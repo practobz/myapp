@@ -23,12 +23,18 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+  try {
     const user = localStorage.getItem('user');
     if (user) {
       setCurrentUser(JSON.parse(user));
     }
-    setLoading(false);
-  }, []);
+  } catch (err) {
+    console.error('❌ Invalid user JSON in localStorage:', err.message);
+    localStorage.removeItem('user');
+  }
+  setLoading(false);
+}, []);
+
 
   // ✅ Updated POST request handler with JSON safety
   const postRequest = async (url, body) => {

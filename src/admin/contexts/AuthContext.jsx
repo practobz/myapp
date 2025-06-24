@@ -1,11 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
-// ✅ Setup backend API base URL
+// Remove trailing slash and whitespace if present
 const BASE_URL = (process.env.REACT_APP_API_URL || '').trim().replace(/\/+$/, '');
 if (!BASE_URL) {
-  console.error('❌ API URL is not set');
-} else {
-  console.log('✅ API base URL:', BASE_URL);
+  console.error("API URL is not set");
 }
 
 const AuthContext = createContext();
@@ -22,24 +20,15 @@ export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-useEffect(() => {
-  try {
-    const rawUser = localStorage.getItem('user');
-
-    if (rawUser && rawUser !== 'undefined') {
-      setCurrentUser(JSON.parse(rawUser));
-    } else {
-      localStorage.removeItem('user'); // remove invalid "undefined"
+  useEffect(() => {
+    const user = localStorage.getItem('user');
+    if (user) {
+      setCurrentUser(JSON.parse(user));
     }
-  } catch (err) {
-    console.error('❌ Invalid user JSON in localStorage:', err.message);
-    localStorage.removeItem('user');
-  }
-  setLoading(false);
-}, []);
+    setLoading(false);
+  }, []);
 
-
-  // ✅ Updated POST request handler with JSON safety
+  // Utility function to handle POST requests
   const postRequest = async (url, body) => {
     try {
       const controller = new AbortController();
@@ -49,31 +38,26 @@ useEffect(() => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
-        signal: controller.signal,
+        signal: controller.signal
       });
       clearTimeout(timeout);
 
-      const data = await res.json().catch(() => {
-        throw new Error('Invalid JSON in response');
-      });
-
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
+        // Show backend error message for 409 (Conflict) and other errors
         if (res.status === 409 && data.error) {
-          throw new Error(data.error);
+          throw new Error(data.error); // Show "Email already exists" directly
         }
         throw new Error(data.error || `HTTP ${res.status}: ${res.statusText}`);
       }
-
       return data;
     } catch (err) {
       if (err.name === 'AbortError') {
         throw new Error('Request timed out');
       }
-      throw new Error(
-        err.message === 'Failed to fetch'
-          ? 'Cannot connect to backend. Is the server running?'
-          : err.message
-      );
+      throw new Error(err.message === 'Failed to fetch'
+        ? 'Cannot connect to backend. Is the server running?'
+        : err.message);
     }
   };
 
@@ -87,10 +71,8 @@ useEffect(() => {
 
   async function customerSignup(userData) {
     const data = await postRequest(`${BASE_URL}/signup/customer`, userData);
-    const user = data.user || (data.success && data.user) || {
-      email: userData.email,
-      role: 'customer',
-    };
+    // Use the full user object from backend response (data.user or data.success && data.user)
+    const user = data.user || (data.success && data.user) || { email: userData.email, role: 'customer' };
     setCurrentUser(user);
     localStorage.setItem('user', JSON.stringify(user));
   }

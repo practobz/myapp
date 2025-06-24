@@ -103,12 +103,18 @@ useEffect(() => {
   }
 
   // === Login Function ===
-  async function login(email, password) {
-    const data = await postRequest(`${BASE_URL}/login`, { email, password });
-    const user = data.user;
-    setCurrentUser(user);
-    localStorage.setItem('user', JSON.stringify(user));
+ async function login(email, password) {
+  const data = await postRequest(`${BASE_URL}/login`, { email, password });
+
+  if (!data.user || typeof data.user !== 'object') {
+    throw new Error('Login failed: Invalid user data from server');
   }
+
+  const user = data.user;
+  setCurrentUser(user);
+  localStorage.setItem('user', JSON.stringify(user));
+}
+
 
   function logout() {
     setCurrentUser(null);

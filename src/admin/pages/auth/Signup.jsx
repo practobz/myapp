@@ -36,7 +36,8 @@ const Signup = () => {
       setError('');
       setLoading(true);
       await signup(email, password);
-      navigate('/admin');
+     navigate('/login');
+
     } catch (err) {
       setError(err.message || 'Failed to create an account'); // Show backend error
       // console.error(err); // Optionally remove this line to avoid console spam

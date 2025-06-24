@@ -79,10 +79,11 @@ useEffect(() => {
 
   // === Signup Functions ===
   async function adminSignup(email, password) {
-  await postRequest(`${BASE_URL}/signup/admin`, { email, password });
-  // ✅ Do not set user or localStorage here
-}
-
+    const data = await postRequest(`${BASE_URL}/signup/admin`, { email, password });
+    const user = { _id: data.userId, email, role: 'admin' };
+    setCurrentUser(user);
+    localStorage.setItem('user', JSON.stringify(user));
+  }
 
   async function customerSignup(userData) {
     const data = await postRequest(`${BASE_URL}/signup/customer`, userData);

@@ -1,9 +1,11 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
-// Remove trailing slash and whitespace if present
+// ✅ Setup backend API base URL
 const BASE_URL = (process.env.REACT_APP_API_URL || '').trim().replace(/\/+$/, '');
 if (!BASE_URL) {
-  console.error("API URL is not set");
+  console.error('❌ API URL is not set');
+} else {
+  console.log('✅ API base URL:', BASE_URL);
 }
 
 const AuthContext = createContext();
@@ -28,7 +30,7 @@ export function AuthProvider({ children }) {
     setLoading(false);
   }, []);
 
-  // Utility function to handle POST requests
+  // ✅ Updated POST request handler with JSON safety
   const postRequest = async (url, body) => {
     try {
       const controller = new AbortController();
@@ -38,26 +40,31 @@ export function AuthProvider({ children }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
-        signal: controller.signal
+        signal: controller.signal,
       });
       clearTimeout(timeout);
 
-      const data = await res.json().catch(() => ({}));
+      const data = await res.json().catch(() => {
+        throw new Error('Invalid JSON in response');
+      });
+
       if (!res.ok) {
-        // Show backend error message for 409 (Conflict) and other errors
         if (res.status === 409 && data.error) {
-          throw new Error(data.error); // Show "Email already exists" directly
+          throw new Error(data.error);
         }
         throw new Error(data.error || `HTTP ${res.status}: ${res.statusText}`);
       }
+
       return data;
     } catch (err) {
       if (err.name === 'AbortError') {
         throw new Error('Request timed out');
       }
-      throw new Error(err.message === 'Failed to fetch'
-        ? 'Cannot connect to backend. Is the server running?'
-        : err.message);
+      throw new Error(
+        err.message === 'Failed to fetch'
+          ? 'Cannot connect to backend. Is the server running?'
+          : err.message
+      );
     }
   };
 
@@ -71,8 +78,10 @@ export function AuthProvider({ children }) {
 
   async function customerSignup(userData) {
     const data = await postRequest(`${BASE_URL}/signup/customer`, userData);
-    // Use the full user object from backend response (data.user or data.success && data.user)
-    const user = data.user || (data.success && data.user) || { email: userData.email, role: 'customer' };
+    const user = data.user || (data.success && data.user) || {
+      email: userData.email,
+      role: 'customer',
+    };
     setCurrentUser(user);
     localStorage.setItem('user', JSON.stringify(user));
   }

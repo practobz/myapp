@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { AtSign, Lock, AlertCircle } from 'lucide-react';
 import Logo from '../../components/layout/Logo';
-// import AdminLayout from '../../components/layout/AdminLayout';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -13,6 +12,8 @@ const Login = () => {
   
   const { login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const successMessage = location.state?.success;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -28,8 +29,7 @@ const Login = () => {
       await login(email, password);
       navigate('/admin');
     } catch (err) {
-      setError(err.message || 'Failed to log in'); // Show backend error
-      // console.error(err); // Optionally remove this line to avoid console spam
+      setError(err.message || 'Failed to log in');
     } finally {
       setLoading(false);
     }
@@ -46,6 +46,12 @@ const Login = () => {
         </div>
 
         <div className="mt-8 card">
+          {successMessage && (
+            <div className="mb-4 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-md">
+              {successMessage}
+            </div>
+          )}
+
           {error && (
             <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md flex items-start">
               <AlertCircle className="h-5 w-5 mr-2 mt-0.5 flex-shrink-0" />

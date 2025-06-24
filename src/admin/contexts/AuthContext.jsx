@@ -22,11 +22,14 @@ export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+useEffect(() => {
   try {
-    const user = localStorage.getItem('user');
-    if (user) {
-      setCurrentUser(JSON.parse(user));
+    const rawUser = localStorage.getItem('user');
+
+    if (rawUser && rawUser !== 'undefined') {
+      setCurrentUser(JSON.parse(rawUser));
+    } else {
+      localStorage.removeItem('user'); // remove invalid "undefined"
     }
   } catch (err) {
     console.error('❌ Invalid user JSON in localStorage:', err.message);

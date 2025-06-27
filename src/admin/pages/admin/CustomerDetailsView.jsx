@@ -15,6 +15,8 @@ import {
   AlertCircle
 } from 'lucide-react';
 
+const API_URL = process.env.REACT_APP_API_URL || '';
+
 function CustomerDetailsView() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -32,7 +34,7 @@ function CustomerDetailsView() {
   const fetchCustomer = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`http://localhost:3001/customer/${id}`);
+      const response = await fetch(`${API_URL}/customer/${id}`);
       if (!response.ok) throw new Error('Failed to fetch customer');
       const data = await response.json();
       setCustomer(data);
@@ -45,43 +47,43 @@ function CustomerDetailsView() {
   };
 
   const fetchCalendarItems = async () => {
-  try {
-    const response = await fetch(`http://localhost:3001/calendars/${id}`);
-    if (response.status === 404) {
-      console.log('No calendar found for this customer yet.');
-      setContentItems([]);
-      return;
+    try {
+      const response = await fetch(`${API_URL}/calendars/${id}`);
+      if (response.status === 404) {
+        console.log('No calendar found for this customer yet.');
+        setContentItems([]);
+        return;
+      }
+      if (!response.ok) throw new Error('Failed to fetch calendar');
+      const calendar = await response.json();
+      // calendar is an array from the backend
+      setContentItems(calendar[0]?.contentItems || []);
+    } catch (err) {
+      console.error('Error fetching calendar items:', err);
     }
-    if (!response.ok) throw new Error('Failed to fetch calendar');
-    const calendar = await response.json();
-    setContentItems(calendar.contentItems || []);
-  } catch (err) {
-    console.error('Error fetching calendar items:', err);
-  }
-};
-
+  };
 
   const handleAddItem = async (item) => {
-  try {
-    const response = await fetch('http://localhost:3001/calendars', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        customerId: id,
-        name: 'Untitled Calendar',
-        description: item.description || '',
-        contentItems: [item], // ✅ wrap item in an array
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      })
-    });
+    try {
+      const response = await fetch(`${API_URL}/calendars`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerId: id,
+          name: 'Untitled Calendar',
+          description: item.description || '',
+          contentItems: [item],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        })
+      });
 
-    if (!response.ok) throw new Error('Failed to add item');
-    fetchCalendarItems();
-  } catch (err) {
-    console.error('Error adding content item:', err);
-  }
-};
+      if (!response.ok) throw new Error('Failed to add item');
+      fetchCalendarItems();
+    } catch (err) {
+      console.error('Error adding content item:', err);
+    }
+  };
 
   const formatDate = (dateString) => {
     if (!dateString) return 'Not available';
@@ -127,7 +129,6 @@ function CustomerDetailsView() {
   return (
     <AdminLayout title="Customer Details">
       <div className="space-y-6">
-        {/* Header */}
         <div className="flex items-center">
           <button
             onClick={() => navigate('/admin/customers-list')}
@@ -138,7 +139,6 @@ function CustomerDetailsView() {
           <h2 className="text-2xl font-bold text-gray-900">Customer Details</h2>
         </div>
 
-        {/* Customer Information */}
         <div className="bg-white rounded-lg shadow-md p-6">
           <div className="flex items-center mb-6">
             <div className="p-4 bg-blue-100 rounded-full mr-4">
@@ -205,7 +205,6 @@ function CustomerDetailsView() {
           </div>
         </div>
 
-        {/* Content Calendar Section */}
         <div className="bg-white rounded-lg shadow-md p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-900">Content Calendar</h3>
@@ -220,8 +219,8 @@ function CustomerDetailsView() {
 
           {contentItems.length > 0 ? (
             <ul className="divide-y divide-gray-200">
-              {contentItems.map((item) => (
-                <li key={item._id} className="py-4">
+              {contentItems.map((item, idx) => (
+                <li key={idx} className="py-4">
                   <div className="text-sm text-gray-500">{formatDate(item.date)}</div>
                   <div className="text-base text-gray-900">{item.description}</div>
                 </li>
@@ -238,7 +237,6 @@ function CustomerDetailsView() {
           )}
         </div>
 
-        {/* Add Modal */}
         <ContentItemModal
           isOpen={isAddModalOpen}
           onClose={() => setIsAddModalOpen(false)}

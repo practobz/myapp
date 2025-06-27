@@ -50,16 +50,39 @@ function CustomerDetailsView() {
     try {
       const response = await fetch(`${API_URL}/calendars/${id}`);
       if (response.status === 404) {
-        console.log('No calendar found for this customer yet.');
-        setContentItems([]);
+        console.log('No calendar found, creating a new one...');
+        await createInitialCalendar(); // Automatically create one
         return;
       }
       if (!response.ok) throw new Error('Failed to fetch calendar');
-      const calendar = await response.json();
-      // calendar is an array from the backend
-      setContentItems(calendar[0]?.contentItems || []);
+
+      const calendars = await response.json();
+      setContentItems(calendars[0]?.contentItems || []);
     } catch (err) {
       console.error('Error fetching calendar items:', err);
+    }
+  };
+
+  const createInitialCalendar = async () => {
+    try {
+      const response = await fetch(`${API_URL}/calendars`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerId: id,
+          name: 'Untitled Calendar',
+          description: 'Auto-generated calendar',
+          contentItems: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        })
+      });
+
+      if (!response.ok) throw new Error('Failed to auto-create calendar');
+      console.log('✅ Calendar created automatically');
+      fetchCalendarItems(); // Load the newly created calendar
+    } catch (err) {
+      console.error('❌ Error creating initial calendar:', err);
     }
   };
 

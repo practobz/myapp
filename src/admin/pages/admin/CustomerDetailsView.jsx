@@ -34,7 +34,7 @@ function CustomerDetailsView() {
   const fetchCustomer = async () => {
     try {
       setLoading(true);
-      const response = await fetch(${API_URL}/customer/${id});
+      const response = await fetch(`${API_URL}/customer/${id}`);
       if (!response.ok) throw new Error('Failed to fetch customer');
       const data = await response.json();
       setCustomer(data);
@@ -48,7 +48,7 @@ function CustomerDetailsView() {
 
   const fetchCalendarItems = async () => {
     try {
-      const response = await fetch(${API_URL}/calendars/${id});
+      const response = await fetch(`${API_URL}/calendars/${id}`);
       if (response.status === 404) {
         console.log('No calendar found for this customer yet.');
         setContentItems([]);
@@ -65,7 +65,7 @@ function CustomerDetailsView() {
 
   const handleAddItem = async (item) => {
     try {
-      const response = await fetch(${API_URL}/calendars, {
+      const response = await fetch(`${API_URL}/calendars`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 const AuthContext = createContext();
+const API_URL = process.env.REACT_APP_API_URL;
 
 export function useAuth() {
   const context = useContext(AuthContext);
@@ -32,15 +33,14 @@ export function AuthProvider({ children }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
-        signal: controller.signal
+        signal: controller.signal,
       });
       clearTimeout(timeout);
 
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        // Show backend error message for 409 (Conflict) and other errors
         if (res.status === 409 && data.error) {
-          throw new Error(data.error); // Show "Email already exists" directly
+          throw new Error(data.error);
         }
         throw new Error(data.error || `HTTP ${res.status}: ${res.statusText}`);
       }
@@ -57,36 +57,33 @@ export function AuthProvider({ children }) {
 
   // === Signup Functions ===
   async function adminSignup(email, password) {
-    const data = await postRequest('http://localhost:3001/signup/admin', { email, password });
+    const data = await postRequest(`${API_URL}/signup/admin`, { email, password });
     const user = { _id: data.userId, email, role: 'admin' };
     setCurrentUser(user);
     localStorage.setItem('user', JSON.stringify(user));
   }
 
   async function customerSignup(userData) {
-    const data = await postRequest('http://localhost:3001/signup/customer', userData);
-    // Use the full user object from backend response (data.user or data.success && data.user)
+    const data = await postRequest(`${API_URL}/signup/customer`, userData);
     const user = data.user || (data.success && data.user) || { email: userData.email, role: 'customer' };
     setCurrentUser(user);
     localStorage.setItem('user', JSON.stringify(user));
   }
 
   async function contentCreatorSignup(email, password) {
-    const data = await postRequest('http://localhost:3001/signup/creator', { email, password });
+    const data = await postRequest(`${API_URL}/signup/creator`, { email, password });
     const user = { _id: data.userId, email, role: 'content_creator' };
     setCurrentUser(user);
     localStorage.setItem('user', JSON.stringify(user));
   }
 
   // === Login Function ===
- async function login(email, password, role = 'admin') {
-  const data = await postRequest(`http://localhost:3001/${role}/login`, { email, password });
-
-  const user = data.user;
-  setCurrentUser(user);
-  localStorage.setItem('user', JSON.stringify(user));
-}
-
+  async function login(email, password, role = 'admin') {
+    const data = await postRequest(`${API_URL}/${role}/login`, { email, password });
+    const user = data.user;
+    setCurrentUser(user);
+    localStorage.setItem('user', JSON.stringify(user));
+  }
 
   function logout() {
     setCurrentUser(null);
@@ -94,18 +91,18 @@ export function AuthProvider({ children }) {
   }
 
   const value = {
-  currentUser,
-  isAuthenticated: !!currentUser,
-  signup: adminSignup,
-  login, // use this only when passing a role
-  logout,
-  adminSignup,
-  customerSignup,
-  contentCreatorSignup,
-  adminLogin: (email, password) => login(email, password, 'admin'),
-  customerLogin: (email, password) => login(email, password, 'customer'),
-  contentCreatorLogin: (email, password) => login(email, password, 'content_creator'),
-};
+    currentUser,
+    isAuthenticated: !!currentUser,
+    signup: adminSignup,
+    login, // general login
+    logout,
+    adminSignup,
+    customerSignup,
+    contentCreatorSignup,
+    adminLogin: (email, password) => login(email, password, 'admin'),
+    customerLogin: (email, password) => login(email, password, 'customer'),
+    contentCreatorLogin: (email, password) => login(email, password, 'content_creator'),
+  };
 
   return (
     <AuthContext.Provider value={value}>

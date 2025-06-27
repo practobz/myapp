@@ -57,7 +57,9 @@ function CustomerDetailsView() {
       if (!response.ok) throw new Error('Failed to fetch calendar');
       const calendar = await response.json();
       // calendar is an array from the backend
-      setContentItems(calendar[0]?.contentItems || []);
+     const allItems = calendar.flatMap(c => c.contentItems || []);
+setContentItems(allItems);
+
     } catch (err) {
       console.error('Error fetching calendar items:', err);
     }

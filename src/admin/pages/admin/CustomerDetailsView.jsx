@@ -64,19 +64,25 @@ function CustomerDetailsView() {
   };
 
 const handleAddItem = async (item) => {
+  if (!customer || !customer._id) {
+    console.error('Customer data not loaded yet');
+    return;
+  }
+
   try {
     const payload = {
       customerId: customer._id,
       name: 'Untitled Calendar',
       description: item.description || '',
-      contentItems: [{
-        date: item.date,
-        description: item.description
-      }],
+      contentItems: [
+        {
+          date: item.date,
+          description: item.description
+        }
+      ],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
-
 
     console.log('📝 POST calendar payload:', payload);
 
@@ -96,6 +102,7 @@ const handleAddItem = async (item) => {
     console.error('Error adding content item:', err);
   }
 };
+
 
 
   const formatDate = (dateString) => {
@@ -251,11 +258,13 @@ const handleAddItem = async (item) => {
         </div>
 
         <ContentItemModal
-          isOpen={isAddModalOpen}
-          onClose={() => setIsAddModalOpen(false)}
-          onSave={handleAddItem}
-          title="Create Content Calendar"
-        />
+  isOpen={isAddModalOpen}
+  onClose={() => setIsAddModalOpen(false)}
+  onSave={handleAddItem}
+  title="Create Content Calendar"
+  disabled={!customer}
+/>
+
       </div>
     </AdminLayout>
   );

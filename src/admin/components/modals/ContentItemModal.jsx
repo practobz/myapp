@@ -8,7 +8,8 @@ function ContentItemModal({ isOpen, onClose, onSave, contentItem, title }) {
 
   useEffect(() => {
     if (contentItem) {
-      setDate(contentItem.date);
+     setDate(contentItem.date?.split('T')[0] || '');
+
       setDescription(contentItem.description);
     } else {
       const today = new Date().toISOString().split('T')[0];

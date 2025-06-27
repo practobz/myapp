@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState } from 'react';
 import { format } from 'date-fns';
-import axios from 'axios';
 
 const initialCustomers = [
 	{
@@ -39,11 +38,6 @@ export function useCustomers() {
 
 export function CustomerProvider({ children }) {
 	const [customers, setCustomers] = useState(initialCustomers);
-
-	const fetchUsers = async () => {
-		const res = await axios.get(`${process.env.REACT_APP_API_URL}/users`);
-		return res.data;
-	};
 
 	const addCustomer = (customer) => {
 		const newCustomer = {
@@ -149,7 +143,6 @@ export function CustomerProvider({ children }) {
 				addContentItem,
 				updateContentItem,
 				deleteContentItem,
-				fetchUsers,
 			}}
 		>
 			{children}

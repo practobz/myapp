@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import axios from 'axios';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../admin/contexts/AuthContext';
 import { AtSign, Lock, AlertCircle, Palette } from 'lucide-react';
@@ -45,12 +44,6 @@ function ContentCreatorLogin() {
     } finally {
       setLoading(false);
     }
-  };
-
-  // Add this function if you need to fetch all users
-  const fetchAllUsers = async () => {
-    const res = await axios.get(`${process.env.REACT_APP_API_URL}/users`);
-    return res.data;
   };
 
   return (

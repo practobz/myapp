@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { ArrowLeft, Filter, Search, Upload, MessageSquare, CheckCircle, Clock, AlertCircle, Palette } from 'lucide-react';
@@ -131,12 +130,6 @@ function Assignments() {
     // navigate(`/content-creator/assignments/${assignment.id}`);
   };
 
-  // Add this function if you need to fetch all users
-  const fetchAllUsers = async () => {
-    const res = await axios.get(`${process.env.REACT_APP_API_URL}/users`);
-    return res.data;
-  };
-
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Header */}
@@ -247,8 +240,7 @@ function Assignments() {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              // Only navigate if the upload page exists
-                              // navigate(`/content-creator/upload/${assignment.id}`);
+                              navigate(`/content-creator/upload/${assignment.id}`);
                             }}
                             className="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700"
                           >
@@ -260,8 +252,7 @@ function Assignments() {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              // Only navigate if the upload page exists
-                              // navigate(`/content-creator/upload/${assignment.id}`);
+                              navigate(`/content-creator/upload/${assignment.id}`);
                             }}
                             className="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-white bg-yellow-600 hover:bg-yellow-700"
                           >

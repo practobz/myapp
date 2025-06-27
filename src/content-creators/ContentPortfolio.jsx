@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Upload, Eye, MessageSquare, Calendar, User, Palette } from 'lucide-react';
 
@@ -83,12 +82,6 @@ function ContentPortfolio() {
   const handleUploadRevision = (contentId) => {
     // Navigate to upload page for revision
     navigate(`/content-creator/upload/${contentId}`);
-  };
-
-  // Add this function if you need to fetch all users
-  const fetchAllUsers = async () => {
-    const res = await axios.get(`${process.env.REACT_APP_API_URL}/users`);
-    return res.data;
   };
 
   return (

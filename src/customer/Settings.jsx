@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import axios from 'axios';
 import { User, Smartphone, Mail, MapPin, FileText, Instagram, Facebook, Linkedin, Youtube, Save } from 'lucide-react';
 import { useAuth } from '../admin/contexts/AuthContext';
 
@@ -16,12 +15,6 @@ function Settings() {
   });
   const [loading, setLoading] = useState(true);
 
-  // Add this function if you need to fetch all users
-  const fetchAllUsers = async () => {
-    const res = await axios.get(`${process.env.REACT_APP_API_URL}/users`);
-    return res.data;
-  };
-
   useEffect(() => {
     if (!currentUser || !currentUser._id) {
       console.warn('No currentUser._id found!');
@@ -30,10 +23,10 @@ function Settings() {
     }
     async function fetchCustomer() {
       try {
-        const res = await axios.get(`${process.env.REACT_APP_API_URL}/customer/${currentUser._id}`);
-        const data = res.data;
+        const res = await fetch(`http://localhost:3001/customer/${currentUser._id}`);
+        const data = await res.json();
         console.log('Fetched customer data:', data);
-        if (!data.email) throw new Error('Failed to fetch customer data');
+        if (!res.ok || !data.email) throw new Error('Failed to fetch customer data');
         setCustomerData(data);
       } catch (err) {
         console.error('Falling back to currentUser:', err);
@@ -49,8 +42,6 @@ function Settings() {
       }
     }
     fetchCustomer();
-    // Optionally, you can call fetchAllUsers() here if you need all users
-    // fetchAllUsers().then(users => console.log(users));
   }, [currentUser]);
 
   const [socialAccounts, setSocialAccounts] = useState({

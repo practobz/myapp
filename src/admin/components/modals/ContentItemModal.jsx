@@ -39,11 +39,14 @@ function ContentItemModal({ isOpen, onClose, onSave, contentItem, title }) {
     e.preventDefault();
     
     if (validate()) {
-      onSave({
-        ...(contentItem?.id ? { id: contentItem.id } : {}),
-        date,
-        description,
-      });
+   onSave({
+  ...(contentItem || {}),
+  date,
+  description,
+  originalDate: contentItem?.originalDate || contentItem?.date,
+  originalDescription: contentItem?.originalDescription || contentItem?.description
+});
+
       onClose();
     }
   };

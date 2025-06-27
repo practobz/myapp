@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { PlusCircle, Clock, MessageSquare, CheckCircle, Globe, User, Bell, ChevronDown, Palette, Eye } from 'lucide-react';
 import { format } from 'date-fns';
@@ -40,12 +39,6 @@ function Dashboard() {
     // For not-yet-created pages, do nothing
     // Example: if (path === '/content-creator/profile') return;
     // For now, disable all navigation for not-yet-created pages
-  };
-
-  // Add this function if you need to fetch all users
-  const fetchAllUsers = async () => {
-    const res = await axios.get(`${process.env.REACT_APP_API_URL}/users`);
-    return res.data;
   };
 
   return (

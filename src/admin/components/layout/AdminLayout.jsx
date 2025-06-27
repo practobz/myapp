@@ -4,33 +4,22 @@ import { LayoutGrid, Calendar as CalendarIcon, Settings as SettingsIcon, LogOut,
 import Header from './Header';
 import Footer from './Footer';
 import Logo from './Logo';
-import Customers from "../../pages/admin/Customers";
 import { useAuth } from '../../contexts/AuthContext';
 
 function AdminLayout({ children, title }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [activeSection, setActiveSection] = useState('dashboard');
   const { logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
   const menuItems = [
-    { icon: LayoutGrid, label: 'Dashboard', section: 'dashboard' },
-    { icon: Users, label: 'Customers', section: 'customers' },
-    { icon: CalendarIcon, label: 'Content Calendar', section: 'calendar' },
-    { icon: SettingsIcon, label: 'Settings', section: 'settings' }
+    { icon: LayoutGrid, label: 'Dashboard', path: '/admin' },
+    { icon: Users, label: 'Customers', path: '/admin/customers' },
+    { icon: CalendarIcon, label: 'Content Calendar', path: '/admin/calendar' },
+    { icon: SettingsIcon, label: 'Settings', path: '/admin/settings' }
   ];
 
-  // Helper to render main content
-  const renderContent = () => {
-    if (activeSection === 'customers') {
-      return <Customers />;
-    }
-    return children;
-  };
-
-  // Highlight active menu item
-  const isActive = (section) => activeSection === section;
+  const isActive = (item) => location.pathname === item.path;
 
   return (
     <div className="h-screen flex bg-gray-50">
@@ -45,10 +34,10 @@ function AdminLayout({ children, title }) {
               const Icon = item.icon;
               return (
                 <button
-                  key={item.section}
-                  onClick={() => setActiveSection(item.section)}
+                  key={item.label}
+                  onClick={() => navigate(item.path)}
                   className={`flex items-center w-full px-4 py-2 rounded-md transition-colors ${
-                    isActive(item.section)
+                    isActive(item)
                       ? 'bg-[#232b3b] text-white'
                       : 'text-gray-300 hover:bg-[#2d3546] hover:text-white'
                   }`}
@@ -100,13 +89,13 @@ function AdminLayout({ children, title }) {
                   const Icon = item.icon;
                   return (
                     <button
-                      key={item.section}
+                      key={item.label}
                       onClick={() => {
-                        setActiveSection(item.section);
+                        navigate(item.path);
                         setSidebarOpen(false);
                       }}
                       className={`flex items-center w-full px-4 py-2 rounded-md transition-colors ${
-                        isActive(item.section)
+                        isActive(item)
                           ? 'bg-[#232b3b] text-white'
                           : 'text-gray-300 hover:bg-[#2d3546] hover:text-white'
                       }`}
@@ -139,7 +128,7 @@ function AdminLayout({ children, title }) {
       <div className="flex flex-col flex-1 min-h-0 w-full md:ml-64">
         <Header onMenuClick={() => setSidebarOpen(true)} />
         <main className="flex-1 p-2 sm:p-4 md:p-6 overflow-auto">
-          {renderContent()}
+          {children}
         </main>
         <Footer />
       </div>

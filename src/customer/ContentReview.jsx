@@ -1,58 +1,44 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, MessageSquare, CheckCircle, Edit3, Trash2, Move } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 function ContentReview() {
   const navigate = useNavigate();
-  
-  // Mock content items with images
-  const [contentItems] = useState([
-    {
-      id: 1,
-      title: 'New Collection Launch Post',
-      description: 'Instagram post for the new summer collection launch',
-      imageUrl: 'https://images.pexels.com/photos/996329/pexels-photo-996329.jpeg?auto=compress&cs=tinysrgb&w=800',
-      status: 'under_review',
-      createdBy: 'Content Creator 1',
-      createdAt: '2024-03-15'
-    },
-    {
-      id: 2,
-      title: 'Weekend Sale Campaign',
-      description: 'Facebook ad creative for the weekend sale campaign',
-      imageUrl: 'https://images.pexels.com/photos/1884581/pexels-photo-1884581.jpeg?auto=compress&cs=tinysrgb&w=800',
-      status: 'under_review',
-      createdBy: 'Content Creator 2',
-      createdAt: '2024-03-16'
-    },
-    {
-      id: 3,
-      title: 'Product Showcase',
-      description: 'LinkedIn post showcasing our latest products',
-      imageUrl: 'https://images.pexels.com/photos/1667088/pexels-photo-1667088.jpeg?auto=compress&cs=tinysrgb&w=800',
-      status: 'under_review',
-      createdBy: 'Content Creator 1',
-      createdAt: '2024-03-17'
-    }
-  ]);
 
-  const [selectedContent, setSelectedContent] = useState(contentItems[0]);
-  const [comments, setComments] = useState([
-    {
-      id: uuidv4(),
-      x: 245,
-      y: 57,
-      comment: 'change the colour contrast',
-      editing: false,
-      done: false,
-      repositioning: false
-    }
-  ]);
+  const [contentItems, setContentItems] = useState([]);
+  const [selectedContent, setSelectedContent] = useState(null);
+  const [comments, setComments] = useState([]);
   const [activeComment, setActiveComment] = useState(null);
   const [hoveredComment, setHoveredComment] = useState(null);
 
-  // Enhanced Button Component
+  useEffect(() => {
+    fetch('http://localhost:3001/api/content-submissions')
+  .then((res) => res.json())
+  .then((data) => {
+    if (!Array.isArray(data)) {
+      throw new Error('Invalid data received');
+    }
+
+    const mapped = data.map((item) => ({
+      id: item._id,
+      title: item.caption || 'Untitled Post',
+      description: item.notes || '',
+      imageUrl: item.images?.[0] || '',
+      createdBy: item.created_by || 'Unknown',
+      createdAt: item.created_at || '',
+      status: 'under_review',
+    }));
+
+    setContentItems(mapped);
+    if (mapped.length > 0) setSelectedContent(mapped[0]);
+  })
+  .catch((err) => {
+    console.error('Failed to fetch content submissions:', err.message);
+  });
+
+  }, []);
+
   const Button = ({ onClick, children, style, variant = 'primary' }) => {
     const variants = {
       primary: {
@@ -102,10 +88,7 @@ function ContentReview() {
     const rect = e.target.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    
-    // Prevent adding comment if one is being edited
     if (comments.some((c) => c.editing)) return;
-    
     const newComment = {
       id: uuidv4(),
       x,
@@ -172,6 +155,9 @@ function ContentReview() {
     setActiveComment(activeComment === id ? null : id);
   };
 
+  if (!selectedContent) {
+    return <div className="p-6 text-gray-600 text-center">Loading content submissions...</div>;
+  }
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}

@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import axios from 'axios';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../admin/contexts/AuthContext';
 import { AtSign, Lock, AlertCircle, User, Phone, Palette, Briefcase } from 'lucide-react';
@@ -19,7 +18,8 @@ function ContentCreatorSignup() {
   const [loading, setLoading] = useState(false);
   
   // Use the correct signup function from your AuthContext
-  const { signup: contentCreatorSignup } = useAuth();
+const { contentCreatorSignup } = useAuth();
+
   const navigate = useNavigate();
 
   const handleInputChange = (e) => {
@@ -64,12 +64,6 @@ function ContentCreatorSignup() {
     } finally {
       setLoading(false);
     }
-  };
-
-  // Add this function if you need to fetch all users
-  const fetchAllUsers = async () => {
-    const res = await axios.get(`${process.env.REACT_APP_API_URL}/users`);
-    return res.data;
   };
 
   return (

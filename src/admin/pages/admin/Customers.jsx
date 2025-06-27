@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import AdminLayout from '../../components/layout/AdminLayout';
 import { Eye, Plus, Calendar, AlertCircle } from 'lucide-react';
 
+const API_URL = process.env.REACT_APP_API_URL;
+
 function Customers() {
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -15,27 +17,28 @@ function Customers() {
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
     const date = new Date(dateString);
-    return isNaN(date) ? 'Invalid Date' : date.toLocaleDateString(undefined, { day: 'numeric', month: 'long' });
+    return isNaN(date) ? 'Invalid Date' : date.toLocaleDateString(undefined, {
+      day: 'numeric',
+      month: 'long',
+    });
   };
 
   useEffect(() => {
     const fetchCustomersAndCalendars = async () => {
       try {
-        const customersRes = await fetch('http://localhost:3001/api/customers');
-        const calendarsRes = await fetch('http://localhost:3001/calendars');
+        console.log("✅ API_URL from env:", API_URL);
+
+        const customersRes = await fetch(`${API_URL}/api/customers`);
+        const calendarsRes = await fetch(`${API_URL}/calendars`);
 
         const customersData = await customersRes.json();
         const calendarsData = await calendarsRes.json();
-
-        console.log('🧾 Customers:', customersData);
-        console.log('🗓️ Calendars:', calendarsData);
 
         if (!Array.isArray(customersData.customers) || !Array.isArray(calendarsData)) {
           console.error('Invalid data from backend');
           return;
         }
 
-        // ✅ Group contentItems by customerId
         const calendarMap = new Map();
         for (const calendar of calendarsData) {
           const { customerId, contentItems = [] } = calendar;
@@ -43,14 +46,12 @@ function Customers() {
           calendarMap.get(customerId).push(...contentItems);
         }
 
-        // ✅ Filter customers with at least one content item
         const filteredCustomers = customersData.customers
           .map((customer) => {
             const id = customer.id || customer._id;
             const items = (calendarMap.get(id) || []).filter(item => item.date);
             if (items.length === 0) return null;
 
-            // Sort to get next content item
             items.sort((a, b) => new Date(a.date) - new Date(b.date));
             const nextItem = items[0];
 
@@ -60,12 +61,12 @@ function Customers() {
               nextDueContent: nextItem?.description || '—',
             };
           })
-          .filter(Boolean); // Remove nulls
+          .filter(Boolean);
 
         setCustomers(filteredCustomers);
-        setLoading(false);
       } catch (err) {
         console.error('Error fetching data:', err);
+      } finally {
         setLoading(false);
       }
     };

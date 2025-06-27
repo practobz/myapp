@@ -109,7 +109,7 @@ function CustomersList() {
                           <p className="text-xs text-gray-500 truncate">ID: {customer._id}</p>
                         </div>
                       </div>
-                      <div className="w-full sm:w-auto">
+                      <div className="self-stretch sm:self-auto w-full sm:w-auto">
                         <button
                           onClick={() => handleViewCustomer(customer._id)}
                           className="inline-flex items-center justify-center w-full sm:w-auto px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors"

@@ -27,6 +27,7 @@ function CustomerDetailsView() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
   useEffect(() => {
+    console.log('📦 useParams ID:', id); // ✅ log
     fetchCustomer();
     fetchCalendarItems();
   }, [id]);
@@ -56,10 +57,7 @@ function CustomerDetailsView() {
       }
       if (!response.ok) throw new Error('Failed to fetch calendar');
       const calendar = await response.json();
-      // calendar is an array from the backend
-     const allItems = calendar.flatMap(c => c.contentItems || []);
-setContentItems(allItems);
-
+      setContentItems(calendar[0]?.contentItems || []);
     } catch (err) {
       console.error('Error fetching calendar items:', err);
     }
@@ -67,20 +65,28 @@ setContentItems(allItems);
 
   const handleAddItem = async (item) => {
     try {
+      const payload = {
+        customerId: id || '9dddbf07c0eb276a637a52b918002571', // ✅ fallback if needed
+        name: 'Untitled Calendar',
+        description: item.description || '',
+        contentItems: [item],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      console.log('📝 POST calendar payload:', payload); // ✅ debug
+
       const response = await fetch(`${API_URL}/calendars`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          customerId: id,
-          name: 'Untitled Calendar',
-          description: item.description || '',
-          contentItems: [item],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        })
+        body: JSON.stringify(payload)
       });
 
-      if (!response.ok) throw new Error('Failed to add item');
+      if (!response.ok) {
+        const errMsg = await response.text();
+        throw new Error('Failed to add item: ' + errMsg);
+      }
+
       fetchCalendarItems();
     } catch (err) {
       console.error('Error adding content item:', err);

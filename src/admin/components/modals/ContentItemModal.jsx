@@ -39,13 +39,14 @@ function ContentItemModal({ isOpen, onClose, onSave, contentItem, title }) {
     e.preventDefault();
     
     if (validate()) {
-   onSave({
+  onSave({
   ...(contentItem || {}),
-  date,
+  date: new Date(date).toISOString(), // ✅ ensures proper ISO format
   description,
   originalDate: contentItem?.originalDate || contentItem?.date,
   originalDescription: contentItem?.originalDescription || contentItem?.description
 });
+
 
       onClose();
     }

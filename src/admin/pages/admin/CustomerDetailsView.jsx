@@ -64,34 +64,35 @@ function CustomerDetailsView() {
   };
 
   const handleAddItem = async (item) => {
-    try {
-      const payload = {
-        customerId: id || '9dddbf07c0eb276a637a52b918002571', // ✅ fallback if needed
-        name: 'Untitled Calendar',
-        description: item.description || '',
-        contentItems: [item],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
+  try {
+    const payload = {
+      customerId: customer?._id, // ✅ correct CouchDB _id
+      name: 'Untitled Calendar',
+      description: item.description || '',
+      contentItems: [item],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
 
-      console.log('📝 POST calendar payload:', payload); // ✅ debug
+    console.log('📝 POST calendar payload:', payload);
 
-      const response = await fetch(`${API_URL}/calendars`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+    const response = await fetch(`${API_URL}/calendars`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
 
-      if (!response.ok) {
-        const errMsg = await response.text();
-        throw new Error('Failed to add item: ' + errMsg);
-      }
-
-      fetchCalendarItems();
-    } catch (err) {
-      console.error('Error adding content item:', err);
+    if (!response.ok) {
+      const errMsg = await response.text();
+      throw new Error('Failed to add item: ' + errMsg);
     }
-  };
+
+    fetchCalendarItems();
+  } catch (err) {
+    console.error('Error adding content item:', err);
+  }
+};
+
 
   const formatDate = (dateString) => {
     if (!dateString) return 'Not available';

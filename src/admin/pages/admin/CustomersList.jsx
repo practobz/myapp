@@ -61,8 +61,8 @@ function CustomersList() {
         </div>
 
         {/* Search */}
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <div className="flex items-center">
+        <div className="bg-white rounded-lg shadow-md p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
             <div className="relative flex-1">
               <Search className="h-5 w-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
               <input
@@ -86,7 +86,7 @@ function CustomersList() {
 
         {/* Customers List */}
         <div className="bg-white rounded-lg shadow-md">
-          <div className="p-6">
+          <div className="p-4 sm:p-6">
             <h3 className="text-lg font-semibold mb-4">
               Customers ({filteredCustomers.length})
             </h3>
@@ -96,22 +96,22 @@ function CustomersList() {
                 {filteredCustomers.map((customer) => (
                   <div 
                     key={customer._id}
-                    className="border rounded-lg p-4 hover:bg-gray-50 transition-colors"
+                    className="border rounded-lg p-3 sm:p-4 hover:bg-gray-50 transition-colors"
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-4">
-                        <div className="p-3 bg-blue-100 rounded-full">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                      <div className="flex items-center space-x-4 w-full">
+                        <div className="p-3 bg-blue-100 rounded-full flex-shrink-0">
                           <User className="h-6 w-6 text-blue-600" />
                         </div>
-                        <div>
-                          <h4 className="font-semibold text-gray-900">{customer.name || 'N/A'}</h4>
-                          <p className="text-sm text-gray-600">{customer.email}</p>
-                          <p className="text-xs text-gray-500">ID: {customer._id}</p>
+                        <div className="min-w-0">
+                          <h4 className="font-semibold text-gray-900 truncate">{customer.name || 'N/A'}</h4>
+                          <p className="text-sm text-gray-600 truncate">{customer.email}</p>
+                          <p className="text-xs text-gray-500 truncate">ID: {customer._id}</p>
                         </div>
                       </div>
                       <button
                         onClick={() => handleViewCustomer(customer._id)}
-                        className="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors"
+                        className="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors w-full sm:w-auto justify-center"
                       >
                         <Eye className="h-4 w-4 mr-2" />
                         View Details

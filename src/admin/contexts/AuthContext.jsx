@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 
 const AuthContext = createContext();
 const API_URL = process.env.REACT_APP_API_URL;
+console.log('🔗 AuthContext is using API_URL:', API_URL);
 
 export function useAuth() {
   const context = useContext(AuthContext);

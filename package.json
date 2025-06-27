@@ -1,7 +1,8 @@
 {
   "name": "social-media-content-tool",
   "private": true,
-  "homepage": "." ,
+ "homepage": "/"
+,
   "version": "0.1.0",
   "type": "module",
   "scripts": {

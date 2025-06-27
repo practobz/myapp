@@ -4,6 +4,7 @@ import AdminLayout from '../../components/layout/AdminLayout';
 import { Eye, Plus, Calendar, AlertCircle } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_API_URL || 'https://myapi-2lv7dhspca-uc.a.run.app';
+console.log("API URL in Customers.jsx:", API_URL);
 
 
 function Customers() {

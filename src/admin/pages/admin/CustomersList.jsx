@@ -98,7 +98,7 @@ function CustomersList() {
                     key={customer._id}
                     className="border rounded-lg p-3 sm:p-4 hover:bg-gray-50 transition-colors"
                   >
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                       <div className="flex items-center space-x-4 w-full">
                         <div className="p-3 bg-blue-100 rounded-full flex-shrink-0">
                           <User className="h-6 w-6 text-blue-600" />
@@ -109,13 +109,15 @@ function CustomersList() {
                           <p className="text-xs text-gray-500 truncate">ID: {customer._id}</p>
                         </div>
                       </div>
-                      <button
-                        onClick={() => handleViewCustomer(customer._id)}
-                        className="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors w-full sm:w-auto justify-center"
-                      >
-                        <Eye className="h-4 w-4 mr-2" />
-                        View Details
-                      </button>
+                      <div className="w-full sm:w-auto">
+                        <button
+                          onClick={() => handleViewCustomer(customer._id)}
+                          className="inline-flex items-center justify-center w-full sm:w-auto px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors"
+                        >
+                          <Eye className="h-4 w-4 mr-2" />
+                          View Details
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}

@@ -63,16 +63,20 @@ function CustomerDetailsView() {
     }
   };
 
-  const handleAddItem = async (item) => {
+const handleAddItem = async (item) => {
   try {
     const payload = {
-      customerId: customer?._id, // ✅ correct CouchDB _id
+      customerId: customer._id,
       name: 'Untitled Calendar',
       description: item.description || '',
-      contentItems: [item],
+      contentItems: [{
+        date: item.date,
+        description: item.description
+      }],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
+
 
     console.log('📝 POST calendar payload:', payload);
 

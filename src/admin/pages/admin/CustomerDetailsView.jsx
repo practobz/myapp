@@ -15,8 +15,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 
-const API_URL = process.env.REACT_APP_API_URL;
-
+const API_URL = process.env.REACT_APP_API_URL || '';
 
 function CustomerDetailsView() {
   const { id } = useParams();
@@ -57,7 +56,8 @@ function CustomerDetailsView() {
       }
       if (!response.ok) throw new Error('Failed to fetch calendar');
       const calendar = await response.json();
-      setContentItems(calendar.contentItems || []);
+      // calendar is an array from the backend
+      setContentItems(calendar[0]?.contentItems || []);
     } catch (err) {
       console.error('Error fetching calendar items:', err);
     }

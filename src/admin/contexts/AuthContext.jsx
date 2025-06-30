@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 const AuthContext = createContext();
+const API_URL = process.env.REACT_APP_API_URL;
+console.log('🔗 AuthContext is using API_URL:', API_URL);
 
 export function useAuth() {
   const context = useContext(AuthContext);
@@ -15,17 +17,9 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem('user');
-      if (raw && raw !== 'undefined' && raw !== '') {
-        const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === 'object') {
-          setCurrentUser(parsed);
-        }
-      }
-    } catch (err) {
-      console.warn('⚠️ Failed to load user from localStorage:', err.message);
-      localStorage.removeItem('user');
+    const user = localStorage.getItem('user');
+    if (user) {
+      setCurrentUser(JSON.parse(user));
     }
     setLoading(false);
   }, []);
@@ -34,14 +28,13 @@ export function AuthProvider({ children }) {
   const postRequest = async (url, body) => {
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 10000);
-      console.log('Posting to URL:', url);
+      const timeout = setTimeout(() => controller.abort(), 5000); // 5s timeout
 
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
-        signal: controller.signal
+        signal: controller.signal,
       });
       clearTimeout(timeout);
 
@@ -70,61 +63,46 @@ export function AuthProvider({ children }) {
 
   // === Signup Functions ===
   async function adminSignup(email, password) {
-    const data = await postRequest(
-      `${process.env.REACT_APP_API_URL}/signup/admin`,
-      { email, password }
-    );
+    const data = await postRequest(`${API_URL}/signup/admin`, { email, password });
     const user = { _id: data.userId, email, role: 'admin' };
     setCurrentUser(user);
-if (user) {
-  localStorage.setItem('user', JSON.stringify(user));
-}
-
+    localStorage.setItem('user', JSON.stringify(user));
   }
 
   async function customerSignup(userData) {
-    const data = await postRequest(
-      `${process.env.REACT_APP_API_URL}/signup/customer`,
-      userData
-    );
-    const user =
-      data.user || (data.success && data.user) || { email: userData.email, role: 'customer' };
-   setCurrentUser(user);
-if (user) {
-  localStorage.setItem('user', JSON.stringify(user));
-}
-
+    try {
+      const data = await postRequest(`${API_URL}/signup/customer`, userData);
+      const user = data.user || (data.success && data.user) || { email: userData.email, role: 'customer' };
+      setCurrentUser(user);
+      localStorage.setItem('user', JSON.stringify(user));
+    } catch (err) {
+      if (err.message === 'Request timed out') {
+        throw new Error('Signup request timed out. Please try again.');
+      }
+      throw err;
+    }
   }
 
-  async function contentCreatorSignup(email, password, additionalData) {
-    const data = await postRequest(
-      `${process.env.REACT_APP_API_URL}/signup/creator`,
-      {
-        email,
-        password,
-        ...additionalData
-      }
-    );
-    const user = { _id: data.userId, email, role: 'content_creator', ...additionalData };
-   setCurrentUser(user);
-if (user) {
-  localStorage.setItem('user', JSON.stringify(user));
-}
-
+  async function contentCreatorSignup(email, password) {
+    const data = await postRequest(`${API_URL}/signup/creator`, { email, password });
+    const user = { _id: data.userId, email, role: 'content_creator' };
+    setCurrentUser(user);
+    localStorage.setItem('user', JSON.stringify(user));
   }
 
   // === Login Function ===
   async function login(email, password, role = 'admin') {
-    const data = await postRequest(
-      `${process.env.REACT_APP_API_URL}/${role}/login`,
-      { email, password }
-    );
-    const user = data.user;
-   setCurrentUser(user);
-if (user) {
-  localStorage.setItem('user', JSON.stringify(user));
-}
-
+    try {
+      const data = await postRequest(`${API_URL}/${role}/login`, { email, password });
+      const user = data.user;
+      setCurrentUser(user);
+      localStorage.setItem('user', JSON.stringify(user));
+    } catch (err) {
+      if (role === 'customer' && err.message === 'Invalid credentials or sign up to create account') {
+        throw err;
+      }
+      throw err;
+    }
   }
 
   function logout() {
@@ -136,7 +114,7 @@ if (user) {
     currentUser,
     isAuthenticated: !!currentUser,
     signup: adminSignup,
-    login,
+    login, // general login
     logout,
     adminSignup,
     customerSignup,

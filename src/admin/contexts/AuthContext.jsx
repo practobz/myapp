@@ -76,7 +76,10 @@ export function AuthProvider({ children }) {
     );
     const user = { _id: data.userId, email, role: 'admin' };
     setCurrentUser(user);
-    localStorage.setItem('user', JSON.stringify(user));
+if (user) {
+  localStorage.setItem('user', JSON.stringify(user));
+}
+
   }
 
   async function customerSignup(userData) {
@@ -86,8 +89,11 @@ export function AuthProvider({ children }) {
     );
     const user =
       data.user || (data.success && data.user) || { email: userData.email, role: 'customer' };
-    setCurrentUser(user);
-    localStorage.setItem('user', JSON.stringify(user));
+   setCurrentUser(user);
+if (user) {
+  localStorage.setItem('user', JSON.stringify(user));
+}
+
   }
 
   async function contentCreatorSignup(email, password, additionalData) {
@@ -100,8 +106,11 @@ export function AuthProvider({ children }) {
       }
     );
     const user = { _id: data.userId, email, role: 'content_creator', ...additionalData };
-    setCurrentUser(user);
-    localStorage.setItem('user', JSON.stringify(user));
+   setCurrentUser(user);
+if (user) {
+  localStorage.setItem('user', JSON.stringify(user));
+}
+
   }
 
   // === Login Function ===
@@ -111,8 +120,11 @@ export function AuthProvider({ children }) {
       { email, password }
     );
     const user = data.user;
-    setCurrentUser(user);
-    localStorage.setItem('user', JSON.stringify(user));
+   setCurrentUser(user);
+if (user) {
+  localStorage.setItem('user', JSON.stringify(user));
+}
+
   }
 
   function logout() {

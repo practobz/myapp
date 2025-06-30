@@ -12,6 +12,8 @@ import ProtectedRoute from './admin/components/ProtectedRoute';
 import CustomersList from './admin/pages/admin/CustomersList';
 import CustomerDetailsView from './admin/pages/admin/CustomerDetailsView';
 import Customers from './admin/pages/admin/Customers';
+import ContentCreators from './admin/pages/admin/ContentCreators';
+import ContentCreatorDetails from './admin/pages/admin/ContentCreatorDetails';
 
 // Customer imports
 import CustomerDashboard from './customer/Dashboard';
@@ -41,6 +43,7 @@ function App() {
             <Routes>
               <Route path="/signup" element={<Signup />} />
               <Route path="/login" element={<Login />} />
+              {/* Protect all /admin routes */}
               <Route path="/admin" element={
                 <ProtectedRoute>
                   <Dashboard />
@@ -74,6 +77,16 @@ function App() {
               <Route path="/admin/customers" element={
                 <ProtectedRoute>
                   <Customers />
+                </ProtectedRoute>
+              } />
+              <Route path="/admin/content-creators" element={
+                <ProtectedRoute>
+                  <ContentCreators />
+                </ProtectedRoute>
+              } />
+              <Route path="/admin/content-creator-details/:id" element={
+                <ProtectedRoute>
+                  <ContentCreatorDetails />
                 </ProtectedRoute>
               } />
               {/* Customer auth routes */}

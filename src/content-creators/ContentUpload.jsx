@@ -1,22 +1,13 @@
 import React, { useState, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import {
-  ArrowLeft,
-  Upload,
-  Image,
-  X,
-  Calendar,
-  Palette,
-  Send
-} from 'lucide-react';
-
-const API_URL = process.env.REACT_APP_API_URL || 'https://myapi-2lv7dhspca-uc.a.run.app';
+import { ArrowLeft, Upload, Image, X, Check, FileText, Calendar, Clock, Palette, Send } from 'lucide-react';
 
 function ContentUpload() {
   const navigate = useNavigate();
   const { assignmentId } = useParams();
   const fileInputRef = useRef(null);
-
+  
+  // Mock assignment data - in real app, fetch based on assignmentId
   const assignment = {
     id: assignmentId || '1',
     customer: 'Shoppers Stop',
@@ -42,20 +33,26 @@ function ContentUpload() {
   const handleDrag = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    setDragActive(e.type === "dragenter" || e.type === "dragover");
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
   };
 
   const handleDrop = (e) => {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+    
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       handleFiles(e.dataTransfer.files);
     }
   };
 
   const handleChange = (e) => {
-    if (e.target.files && e.target.files.length > 0) {
+    e.preventDefault();
+    if (e.target.files && e.target.files[0]) {
       handleFiles(e.target.files);
     }
   };
@@ -65,24 +62,22 @@ function ContentUpload() {
       if (file.type.startsWith('image/')) {
         const reader = new FileReader();
         reader.onload = (e) => {
-          setUploadedFiles(prev => [
-            ...prev,
-            {
-              id: Date.now() + Math.random(),
-              file,
-              preview: e.target.result,
-              name: file.name,
-              size: file.size
-            }
-          ]);
+          const newFile = {
+            id: Date.now() + Math.random(),
+            file: file,
+            preview: e.target.result,
+            name: file.name,
+            size: file.size
+          };
+          setUploadedFiles(prev => [...prev, newFile]);
         };
         reader.readAsDataURL(file);
       }
     });
   };
 
-  const removeFile = (id) => {
-    setUploadedFiles(prev => prev.filter(file => file.id !== id));
+  const removeFile = (fileId) => {
+    setUploadedFiles(prev => prev.filter(file => file.id !== fileId));
   };
 
   const formatFileSize = (bytes) => {
@@ -93,74 +88,82 @@ function ContentUpload() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  const handleSubmit = async () => {
-    if (uploadedFiles.length === 0) {
-      alert('Please upload at least one image');
-      return;
-    }
+ const handleSubmit = async () => {
+  if (uploadedFiles.length === 0) {
+    alert('Please upload at least one image');
+    return;
+  }
 
-    setSubmitting(true);
-    const uploadedImageUrls = [];
+  setSubmitting(true);
+  const uploadedImageUrls = [];
 
-    try {
-      for (const fileObj of uploadedFiles) {
-        const safeFileName = fileObj.name.replace(/[^\w.-]/g, '_');
+  try {
+    // Upload each image to GCS
+    for (const fileObj of uploadedFiles) {
+      const safeFileName = fileObj.name.replace(/[^\w.-]/g, '_');
 
-        const res = await fetch(
-          `${API_URL}/api/gcs/generate-upload-url?filename=${encodeURIComponent(safeFileName)}&contentType=${encodeURIComponent(fileObj.file.type)}`
-        );
+      const res = await fetch(
+        `${process.env.REACT_APP_API_URL}/api/gcs/generate-upload-url?filename=${encodeURIComponent(safeFileName)}&contentType=${encodeURIComponent(fileObj.file.type)}`
+      );
 
-        if (!res.ok) {
-          throw new Error(`Failed to get signed URL (Status: ${res.status})`);
-        }
-
-        const { url } = await res.json();
-        if (!url) {
-          throw new Error('Signed URL missing in response');
-        }
-
-        const uploadRes = await fetch(url, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': fileObj.file.type
-          },
-          body: fileObj.file
-        });
-
-        if (!uploadRes.ok) {
-          throw new Error(`Upload failed for ${fileObj.name} (Status: ${uploadRes.status})`);
-        }
-
-        const publicUrl = `https://storage.googleapis.com/mediaupload-adcore/${safeFileName}`;
-        uploadedImageUrls.push(publicUrl);
+      if (!res.ok) {
+        throw new Error(`Failed to get signed URL (Status: ${res.status})`);
       }
 
-      const response = await fetch(`${API_URL}/api/content-submissions`, {
-        method: 'POST',
+      const { url } = await res.json();
+      if (!url) {
+        throw new Error(`Signed URL missing in response`);
+      }
+
+      const uploadRes = await fetch(url, {
+        method: 'PUT',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': fileObj.file.type,
         },
-        body: JSON.stringify({
-          assignment_id: assignment.id,
-          caption,
-          hashtags,
-          notes,
-          images: uploadedImageUrls
-        })
+        body: fileObj.file,
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to save submission to database');
+      if (!uploadRes.ok) {
+        throw new Error(`Upload failed for ${fileObj.name} (Status: ${uploadRes.status})`);
       }
 
-      alert('Content submitted successfully! The customer will review your work.');
-      navigate('/content-creator/assignments');
-    } catch (err) {
-      console.error('Upload error:', err);
-      alert('Upload failed. Please try again.');
-    } finally {
-      setSubmitting(false);
+      const publicUrl = `https://storage.googleapis.com/mediaupload-adcore/${safeFileName}`;
+      uploadedImageUrls.push(publicUrl);
     }
+
+    // 👉 Send metadata to backend
+    const response = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        assignment_id: assignment.id,
+        caption,
+        hashtags,
+        notes,
+        images: uploadedImageUrls
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to save submission to database');
+    }
+
+    alert('Content submitted successfully! The customer will review your work.');
+    navigate('/content-creator/assignments');
+  } catch (err) {
+    console.error('Upload error:', err);
+    alert('Upload failed. Please try again.');
+  } finally {
+    setSubmitting(false);
+  }
+};
+
+
+
+  const onButtonClick = () => {
+    fileInputRef.current?.click();
   };
 
   return (
@@ -205,19 +208,29 @@ function ContentUpload() {
                 </span>
               </div>
             </div>
+            
             <p className="text-gray-700 mb-4">{assignment.description}</p>
-            <h3 className="font-semibold text-gray-900 mb-2">Requirements:</h3>
-            <ul className="list-disc list-inside space-y-1 text-gray-600">
-              {assignment.requirements.map((req, i) => <li key={i}>{req}</li>)}
-            </ul>
+            
+            <div>
+              <h3 className="font-semibold text-gray-900 mb-2">Requirements:</h3>
+              <ul className="list-disc list-inside space-y-1 text-gray-600">
+                {assignment.requirements.map((req, index) => (
+                  <li key={index}>{req}</li>
+                ))}
+              </ul>
+            </div>
           </div>
 
           {/* Upload Section */}
           <div className="bg-white rounded-lg shadow-md p-6">
             <h2 className="text-xl font-semibold mb-4">Upload Content</h2>
+            
+            {/* Drag and Drop Area */}
             <div
               className={`relative border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-                dragActive ? 'border-purple-400 bg-purple-50' : 'border-gray-300 hover:border-gray-400'
+                dragActive 
+                  ? 'border-purple-400 bg-purple-50' 
+                  : 'border-gray-300 hover:border-gray-400'
               }`}
               onDragEnter={handleDrag}
               onDragLeave={handleDrag}
@@ -232,26 +245,43 @@ function ContentUpload() {
                 onChange={handleChange}
                 className="hidden"
               />
-              <Upload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-lg font-medium">Drag & drop or</p>
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="mt-2 inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700"
-              >
-                <Image className="h-4 w-4 mr-2" />
-                Browse Files
-              </button>
-              <p className="text-sm text-gray-400 mt-2">JPG, PNG, GIF. Max 10MB each</p>
+              
+              <div className="space-y-4">
+                <div className="flex justify-center">
+                  <Upload className="h-12 w-12 text-gray-400" />
+                </div>
+                <div>
+                  <p className="text-lg font-medium text-gray-900">
+                    Drag and drop your images here
+                  </p>
+                  <p className="text-gray-500">or</p>
+                  <button
+                    onClick={onButtonClick}
+                    className="mt-2 inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors"
+                  >
+                    <Image className="h-4 w-4 mr-2" />
+                    Browse Files
+                  </button>
+                </div>
+                <p className="text-sm text-gray-400">
+                  Supports: JPG, PNG, GIF (Max 10MB per file)
+                </p>
+              </div>
             </div>
 
+            {/* Uploaded Files Preview */}
             {uploadedFiles.length > 0 && (
               <div className="mt-6">
                 <h3 className="font-semibold text-gray-900 mb-3">Uploaded Images ({uploadedFiles.length})</h3>
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                  {uploadedFiles.map(file => (
+                  {uploadedFiles.map((file) => (
                     <div key={file.id} className="relative group">
                       <div className="aspect-square rounded-lg overflow-hidden bg-gray-100">
-                        <img src={file.preview} alt={file.name} className="w-full h-full object-cover" />
+                        <img
+                          src={file.preview}
+                          alt={file.name}
+                          className="w-full h-full object-cover"
+                        />
                       </div>
                       <button
                         onClick={() => removeFile(file.id)}
@@ -273,53 +303,76 @@ function ContentUpload() {
           {/* Content Details */}
           <div className="bg-white rounded-lg shadow-md p-6">
             <h2 className="text-xl font-semibold mb-4">Content Details</h2>
+            
             <div className="space-y-4">
-              <textarea
-                value={caption}
-                onChange={(e) => setCaption(e.target.value)}
-                rows={4}
-                placeholder="Caption..."
-                className="w-full border border-gray-300 rounded-md px-3 py-2"
-              />
-              <input
-                value={hashtags}
-                onChange={(e) => setHashtags(e.target.value)}
-                placeholder="Hashtags..."
-                className="w-full border border-gray-300 rounded-md px-3 py-2"
-              />
-              <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                rows={3}
-                placeholder="Notes for client..."
-                className="w-full border border-gray-300 rounded-md px-3 py-2"
-              />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Caption
+                </label>
+                <textarea
+                  value={caption}
+                  onChange={(e) => setCaption(e.target.value)}
+                  rows={4}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  placeholder="Write an engaging caption for your post..."
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Hashtags
+                </label>
+                <input
+                  type="text"
+                  value={hashtags}
+                  onChange={(e) => setHashtags(e.target.value)}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  placeholder="#fashion #summer #newcollection #style"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Notes for Client
+                </label>
+                <textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  rows={3}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  placeholder="Any additional notes or explanations for the client..."
+                />
+              </div>
             </div>
           </div>
 
           {/* Submit Section */}
-          <div className="bg-white rounded-lg shadow-md p-6 flex items-center justify-between">
-            <div>
-              <h3 className="font-semibold text-gray-900">Ready to Submit?</h3>
-              <p className="text-sm text-gray-600 mt-1">Your content will be sent to {assignment.customer} for review</p>
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-gray-900">Ready to Submit?</h3>
+                <p className="text-sm text-gray-600 mt-1">
+                  Your content will be sent to {assignment.customer} for review
+                </p>
+              </div>
+              <button
+                onClick={handleSubmit}
+                disabled={submitting || uploadedFiles.length === 0}
+                className="inline-flex items-center px-6 py-3 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {submitting ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Submitting...
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-4 w-4 mr-2" />
+                    Submit Content
+                  </>
+                )}
+              </button>
             </div>
-            <button
-              onClick={handleSubmit}
-              disabled={submitting || uploadedFiles.length === 0}
-              className="inline-flex items-center px-6 py-3 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50"
-            >
-              {submitting ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Submitting...
-                </>
-              ) : (
-                <>
-                  <Send className="h-4 w-4 mr-2" />
-                  Submit Content
-                </>
-              )}
-            </button>
           </div>
         </div>
       </div>

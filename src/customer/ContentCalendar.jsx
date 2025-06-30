@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { MessageSquare, Instagram, Facebook, Linkedin, Youtube, AlertCircle, Eye } from 'lucide-react';
@@ -6,81 +6,48 @@ import { MessageSquare, Instagram, Facebook, Linkedin, Youtube, AlertCircle, Eye
 function ContentCalendar() {
   const navigate = useNavigate();
   const [selectedContent, setSelectedContent] = useState(null);
-  const [selectedCalendar, setSelectedCalendar] = useState('calendar1');
   const [statusFilter, setStatusFilter] = useState('all');
-  
-  // Mock data for multiple content calendars
-  const contentCalendars = {
-    calendar1: {
-      name: 'Main Brand Calendar',
-      items: [
-        {
-          id: 1,
-          date: '2024-03-15',
-          status: 'published',
-          description: 'New product launch post',
-          commentCount: 12,
-          platforms: ['instagram', 'facebook'],
-          engagement: { likes: 245, shares: 45 }
-        },
-        {
-          id: 2,
-          date: '2024-03-16',
-          status: 'under_review',
-          description: 'Customer testimonial showcase',
-          commentCount: 3,
-          platforms: ['linkedin'],
-          engagement: { likes: 89, shares: 12 }
-        },
-        {
-          id: 3,
-          date: '2024-03-17',
-          status: 'draft',
-          description: 'Behind the scenes video',
-          commentCount: 0,
-          platforms: ['youtube', 'instagram'],
-          engagement: { likes: 0, shares: 0 }
-        }
-      ]
-    },
-    calendar2: {
-      name: 'Seasonal Campaign',
-      items: [
-        {
-          id: 4,
-          date: '2024-03-18',
-          status: 'published',
-          description: 'Spring collection announcement',
-          commentCount: 25,
-          platforms: ['instagram', 'facebook', 'linkedin'],
-          engagement: { likes: 456, shares: 78 }
-        },
-        {
-          id: 5,
-          date: '2024-03-19',
-          status: 'waiting_input',
-          description: 'Customer feedback compilation',
-          commentCount: 0,
-          platforms: ['facebook'],
-          engagement: { likes: 0, shares: 0 }
-        }
-      ]
-    },
-    calendar3: {
-      name: 'Event Promotions',
-      items: [
-        {
-          id: 6,
-          date: '2024-03-20',
-          status: 'scheduled',
-          description: 'Upcoming webinar promotion',
-          commentCount: 0,
-          platforms: ['linkedin', 'youtube'],
-          engagement: { likes: 0, shares: 0 }
-        }
-      ]
+  const [calendars, setCalendars] = useState([]);
+  const [customer, setCustomer] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  // Get logged-in customer info (assume it's stored in localStorage as 'user')
+  let user = null;
+  try {
+    user = JSON.parse(localStorage.getItem('user'));
+  } catch {
+    user = null;
+  }
+  const customerId = user?.id || user?._id;
+  const customerName = user?.name;
+
+  useEffect(() => {
+    const fetchCustomerAndCalendars = async () => {
+      setLoading(true);
+      try {
+        // Fetch customer details
+        const customerRes = await fetch(`/api/customers/${customerId}`);
+        const customerData = await customerRes.json();
+        setCustomer(customerData);
+
+        // Fetch content calendars for this customer
+        const calendarsRes = await fetch(`/calendars/${customerId}`);
+        const raw = await calendarsRes.json();
+        // Normalize to array
+        const calendarArray = Array.isArray(raw) ? raw : [raw];
+        setCalendars(calendarArray);
+      } catch (err) {
+        setCustomer(null);
+        setCalendars([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (customerId) {
+      fetchCustomerAndCalendars();
     }
-  };
+  }, [customerId]);
 
   const getPlatformIcon = (platform) => {
     switch (platform) {
@@ -115,6 +82,7 @@ function ContentCalendar() {
   };
 
   const getStatusLabel = (status) => {
+    if (!status) return '';
     switch (status) {
       case 'waiting_input':
         return 'Waiting Input';
@@ -127,30 +95,47 @@ function ContentCalendar() {
     setSelectedContent(content.status === 'published' ? content : null);
   };
 
-  const currentCalendar = contentCalendars[selectedCalendar];
+  // Flatten all content items from all calendars for this customer
+  let allItems = [];
+  calendars.forEach(calendar => {
+    if (Array.isArray(calendar.contentItems)) {
+      calendar.contentItems.forEach(item => {
+        allItems.push({
+          ...item,
+          calendarName: calendar.name || '',
+          id: item.id || item._id || Math.random().toString(36).slice(2)
+        });
+      });
+    }
+  });
 
-  // Add all possible statuses for filter buttons
-  const statusOptions = [
-    { key: 'all', label: 'All', color: 'bg-gray-200 text-gray-800' },
-    { key: 'published', label: 'Published', color: 'bg-green-100 text-green-800' },
-    { key: 'under_review', label: 'Under Review', color: 'bg-yellow-100 text-yellow-800' },
-    { key: 'scheduled', label: 'Scheduled', color: 'bg-blue-100 text-blue-800' },
-    { key: 'waiting_input', label: 'Waiting Input', color: 'bg-orange-100 text-orange-800' },
-    { key: 'draft', label: 'Draft', color: 'bg-gray-100 text-gray-800' }
-  ];
-
-  // Filter and sort items based on statusFilter
+  // Only show content for this customer, filter and sort as before
   const filteredItems = statusFilter === 'all'
-    ? currentCalendar.items
-    : currentCalendar.items.filter(item => item.status === statusFilter);
+    ? allItems
+    : allItems.filter(item => item.status === statusFilter);
 
-  // Sort items so that filtered status appears first
   const sortedItems = [...filteredItems].sort((a, b) => {
     if (statusFilter === 'all') return 0;
     if (a.status === statusFilter && b.status !== statusFilter) return -1;
     if (a.status !== statusFilter && b.status === statusFilter) return 1;
     return 0;
   });
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-gray-500">
+        Loading...
+      </div>
+    );
+  }
+
+  if (!customer) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-red-500">
+        Customer not found.
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -162,21 +147,14 @@ function ContentCalendar() {
             <div className="bg-white rounded-lg shadow-md p-6">
               <h3 className="text-lg font-semibold mb-4">Content Calendars</h3>
               <div className="space-y-2">
-                {Object.entries(contentCalendars).map(([key, calendar]) => (
+                {calendars.map((calendar, idx) => (
                   <button
-                    key={key}
-                    onClick={() => {
-                      setSelectedCalendar(key);
-                      setStatusFilter('all');
-                    }}
-                    className={`w-full text-left p-3 rounded-md transition-colors ${
-                      selectedCalendar === key
-                        ? 'bg-[#1a1f2e] text-white'
-                        : 'bg-gray-50 hover:bg-gray-100 text-gray-700'
-                    }`}
+                    key={calendar._id || idx}
+                    onClick={() => {/* no-op, only one customer calendar is shown */}}
+                    className="w-full text-left p-3 rounded-md bg-[#1a1f2e] text-white"
                   >
                     <div className="font-medium">{calendar.name}</div>
-                    <div className="text-sm opacity-75">{calendar.items.length} items</div>
+                    <div className="text-sm opacity-75">{calendar.contentItems?.length || 0} items</div>
                   </button>
                 ))}
               </div>
@@ -188,12 +166,19 @@ function ContentCalendar() {
             <div className="bg-white rounded-lg shadow-md p-6">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-4">
                 <div>
-                  <h2 className="text-xl font-semibold">{currentCalendar.name}</h2>
+                  <h2 className="text-xl font-semibold">{customer.name}'s Content Calendar</h2>
                   <p className="text-gray-600 text-sm mt-1">Manage your content schedule</p>
                 </div>
                 {/* Status Filter Buttons */}
                 <div className="flex flex-wrap gap-2">
-                  {statusOptions.map(option => (
+                  {[
+                    { key: 'all', label: 'All', color: 'bg-gray-200 text-gray-800' },
+                    { key: 'published', label: 'Published', color: 'bg-green-100 text-green-800' },
+                    { key: 'under_review', label: 'Under Review', color: 'bg-yellow-100 text-yellow-800' },
+                    { key: 'scheduled', label: 'Scheduled', color: 'bg-blue-100 text-blue-800' },
+                    { key: 'waiting_input', label: 'Waiting Input', color: 'bg-orange-100 text-orange-800' },
+                    { key: 'draft', label: 'Draft', color: 'bg-gray-100 text-gray-800' }
+                  ].map(option => (
                     <button
                       key={option.key}
                       onClick={() => setStatusFilter(option.key)}
@@ -228,7 +213,7 @@ function ContentCalendar() {
                       <div className="flex items-center space-x-3">
                         <div className="flex items-center text-gray-500">
                           <MessageSquare className="h-4 w-4 mr-1" />
-                          <span>{item.commentCount}</span>
+                          <span>{item.commentCount || 0}</span>
                         </div>
                         {item.status === 'published' && (
                           <Eye className="h-4 w-4 text-gray-400" />
@@ -239,7 +224,7 @@ function ContentCalendar() {
                     
                     {/* Platform Icons */}
                     <div className="flex items-center space-x-2">
-                      {item.platforms.map((platform) => (
+                      {(item.platforms || []).map((platform) => (
                         <div key={platform} className="text-gray-500">
                           {getPlatformIcon(platform)}
                         </div>
@@ -281,7 +266,7 @@ function ContentCalendar() {
                 <div>
                   <p className="text-sm text-gray-500">Published On</p>
                   <div className="flex items-center space-x-3 mt-2">
-                    {selectedContent.platforms.map((platform) => (
+                    {(selectedContent.platforms || []).map((platform) => (
                       <div key={platform} className="flex items-center space-x-2 bg-gray-100 px-3 py-2 rounded-md">
                         {getPlatformIcon(platform)}
                         <span className="capitalize">{platform}</span>
@@ -295,11 +280,11 @@ function ContentCalendar() {
                   <div className="grid grid-cols-2 gap-4 mt-2">
                     <div className="bg-gray-100 p-3 rounded-md">
                       <p className="text-sm text-gray-500">Likes</p>
-                      <p className="font-medium">{selectedContent.engagement.likes}</p>
+                      <p className="font-medium">{selectedContent.engagement?.likes || 0}</p>
                     </div>
                     <div className="bg-gray-100 p-3 rounded-md">
                       <p className="text-sm text-gray-500">Shares</p>
-                      <p className="font-medium">{selectedContent.engagement.shares}</p>
+                      <p className="font-medium">{selectedContent.engagement?.shares || 0}</p>
                     </div>
                   </div>
                 </div>

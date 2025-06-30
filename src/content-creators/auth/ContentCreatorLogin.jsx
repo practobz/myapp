@@ -39,14 +39,7 @@ function ContentCreatorLogin() {
       await contentCreatorLogin(email, password);
       navigate('/content-creator');
     } catch (err) {
-      if (
-        err.message === 'Invalid credentials or sign up to create account' ||
-        err.message.toLowerCase().includes('invalid credentials')
-      ) {
-        setError('Invalid credentials or sign up if account does not exist');
-      } else {
-        setError('Failed to log in');
-      }
+      setError('Failed to log in');
       console.error(err);
     } finally {
       setLoading(false);

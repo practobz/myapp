@@ -3,9 +3,14 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import AdminLayout from '../../components/layout/AdminLayout';
 import ContentItemModal from '../../components/modals/ContentItemModal';
-import { ChevronLeft, Pencil, Trash2, Plus, AlertCircle } from 'lucide-react';
+import AssignCreatorModal from '../../components/modals/AssignCreatorModal';
+import ContentCalendarModal from '../../components/modals/ContentCalendarModal';
+import {
+  ChevronLeft, Pencil, Trash2, Plus, AlertCircle, Calendar, Clock, User, FileText, Activity, Target, UserCheck,
+  ChevronRight, ChevronDown
+} from 'lucide-react';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+const API_URL = process.env.REACT_APP_API_URL;
 
 const CustomerDetails = () => {
   const { id } = useParams();
@@ -18,34 +23,45 @@ const CustomerDetails = () => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState(undefined);
   const [deleteConfirmation, setDeleteConfirmation] = useState(null);
+  const [creators, setCreators] = useState([]);
+  const [expandedCalendars, setExpandedCalendars] = useState(new Set());
+  const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
+  const [selectedCalendar, setSelectedCalendar] = useState(null);
+  const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
+  const [isEditCalendarModalOpen, setIsEditCalendarModalOpen] = useState(false);
+  const [calendarToEdit, setCalendarToEdit] = useState(null);
 
   useEffect(() => {
-    const user = localStorage.getItem('user');
-    if (!user) return navigate('/admin');
-
-    setCustomer({
-      id,
-      name: 'Test Customer',
-    });
-  }, [id, navigate]);
-
-  useEffect(() => {
+    fetchCustomer();
     fetchCalendarItems();
+    fetchCreators();
   }, [id]);
+
+  const fetchCustomer = async () => {
+    try {
+      const response = await fetch(`${API_URL}/customer/${id}`);
+      if (!response.ok) return setCustomer(null);
+      const data = await response.json();
+      setCustomer(data);
+    } catch {
+      setCustomer(null);
+    }
+  };
 
   const fetchCalendarItems = async () => {
     try {
-      const response = await fetch(`${API_URL}/calendars/${id}`);
+      const response = await fetch(`${API_URL}/calendars`);
       if (!response.ok) {
+        setCalendars([]);
         setContentItems([]);
         return;
       }
+      const allCalendars = await response.json();
+      const customerCalendars = allCalendars.filter(c => c.customerId === id);
+      setCalendars(customerCalendars);
 
-      const raw = await response.json();
-      const calendarArray = Array.isArray(raw) ? raw : [raw];
-      setCalendars(calendarArray);
-
-      const allItems = calendarArray
+      // Flatten all content items for stats
+      const allItems = customerCalendars
         .filter(c => Array.isArray(c.contentItems) && c.contentItems.length > 0)
         .flatMap(c => c.contentItems.map(item => ({
           ...item,
@@ -53,107 +69,268 @@ const CustomerDetails = () => {
           _id: `${c._id}_${item.date}_${item.description}`
         })))
         .sort((a, b) => new Date(a.date) - new Date(b.date));
-
       setContentItems(allItems);
     } catch (err) {
-      console.error("❌ Error fetching calendar items:", err);
+      setCalendars([]);
+      setContentItems([]);
     }
   };
 
-  const handleAddItem = async (item) => {
+  const fetchCreators = async () => {
+    try {
+      const response = await fetch(`${API_URL}/users?role=content_creator`);
+      if (!response.ok) throw new Error('Failed to fetch content creators');
+      const raw = await response.clone().json();
+      const data = Array.isArray(raw) ? raw : (Array.isArray(raw.creators) ? raw.creators : []);
+      setCreators(data);
+    } catch {
+      setCreators([]);
+    }
+  };
+
+  const handleAddCalendar = async (calendarData) => {
     try {
       const response = await fetch(`${API_URL}/calendars`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           customerId: id,
-          name: 'Untitled Calendar',
-          description: item.description || '',
-          contentItems: [item],
+          name: calendarData.name,
+          description: calendarData.description,
+          assignedTo: '',
+          assignedToName: '',
+          contentItems: [],
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         })
       });
-
-      if (!response.ok) throw new Error('Failed to add item');
+      if (!response.ok) throw new Error('Failed to add calendar');
       fetchCalendarItems();
     } catch (err) {
-      console.error('❌ Error adding content item:', err);
+      // handle error
     }
   };
-const handleEditItem = (item) => {
-  setSelectedItem({
-    ...item,
-    _calendarId: item._calendarId || item._id?.split('_')[0],
-    originalDate: item.date,
-    originalDescription: item.description
-  });
-  setIsEditModalOpen(true);
-};
 
+  const handleCreateCalendar = async (calendarData) => {
+    try {
+      const response = await fetch(`${API_URL}/calendars`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerId: id,
+          name: calendarData.name,
+          description: calendarData.description,
+          assignedTo: calendarData.assignedTo || '',
+          assignedToName: calendarData.assignedToName || '',
+          contentItems: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        })
+      });
+      if (!response.ok) throw new Error('Failed to add calendar');
+      fetchCalendarItems();
+    } catch (err) {
+      // handle error
+    } finally {
+      setIsCalendarModalOpen(false);
+    }
+  };
 
+  const handleAddItem = async (item, calendarId) => {
+  if (!calendarId) {
+    alert("Please select a calendar before adding content.");
+    return;
+  }
 
-
- const handleUpdateItem = async (updatedItem) => {
   try {
-    const {
-      _calendarId,
-      date,
-      description,
-      originalDate,
-      originalDescription
-    } = updatedItem;
-
-    if (!_calendarId || !originalDate || !originalDescription) {
-      console.error("❌ Missing required fields for update:", updatedItem);
+    const calendar = calendars.find(c => c._id === calendarId);
+    if (!calendar) {
+      alert("Calendar not found.");
       return;
     }
 
-    const url = `${API_URL}/calendars/item/${_calendarId}/${originalDate}/${encodeURIComponent(originalDescription)}`;
-
-    const response = await fetch(url, {
+    const updatedContentItems = [...(calendar.contentItems || []), item];
+    const response = await fetch(`${API_URL}/calendars/${calendarId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date, description })
+      body: JSON.stringify({
+        ...calendar,
+        contentItems: updatedContentItems,
+        updatedAt: new Date().toISOString()
+      })
     });
 
     if (!response.ok) {
-      const errText = await response.text();
-      console.error('🛑 PUT failed:', response.status, errText);
-      throw new Error(`Failed to update item (status ${response.status})`);
+      throw new Error('Failed to add item');
     }
 
     fetchCalendarItems();
   } catch (err) {
-    console.error('❌ Error updating item:', err);
-  } finally {
-    setIsEditModalOpen(false);
+    console.error('❌ Error adding content item:', err);
+    alert("Failed to add content item.");
   }
 };
 
 
+  // Edit content item handler (match CustomerDetailsView.jsx)
+  const handleEditItem = (item, calendarId) => {
+    setSelectedItem({
+      ...item,
+      _calendarId: calendarId,
+      originalDate: item.date,
+      originalDescription: item.description
+    });
+    setIsEditModalOpen(true);
+  };
+
+  // Update content item handler (match CustomerDetailsView.jsx)
+  const handleUpdateItem = async (updatedItem) => {
+    try {
+      const {
+        _calendarId,
+        date,
+        description,
+        originalDate,
+        originalDescription,
+        type,
+        status,
+        title
+      } = updatedItem;
+
+      if (!_calendarId || !originalDate || !originalDescription) return;
+
+      // Fetch the latest calendar to get all items
+      let calendar = null;
+      let calendarRes = await fetch(`${API_URL}/calendars/${_calendarId}`);
+      if (calendarRes.ok) {
+        calendar = await calendarRes.json();
+      } else {
+        // fallback: try to fetch all calendars and find by _id
+        const allRes = await fetch(`${API_URL}/calendars`);
+        if (allRes.ok) {
+          const allCalendars = await allRes.json();
+          calendar = allCalendars.find(c => c._id === _calendarId);
+        }
+      }
+      if (!calendar || !calendar._id) {
+        throw new Error('Calendar not found');
+      }
+
+      // Find and update the content item in the array
+      const updatedContentItems = (calendar.contentItems || []).map(item => {
+        if (
+          item.date === originalDate &&
+          item.description === originalDescription
+        ) {
+          return {
+            ...item,
+            date,
+            description,
+            type: type !== undefined ? type : item.type,
+            status: status !== undefined ? status : item.status,
+            title: title !== undefined ? title : item.title
+          };
+        }
+        return item;
+      });
+
+      const response = await fetch(`${API_URL}/calendars/${calendar._id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...calendar,
+          contentItems: updatedContentItems,
+          updatedAt: new Date().toISOString()
+        })
+      });
+
+      if (!response.ok) throw new Error('Failed to update item');
+      fetchCalendarItems();
+    } catch (err) {
+      // handle error
+    } finally {
+      setIsEditModalOpen(false);
+    }
+  };
+
+  const handleEditCalendar = (calendar) => {
+    setCalendarToEdit(calendar);
+    setIsEditCalendarModalOpen(true);
+  };
+
+  const handleUpdateCalendar = async (updatedCalendarData) => {
+    try {
+      const response = await fetch(`${API_URL}/calendars/${calendarToEdit._id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...calendarToEdit,
+          ...updatedCalendarData,
+          updatedAt: new Date().toISOString()
+        })
+      });
+      if (!response.ok) throw new Error('Failed to update calendar');
+      fetchCalendarItems();
+    } catch (err) {
+      // handle error
+    } finally {
+      setIsEditCalendarModalOpen(false);
+      setCalendarToEdit(null);
+    }
+  };
 
   const handleDeleteConfirm = (id) => setDeleteConfirmation(id);
 
-  const handleDeleteItem = async (id) => {
+  const handleDeleteItem = async (calendarId, item) => {
     try {
-      const [calendarId, date, ...descParts] = id.split('_');
-      const description = descParts.join('_');
-      const response = await fetch(
-        `${API_URL}/calendars/item/${calendarId}/${date}/${encodeURIComponent(description)}`,
-        {
-          method: 'DELETE'
-        }
-      );
+      const description = item.description;
+      const date = item.date;
+      const url = `${API_URL}/calendars/item/${calendarId}/${date}/${encodeURIComponent(description)}`;
+      const response = await fetch(url, { method: 'DELETE' });
       if (!response.ok) throw new Error('Failed to delete item');
       fetchCalendarItems();
     } catch (err) {
-      console.error('❌ Error deleting item:', err);
+      // handle error
     }
-    setDeleteConfirmation(null);
+  };
+
+  const handleDeleteCalendar = async (calendarId) => {
+    if (!window.confirm('Are you sure you want to delete this content calendar?')) return;
+    try {
+      const response = await fetch(`${API_URL}/calendars/${calendarId}`, {
+        method: 'DELETE'
+      });
+      if (!response.ok) throw new Error('Failed to delete calendar');
+      fetchCalendarItems();
+    } catch (err) {
+      // handle error
+    }
   };
 
   const handleCancelDelete = () => setDeleteConfirmation(null);
+
+  const handleAssignCreator = async (creator) => {
+    if (!selectedCalendar) return;
+    try {
+      const calendar = calendars.find(c => c._id === selectedCalendar._id);
+      const response = await fetch(`${API_URL}/calendars/${selectedCalendar._id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...calendar,
+          assignedTo: creator.email,
+          assignedToName: creator.name,
+          updatedAt: new Date().toISOString()
+        })
+      });
+      if (!response.ok) throw new Error('Failed to assign creator');
+      fetchCalendarItems();
+    } catch (err) {
+      // handle error
+    }
+    setIsAssignModalOpen(false);
+    setSelectedCalendar(null);
+  };
 
   const formatDate = (dateString) => {
     try {
@@ -164,103 +341,330 @@ const handleEditItem = (item) => {
     }
   };
 
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'assigned':
+        return 'bg-blue-50 text-blue-700 border-blue-200';
+      case 'in_progress':
+        return 'bg-amber-50 text-amber-700 border-amber-200';
+      case 'waiting_input':
+        return 'bg-orange-50 text-orange-700 border-orange-200';
+      case 'approved':
+        return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+      case 'published':
+        return 'bg-purple-50 text-purple-700 border-purple-200';
+      default:
+        return 'bg-gray-50 text-gray-700 border-gray-200';
+    }
+  };
+
+  const getPriorityColor = (priority) => {
+    switch ((priority || '').toLowerCase()) {
+      case 'high':
+        return 'bg-red-100 text-red-800 border-red-200';
+      case 'medium':
+        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case 'low':
+        return 'bg-green-100 text-green-800 border-green-200';
+      default:
+        return 'bg-gray-100 text-gray-800 border-gray-200';
+    }
+  };
+
+  const toggleCalendarExpansion = (calendarId) => {
+    const newExpanded = new Set(expandedCalendars);
+    if (newExpanded.has(calendarId)) {
+      newExpanded.delete(calendarId);
+    } else {
+      newExpanded.add(calendarId);
+    }
+    setExpandedCalendars(newExpanded);
+  };
+
   if (!customer) {
     return (
       <AdminLayout title="Customer Not Found">
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <div className="flex items-center text-red-600 mb-4">
-            <AlertCircle className="h-6 w-6 mr-2" />
-            <h3 className="text-lg font-semibold">Customer not found</h3>
+        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
+          <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg p-8 border border-gray-200/50 max-w-md w-full mx-4">
+            <div className="text-center">
+              <div className="bg-red-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
+                <AlertCircle className="h-8 w-8 text-red-600" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Customer not found</h3>
+              <p className="text-gray-600 mb-6">The customer you're looking for doesn't exist or has been removed.</p>
+              <button
+                onClick={() => navigate('/admin')}
+                className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
+              >
+                <ChevronLeft className="h-4 w-4 mr-2" />
+                Back to Dashboard
+              </button>
+            </div>
           </div>
-          <p className="mb-4">The customer you're looking for doesn't exist or has been removed.</p>
-          <button
-            onClick={() => navigate('/admin')}
-            className="btn-primary flex items-center"
-          >
-            <ChevronLeft className="h-4 w-4 mr-2" />
-            Back to Dashboard
-          </button>
         </div>
       </AdminLayout>
     );
   }
 
   return (
-    <AdminLayout title={`${customer.name} - Content Calendar`}>
-      <div className="space-y-4 sm:space-y-6">
-        <div className="flex items-center">
-          <button
-            onClick={() => navigate('/admin')}
-            className="mr-4 text-gray-600 hover:text-gray-900 transition-colors"
-          >
-            <ChevronLeft className="h-5 w-5" />
-          </button>
-          <h2 className="text-xl sm:text-2xl font-bold text-gray-900">{customer.name}</h2>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">Content Calendar</h3>
-            <button
-              onClick={() => setIsAddModalOpen(true)}
-              className="btn-primary flex items-center"
-            >
-              <Plus className="h-4 w-4 mr-2" /> Add Content
-            </button>
+    <AdminLayout title={`${customer.name} - Details`}>
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+        <div className="space-y-8">
+          {/* Header Section */}
+          <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-gray-200/50">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <button
+                  onClick={() => navigate('/admin/customers')}
+                  className="mr-4 p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all duration-200"
+                >
+                  <ChevronLeft className="h-5 w-5" />
+                </button>
+                <div className="flex items-center">
+                  <div className="h-12 w-12 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
+                    <span className="text-white font-bold text-lg">
+                      {customer.name.charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                  <div className="ml-4">
+                    <h2 className="text-2xl font-bold text-gray-900">{customer.name} - Details</h2>
+                    <p className="text-gray-600">Content Management Dashboard</p>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
-          {contentItems.length > 0 ? (
-            <ul className="divide-y divide-gray-200">
-              {contentItems.map(item => (
-                <li key={item._id} className="p-4">
-                  {deleteConfirmation === item._id ? (
-                    <div className="bg-red-50 p-3 rounded-md">
-                      <p className="text-sm text-red-700 mb-3">
-                        Are you sure you want to delete this content item?
-                      </p>
-                      <div className="flex space-x-3">
-                        <button onClick={handleCancelDelete} className="btn-secondary text-sm py-1 px-3">Cancel</button>
-                        <button onClick={() => handleDeleteItem(item._id)} className="btn-danger text-sm py-1 px-3">Delete</button>
-                      </div>
+          {/* Accordion Content Calendars */}
+          <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden">
+  <div className="px-8 py-6 border-b border-gray-200/50">
+    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
+      <div>
+        <h3 className="text-2xl font-bold text-gray-900">Content Calendars</h3>
+        <p className="text-gray-600 mt-1">Manage content calendars and items</p>
+      </div>
+      <button
+        onClick={() => setIsCalendarModalOpen(true)}
+        className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
+      >
+        <Plus className="h-5 w-5 mr-2" />
+        Add Content Calendar
+      </button>
+    </div>
+  </div>
+
+  <div className="p-8">
+    {calendars.length > 0 ? (
+      <div className="space-y-4">
+        {calendars.map((calendar) => (
+          <div key={calendar._id} className="bg-white rounded-xl border border-gray-200/50 shadow-sm overflow-hidden">
+            <div
+              className="p-6 cursor-pointer hover:bg-gray-50 transition-colors"
+              onClick={() => toggleCalendarExpansion(calendar._id)}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  <div className="p-2 bg-blue-100 rounded-lg">
+                    <Calendar className="h-5 w-5 text-blue-600" />
+                  </div>
+                  <div>
+                    <h4 className="text-lg font-semibold text-gray-900">{calendar.name}</h4>
+                    <p className="text-sm text-gray-600">{calendar.description}</p>
+                    <div className="flex items-center space-x-4 mt-2">
+                      <span className="text-xs text-gray-500">{calendar.contentItems?.length || 0} content items</span>
+                      {calendar.assignedTo && (
+                        <button
+                          onClick={e => {
+                            e.stopPropagation();
+                            navigate(`/admin/content-creator-details/${calendar.assignedTo}`);
+                          }}
+                          className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                        >
+                          Assigned to - {calendar.assignedToName || calendar.assignedTo}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-2">
+                  {/* Add Item */}
+                  <button
+                    onClick={e => {
+                      e.stopPropagation();
+                      setSelectedCalendar(calendar);
+                      setIsAddModalOpen(true);
+                    }}
+                    className="inline-flex items-center px-3 py-1 bg-green-100 text-green-700 rounded-lg text-sm font-medium hover:bg-green-200 transition-colors"
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    Add Item
+                  </button>
+                  {/* Edit Calendar button */}
+                  <button
+                    onClick={e => {
+                      e.stopPropagation();
+                      handleEditCalendar(calendar);
+                    }}
+                    className="inline-flex items-center px-3 py-1 bg-blue-100 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-200 transition-colors"
+                  >
+                    <Pencil className="h-4 w-4 mr-1" />
+                    Edit Calendar
+                  </button>
+                  {/* Delete Calendar button */}
+                  <button
+                    onClick={e => {
+                      e.stopPropagation();
+                      handleDeleteCalendar(calendar._id);
+                    }}
+                    className="inline-flex items-center px-3 py-1 bg-red-100 text-red-700 rounded-lg text-sm font-medium hover:bg-red-200 transition-colors"
+                  >
+                    <Trash2 className="h-4 w-4 mr-1" />
+                    Delete Calendar
+                  </button>
+                  {expandedCalendars.has(calendar._id) ? (
+                    <ChevronDown className="h-5 w-5 text-gray-400" />
+                  ) : (
+                    <ChevronRight className="h-5 w-5 text-gray-400" />
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {expandedCalendars.has(calendar._id) && (
+              <div className="border-t border-gray-200/50 bg-gray-50/50">
+                <div className="p-6">
+                  <h5 className="text-sm font-semibold text-gray-700 mb-4">Content Items</h5>
+                  {calendar.contentItems && calendar.contentItems.length > 0 ? (
+                    <div className="space-y-3">
+                      {calendar.contentItems.map((item, index) => (
+                        <div key={index} className="bg-white rounded-lg p-4 border border-gray-200/50">
+                          <div className="flex items-start justify-between">
+                            <div>
+                              {/* Content Title */}
+                              {item.title && (
+                                <p className="font-semibold text-blue-800 mb-1">{item.title}</p>
+                              )}
+                              <p className="font-medium text-gray-900">{item.description}</p>
+                              <p className="text-sm text-gray-600 mt-1">Due: {formatDate(item.date)}</p>
+                              {item.type && (
+                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200 mt-2">
+                                  {item.type}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              {item.status && (
+                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border bg-gray-100 text-gray-800 border-gray-200">
+                                  {item.status.replace('_', ' ').toUpperCase()}
+                                </span>
+                              )}
+                              <button
+                                className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  handleEditItem(item, calendar._id);
+                                }}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </button>
+                              <button
+                                className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  handleDeleteItem(calendar._id, item);
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   ) : (
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <p className="text-sm font-medium text-gray-500">{formatDate(item.date)}</p>
-                        <p className="text-base mt-1 text-primary-700">{item.description}</p>
-                      </div>
-                      <div className="flex space-x-2">
-                        <button onClick={() => handleEditItem(item)} className="text-gray-500 hover:text-primary-600">
-                          <Pencil className="h-5 w-5" />
-                        </button>
-                        <button onClick={() => handleDeleteConfirm(item._id)} className="text-gray-500 hover:text-red-600">
-                          <Trash2 className="h-5 w-5" />
-                        </button>
-                      </div>
-                    </div>
+                    <p className="text-gray-500 text-sm">No content items in this calendar.</p>
                   )}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <div className="p-6 text-center text-gray-500">No content items found.</div>
-          )}
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    ) : (
+      <div className="text-center py-12">
+        <div className="bg-gray-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
+          <Calendar className="h-8 w-8 text-gray-400" />
+        </div>
+        <h3 className="text-lg font-medium text-gray-900 mb-2">No content calendars created yet</h3>
+        <p className="text-gray-500 mb-6">
+          Create a content calendar to start managing this customer's content schedule.
+        </p>
+        <button
+          onClick={() => setIsCalendarModalOpen(true)}
+          className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
+        >
+          <Plus className="h-5 w-5 mr-2" />
+          Create First Calendar
+        </button>
+      </div>
+    )}
+  </div>
+</div>
         </div>
       </div>
 
+      {/* Modals */}
+      <ContentCalendarModal
+        isOpen={isCalendarModalOpen}
+        onClose={() => setIsCalendarModalOpen(false)}
+        onSave={handleCreateCalendar}
+        title="Create Content Calendar"
+        creators={creators}
+      />
+      <ContentCalendarModal
+        isOpen={isEditCalendarModalOpen}
+        onClose={() => {
+          setIsEditCalendarModalOpen(false);
+          setCalendarToEdit(null);
+        }}
+        onSave={handleUpdateCalendar}
+        title="Edit Content Calendar"
+        initialData={calendarToEdit}
+        creators={creators}
+      />
       <ContentItemModal
         isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
-        onSave={handleAddItem}
-        title="Add New Content"
+        onClose={() => {
+          setIsAddModalOpen(false);
+          setSelectedCalendar(null);
+        }}
+        onSave={(item) => {
+          if (!selectedCalendar?._id) {
+            alert("No calendar selected. Please choose a calendar first.");
+            return;
+          }
+          handleAddItem(item, selectedCalendar._id);
+        }}
+        title={selectedCalendar ? `Add Content to ${selectedCalendar.name}` : "Add New Content"}
+        creators={Array.isArray(creators) ? creators : []}
       />
-
       <ContentItemModal
         isOpen={isEditModalOpen}
         onClose={() => setIsEditModalOpen(false)}
         onSave={handleUpdateItem}
         contentItem={selectedItem}
         title="Edit Content"
+        creators={Array.isArray(creators) ? creators : []}
+      />
+      <AssignCreatorModal
+        isOpen={isAssignModalOpen}
+        onClose={() => {
+          setIsAssignModalOpen(false);
+          setSelectedCalendar(null);
+        }}
+        onAssign={handleAssignCreator}
+        calendarName={selectedCalendar?.name || ''}
+        creators={creators}
       />
     </AdminLayout>
   );

@@ -1,146 +1,108 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { LayoutGrid, Calendar as CalendarIcon, Settings as SettingsIcon, LogOut, Users, Menu, X } from 'lucide-react';
-import Header from './Header';
+import { Bell, Search, ChevronDown, Settings, LogOut, User } from 'lucide-react';
 import Footer from './Footer';
 import Logo from './Logo';
 import { useAuth } from '../../contexts/AuthContext';
 
 function AdminLayout({ children, title }) {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
   const { logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
-  const menuItems = [
-    { icon: LayoutGrid, label: 'Dashboard', path: '/admin' },
-    { icon: Users, label: 'Customers', path: '/admin/customers' },
-    { icon: CalendarIcon, label: 'Content Calendar', path: '/admin/calendar' },
-    { icon: SettingsIcon, label: 'Settings', path: '/admin/settings' }
-  ];
-
-  const isActive = (item) => location.pathname === item.path;
+  const handleLogout = async () => {
+    await logout?.();
+    navigate('/login');
+  };
 
   return (
-    <div className="h-screen flex bg-gray-50">
-      {/* Sidebar for desktop */}
-      <div className="hidden md:fixed md:inset-y-0 md:flex md:flex-col md:w-64 bg-[#1a1f2e] z-20">
-        <div className="flex items-center h-16 px-4">
-          <Logo size="medium" />
-        </div>
-        <div className="flex flex-col flex-1 overflow-y-auto">
-          <nav className="flex-1 px-2 py-4 space-y-1">
-            {menuItems.map((item) => {
-              const Icon = item.icon;
-              return (
-                <button
-                  key={item.label}
-                  onClick={() => navigate(item.path)}
-                  className={`flex items-center w-full px-4 py-2 rounded-md transition-colors ${
-                    isActive(item)
-                      ? 'bg-[#232b3b] text-white'
-                      : 'text-gray-300 hover:bg-[#2d3546] hover:text-white'
-                  }`}
-                >
-                  <Icon className="h-5 w-5 mr-3" />
-                  {item.label}
-                </button>
-              );
-            })}
-          </nav>
-          <div className="p-4">
-            <button
-              onClick={async () => {
-                await logout?.();
-                navigate('/login');
-              }}
-              className="flex items-center w-full px-4 py-2 text-gray-300 rounded-md hover:bg-[#2d3546] hover:text-white transition-colors"
-            >
-              <LogOut className="h-5 w-5 mr-3" />
-              Logout
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Sidebar for mobile */}
-      {sidebarOpen && (
-        <div className="fixed inset-0 z-40 flex">
-          {/* Overlay */}
-          <div
-            className="fixed inset-0 bg-black bg-opacity-40"
-            onClick={() => setSidebarOpen(false)}
-          />
-          {/* Sidebar */}
-          <div className="relative flex flex-col w-64 bg-[#1a1f2e] h-full z-50">
-            <button
-              className="absolute top-4 right-4 text-white"
-              onClick={() => setSidebarOpen(false)}
-              aria-label="Close sidebar"
-            >
-              <X className="h-6 w-6" />
-            </button>
-            <div className="flex items-center h-16 px-4">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+      {/* Enhanced Header */}
+      <header className="bg-white shadow-sm border-b border-gray-200/50 sticky top-0 z-50">
+        <div className="px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center">
               <Logo size="medium" />
+              <div className="ml-6">
+                <h1 className="text-xl font-bold text-gray-900">{title}</h1>
+                <p className="text-sm text-gray-500">Manage your content strategy</p>
+              </div>
             </div>
-            <div className="flex flex-col flex-1 overflow-y-auto">
-              <nav className="flex-1 px-2 py-4 space-y-1">
-                {menuItems.map((item) => {
-                  const Icon = item.icon;
-                  return (
-                    <button
-                      key={item.label}
-                      onClick={() => {
-                        navigate(item.path);
-                        setSidebarOpen(false);
-                      }}
-                      className={`flex items-center w-full px-4 py-2 rounded-md transition-colors ${
-                        isActive(item)
-                          ? 'bg-[#232b3b] text-white'
-                          : 'text-gray-300 hover:bg-[#2d3546] hover:text-white'
-                      }`}
-                    >
-                      <Icon className="h-5 w-5 mr-3" />
-                      {item.label}
-                    </button>
-                  );
-                })}
-              </nav>
-              <div className="p-4">
-                <button
-                  onClick={async () => {
-                    await logout?.();
-                    setSidebarOpen(false);
-                    navigate('/login');
-                  }}
-                  className="flex items-center w-full px-4 py-2 text-gray-300 rounded-md hover:bg-[#2d3546] hover:text-white transition-colors"
-                >
-                  <LogOut className="h-5 w-5 mr-3" />
-                  Logout
+            
+            <div className="flex items-center space-x-4">
+              <div className="hidden md:flex items-center space-x-3">
+                <div className="relative">
+                  <Search className="h-5 w-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Search..."
+                    className="pl-10 pr-4 py-2 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm w-64"
+                  />
+                </div>
+                <button className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all duration-200 relative">
+                  <Bell className="h-5 w-5" />
+                  <span className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full"></span>
                 </button>
+              </div>
+              
+              {/* Admin Profile Dropdown */}
+              <div className="relative z-50">
+                <button
+                  onClick={() => setDropdownOpen(!dropdownOpen)}
+                  className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-100 transition-all duration-200"
+                >
+                  <div className="h-8 w-8 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full flex items-center justify-center">
+                    <span className="text-white text-sm font-semibold">A</span>
+                  </div>
+                  <div className="hidden sm:block text-left">
+                    <p className="text-sm font-medium text-gray-900">Admin User</p>
+                    <p className="text-xs text-gray-500">admin@aureumcreative.com</p>
+                  </div>
+                  <ChevronDown className="h-4 w-4 text-gray-500" />
+                </button>
+
+                {/* Dropdown Menu */}
+                {dropdownOpen && (
+                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg border border-gray-200/50 py-2 z-50">
+                    <div className="px-4 py-3 border-b border-gray-100">
+                      <p className="text-sm font-medium text-gray-900">Admin User</p>
+                      <p className="text-xs text-gray-500">admin@aureumcreative.com</p>
+                    </div>
+                    
+                    <button
+                      onClick={() => {
+                        navigate('/admin/settings');
+                        setDropdownOpen(false);
+                      }}
+                      className="flex items-center w-full px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                    >
+                      <Settings className="h-4 w-4 mr-3" />
+                      Settings
+                    </button>
+                    
+                    <button
+                      onClick={() => {
+                        handleLogout();
+                        setDropdownOpen(false);
+                      }}
+                      className="flex items-center w-full px-4 py-3 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                    >
+                      <LogOut className="h-4 w-4 mr-3" />
+                      Logout
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
         </div>
-      )}
+      </header>
 
-      {/* Main content */}
-      <div className="flex flex-col flex-1 min-h-0 w-full md:ml-64">
-        <Header onMenuClick={() => setSidebarOpen(true)} />
-        <main className="flex-1 p-2 sm:p-4 md:p-6 overflow-auto">
-          {children}
-        </main>
-        <Footer />
-      </div>
-
-      {/* Mobile Hamburger */}
-      <button
-        className="fixed top-4 left-4 z-30 md:hidden bg-white rounded p-2 shadow"
-        onClick={() => setSidebarOpen(true)}
-        aria-label="Open sidebar"
-      >
-        <Menu className="h-6 w-6 text-gray-800" />
-      </button>
+      <main className="flex-1 p-4 sm:p-6 lg:p-8">
+        {children}
+      </main>
+      <Footer />
     </div>
   );
 }

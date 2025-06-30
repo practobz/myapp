@@ -3,9 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, MessageSquare, CheckCircle, Edit3, Trash2, Move } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
-// ✅ Set base API URL dynamically
-const API_URL = process.env.REACT_APP_API_URL || 'https://myapi-2lv7dhspca-uc.a.run.app';
-
 function ContentReview() {
   const navigate = useNavigate();
 
@@ -16,25 +13,30 @@ function ContentReview() {
   const [hoveredComment, setHoveredComment] = useState(null);
 
   useEffect(() => {
-    fetch(`${API_URL}/api/content-submissions`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (!Array.isArray(data)) throw new Error('Invalid data received');
-        const mapped = data.map((item) => ({
-          id: item._id,
-          title: item.caption || 'Untitled Post',
-          description: item.notes || '',
-          imageUrl: item.images?.[0] || '',
-          createdBy: item.created_by || 'Unknown',
-          createdAt: item.created_at || '',
-          status: 'under_review',
-        }));
-        setContentItems(mapped);
-        if (mapped.length > 0) setSelectedContent(mapped[0]);
-      })
-      .catch((err) => {
-        console.error('Failed to fetch content submissions:', err.message);
-      });
+    fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions`)
+  .then((res) => res.json())
+  .then((data) => {
+    if (!Array.isArray(data)) {
+      throw new Error('Invalid data received');
+    }
+
+    const mapped = data.map((item) => ({
+      id: item._id,
+      title: item.caption || 'Untitled Post',
+      description: item.notes || '',
+      imageUrl: item.images?.[0] || '',
+      createdBy: item.created_by || 'Unknown',
+      createdAt: item.created_at || '',
+      status: 'under_review',
+    }));
+
+    setContentItems(mapped);
+    if (mapped.length > 0) setSelectedContent(mapped[0]);
+  })
+  .catch((err) => {
+    console.error('Failed to fetch content submissions:', err.message);
+  });
+
   }, []);
 
   const Button = ({ onClick, children, style, variant = 'primary' }) => {
@@ -156,14 +158,17 @@ function ContentReview() {
   if (!selectedContent) {
     return <div className="p-6 text-gray-600 text-center">Loading content submissions...</div>;
   }
-
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+     
+
+      {/* Main Content */}
       <div className="max-w-full lg:max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 py-4 sm:py-8">
         <div className="flex flex-col lg:flex-row gap-6">
-          {/* Left Sidebar */}
+          {/* Left Sidebar - Content List & Comments */}
           <div className="w-full lg:w-80 flex-shrink-0 space-y-6">
-            {/* Content List */}
+            {/* Content Items */}
             <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 w-full">
               <h3 className="text-lg font-semibold mb-4 text-[#2563eb]">Content Items</h3>
               <div className="space-y-3">
@@ -195,6 +200,7 @@ function ContentReview() {
                 <MessageSquare className="h-5 w-5 text-[#2563eb] mr-2" />
                 <h3 className="text-lg font-semibold text-[#2563eb]">All Comments</h3>
               </div>
+              
               <div className="space-y-3 max-h-80 overflow-y-auto">
                 {comments.length === 0 ? (
                   <p className="text-gray-500 text-sm italic">No comments yet. Click on the image to add comments.</p>
@@ -229,14 +235,15 @@ function ContentReview() {
               </div>
             </div>
           </div>
-
-          {/* Main Image & Actions */}
+          {/* Main Content Area */}
           <div className="flex-1 min-w-0 w-full">
             <div className="bg-white rounded-lg shadow-md p-4 sm:p-8 w-full">
               <div className="mb-4 sm:mb-6">
                 <h2 className="text-2xl font-bold text-gray-900">{selectedContent.title}</h2>
                 <p className="text-gray-600 mt-2">{selectedContent.description}</p>
               </div>
+
+              {/* Image with Comments */}
               <div className="flex justify-center">
                 <div
                   style={{
@@ -252,6 +259,7 @@ function ContentReview() {
                     alt={selectedContent.title}
                     style={{
                       width: "100%",
+                      maxWidth: "100%",
                       height: "auto",
                       maxHeight: "50vh",
                       borderRadius: "12px",
@@ -263,12 +271,174 @@ function ContentReview() {
                     className="w-full max-h-[50vh] object-contain"
                     onClick={handleImageClickWithReposition}
                   />
-                  {/* Markers render here */}
-                  {/* (left out to shorten) */}
+                  
+                  {/* Comment Markers */}
+                  {comments.map((comment, index) => {
+                    // Calculate floating box position
+                    let boxLeft = 40;
+                    let boxRight = "auto";
+                    const img = document.querySelector(`img[alt="${selectedContent.title}"]`);
+                    if (img && img.width && comment.x > img.width / 2) {
+                      boxLeft = "auto";
+                      boxRight = 40;
+                    }
+
+                    return (
+                      <div
+                        key={comment.id}
+                        style={{
+                          position: "absolute",
+                          top: comment.y - 14,
+                          left: comment.x - 14,
+                          width: 28,
+                          height: 28,
+                          background: comment.done ? "#27ae60" : comment.editing ? "#2563eb" : "#e74c3c",
+                          color: "#fff",
+                          borderRadius: "50%",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontWeight: "bold",
+                          fontSize: "14px",
+                          boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+                          cursor: "pointer",
+                          zIndex: 2,
+                          border: "2px solid #fff",
+                          transition: "all 0.2s",
+                        }}
+                        onMouseEnter={() => setHoveredComment(comment.id)}
+                        onMouseLeave={() => setHoveredComment(null)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleCommentListClick(comment.id);
+                        }}
+                      >
+                        {index + 1}
+                        
+                        {/* Floating Comment Box */}
+                        {(comment.editing || activeComment === comment.id || hoveredComment === comment.id) && (
+                          <div
+                            style={{
+                              position: "absolute",
+                              left: boxLeft,
+                              right: boxRight,
+                              top: "50%",
+                              transform: "translateY(-50%)",
+                              background: "#fff",
+                              border: "2px solid #2563eb",
+                              borderRadius: "8px",
+                              padding: "12px",
+                              minWidth: "200px",
+                              maxWidth: "250px",
+                              zIndex: 10,
+                              boxShadow: "0 4px 20px rgba(37,99,235,0.15)",
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {comment.editing ? (
+                              <>
+                                <textarea
+                                  value={comment.comment}
+                                  onChange={(e) => handleCommentChange(comment.id, e.target.value)}
+                                  placeholder="Add a comment..."
+                                  style={{
+                                    width: "100%",
+                                    padding: "8px",
+                                    borderRadius: "6px",
+                                    border: "1px solid #e0eafc",
+                                    marginBottom: "8px",
+                                    resize: "none",
+                                    fontSize: "14px",
+                                    fontFamily: "inherit",
+                                    minHeight: "60px",
+                                    color: "#111", // <-- set text color to black
+                                    background: "#fff"
+                                  }}
+                                  autoFocus
+                                />
+                                <div style={{ display: "flex", gap: "8px" }}>
+                                  <Button
+                                    onClick={() => handleCommentSubmit(comment.id)}
+                                    variant="success"
+                                    style={{ flex: 1, fontSize: "12px", padding: "4px 8px" }}
+                                  >
+                                    Submit
+                                  </Button>
+                                  <Button
+                                    onClick={() => handleCommentCancel(comment.id)}
+                                    variant="danger"
+                                    style={{ flex: 1, fontSize: "12px", padding: "4px 8px" }}
+                                  >
+                                    Cancel
+                                  </Button>
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <div style={{
+                                  marginBottom: "8px",
+                                  fontWeight: "600",
+                                  color: "#2563eb",
+                                  fontSize: "14px",
+                                  wordBreak: "break-word"
+                                }}>
+                                  {comment.comment}
+                                  {comment.done && <span style={{ color: "#27ae60" }}> (Done)</span>}
+                                  {comment.repositioning && (
+                                    <span style={{ fontStyle: "italic", color: "#3a8dde" }}> (Repositioning...)</span>
+                                  )}
+                                </div>
+                                <div style={{
+                                  display: "grid",
+                                  gridTemplateColumns: "1fr 1fr",
+                                  gap: "6px"
+                                }}>
+                                  {!comment.done && (
+                                    <Button
+                                      onClick={() => handleMarkDone(comment.id)}
+                                      variant="success"
+                                      style={{ fontSize: "11px", padding: "4px 6px" }}
+                                    >
+                                      <CheckCircle className="h-3 w-3 mr-1" />
+                                      Mark as Done
+                                    </Button>
+                                  )}
+                                  <Button
+                                    onClick={() => handleEditComment(comment.id)}
+                                    variant="warning"
+                                    style={{ fontSize: "11px", padding: "4px 6px" }}
+                                  >
+                                    <Edit3 className="h-3 w-3 mr-1" />
+                                    Edit
+                                  </Button>
+                                  <Button
+                                    onClick={() => handleCommentCancel(comment.id)}
+                                    variant="danger"
+                                    style={{ fontSize: "11px", padding: "4px 6px" }}
+                                  >
+                                    <Trash2 className="h-3 w-3 mr-1" />
+                                    Discard
+                                  </Button>
+                                  <Button
+                                    onClick={() => handleRepositionStart(comment.id)}
+                                    variant="info"
+                                    style={{ fontSize: "11px", padding: "4px 6px" }}
+                                  >
+                                    <Move className="h-3 w-3 mr-1" />
+                                    Reposition
+                                  </Button>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
-              {/* Final Action Buttons */}
+              {/* Action Buttons */}
               <div className="mt-6 sm:mt-8 flex flex-col sm:flex-row justify-center gap-3 sm:gap-4 w-full">
                 <Button
                   onClick={() => navigate(`/customer/approve/${selectedContent.id}`)}
@@ -280,6 +450,7 @@ function ContentReview() {
                 </Button>
                 <Button
                   onClick={() => {
+                    // Handle request changes
                     console.log('Request changes for:', selectedContent.id);
                   }}
                   variant="warning"

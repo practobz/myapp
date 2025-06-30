@@ -23,7 +23,7 @@ function Settings() {
     }
     async function fetchCustomer() {
       try {
-        const res = await fetch(`http://localhost:3001/customer/${currentUser._id}`);
+        const res = await fetch(`${process.env.REACT_APP_API_URL}/customer/${currentUser._id}`);
         const data = await res.json();
         console.log('Fetched customer data:', data);
         if (!res.ok || !data.email) throw new Error('Failed to fetch customer data');

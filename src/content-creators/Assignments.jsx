@@ -1,87 +1,76 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
-import { ArrowLeft, Filter, Search, Upload, MessageSquare, CheckCircle, Clock, AlertCircle, Palette } from 'lucide-react';
+import { ArrowLeft, Filter, Search, Upload, MessageSquare, CheckCircle, Clock, AlertCircle, Palette, Play } from 'lucide-react';
 import Footer from '../admin/components/layout/Footer';
 
 function Assignments() {
   const navigate = useNavigate();
   const [selectedFilter, setSelectedFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [assignments, setAssignments] = useState([]);
 
-  // Mock data for content assignments
-  const assignments = [
-    {
-      id: 1,
-      customer: 'Shoppers Stop',
-      title: 'New Collection Launch Post',
-      type: 'Instagram Post',
-      description: 'Create an engaging Instagram post for the new summer collection launch',
-      dueDate: '2024-03-18',
-      status: 'assigned',
-      priority: 'high',
-      assignedDate: '2024-03-15'
-    },
-    {
-      id: 2,
-      customer: 'Pantaloons',
-      title: 'Facebook Campaign Creative',
-      type: 'Facebook Ad',
-      description: 'Design Facebook ad creative for the weekend sale campaign',
-      dueDate: '2024-03-19',
-      status: 'in_progress',
-      priority: 'medium',
-      assignedDate: '2024-03-14'
-    },
-    {
-      id: 3,
-      customer: 'Fashion Hub',
-      title: 'LinkedIn Article',
-      type: 'LinkedIn Post',
-      description: 'Write a professional article about sustainable fashion trends',
-      dueDate: '2024-03-20',
-      status: 'waiting_input',
-      priority: 'low',
-      assignedDate: '2024-03-13'
-    },
-    {
-      id: 4,
-      customer: 'Style Central',
-      title: 'Product Photography',
-      type: 'Photography',
-      description: 'Product photos for new accessories line',
-      dueDate: '2024-03-22',
-      status: 'approved',
-      priority: 'high',
-      assignedDate: '2024-03-12'
-    },
-    {
-      id: 5,
-      customer: 'Trendy Wear',
-      title: 'YouTube Video Script',
-      type: 'Video Content',
-      description: 'Script for brand story video for YouTube channel',
-      dueDate: '2024-03-25',
-      status: 'published',
-      priority: 'medium',
-      assignedDate: '2024-03-10'
+  // Get current creator's email or id
+  let creatorEmail = (localStorage.getItem('userEmail') || '').toLowerCase();
+  if (!creatorEmail) {
+    try {
+      const userStr = localStorage.getItem('user');
+      if (userStr) {
+        const userObj = JSON.parse(userStr);
+        if (userObj.email) {
+          creatorEmail = userObj.email.toLowerCase();
+        }
+      }
+    } catch (e) {
+      // ignore
     }
-  ];
+  }
+
+  useEffect(() => {
+    // Fetch all content calendar items assigned to this creator
+    const fetchAssignments = async () => {
+      try {
+        const res = await fetch(`${process.env.REACT_APP_API_URL}/calendars`);
+        const calendars = await res.json();
+        let allAssignments = [];
+        calendars.forEach(calendar => {
+          if (Array.isArray(calendar.contentItems)) {
+            calendar.contentItems.forEach(item => {
+              allAssignments.push({
+                ...item,
+                customer: calendar.customerName || calendar.customer || '',
+                id: item.id || item._id || item.title || Math.random().toString(36).slice(2)
+              });
+            });
+          }
+        });
+        const filtered = allAssignments.filter(item =>
+          (item.assignedTo || '').toLowerCase() === creatorEmail
+        );
+        setAssignments(filtered);
+      } catch (err) {
+        setAssignments([]);
+      }
+    };
+    if (creatorEmail && creatorEmail.length > 0) {
+      fetchAssignments();
+    }
+  }, [creatorEmail]);
 
   const getStatusColor = (status) => {
     switch (status) {
       case 'assigned':
-        return 'bg-blue-100 text-blue-800';
+        return 'bg-blue-50 text-blue-700 border-blue-200';
       case 'in_progress':
-        return 'bg-yellow-100 text-yellow-800';
+        return 'bg-amber-50 text-amber-700 border-amber-200';
       case 'waiting_input':
-        return 'bg-orange-100 text-orange-800';
+        return 'bg-orange-50 text-orange-700 border-orange-200';
       case 'approved':
-        return 'bg-green-100 text-green-800';
+        return 'bg-emerald-50 text-emerald-700 border-emerald-200';
       case 'published':
-        return 'bg-purple-100 text-purple-800';
+        return 'bg-purple-50 text-purple-700 border-purple-200';
       default:
-        return 'bg-gray-100 text-gray-800';
+        return 'bg-gray-50 text-gray-700 border-gray-200';
     }
   };
 
@@ -103,50 +92,58 @@ function Assignments() {
   };
 
   const getPriorityColor = (priority) => {
-    switch (priority) {
+    switch ((priority || '').toLowerCase()) {
       case 'high':
-        return 'text-red-600';
+        return 'bg-red-100 text-red-800 border-red-200';
       case 'medium':
-        return 'text-yellow-600';
+        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
       case 'low':
-        return 'text-green-600';
+        return 'bg-green-100 text-green-800 border-green-200';
       default:
-        return 'text-gray-600';
+        return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
 
   const filteredAssignments = assignments.filter(assignment => {
     const matchesFilter = selectedFilter === 'all' || assignment.status === selectedFilter;
-    const matchesSearch = assignment.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         assignment.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         assignment.type.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = (assignment.customer || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         (assignment.title || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         (assignment.type || '').toLowerCase().includes(searchTerm.toLowerCase());
     return matchesFilter && matchesSearch;
   });
 
   const handleAssignmentClick = (assignment) => {
-    // Navigate to assignment detail page
-    // Only navigate if the page exists
-    // For this example, do nothing (or show a message) if not implemented
     // navigate(`/content-creator/assignments/${assignment.id}`);
   };
 
+  const handleStartWork = (assignment) => {
+    navigate(`/content-creator/upload/${assignment.id || assignment._id}`);
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-2xl sm:max-w-3xl md:max-w-4xl lg:max-w-5xl xl:max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center h-16">
-            <button
-              onClick={() => navigate('/content-creator')}
-              className="mr-4 text-gray-600 hover:text-gray-900 transition-colors"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </button>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex flex-col">
+      {/* Header with Navigation */}
+      <header className="bg-white/80 backdrop-blur-sm shadow-sm border-b border-gray-200/50 sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
             <div className="flex items-center">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <Palette className="h-6 w-6 text-purple-600" />
+              <button
+                onClick={() => navigate('/content-creator')}
+                className="mr-4 p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all duration-200"
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </button>
+              <div className="flex items-center">
+                <div className="p-2 bg-gradient-to-r from-purple-500 to-indigo-600 rounded-xl shadow-lg">
+                  <Palette className="h-6 w-6 text-white" />
+                </div>
+                <div className="ml-3">
+                  <span className="text-xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">
+                    Content Creator Portal
+                  </span>
+                  <p className="text-sm text-gray-500">Assignment Dashboard</p>
+                </div>
               </div>
-              <span className="ml-2 text-base sm:text-xl font-bold text-purple-900 truncate">Content Creator Portal</span>
             </div>
           </div>
         </div>
@@ -154,23 +151,26 @@ function Assignments() {
 
       {/* Main Content */}
       <div className="flex-1">
-        <div className="max-w-2xl sm:max-w-3xl md:max-w-4xl lg:max-w-5xl xl:max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
-          <div className="space-y-3 sm:space-y-6">
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">My Assignments</h1>
-              <p className="text-gray-600 mt-2 text-sm sm:text-base">Manage your content creation assignments</p>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="space-y-8">
+            {/* Page Header */}
+            <div className="text-center">
+              <h1 className="text-4xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
+                My Assignments
+              </h1>
+              <p className="text-gray-600 mt-3 text-lg">Manage and track your content creation tasks</p>
             </div>
 
             {/* Filters and Search */}
-            <div className="bg-white rounded-lg shadow-md p-3 sm:p-4 md:p-6">
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0">
-                <div className="flex items-center space-x-4">
+            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-gray-200/50">
+              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
+                <div className="flex flex-col sm:flex-row sm:items-center space-y-4 sm:space-y-0 sm:space-x-4">
                   <div className="flex items-center">
                     <Filter className="h-5 w-5 text-gray-400 mr-2" />
                     <select
                       value={selectedFilter}
                       onChange={(e) => setSelectedFilter(e.target.value)}
-                      className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      className="bg-white border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent shadow-sm"
                     >
                       <option value="all">All Assignments</option>
                       <option value="assigned">New Assigned</option>
@@ -190,7 +190,7 @@ function Assignments() {
                       placeholder="Search assignments..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-10 pr-4 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      className="pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent shadow-sm w-64"
                     />
                   </div>
                 </div>
@@ -198,77 +198,91 @@ function Assignments() {
             </div>
 
             {/* Assignments List */}
-            <div className="bg-white rounded-lg shadow-md p-2 sm:p-4 md:p-6">
-              <h2 className="text-xl font-semibold mb-4">
-                Assignments ({filteredAssignments.length})
-              </h2>
-              <div className="space-y-3 sm:space-y-4">
-                {filteredAssignments.map((assignment) => (
-                  <div 
-                    key={assignment.id}
-                    className="border rounded-lg p-3 sm:p-4 hover:bg-gray-50 cursor-pointer transition-colors w-full min-w-0"
-                    onClick={() => handleAssignmentClick(assignment)}
+            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-gray-200/50">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold text-gray-900">
+                  Assignments ({filteredAssignments.length})
+                </h2>
+              </div>
+              
+              <div className="space-y-4">
+                {filteredAssignments.map((assignment, idx) => (
+                  <div
+                    key={assignment.id || assignment._id || idx}
+                    className="bg-white rounded-xl border border-gray-200/50 shadow-sm hover:shadow-lg transition-all duration-300 overflow-hidden group"
                   >
-                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-3 mb-2">
-                          <h3 className="font-semibold text-gray-900">{assignment.title}</h3>
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(assignment.status)}`}>
-                            {getStatusIcon(assignment.status)}
-                            <span className="ml-1">{assignment.status.replace('_', ' ').charAt(0).toUpperCase() + assignment.status.slice(1)}</span>
-                          </span>
-                          <span className={`text-xs font-medium ${getPriorityColor(assignment.priority)}`}>
-                            {assignment.priority.toUpperCase()} PRIORITY
-                          </span>
+                    <div className="p-6">
+                      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+                        <div className="flex-1 space-y-4">
+                          {/* Header */}
+                          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                            <div>
+                              <h3 className="text-xl font-bold text-gray-900 mb-2">{assignment.title}</h3>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(assignment.status)}`}>
+                                  {getStatusIcon(assignment.status)}
+                                  <span className="ml-1 capitalize">{(assignment.status || 'assigned').replace('_', ' ')}</span>
+                                </span>
+                                <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getPriorityColor(assignment.priority)}`}>
+                                  {(assignment.priority || 'Medium').toUpperCase()} PRIORITY
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Details Grid */}
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="flex items-center space-x-2">
+                              <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                              <div>
+                                <span className="text-sm font-medium text-gray-500">Customer</span>
+                                <p className="text-sm text-gray-900">{assignment.customer}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                              <div>
+                                <span className="text-sm font-medium text-gray-500">Content Type</span>
+                                <p className="text-sm text-gray-900">{assignment.type}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                              <div>
+                                <span className="text-sm font-medium text-gray-500">Due Date</span>
+                                <p className="text-sm text-gray-900">{format(new Date(assignment.dueDate), 'MMM dd, yyyy')}</p>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Description */}
+                          <div className="bg-gray-50 rounded-lg p-4">
+                            <p className="text-gray-700 text-sm leading-relaxed">{assignment.description}</p>
+                          </div>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-600">
-                          <div>
-                            <span className="font-medium">Customer:</span> {assignment.customer}
-                          </div>
-                          <div>
-                            <span className="font-medium">Type:</span> {assignment.type}
-                          </div>
-                          <div>
-                            <span className="font-medium">Due Date:</span> {format(new Date(assignment.dueDate), 'MMM dd, yyyy')}
-                          </div>
-                        </div>
-                        <p className="text-gray-700 mt-2">{assignment.description}</p>
-                      </div>
-                      {/* Buttons always inside the card, below content on mobile, right on desktop */}
-                      <div className="flex flex-row sm:flex-col items-end sm:items-end gap-2 mt-2 sm:mt-0">
-                        {assignment.status === 'assigned' && (
+
+                        {/* Action Button */}
+                        <div className="flex-shrink-0">
                           <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              navigate(`/content-creator/upload/${assignment.id}`);
-                            }}
-                            className="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700"
+                            onClick={() => handleStartWork(assignment)}
+                            className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-semibold rounded-xl hover:from-purple-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
                           >
-                            <Upload className="h-4 w-4 mr-1" />
+                            <Play className="h-5 w-5 mr-2" />
                             Start Work
                           </button>
-                        )}
-                        {assignment.status === 'in_progress' && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              navigate(`/content-creator/upload/${assignment.id}`);
-                            }}
-                            className="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-white bg-yellow-600 hover:bg-yellow-700"
-                          >
-                            <Upload className="h-4 w-4 mr-1" />
-                            Continue
-                          </button>
-                        )}
+                        </div>
                       </div>
                     </div>
                   </div>
                 ))}
 
                 {filteredAssignments.length === 0 && (
-                  <div className="text-center py-8">
-                    <AlertCircle className="h-12 w-12 text-gray-400 mx-auto mb-3" />
-                    <p className="text-gray-500">No assignments found matching your criteria.</p>
+                  <div className="text-center py-12">
+                    <div className="bg-gray-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
+                      <AlertCircle className="h-8 w-8 text-gray-400" />
+                    </div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No assignments found</h3>
+                    <p className="text-gray-500">No assignments match your current search criteria.</p>
                   </div>
                 )}
               </div>

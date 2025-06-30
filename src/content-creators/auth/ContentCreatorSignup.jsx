@@ -59,11 +59,7 @@ const { contentCreatorSignup } = useAuth();
       await contentCreatorSignup(formData.email, formData.password, formData);
       navigate('/content-creator');
     } catch (err) {
-      if (err.message === 'Signup request timed out. Please try again.' || err.message === 'Request timed out') {
-        setError('Signup request timed out. Please try again.');
-      } else {
-        setError('Failed to create an account');
-      }
+      setError('Failed to create an account');
       console.error(err);
     } finally {
       setLoading(false);

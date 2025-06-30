@@ -33,8 +33,6 @@ const Login = () => {
         setError('Invalid email or password. Please check your credentials or sign up to create an account.');
       } else if (err.message?.includes('User not found')) {
         setError('No account found with this email. Please sign up to create an account.');
-      } else if (err.message?.includes('timed out')) {
-        setError(err.message);
       } else {
         setError('Failed to log in. Please try again.');
       }

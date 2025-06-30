@@ -17,7 +17,7 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     try {
       const raw = localStorage.getItem('user');
-      if (raw) {
+      if (raw && raw !== 'undefined' && raw !== '') {
         const parsed = JSON.parse(raw);
         if (parsed && typeof parsed === 'object') {
           setCurrentUser(parsed);

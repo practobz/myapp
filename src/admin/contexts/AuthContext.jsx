@@ -15,9 +15,17 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const user = localStorage.getItem('user');
-    if (user) {
-      setCurrentUser(JSON.parse(user));
+    try {
+      const raw = localStorage.getItem('user');
+      if (raw && raw !== 'undefined' && raw !== '') {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') {
+          setCurrentUser(parsed);
+        }
+      }
+    } catch (err) {
+      console.warn('⚠️ Failed to load user from localStorage:', err.message);
+      localStorage.removeItem('user');
     }
     setLoading(false);
   }, []);
@@ -26,7 +34,8 @@ export function AuthProvider({ children }) {
   const postRequest = async (url, body) => {
     try {
       const controller = new AbortController();
-     const timeout = setTimeout(() => controller.abort(), 10000); // 10s timeout
+      const timeout = setTimeout(() => controller.abort(), 10000);
+      console.log('Posting to URL:', url);
 
       const res = await fetch(url, {
         method: 'POST',
@@ -67,71 +76,56 @@ export function AuthProvider({ children }) {
     );
     const user = { _id: data.userId, email, role: 'admin' };
     setCurrentUser(user);
-    localStorage.setItem('user', JSON.stringify(user));
+if (user) {
+  localStorage.setItem('user', JSON.stringify(user));
+}
+
   }
 
   async function customerSignup(userData) {
-    try {
-      const data = await postRequest(
-        `${process.env.REACT_APP_API_URL}/signup/customer`,
-        userData
-      );
-      const user = data.user || (data.success && data.user) || { email: userData.email, role: 'customer' };
-      setCurrentUser(user);
-      localStorage.setItem('user', JSON.stringify(user));
-    } catch (err) {
-      if (err.message === 'Request timed out') {
-        throw new Error('Signup request timed out. Please try again.');
-      }
-      throw err;
-    }
+    const data = await postRequest(
+      `${process.env.REACT_APP_API_URL}/signup/customer`,
+      userData
+    );
+    const user =
+      data.user || (data.success && data.user) || { email: userData.email, role: 'customer' };
+   setCurrentUser(user);
+if (user) {
+  localStorage.setItem('user', JSON.stringify(user));
+}
+
   }
 
   async function contentCreatorSignup(email, password, additionalData) {
-    try {
-      const data = await postRequest(
-        `${process.env.REACT_APP_API_URL}/signup/creator`,
-        {
-          email,
-          password,
-          ...additionalData
-        }
-      );
-      const user = { _id: data.userId, email, role: 'content_creator', ...additionalData };
-      setCurrentUser(user);
-      localStorage.setItem('user', JSON.stringify(user));
-    } catch (err) {
-      if (err.message === 'Request timed out') {
-        throw new Error('Signup request timed out. Please try again.');
+    const data = await postRequest(
+      `${process.env.REACT_APP_API_URL}/signup/creator`,
+      {
+        email,
+        password,
+        ...additionalData
       }
-      throw err;
-    }
+    );
+    const user = { _id: data.userId, email, role: 'content_creator', ...additionalData };
+   setCurrentUser(user);
+if (user) {
+  localStorage.setItem('user', JSON.stringify(user));
+}
+
   }
 
   // === Login Function ===
   async function login(email, password, role = 'admin') {
-    try {
-      const data = await postRequest(
-        `${process.env.REACT_APP_API_URL}/${role}/login`,
-        { email, password }
-      );
-      const user = data.user;
-      setCurrentUser(user);
-      localStorage.setItem('user', JSON.stringify(user));
-    } catch (err) {
-      if (
-        err.message === 'Invalid credentials or sign up to create account' ||
-        err.message.toLowerCase().includes('invalid credentials')
-      ) {
-        throw err;
-      }
-      if (err.message === 'Request timed out') {
-        throw new Error('Login request timed out. Please try again.');
-      }
-      throw err;
-    }
-  }
+    const data = await postRequest(
+      `${process.env.REACT_APP_API_URL}/${role}/login`,
+      { email, password }
+    );
+    const user = data.user;
+   setCurrentUser(user);
+if (user) {
+  localStorage.setItem('user', JSON.stringify(user));
+}
 
+  }
 
   function logout() {
     setCurrentUser(null);
@@ -139,18 +133,18 @@ export function AuthProvider({ children }) {
   }
 
   const value = {
-  currentUser,
-  isAuthenticated: !!currentUser,
-  signup: adminSignup,
-  login, // use this only when passing a role
-  logout,
-  adminSignup,
-  customerSignup,
-  contentCreatorSignup,
-  adminLogin: (email, password) => login(email, password, 'admin'),
-  customerLogin: (email, password) => login(email, password, 'customer'),
-  contentCreatorLogin: (email, password) => login(email, password, 'content_creator'),
-};
+    currentUser,
+    isAuthenticated: !!currentUser,
+    signup: adminSignup,
+    login,
+    logout,
+    adminSignup,
+    customerSignup,
+    contentCreatorSignup,
+    adminLogin: (email, password) => login(email, password, 'admin'),
+    customerLogin: (email, password) => login(email, password, 'customer'),
+    contentCreatorLogin: (email, password) => login(email, password, 'content_creator'),
+  };
 
   return (
     <AuthContext.Provider value={value}>

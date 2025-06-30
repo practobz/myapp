@@ -23,42 +23,57 @@ export function AuthProvider({ children }) {
   }, []);
 
   // Utility function to handle POST requests
-  const postRequest = async (url, body) => {
-    try {
-      const controller = new AbortController();
-     const timeout = setTimeout(() => controller.abort(), 10000); // 10s timeout
-console.log('Posting to URL:', url);
+const postRequest = async (url, body) => {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000); // 10s timeout
+    console.log('📡 Posting to URL:', url);
 
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-        signal: controller.signal
-      });
-      clearTimeout(timeout);
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal
+    });
+    clearTimeout(timeout);
 
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        if (res.status === 401) {
-          throw new Error('Invalid credentials or sign up to create account');
-        }
-        if (res.status === 409 && data.error) {
-          throw new Error(data.error);
-        }
-        throw new Error(data.error || `HTTP ${res.status}: ${res.statusText}`);
+    // ✅ SAFELY parse JSON only if Content-Type is correct and body is present
+    const contentType = res.headers.get('Content-Type') || '';
+    let data = {};
+
+    if (contentType.includes('application/json')) {
+      const text = await res.text();
+      if (text) {
+        data = JSON.parse(text);
+      } else {
+        console.warn('⚠️ Empty JSON response received');
       }
-      return data;
-    } catch (err) {
-      if (err.name === 'AbortError') {
-        throw new Error('Request timed out');
-      }
-      throw new Error(
-        err.message === 'Failed to fetch'
-          ? 'Cannot connect to backend. Is the server running?'
-          : err.message
-      );
+    } else {
+      console.warn('⚠️ Unexpected Content-Type:', contentType);
     }
-  };
+
+    if (!res.ok) {
+      if (res.status === 401) {
+        throw new Error('Invalid credentials or sign up to create account');
+      }
+      if (res.status === 409 && data.error) {
+        throw new Error(data.error);
+      }
+      throw new Error(data.error || `HTTP ${res.status}: ${res.statusText}`);
+    }
+
+    return data;
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new Error('Request timed out');
+    }
+    throw new Error(
+      err.message === 'Failed to fetch'
+        ? 'Cannot connect to backend. Is the server running?'
+        : err.message
+    );
+  }
+};
 
   // === Signup Functions ===
   async function adminSignup(email, password) {

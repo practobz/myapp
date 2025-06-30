@@ -173,12 +173,14 @@ function ContentCreators() {
                             <div className="flex-shrink-0 h-10 w-10">
                               <div className="h-10 w-10 rounded-full bg-gradient-to-r from-purple-500 to-indigo-600 flex items-center justify-center">
                                 <span className="text-white font-semibold text-sm">
-                                  {(creator.name || 'U').charAt(0).toUpperCase()}
+                                  {(creator.name && creator.name.trim() !== '' ? creator.name : (creator.email || 'U')).charAt(0).toUpperCase()}
                                 </span>
                               </div>
                             </div>
                             <div className="ml-4">
-                              <div className="text-sm font-semibold text-gray-900">{creator.name || 'Unnamed Creator'}</div>
+                              <div className="text-sm font-semibold text-gray-900">
+                                {creator.name && creator.name.trim() !== '' ? creator.name : 'Unnamed Creator'}
+                              </div>
                               <div className="text-xs text-gray-500">Content Creator</div>
                             </div>
                           </div>
@@ -186,7 +188,7 @@ function ContentCreators() {
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center text-sm text-gray-900">
                             <Phone className="h-4 w-4 mr-2 text-gray-400" />
-                            {creator.mobile || 'Not provided'}
+                            {creator.mobile && creator.mobile.trim() !== '' ? creator.mobile : 'Not provided'}
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">

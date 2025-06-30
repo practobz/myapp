@@ -26,7 +26,8 @@ export function AuthProvider({ children }) {
   const postRequest = async (url, body) => {
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 5000); // 5s timeout
+     const timeout = setTimeout(() => controller.abort(), 10000); // 10s timeout
+console.log('Posting to URL:', url);
 
       const res = await fetch(url, {
         method: 'POST',

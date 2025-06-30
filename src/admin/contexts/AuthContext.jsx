@@ -15,65 +15,58 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const user = localStorage.getItem('user');
-    if (user) {
-      setCurrentUser(JSON.parse(user));
+    try {
+      const raw = localStorage.getItem('user');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') {
+          setCurrentUser(parsed);
+        }
+      }
+    } catch (err) {
+      console.warn('⚠️ Failed to load user from localStorage:', err.message);
+      localStorage.removeItem('user');
     }
     setLoading(false);
   }, []);
 
   // Utility function to handle POST requests
-const postRequest = async (url, body) => {
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000); // 10s timeout
-    console.log('📡 Posting to URL:', url);
+  const postRequest = async (url, body) => {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+      console.log('Posting to URL:', url);
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: controller.signal
-    });
-    clearTimeout(timeout);
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: controller.signal
+      });
+      clearTimeout(timeout);
 
-    // ✅ SAFELY parse JSON only if Content-Type is correct and body is present
-    const contentType = res.headers.get('Content-Type') || '';
-    let data = {};
-
-    if (contentType.includes('application/json')) {
-      const text = await res.text();
-      if (text) {
-        data = JSON.parse(text);
-      } else {
-        console.warn('⚠️ Empty JSON response received');
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (res.status === 401) {
+          throw new Error('Invalid credentials or sign up to create account');
+        }
+        if (res.status === 409 && data.error) {
+          throw new Error(data.error);
+        }
+        throw new Error(data.error || `HTTP ${res.status}: ${res.statusText}`);
       }
-    } else {
-      console.warn('⚠️ Unexpected Content-Type:', contentType);
-    }
-
-    if (!res.ok) {
-      if (res.status === 401) {
-        throw new Error('Invalid credentials or sign up to create account');
+      return data;
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        throw new Error('Request timed out');
       }
-      if (res.status === 409 && data.error) {
-        throw new Error(data.error);
-      }
-      throw new Error(data.error || `HTTP ${res.status}: ${res.statusText}`);
+      throw new Error(
+        err.message === 'Failed to fetch'
+          ? 'Cannot connect to backend. Is the server running?'
+          : err.message
+      );
     }
-
-    return data;
-  } catch (err) {
-    if (err.name === 'AbortError') {
-      throw new Error('Request timed out');
-    }
-    throw new Error(
-      err.message === 'Failed to fetch'
-        ? 'Cannot connect to backend. Is the server running?'
-        : err.message
-    );
-  }
-};
+  };
 
   // === Signup Functions ===
   async function adminSignup(email, password) {
@@ -87,67 +80,40 @@ const postRequest = async (url, body) => {
   }
 
   async function customerSignup(userData) {
-    try {
-      const data = await postRequest(
-        `${process.env.REACT_APP_API_URL}/signup/customer`,
-        userData
-      );
-      const user = data.user || (data.success && data.user) || { email: userData.email, role: 'customer' };
-      setCurrentUser(user);
-      localStorage.setItem('user', JSON.stringify(user));
-    } catch (err) {
-      if (err.message === 'Request timed out') {
-        throw new Error('Signup request timed out. Please try again.');
-      }
-      throw err;
-    }
+    const data = await postRequest(
+      `${process.env.REACT_APP_API_URL}/signup/customer`,
+      userData
+    );
+    const user =
+      data.user || (data.success && data.user) || { email: userData.email, role: 'customer' };
+    setCurrentUser(user);
+    localStorage.setItem('user', JSON.stringify(user));
   }
 
   async function contentCreatorSignup(email, password, additionalData) {
-    try {
-      const data = await postRequest(
-        `${process.env.REACT_APP_API_URL}/signup/creator`,
-        {
-          email,
-          password,
-          ...additionalData
-        }
-      );
-      const user = { _id: data.userId, email, role: 'content_creator', ...additionalData };
-      setCurrentUser(user);
-      localStorage.setItem('user', JSON.stringify(user));
-    } catch (err) {
-      if (err.message === 'Request timed out') {
-        throw new Error('Signup request timed out. Please try again.');
+    const data = await postRequest(
+      `${process.env.REACT_APP_API_URL}/signup/creator`,
+      {
+        email,
+        password,
+        ...additionalData
       }
-      throw err;
-    }
+    );
+    const user = { _id: data.userId, email, role: 'content_creator', ...additionalData };
+    setCurrentUser(user);
+    localStorage.setItem('user', JSON.stringify(user));
   }
 
   // === Login Function ===
   async function login(email, password, role = 'admin') {
-    try {
-      const data = await postRequest(
-        `${process.env.REACT_APP_API_URL}/${role}/login`,
-        { email, password }
-      );
-      const user = data.user;
-      setCurrentUser(user);
-      localStorage.setItem('user', JSON.stringify(user));
-    } catch (err) {
-      if (
-        err.message === 'Invalid credentials or sign up to create account' ||
-        err.message.toLowerCase().includes('invalid credentials')
-      ) {
-        throw err;
-      }
-      if (err.message === 'Request timed out') {
-        throw new Error('Login request timed out. Please try again.');
-      }
-      throw err;
-    }
+    const data = await postRequest(
+      `${process.env.REACT_APP_API_URL}/${role}/login`,
+      { email, password }
+    );
+    const user = data.user;
+    setCurrentUser(user);
+    localStorage.setItem('user', JSON.stringify(user));
   }
-
 
   function logout() {
     setCurrentUser(null);
@@ -155,18 +121,18 @@ const postRequest = async (url, body) => {
   }
 
   const value = {
-  currentUser,
-  isAuthenticated: !!currentUser,
-  signup: adminSignup,
-  login, // use this only when passing a role
-  logout,
-  adminSignup,
-  customerSignup,
-  contentCreatorSignup,
-  adminLogin: (email, password) => login(email, password, 'admin'),
-  customerLogin: (email, password) => login(email, password, 'customer'),
-  contentCreatorLogin: (email, password) => login(email, password, 'content_creator'),
-};
+    currentUser,
+    isAuthenticated: !!currentUser,
+    signup: adminSignup,
+    login,
+    logout,
+    adminSignup,
+    customerSignup,
+    contentCreatorSignup,
+    adminLogin: (email, password) => login(email, password, 'admin'),
+    customerLogin: (email, password) => login(email, password, 'customer'),
+    contentCreatorLogin: (email, password) => login(email, password, 'content_creator'),
+  };
 
   return (
     <AuthContext.Provider value={value}>

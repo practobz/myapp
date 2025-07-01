@@ -33,6 +33,30 @@ import ContentCreatorLogin from './content-creators/auth/ContentCreatorLogin';
 import Assignments from './content-creators/Assignments';
 import ContentPortfolio from './content-creators/ContentPortfolio';
 import ContentUpload from './content-creators/ContentUpload';
+import { useAuth } from './admin/contexts/AuthContext';
+
+// --- ProtectedRoute for all portals ---
+function ProtectedRoutePortal({ children, role }) {
+  const { currentUser } = useAuth();
+
+  // Not logged in
+  if (!currentUser) {
+    if (role === 'admin') return <Navigate to="/login" replace />;
+    if (role === 'customer') return <Navigate to="/customer/login" replace />;
+    if (role === 'content_creator') return <Navigate to="/content-creator/login" replace />;
+    return <Navigate to="/login" replace />;
+  }
+
+  // Wrong role
+  if (role && currentUser.role !== role) {
+    if (currentUser.role === 'admin') return <Navigate to="/admin" replace />;
+    if (currentUser.role === 'customer') return <Navigate to="/customer" replace />;
+    if (currentUser.role === 'content_creator') return <Navigate to="/content-creator" replace />;
+    return <Navigate to="/login" replace />;
+  }
+
+  return children;
+}
 
 function App() {
   return (
@@ -41,102 +65,140 @@ function App() {
         <CustomerProvider>
           <div className="min-h-screen bg-gray-50">
             <Routes>
+              {/* Public Auth Routes */}
               <Route path="/signup" element={<Signup />} />
               <Route path="/login" element={<Login />} />
-              {/* Protect all /admin routes */}
-              <Route path="/admin" element={
-                <ProtectedRoute>
-                  <Dashboard />
-                </ProtectedRoute>
-              } />
-              <Route path="/admin/customers/:id" element={
-                <ProtectedRoute>
-                  <CustomerDetails />
-                </ProtectedRoute>
-              } />
-              <Route path="/admin/comment" element={
-                <ProtectedRoute>
-                  <Comment />
-                </ProtectedRoute>
-              } />
-              <Route path="/admin/customers-list" element={
-                <ProtectedRoute>
-                  <CustomersList />
-                </ProtectedRoute>
-              } />
-              <Route path="/admin/calendar" element={
-                <ProtectedRoute>
-                  <CustomersList />
-                </ProtectedRoute>
-              } />
-              <Route path="/admin/customer-details/:id" element={
-                <ProtectedRoute>
-                  <CustomerDetailsView />
-                </ProtectedRoute>
-              } />
-              <Route path="/admin/customers" element={
-                <ProtectedRoute>
-                  <Customers />
-                </ProtectedRoute>
-              } />
-              <Route path="/admin/content-creators" element={
-                <ProtectedRoute>
-                  <ContentCreators />
-                </ProtectedRoute>
-              } />
-              <Route path="/admin/content-creator-details/:id" element={
-                <ProtectedRoute>
-                  <ContentCreatorDetails />
-                </ProtectedRoute>
-              } />
-              {/* Customer auth routes */}
               <Route path="/customer/signup" element={<CustomerSignup />} />
               <Route path="/customer/login" element={<CustomerLogin />} />
-              {/* Customer routes with layout */}
-              <Route path="/customer" element={
-                <CustomerLayout>
-                  <CustomerDashboard />
-                </CustomerLayout>
-              } />
-              <Route path="/customer/calendar" element={
-                <CustomerLayout>
-                  <ContentCalendar />
-                </CustomerLayout>
-              } />
-              <Route path="/customer/settings" element={
-                <CustomerLayout>
-                  <CustomerSettings />
-                </CustomerLayout>
-              } />
-              <Route path="/customer/subscription" element={
-                <CustomerLayout>
-                  <Subscription />
-                </CustomerLayout>
-              } />
-              <Route path="/customer/content-review" element={
-                <CustomerLayout>
-                  <ContentReview />
-                </CustomerLayout>
-              } />
-              <Route path="/customer/approve/:id" element={
-                <CustomerLayout>
-                  <ContentApproval />
-                </CustomerLayout>
-              } />
-              <Route path="/customer/upload" element={
-                <CustomerLayout>
-                  <ContentUpload />
-                </CustomerLayout>
-              } />
-              {/* Content Creator routes */}
-              <Route path="/content-creator" element={<ContentCreatorDashboard />} />
               <Route path="/content-creator/signup" element={<ContentCreatorSignup />} />
               <Route path="/content-creator/login" element={<ContentCreatorLogin />} />
-              <Route path="/content-creator/assignments" element={<Assignments />} />
-              <Route path="/content-creator/portfolio" element={<ContentPortfolio />} />
-              <Route path="/content-creator/upload/:assignmentId" element={<ContentUpload />} />
-              <Route path="/content-creator/upload" element={<ContentUpload />} />
-              {/* Add more content-creator routes as needed */}
+
+              {/* Admin Portal (protected) */}
+              <Route path="/admin" element={
+                <ProtectedRoutePortal role="admin">
+                  <Dashboard />
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/admin/customers/:id" element={
+                <ProtectedRoutePortal role="admin">
+                  <CustomerDetails />
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/admin/comment" element={
+                <ProtectedRoutePortal role="admin">
+                  <Comment />
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/admin/customers-list" element={
+                <ProtectedRoutePortal role="admin">
+                  <CustomersList />
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/admin/calendar" element={
+                <ProtectedRoutePortal role="admin">
+                  <CustomersList />
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/admin/customer-details/:id" element={
+                <ProtectedRoutePortal role="admin">
+                  <CustomerDetailsView />
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/admin/customers" element={
+                <ProtectedRoutePortal role="admin">
+                  <Customers />
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/admin/content-creators" element={
+                <ProtectedRoutePortal role="admin">
+                  <ContentCreators />
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/admin/content-creator-details/:id" element={
+                <ProtectedRoutePortal role="admin">
+                  <ContentCreatorDetails />
+                </ProtectedRoutePortal>
+              } />
+
+              {/* Customer Portal (protected) */}
+              <Route path="/customer" element={
+                <ProtectedRoutePortal role="customer">
+                  <CustomerLayout>
+                    <CustomerDashboard />
+                  </CustomerLayout>
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/customer/calendar" element={
+                <ProtectedRoutePortal role="customer">
+                  <CustomerLayout>
+                    <ContentCalendar />
+                  </CustomerLayout>
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/customer/settings" element={
+                <ProtectedRoutePortal role="customer">
+                  <CustomerLayout>
+                    <CustomerSettings />
+                  </CustomerLayout>
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/customer/subscription" element={
+                <ProtectedRoutePortal role="customer">
+                  <CustomerLayout>
+                    <Subscription />
+                  </CustomerLayout>
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/customer/content-review" element={
+                <ProtectedRoutePortal role="customer">
+                  <CustomerLayout>
+                    <ContentReview />
+                  </CustomerLayout>
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/customer/approve/:id" element={
+                <ProtectedRoutePortal role="customer">
+                  <CustomerLayout>
+                    <ContentApproval />
+                  </CustomerLayout>
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/customer/upload" element={
+                <ProtectedRoutePortal role="customer">
+                  <CustomerLayout>
+                    <ContentUpload />
+                  </CustomerLayout>
+                </ProtectedRoutePortal>
+              } />
+
+              {/* Content Creator Portal (protected) */}
+              <Route path="/content-creator" element={
+                <ProtectedRoutePortal role="content_creator">
+                  <ContentCreatorDashboard />
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/content-creator/assignments" element={
+                <ProtectedRoutePortal role="content_creator">
+                  <Assignments />
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/content-creator/portfolio" element={
+                <ProtectedRoutePortal role="content_creator">
+                  <ContentPortfolio />
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/content-creator/upload/:assignmentId" element={
+                <ProtectedRoutePortal role="content_creator">
+                  <ContentUpload />
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/content-creator/upload" element={
+                <ProtectedRoutePortal role="content_creator">
+                  <ContentUpload />
+                </ProtectedRoutePortal>
+              } />
+
+              {/* Default route */}
               <Route path="/" element={<Navigate to="/login" replace />} />
             </Routes>
           </div>

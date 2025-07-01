@@ -16,10 +16,12 @@ import {
   ChevronRight,
   ChevronDown,
   Palette,
-  Briefcase
+  Briefcase,
+  Award,
+  Shield
 } from 'lucide-react';
 
-const API_URL = process.env.REACT_APP_API_URL;
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 
 function ContentCreatorDetails() {
   const { id } = useParams();
@@ -32,18 +34,47 @@ function ContentCreatorDetails() {
 
   useEffect(() => {
     fetchCreatorDetails();
-    fetchAssignedCalendars();
   }, [id]);
+
+  useEffect(() => {
+    if (creator) {
+      fetchAssignedCalendars();
+    }
+  }, [creator]);
 
   const fetchCreatorDetails = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_URL}/users/${id}`);
-      if (!response.ok) throw new Error('Failed to fetch creator details');
-      const data = await response.json();
-      // If the API returns {doc: {...}}, use data.doc, else use data directly
-      const creatorData = data.doc ? data.doc : data;
-      setCreator(creatorData);
+      
+      // First try to get all content creators and find the one with matching ID
+      const allCreatorsResponse = await fetch(`${API_URL}/users?role=content_creator`);
+      if (!allCreatorsResponse.ok) throw new Error('Failed to fetch content creators');
+      
+      const allCreatorsData = await allCreatorsResponse.json();
+      const creators = Array.isArray(allCreatorsData) ? allCreatorsData : (allCreatorsData.creators || []);
+      
+      console.log('All creators:', creators);
+      console.log('Looking for ID:', id);
+      
+      // Find the creator with matching ID
+      const foundCreator = creators.find(creator => creator._id === id);
+      
+      if (!foundCreator) {
+        // If not found in the list, try the individual endpoint as fallback
+        const individualResponse = await fetch(`${API_URL}/users/${id}`);
+        if (!individualResponse.ok) throw new Error('Creator not found');
+        
+        const individualData = await individualResponse.json();
+        console.log('Individual creator API Response:', individualData);
+        
+        // Handle different response formats
+        const creatorData = individualData.doc || individualData;
+        setCreator(creatorData);
+      } else {
+        console.log('Found creator:', foundCreator);
+        setCreator(foundCreator);
+      }
+      
     } catch (err) {
       setError('Failed to load creator details');
       console.error('Error fetching creator:', err);
@@ -58,14 +89,18 @@ function ContentCreatorDetails() {
       if (!response.ok) throw new Error('Failed to fetch calendars');
       const calendars = await response.json();
       
-      // Get creator email first
-      const creatorResponse = await fetch(`${API_URL}/users/${id}`);
-      const creatorData = await creatorResponse.json();
+      // Get creator email
+      const creatorEmail = creator?.email;
+      
+      if (!creatorEmail) {
+        console.log('No creator email found, skipping calendar assignment check');
+        return;
+      }
       
       // Filter calendars assigned to this creator
       const assigned = calendars.filter(calendar => 
-        calendar.assignedTo === creatorData.email || 
-        (calendar.contentItems && calendar.contentItems.some(item => item.assignedTo === creatorData.email))
+        calendar.assignedTo === creatorEmail || 
+        (calendar.contentItems && calendar.contentItems.some(item => item.assignedTo === creatorEmail))
       );
       
       // Enrich with customer names
@@ -121,6 +156,40 @@ function ContentCreatorDetails() {
     } catch (error) {
       return 'Invalid date';
     }
+  };
+
+  const getSpecializationDisplay = (specialization) => {
+    if (!specialization) return 'Not specified';
+    
+    const specializationMap = {
+      'graphic-design': 'Graphic Design',
+      'video-editing': 'Video Editing',
+      'content-writing': 'Content Writing',
+      'social-media': 'Social Media Management',
+      'photography': 'Photography',
+      'web-design': 'Web Design'
+    };
+    return specializationMap[specialization] || specialization.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+  };
+
+  const getExperienceDisplay = (experience) => {
+    if (!experience) return 'Not specified';
+    
+    const experienceMap = {
+      'beginner': 'Beginner (0-1 years)',
+      'intermediate': 'Intermediate (2-4 years)',
+      'advanced': 'Advanced (5-7 years)',
+      'expert': 'Expert (8+ years)'
+    };
+    return experienceMap[experience] || experience.replace(/\b\w/g, l => l.toUpperCase());
+  };
+
+  const getStatusColor = (isActive) => {
+    return isActive ? 'bg-green-100 text-green-800 border-green-200' : 'bg-red-100 text-red-800 border-red-200';
+  };
+
+  const getStatusText = (isActive) => {
+    return isActive ? 'Active' : 'Inactive';
   };
 
   if (loading) {
@@ -180,14 +249,19 @@ function ContentCreatorDetails() {
                 <div className="flex items-center">
                   <div className="h-12 w-12 bg-gradient-to-r from-purple-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
                     <span className="text-white font-bold text-lg">
-                      {(creator.name || 'U').charAt(0).toUpperCase()}
+                      {(creator.name || creator.email || 'U').charAt(0).toUpperCase()}
                     </span>
                   </div>
                   <div className="ml-4">
-                    <h2 className="text-2xl font-bold text-gray-900">{creator.name || 'Unnamed Creator'}</h2>
+                    <h2 className="text-2xl font-bold text-gray-900">{creator.name || creator.email || 'Unnamed Creator'}</h2>
                     <p className="text-gray-600">Content Creator Profile & Assignments</p>
                   </div>
                 </div>
+              </div>
+              <div className="flex items-center space-x-2">
+                <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(creator.isActive)}`}>
+                  {getStatusText(creator.isActive)}
+                </span>
               </div>
             </div>
           </div>
@@ -203,18 +277,18 @@ function ContentCreatorDetails() {
               {/* Personal Information */}
               <div className="space-y-6">
                 <h4 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-2">Personal Details</h4>
+                
                 <div className="space-y-4">
-                  {/* Name Field */}
                   <div className="flex items-start space-x-4 p-4 bg-gray-50/50 rounded-xl">
                     <div className="p-2 bg-blue-100 rounded-lg">
                       <User className="h-5 w-5 text-blue-600" />
                     </div>
                     <div className="flex-1">
-                      <p className="text-sm font-medium text-gray-500">Name</p>
-                      {/* Show 'name' field if present, else fallback to email */}
-                      <p className="text-gray-900 font-medium">{creator.name || creator.email || 'Not provided'}</p>
+                      <p className="text-sm font-medium text-gray-500">Full Name</p>
+                      <p className="text-gray-900 font-medium">{creator.name || 'Not provided'}</p>
                     </div>
                   </div>
+
                   <div className="flex items-start space-x-4 p-4 bg-gray-50/50 rounded-xl">
                     <div className="p-2 bg-green-100 rounded-lg">
                       <Mail className="h-5 w-5 text-green-600" />
@@ -224,6 +298,7 @@ function ContentCreatorDetails() {
                       <p className="text-gray-900 font-medium">{creator.email || 'Not provided'}</p>
                     </div>
                   </div>
+
                   <div className="flex items-start space-x-4 p-4 bg-gray-50/50 rounded-xl">
                     <div className="p-2 bg-blue-100 rounded-lg">
                       <Phone className="h-5 w-5 text-blue-600" />
@@ -233,33 +308,94 @@ function ContentCreatorDetails() {
                       <p className="text-gray-900 font-medium">{creator.mobile || 'Not provided'}</p>
                     </div>
                   </div>
+
+                  <div className="flex items-start space-x-4 p-4 bg-gray-50/50 rounded-xl">
+                    <div className="p-2 bg-orange-100 rounded-lg">
+                      <MapPin className="h-5 w-5 text-orange-600" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-gray-500">Address</p>
+                      <p className="text-gray-900 font-medium">{creator.address || 'Not provided'}</p>
+                    </div>
+                  </div>
                 </div>
               </div>
+
               {/* Professional Information */}
               <div className="space-y-6">
                 <h4 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-2">Professional Details</h4>
+                
                 <div className="space-y-4">
                   <div className="flex items-start space-x-4 p-4 bg-gray-50/50 rounded-xl">
                     <div className="p-2 bg-indigo-100 rounded-lg">
-                      <Palette className="h-5 w-5 text-indigo-600" />
+                      <Building className="h-5 w-5 text-indigo-600" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-gray-500">Role</p>
+                      <p className="text-gray-900 font-medium capitalize">{creator.role?.replace('_', ' ') || 'Content Creator'}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start space-x-4 p-4 bg-gray-50/50 rounded-xl">
+                    <div className="p-2 bg-purple-100 rounded-lg">
+                      <Palette className="h-5 w-5 text-purple-600" />
                     </div>
                     <div className="flex-1">
                       <p className="text-sm font-medium text-gray-500">Specialization</p>
-                      <p className="text-gray-900 font-medium">{creator.specialization || 'Not provided'}</p>
+                      <p className="text-gray-900 font-medium">{getSpecializationDisplay(creator.specialization)}</p>
                     </div>
                   </div>
+
                   <div className="flex items-start space-x-4 p-4 bg-gray-50/50 rounded-xl">
                     <div className="p-2 bg-yellow-100 rounded-lg">
-                      <Briefcase className="h-5 w-5 text-yellow-600" />
+                      <Award className="h-5 w-5 text-yellow-600" />
                     </div>
                     <div className="flex-1">
-                      <p className="text-sm font-medium text-gray-500">Experience</p>
-                      <p className="text-gray-900 font-medium">{creator.experience || 'Not provided'}</p>
+                      <p className="text-sm font-medium text-gray-500">Experience Level</p>
+                      <p className="text-gray-900 font-medium">{getExperienceDisplay(creator.experience)}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start space-x-4 p-4 bg-gray-50/50 rounded-xl">
+                    <div className="p-2 bg-teal-100 rounded-lg">
+                      <Calendar className="h-5 w-5 text-teal-600" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-gray-500">Registration Date</p>
+                      <p className="text-gray-900 font-medium">{formatDate(creator.createdAt)}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start space-x-4 p-4 bg-gray-50/50 rounded-xl">
+                    <div className="p-2 bg-pink-100 rounded-lg">
+                      <Hash className="h-5 w-5 text-pink-600" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-gray-500">Creator ID</p>
+                      <p className="text-gray-900 font-mono text-sm">{creator._id}</p>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
+
+            {/* Permissions Section */}
+            {creator.permissions && creator.permissions.length > 0 && (
+              <div className="mt-8 pt-8 border-t border-gray-200">
+                <h4 className="text-lg font-semibold text-gray-900 mb-4">Permissions & Access</h4>
+                <div className="flex flex-wrap gap-2">
+                  {creator.permissions.map((permission, index) => (
+                    <span
+                      key={index}
+                      className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200"
+                    >
+                      <Shield className="h-3 w-3 mr-1" />
+                      {permission.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Assigned Calendars Section */}

@@ -9,6 +9,7 @@ import {
   ChevronLeft, Pencil, Trash2, Plus, AlertCircle, Calendar, Clock, User, FileText, Activity, Target, UserCheck,
   ChevronRight, ChevronDown, MoreVertical
 } from 'lucide-react';
+import { v4 as uuidv4 } from 'uuid';
 
 const API_URL = process.env.REACT_APP_API_URL;
 
@@ -138,39 +139,41 @@ const CustomerDetails = () => {
   };
 
   const handleAddItem = async (item, calendarId) => {
-  if (!calendarId) {
-    alert("Please select a calendar before adding content.");
-    return;
-  }
-
-  try {
-    const calendar = calendars.find(c => c._id === calendarId);
-    if (!calendar) {
-      alert("Calendar not found.");
+    if (!calendarId) {
+      alert("Please select a calendar before adding content.");
       return;
     }
 
-    const updatedContentItems = [...(calendar.contentItems || []), item];
-    const response = await fetch(`${API_URL}/calendars/${calendarId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...calendar,
-        contentItems: updatedContentItems,
-        updatedAt: new Date().toISOString()
-      })
-    });
+    try {
+      const calendar = calendars.find(c => c._id === calendarId);
+      if (!calendar) {
+        alert("Calendar not found.");
+        return;
+      }
 
-    if (!response.ok) {
-      throw new Error('Failed to add item');
+      // Ensure item has a unique id
+      const itemWithId = { ...item, id: item.id || uuidv4() };
+      const updatedContentItems = [...(calendar.contentItems || []), itemWithId];
+      const response = await fetch(`${API_URL}/calendars/${calendarId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...calendar,
+          contentItems: updatedContentItems,
+          updatedAt: new Date().toISOString()
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to add item');
+      }
+
+      fetchCalendarItems();
+    } catch (err) {
+      console.error('❌ Error adding content item:', err);
+      alert("Failed to add content item.");
     }
-
-    fetchCalendarItems();
-  } catch (err) {
-    console.error('❌ Error adding content item:', err);
-    alert("Failed to add content item.");
-  }
-};
+  };
 
 
   // Edit content item handler (match CustomerDetailsView.jsx)
@@ -229,7 +232,9 @@ const CustomerDetails = () => {
             description,
             type: type !== undefined ? type : item.type,
             status: status !== undefined ? status : item.status,
-            title: title !== undefined ? title : item.title
+            title: title !== undefined ? title : item.title,
+            // Ensure id is preserved or generated
+            id: item.id || uuidv4()
           };
         }
         return item;

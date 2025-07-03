@@ -27,6 +27,7 @@ import {
   Trash2,
   MoreVertical
 } from 'lucide-react';
+import { v4 as uuidv4 } from 'uuid';
 
 function CustomerDetailsView() {
   const { id } = useParams();
@@ -141,7 +142,9 @@ function CustomerDetailsView() {
         throw new Error('Calendar not found');
       }
 
-      const updatedContentItems = [...(calendar.contentItems || []), item];
+      // Ensure item has a unique id
+      const itemWithId = { ...item, id: item.id || uuidv4() };
+      const updatedContentItems = [...(calendar.contentItems || []), itemWithId];
 
       const response = await fetch(`${API_URL}/calendars/${calendar._id}`, {
         method: 'PUT',
@@ -284,7 +287,9 @@ function CustomerDetailsView() {
             status: status !== undefined ? status : item.status,
             title: title !== undefined ? title : item.title,
             assignedTo: assignedTo !== undefined ? assignedTo : item.assignedTo,
-            assignedToName: assignedToName !== undefined ? assignedToName : item.assignedToName
+            assignedToName: assignedToName !== undefined ? assignedToName : item.assignedToName,
+            // Ensure id is preserved or generated
+            id: item.id || uuidv4()
           };
         }
         return item;

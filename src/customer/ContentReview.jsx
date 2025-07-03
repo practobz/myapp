@@ -193,7 +193,7 @@ function ContentReview() {
           },
           body: JSON.stringify({
             versionId: versionIdForPatch,
-            comment: newCommentObj
+            comment: newCommentObj // { id, comment, position, timestamp, status }
           })
         });
 

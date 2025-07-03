@@ -246,7 +246,9 @@ function CustomerDetailsView() {
         originalDescription,
         type,
         status,
-        title
+        title,
+        assignedTo,
+        assignedToName
       } = updatedItem;
 
       if (!_calendarId || !originalDate || !originalDescription) return;
@@ -280,7 +282,9 @@ function CustomerDetailsView() {
             description,
             type: type !== undefined ? type : item.type,
             status: status !== undefined ? status : item.status,
-            title: title !== undefined ? title : item.title
+            title: title !== undefined ? title : item.title,
+            assignedTo: assignedTo !== undefined ? assignedTo : item.assignedTo,
+            assignedToName: assignedToName !== undefined ? assignedToName : item.assignedToName
           };
         }
         return item;

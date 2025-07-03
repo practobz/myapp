@@ -15,9 +15,15 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Fix: Only parse if value is a valid JSON string
     const user = localStorage.getItem('user');
-    if (user) {
-      setCurrentUser(JSON.parse(user));
+    if (user && user !== 'undefined') {
+      try {
+        setCurrentUser(JSON.parse(user));
+      } catch (e) {
+        setCurrentUser(null);
+        localStorage.removeItem('user');
+      }
     }
     setLoading(false);
   }, []);

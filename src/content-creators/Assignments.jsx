@@ -1,30 +1,65 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
-import { ArrowLeft, Filter, Search, Upload, MessageSquare, CheckCircle, Clock, AlertCircle, Palette, Play } from 'lucide-react';
+import { ArrowLeft, Filter, Search, Upload, MessageSquare, CheckCircle, Clock, AlertCircle, Palette, Play, Eye } from 'lucide-react';
 import Footer from '../admin/components/layout/Footer';
+
+// Helper to get creator email from localStorage
+function getCreatorEmail() {
+  let email = '';
+  try {
+    email = (localStorage.getItem('userEmail') || '').toLowerCase();
+    if (!email) {
+      const userStr = localStorage.getItem('user');
+      if (userStr) {
+        const userObj = JSON.parse(userStr);
+        if (userObj.email) {
+          email = userObj.email.toLowerCase();
+        }
+      }
+    }
+  } catch (e) {
+    email = '';
+  }
+  return email;
+}
 
 function Assignments() {
   const navigate = useNavigate();
   const [selectedFilter, setSelectedFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [assignments, setAssignments] = useState([]);
+  const [customerMap, setCustomerMap] = useState({});
 
   // Get current creator's email or id
-  let creatorEmail = (localStorage.getItem('userEmail') || '').toLowerCase();
-  if (!creatorEmail) {
-    try {
-      const userStr = localStorage.getItem('user');
-      if (userStr) {
-        const userObj = JSON.parse(userStr);
-        if (userObj.email) {
-          creatorEmail = userObj.email.toLowerCase();
-        }
-      }
-    } catch (e) {
-      // ignore
+  const creatorEmail = getCreatorEmail();
+
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!creatorEmail) {
+      navigate('/content-creator/login');
     }
-  }
+  }, [creatorEmail, navigate]);
+
+  useEffect(() => {
+    // Fetch all customers and build a map of customerId -> customerName
+    const fetchCustomers = async () => {
+      try {
+        const res = await fetch(`${process.env.REACT_APP_API_URL}/api/customers`);
+        const data = await res.json();
+        if (Array.isArray(data.customers)) {
+          const map = {};
+          data.customers.forEach(c => {
+            map[c._id || c.id] = c.name || c.customerName || c.email || '';
+          });
+          setCustomerMap(map);
+        }
+      } catch (err) {
+        setCustomerMap({});
+      }
+    };
+    fetchCustomers();
+  }, []);
 
   useEffect(() => {
     // Fetch all content calendar items assigned to this creator
@@ -38,7 +73,10 @@ function Assignments() {
             calendar.contentItems.forEach(item => {
               allAssignments.push({
                 ...item,
-                customer: calendar.customerName || calendar.customer || '',
+                calendarName: calendar.name || calendar.customerName || calendar.customer || '',
+                calendarId: calendar._id || calendar.id,
+                customerId: calendar.customerId || calendar.customer_id || calendar.customer?._id || '',
+                customerName: customerMap[calendar.customerId || calendar.customer_id || (calendar.customer && calendar.customer._id)] || '',
                 id: item.id || item._id || item.title || Math.random().toString(36).slice(2)
               });
             });
@@ -52,10 +90,10 @@ function Assignments() {
         setAssignments([]);
       }
     };
-    if (creatorEmail && creatorEmail.length > 0) {
+    if (creatorEmail && creatorEmail.length > 0 && Object.keys(customerMap).length > 0) {
       fetchAssignments();
     }
-  }, [creatorEmail]);
+  }, [creatorEmail, customerMap]);
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -113,11 +151,16 @@ function Assignments() {
   });
 
   const handleAssignmentClick = (assignment) => {
-    // navigate(`/content-creator/assignments/${assignment.id}`);
+    // Navigate to detailed view or portfolio for this specific assignment
+    navigate(`/content-creator/portfolio`, { state: { assignmentId: assignment.id } });
   };
 
   const handleStartWork = (assignment) => {
     navigate(`/content-creator/upload/${assignment.id || assignment._id}`);
+  };
+
+  const handleViewPortfolio = (assignment) => {
+    navigate(`/content-creator/portfolio`, { state: { assignmentId: assignment.id } });
   };
 
   return (
@@ -212,63 +255,60 @@ function Assignments() {
                     className="bg-white rounded-xl border border-gray-200/50 shadow-sm hover:shadow-lg transition-all duration-300 overflow-hidden group"
                   >
                     <div className="p-6">
-                      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
-                        <div className="flex-1 space-y-4">
-                          {/* Header */}
-                          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+                        {/* Left: Title, Calendar, Status, Priority */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <h3 className="text-xl font-bold text-gray-900">{assignment.title}</h3>
+                              <span className="px-2 py-1 rounded bg-gray-100 text-xs text-gray-700 font-medium">
+                                {assignment.calendarName}
+                              </span>
+                              <span className="text-xs text-gray-400 font-mono">ID: {assignment.id}</span>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2 mt-2 sm:mt-0">
+                              <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(assignment.status)}`}>
+                                {getStatusIcon(assignment.status)}
+                                <span className="ml-1 capitalize">{(assignment.status || 'assigned').replace('_', ' ')}</span>
+                              </span>
+                              <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getPriorityColor(assignment.priority)}`}>
+                                {(assignment.priority || 'Medium').toUpperCase()} PRIORITY
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap gap-8 mt-4">
                             <div>
-                              <h3 className="text-xl font-bold text-gray-900 mb-2">{assignment.title}</h3>
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(assignment.status)}`}>
-                                  {getStatusIcon(assignment.status)}
-                                  <span className="ml-1 capitalize">{(assignment.status || 'assigned').replace('_', ' ')}</span>
-                                </span>
-                                <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getPriorityColor(assignment.priority)}`}>
-                                  {(assignment.priority || 'Medium').toUpperCase()} PRIORITY
-                                </span>
-                              </div>
+                              <span className="text-xs font-medium text-gray-500">Customer</span>
+                              <p className="text-sm text-gray-900 font-semibold">{assignment.customerName || assignment.customer || ''}</p>
+                            </div>
+                            <div>
+                              <span className="text-xs font-medium text-gray-500">Content Type</span>
+                              <p className="text-sm text-gray-900">{assignment.type}</p>
+                            </div>
+                            <div>
+                              <span className="text-xs font-medium text-gray-500">Due Date</span>
+                              <p className="text-sm text-gray-900">{format(new Date(assignment.dueDate), 'MMM dd, yyyy')}</p>
                             </div>
                           </div>
-
-                          {/* Details Grid */}
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div className="flex items-center space-x-2">
-                              <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                              <div>
-                                <span className="text-sm font-medium text-gray-500">Customer</span>
-                                <p className="text-sm text-gray-900">{assignment.customer}</p>
-                              </div>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                              <div>
-                                <span className="text-sm font-medium text-gray-500">Content Type</span>
-                                <p className="text-sm text-gray-900">{assignment.type}</p>
-                              </div>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-                              <div>
-                                <span className="text-sm font-medium text-gray-500">Due Date</span>
-                                <p className="text-sm text-gray-900">{format(new Date(assignment.dueDate), 'MMM dd, yyyy')}</p>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Description */}
-                          <div className="bg-gray-50 rounded-lg p-4">
+                          <div className="bg-gray-50 rounded-lg p-4 mt-4">
                             <p className="text-gray-700 text-sm leading-relaxed">{assignment.description}</p>
                           </div>
                         </div>
-
-                        {/* Action Button */}
-                        <div className="flex-shrink-0">
+                        {/* Right: Action Buttons */}
+                        <div className="flex flex-col gap-3 min-w-[180px]">
                           <button
                             onClick={() => handleStartWork(assignment)}
                             className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-semibold rounded-xl hover:from-purple-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
                           >
                             <Play className="h-5 w-5 mr-2" />
                             Start Work
+                          </button>
+                          <button
+                            onClick={() => handleViewPortfolio(assignment)}
+                            className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-cyan-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
+                          >
+                            <Eye className="h-5 w-5 mr-2" />
+                            View Portfolio
                           </button>
                         </div>
                       </div>

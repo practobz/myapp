@@ -7,7 +7,9 @@ import { Users, Calendar, Clock, TrendingUp, BarChart3, Target, Activity, Zap, A
 function Dashboard() {
   const [customers, setCustomers] = useState([]);
   const [contentCreators, setContentCreators] = useState([]);
+  const [contentItems, setContentItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -15,6 +17,8 @@ function Dashboard() {
   }, []);
 
   const fetchDashboardData = async () => {
+    setLoading(true);
+    setError('');
     try {
       // Fetch customers
       const customersRes = await fetch(`${process.env.REACT_APP_API_URL}/api/customers`);
@@ -25,7 +29,18 @@ function Dashboard() {
       const creatorsRes = await fetch(`${process.env.REACT_APP_API_URL}/users?role=content_creator`);
       const creatorsData = await creatorsRes.json();
       setContentCreators(Array.isArray(creatorsData) ? creatorsData : (creatorsData.creators || []));
+
+      // Fetch all calendars and aggregate content items
+      const calendarsRes = await fetch(`${process.env.REACT_APP_API_URL}/calendars`);
+      const calendarsData = await calendarsRes.json();
+      // Flatten all contentItems from all calendars
+      const allContentItems = Array.isArray(calendarsData)
+        ? calendarsData.flatMap(cal => Array.isArray(cal.contentItems) ? cal.contentItems : [])
+        : [];
+      setContentItems(allContentItems);
+
     } catch (error) {
+      setError('Error fetching dashboard data');
       console.error('Error fetching dashboard data:', error);
     } finally {
       setLoading(false);
@@ -35,13 +50,32 @@ function Dashboard() {
   // Calculate statistics
   const totalCustomers = customers.length;
   const totalContentCreators = contentCreators.length;
-  const totalContentItems = 45; // Mock data - replace with actual calculation
-  const upcomingContent = 12; // Mock data - replace with actual calculation
+  const totalContentItems = contentItems.length;
 
   // Calculate engagement metrics (mock data)
   const engagementRate = "78%";
   const monthlyGrowth = "12.5%";
   const reachTarget = "92%";
+
+  if (loading) {
+    return (
+      <AdminLayout title="Dashboard">
+        <div className="flex justify-center items-center h-96">
+          <span className="text-lg text-gray-600">Loading dashboard...</span>
+        </div>
+      </AdminLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <AdminLayout title="Dashboard">
+        <div className="flex justify-center items-center h-96">
+          <span className="text-lg text-red-600">{error}</span>
+        </div>
+      </AdminLayout>
+    );
+  }
 
   return (
     <AdminLayout title="Dashboard">
@@ -93,7 +127,7 @@ function Dashboard() {
         </div>
 
         {/* Main Statistics */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           <div 
             onClick={() => navigate('/admin/customers-list')}
             className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-gray-200/50 hover:shadow-xl transition-all duration-300 group cursor-pointer"
@@ -138,19 +172,6 @@ function Dashboard() {
                 <p className="text-sm font-semibold text-gray-600 uppercase tracking-wider">Content Items</p>
                 <h3 className="text-3xl font-bold text-gray-900 mt-1">{totalContentItems}</h3>
                 <p className="text-sm text-green-600 font-medium mt-1">+12% from last week</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-gray-200/50 hover:shadow-xl transition-all duration-300 group">
-            <div className="flex items-center">
-              <div className="p-4 bg-gradient-to-r from-orange-500 to-orange-600 rounded-xl shadow-lg group-hover:shadow-xl transition-all duration-300">
-                <Clock className="h-8 w-8 text-white" />
-              </div>
-              <div className="ml-6">
-                <p className="text-sm font-semibold text-gray-600 uppercase tracking-wider">Upcoming Content</p>
-                <h3 className="text-3xl font-bold text-gray-900 mt-1">{upcomingContent}</h3>
-                <p className="text-sm text-blue-600 font-medium mt-1">Next 7 days</p>
               </div>
             </div>
           </div>
@@ -210,7 +231,7 @@ function Dashboard() {
         {/* Quick Actions */}
         <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 p-8">
           <h2 className="text-2xl font-bold text-gray-900 mb-6">Quick Actions</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <button 
               onClick={() => navigate('/admin/customers-list')}
               className="flex items-center justify-center p-6 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
@@ -233,11 +254,6 @@ function Dashboard() {
             >
               <Calendar className="h-6 w-6 mr-3" />
               <span className="font-semibold">Content Calendar</span>
-            </button>
-            
-            <button className="flex items-center justify-center p-6 bg-gradient-to-r from-orange-600 to-red-600 text-white rounded-xl hover:from-orange-700 hover:to-red-700 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl">
-              <BarChart3 className="h-6 w-6 mr-3" />
-              <span className="font-semibold">Analytics</span>
             </button>
           </div>
         </div>

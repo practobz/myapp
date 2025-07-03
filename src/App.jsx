@@ -33,6 +33,8 @@ import ContentCreatorLogin from './content-creators/auth/ContentCreatorLogin';
 import Assignments from './content-creators/Assignments';
 import ContentPortfolio from './content-creators/ContentPortfolio';
 import ContentUpload from './content-creators/ContentUpload';
+import Profile from './content-creators/Profile';
+import Settings from './content-creators/Settings';
 import { useAuth } from './admin/contexts/AuthContext';
 
 // --- ProtectedRoute for all portals ---
@@ -195,6 +197,16 @@ function App() {
               <Route path="/content-creator/upload" element={
                 <ProtectedRoutePortal role="content_creator">
                   <ContentUpload />
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/content-creator/profile" element={
+                <ProtectedRoutePortal role="content_creator">
+                  <Profile />
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/content-creator/settings" element={
+                <ProtectedRoutePortal role="content_creator">
+                  <Settings />
                 </ProtectedRoutePortal>
               } />
 

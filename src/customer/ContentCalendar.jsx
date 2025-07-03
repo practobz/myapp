@@ -26,16 +26,16 @@ function ContentCalendar() {
       setLoading(true);
       try {
         // Fetch customer details
-        const customerRes = await fetch(`/api/customers/${customerId}`);
+        const customerRes = await fetch(`${process.env.REACT_APP_API_URL}/customer/${customerId}`);
         const customerData = await customerRes.json();
         setCustomer(customerData);
 
-        // Fetch content calendars for this customer
-        const calendarsRes = await fetch(`/calendars/${customerId}`);
-        const raw = await calendarsRes.json();
-        // Normalize to array
-        const calendarArray = Array.isArray(raw) ? raw : [raw];
-        setCalendars(calendarArray);
+        // Fetch all calendars, then filter by customerId
+        const calendarsRes = await fetch(`${process.env.REACT_APP_API_URL}/calendars`);
+        const allCalendars = await calendarsRes.json();
+        // Only calendars for this customer
+        const customerCalendars = allCalendars.filter(c => c.customerId === customerId);
+        setCalendars(customerCalendars);
       } catch (err) {
         setCustomer(null);
         setCalendars([]);
@@ -103,7 +103,8 @@ function ContentCalendar() {
         allItems.push({
           ...item,
           calendarName: calendar.name || '',
-          id: item.id || item._id || Math.random().toString(36).slice(2)
+          id: item.id || item._id || Math.random().toString(36).slice(2),
+          creator: item.assignedToName || item.assignedTo || calendar.assignedToName || calendar.assignedTo || '', // show creator if available
         });
       });
     }
@@ -222,6 +223,13 @@ function ContentCalendar() {
                     </div>
                     <p className="text-gray-700 mb-3">{item.description}</p>
                     
+                    {/* Assigned Creator */}
+                    {item.creator && (
+                      <div className="text-xs text-blue-700 mb-2">
+                        Assigned to: <span className="font-semibold">{item.creator}</span>
+                      </div>
+                    )}
+
                     {/* Platform Icons */}
                     <div className="flex items-center space-x-2">
                       {(item.platforms || []).map((platform) => (

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PlusCircle, Clock, MessageSquare, CheckCircle, Globe, User, Bell, ChevronDown, Palette, Eye } from 'lucide-react';
 import { format } from 'date-fns';
@@ -6,24 +6,90 @@ import { useAuth } from "../admin/contexts/AuthContext";
 import Logo from '../admin/components/layout/Logo';
 import Footer from '../admin/components/layout/Footer';
 
+// Helper to get creator email from localStorage
+function getCreatorEmail() {
+  let email = '';
+  try {
+    email = (localStorage.getItem('userEmail') || '').toLowerCase();
+    if (!email) {
+      const userStr = localStorage.getItem('user');
+      if (userStr) {
+        const userObj = JSON.parse(userStr);
+        if (userObj.email) {
+          email = userObj.email.toLowerCase();
+        }
+      }
+    }
+  } catch (e) {
+    email = '';
+  }
+  return email;
+}
+
 function Dashboard() {
   const navigate = useNavigate();
   const { logout } = useAuth();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
 
-  // Mock data for content creator dashboard
+  // Real assignments data
+  const [assignments, setAssignments] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const creatorEmail = getCreatorEmail();
+
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!creatorEmail) {
+      navigate('/content-creator/login');
+    }
+  }, [creatorEmail, navigate]);
+
+  useEffect(() => {
+    if (!creatorEmail) return;
+    const fetchAssignments = async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(`${process.env.REACT_APP_API_URL}/calendars`);
+        const calendars = await res.json();
+        let allAssignments = [];
+        calendars.forEach(calendar => {
+          if (Array.isArray(calendar.contentItems)) {
+            calendar.contentItems.forEach(item => {
+              allAssignments.push({
+                ...item,
+                customerName: calendar.customerName || calendar.name || calendar.customer || '',
+                customerId: calendar.customerId || calendar.customer_id || calendar.customer?._id || '',
+                customer: calendar.customer || calendar.customerName || calendar.name || '',
+                id: item.id || item._id || item.title || Math.random().toString(36).slice(2)
+              });
+            });
+          }
+        });
+        const filtered = allAssignments.filter(item =>
+          (item.assignedTo || '').toLowerCase() === creatorEmail
+        );
+        setAssignments(filtered);
+      } catch (err) {
+        setAssignments([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchAssignments();
+  }, [creatorEmail]);
+
+  // Calculate stats from assignments
   const stats = {
-    newContentAssigned: 8,
-    contentWaitingInputs: 3,
-    contentApproved: 12,
-    contentPublished: 45
+    newContentAssigned: assignments.filter(a => (a.status || 'assigned') === 'assigned').length,
+    contentWaitingInputs: assignments.filter(a => (a.status || 'assigned') === 'waiting_input').length,
+    contentApproved: assignments.filter(a => (a.status || 'assigned') === 'approved').length,
+    contentPublished: assignments.filter(a => (a.status || 'assigned') === 'published').length
   };
 
-  const recentAssignments = [
-    { id: 1, customer: 'Shoppers Stop', type: 'Instagram Post', dueDate: '2024-03-18', status: 'assigned' },
-    { id: 2, customer: 'Pantaloons', type: 'Facebook Campaign', dueDate: '2024-03-19', status: 'in_progress' },
-    { id: 3, customer: 'Fashion Hub', type: 'LinkedIn Article', dueDate: '2024-03-20', status: 'waiting_input' }
-  ];
+  // Recent assignments (show last 3 by due date)
+  const recentAssignments = [...assignments]
+    .sort((a, b) => new Date(b.dueDate) - new Date(a.dueDate))
+    .slice(0, 3);
 
   const handleUserMenuToggle = () => {
     setIsUserMenuOpen(!isUserMenuOpen);
@@ -34,11 +100,18 @@ function Dashboard() {
     navigate('/content-creator/login');
   };
 
+  // Navigate to assignments with filter
+  const goToAssignments = (filter) => {
+    if (filter && filter !== 'all') {
+      navigate(`/content-creator/assignments?filter=${filter}`);
+    } else {
+      navigate('/content-creator/assignments');
+    }
+  };
+
   const handleNavigation = (path) => {
-    // Only navigate if the page exists
-    // For not-yet-created pages, do nothing
-    // Example: if (path === '/content-creator/profile') return;
-    // For now, disable all navigation for not-yet-created pages
+    setIsUserMenuOpen(false);
+    navigate(path);
   };
 
   return (
@@ -80,13 +153,13 @@ function Dashboard() {
                 {isUserMenuOpen && (
                   <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50 border">
                     <button
-                      // onClick={() => handleNavigation('/content-creator/profile')}
+                      onClick={() => handleNavigation('/content-creator/profile')}
                       className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                     >
                       My Profile
                     </button>
                     <button
-                      // onClick={() => handleNavigation('/content-creator/settings')}
+                      onClick={() => handleNavigation('/content-creator/settings')}
                       className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                     >
                       Settings
@@ -118,7 +191,7 @@ function Dashboard() {
             <div className="flex flex-col gap-3 md:grid md:grid-cols-4 md:gap-6">
               <div 
                 className="bg-white rounded-lg shadow-md p-3 sm:p-4 md:p-6 cursor-pointer hover:shadow-lg transition-shadow w-full min-w-0"
-                onClick={() => navigate('/content-creator/assignments')}
+                onClick={() => goToAssignments('assigned')}
               >
                 <div className="flex items-center">
                   <div className="p-3 bg-blue-100 rounded-full">
@@ -133,7 +206,7 @@ function Dashboard() {
 
               <div 
                 className="bg-white rounded-lg shadow-md p-3 sm:p-4 md:p-6 cursor-pointer hover:shadow-lg transition-shadow w-full min-w-0"
-                // onClick={() => navigate('/content-creator/assignments')}
+                onClick={() => goToAssignments('waiting_input')}
               >
                 <div className="flex items-center">
                   <div className="p-3 bg-orange-100 rounded-full">
@@ -148,7 +221,7 @@ function Dashboard() {
 
               <div 
                 className="bg-white rounded-lg shadow-md p-3 sm:p-4 md:p-6 cursor-pointer hover:shadow-lg transition-shadow w-full min-w-0"
-                // onClick={() => navigate('/content-creator/assignments')}
+                onClick={() => goToAssignments('approved')}
               >
                 <div className="flex items-center">
                   <div className="p-3 bg-green-100 rounded-full">
@@ -163,7 +236,7 @@ function Dashboard() {
 
               <div 
                 className="bg-white rounded-lg shadow-md p-3 sm:p-4 md:p-6 cursor-pointer hover:shadow-lg transition-shadow w-full min-w-0"
-                // onClick={() => navigate('/content-creator/assignments')}
+                onClick={() => goToAssignments('published')}
               >
                 <div className="flex items-center">
                   <div className="p-3 bg-purple-100 rounded-full">
@@ -181,23 +254,37 @@ function Dashboard() {
               <div className="bg-white rounded-lg shadow-md p-3 sm:p-4 md:p-6 w-full min-w-0">
                 <h2 className="text-xl font-semibold mb-4">Recent Assignments</h2>
                 <div className="space-y-4">
-                  {recentAssignments.map((assignment) => (
-                    <div key={assignment.id} className="flex items-center justify-between border-b pb-4">
-                      <div>
-                        <p className="font-medium">{assignment.customer}</p>
-                        <p className="text-sm text-gray-500">{assignment.type}</p>
-                        <p className="text-xs text-gray-400">Due: {format(new Date(assignment.dueDate), 'MMM dd, yyyy')}</p>
-                      </div>
-                      <span className={`px-3 py-1 rounded-full text-sm ${
-                        assignment.status === 'assigned' ? 'bg-blue-100 text-blue-800' :
-                        assignment.status === 'in_progress' ? 'bg-yellow-100 text-yellow-800' :
-                        assignment.status === 'waiting_input' ? 'bg-orange-100 text-orange-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                        {assignment.status.replace('_', ' ').charAt(0).toUpperCase() + assignment.status.slice(1)}
-                      </span>
-                    </div>
-                  ))}
+                  {loading ? (
+                    <div className="text-gray-400 text-sm">Loading...</div>
+                  ) : recentAssignments.length === 0 ? (
+                    <div className="text-gray-400 text-sm">No recent assignments.</div>
+                  ) : (
+                    recentAssignments.map((assignment) => {
+                      // Defensive: fallback for status
+                      const status = assignment.status || 'assigned';
+                      return (
+                        <div key={assignment.id} className="flex items-center justify-between border-b pb-4">
+                          <div>
+                            <p className="font-medium">{assignment.customerName || assignment.customer || ''}</p>
+                            <p className="text-sm text-gray-500">{assignment.type}</p>
+                            <p className="text-xs text-gray-400">Due: {format(new Date(assignment.dueDate), 'MMM dd, yyyy')}</p>
+                          </div>
+                          <span className={`px-3 py-1 rounded-full text-sm ${
+                            status === 'assigned' ? 'bg-blue-100 text-blue-800' :
+                            status === 'in_progress' ? 'bg-yellow-100 text-yellow-800' :
+                            status === 'waiting_input' ? 'bg-orange-100 text-orange-800' :
+                            status === 'approved' ? 'bg-green-100 text-green-800' :
+                            status === 'published' ? 'bg-purple-100 text-purple-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            {typeof status === 'string'
+                              ? (status.replace('_', ' ').charAt(0).toUpperCase() + status.replace('_', ' ').slice(1))
+                              : 'Assigned'}
+                          </span>
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
               </div>
 
@@ -205,7 +292,7 @@ function Dashboard() {
                 <h2 className="text-xl font-semibold mb-4">Quick Actions</h2>
                 <div className="space-y-3">
                   <button 
-                    onClick={() => navigate('/content-creator/assignments')}
+                    onClick={() => goToAssignments('all')}
                     className="w-full text-left p-3 bg-gray-50 rounded-md hover:bg-gray-100 transition-colors"
                   >
                     <div className="flex items-center">
@@ -213,34 +300,31 @@ function Dashboard() {
                       <span>View All Assignments</span>
                     </div>
                   </button>
-                   <button 
-                  onClick={() => navigate('/content-creator/portfolio')}
-                  className="w-full text-left p-3 bg-gray-50 rounded-md hover:bg-gray-100 transition-colors"
-                >
-                  <div className="flex items-center">
-                    <Eye className="h-5 w-5 text-gray-600 mr-3" />
-                    <span>View My Portfolio</span>
-                  </div>
-                </button>
-
-
-
                   <button 
-                    // onClick={() => navigate('/content-creator/upload')}
+                    onClick={() => navigate('/content-creator/portfolio')}
                     className="w-full text-left p-3 bg-gray-50 rounded-md hover:bg-gray-100 transition-colors"
                   >
                     <div className="flex items-center">
-                      <Clock className="h-5 w-5 text-gray-600 mr-3" />
-                      <span>Upload Content</span>
+                      <Eye className="h-5 w-5 text-gray-600 mr-3" />
+                      <span>View My Portfolio</span>
                     </div>
                   </button>
                   <button 
-                    // onClick={() => navigate('/content-creator/profile')}
+                    onClick={() => navigate('/content-creator/profile')}
                     className="w-full text-left p-3 bg-gray-50 rounded-md hover:bg-gray-100 transition-colors"
                   >
                     <div className="flex items-center">
                       <User className="h-5 w-5 text-gray-600 mr-3" />
                       <span>Manage Profile</span>
+                    </div>
+                  </button>
+                  <button 
+                    onClick={() => navigate('/content-creator/settings')}
+                    className="w-full text-left p-3 bg-gray-50 rounded-md hover:bg-gray-100 transition-colors"
+                  >
+                    <div className="flex items-center">
+                      <Clock className="h-5 w-5 text-gray-600 mr-3" />
+                      <span>Settings</span>
                     </div>
                   </button>
                 </div>

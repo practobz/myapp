@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Modal from './Modal';
+import { v4 as uuidv4 } from 'uuid';
 
 function ContentItemModal({ isOpen, onClose, onSave, contentItem, title, creators = [] }) {
   const [date, setDate] = useState('');
@@ -49,6 +50,7 @@ function ContentItemModal({ isOpen, onClose, onSave, contentItem, title, creator
     if (validate()) {
       onSave({
         ...(contentItem || {}),
+        id: contentItem?.id || uuidv4(),
         date,
         description,
         title: contentTitle,

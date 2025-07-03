@@ -185,15 +185,15 @@ function ContentReview() {
           return;
         }
 
-        // Save comment to backend: POST the submission to add comment to the correct version
+        // Save comment to backend: PATCH the submission to add comment to the correct version
         const response = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions/${assignmentIdForPatch}/comment`, {
-          method: 'POST', // changed from PATCH to POST
+          method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
             versionId: versionIdForPatch,
-            comment: newCommentObj // { id, comment, position, timestamp, status }
+            comment: newCommentObj
           })
         });
 

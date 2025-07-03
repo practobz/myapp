@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Upload, Image, X, Check, FileText, Calendar, Clock, Palette, Send, MapPin, Tag, MessageSquare } from 'lucide-react';
-import { v4 as uuidv4 } from 'uuid';
 
 // Helper to get creator email from localStorage
 function getCreatorEmail() {
@@ -200,9 +199,7 @@ function ContentUpload() {
           hashtags,
           notes,
           images: uploadedImageUrls,
-          created_by: creatorEmail,
-          // If you ever add contentItems here, ensure id is present:
-          // contentItems: [{ ...item, id: item.id || uuidv4() }]
+          created_by: creatorEmail
         })
       });
 

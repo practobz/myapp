@@ -25,6 +25,8 @@ import CustomerLogin from './customer/auth/CustomerLogin';
 import Subscription from './customer/Subscription';
 import ContentReview from './customer/ContentReview';
 import ContentApproval from './customer/ContentApproval';
+import MediaLibrary from './customer/MediaLibrary';
+import Analytics from './customer/Analytics';
 
 // Content Creator imports
 import ContentCreatorDashboard from './content-creators/Dashboard';
@@ -74,6 +76,10 @@ function App() {
               <Route path="/customer/login" element={<CustomerLogin />} />
               <Route path="/content-creator/signup" element={<ContentCreatorSignup />} />
               <Route path="/content-creator/login" element={<ContentCreatorLogin />} />
+
+              {/* Customer Media Library & Analytics */}
+              <Route path="/customer/media-library" element={<MediaLibrary />} />
+              <Route path="/customer/analytics" element={<Analytics />} />
 
               {/* Admin Portal (protected) */}
               <Route path="/admin" element={

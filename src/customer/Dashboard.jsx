@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LayoutGrid, Calendar as CalendarIcon, Clock, FileText, TrendingUp, User, MessageSquare, CheckCircle } from 'lucide-react';
+import { LayoutGrid, Calendar as CalendarIcon, Clock, FileText, TrendingUp, User, MessageSquare, CheckCircle, Eye, Bell, ChevronDown, Image as ImageIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { useAuth } from '../admin/contexts/AuthContext';
 
@@ -226,7 +226,7 @@ function Dashboard() {
               </div>
             </div>
 
-            {/* Quick Actions */}
+                        {/* Quick Actions */}
             <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg p-8 border border-gray-200/50">
               <h2 className="text-2xl font-bold text-gray-900 mb-6">Quick Actions</h2>
               <div className="space-y-4">
@@ -251,13 +251,23 @@ function Dashboard() {
                 </button>
                 
                 <button 
-                  onClick={() => navigate('/customer/settings')}
+                  onClick={() => navigate('/customer/media-library')}
                   className="w-full flex items-center p-4 bg-gradient-to-r from-emerald-50 to-green-50 rounded-xl hover:from-emerald-100 hover:to-green-100 transition-all duration-200 border border-emerald-200/50 group"
                 >
                   <div className="p-2 bg-emerald-100 rounded-lg group-hover:bg-emerald-200 transition-colors">
-                    <User className="h-5 w-5 text-emerald-600" />
+                    <ImageIcon className="h-5 w-5 text-emerald-600" />
                   </div>
-                  <span className="ml-3 font-semibold text-gray-900">Manage Settings</span>
+                  <span className="ml-3 font-semibold text-gray-900">Manage Media Library</span>
+                </button>
+
+                <button 
+                  onClick={() => navigate('/customer/analytics')}
+                  className="w-full flex items-center p-4 bg-gradient-to-r from-orange-50 to-red-50 rounded-xl hover:from-orange-100 hover:to-red-100 transition-all duration-200 border border-orange-200/50 group"
+                >
+                  <div className="p-2 bg-orange-100 rounded-lg group-hover:bg-orange-200 transition-colors">
+                    <TrendingUp className="h-5 w-5 text-orange-600" />
+                  </div>
+                  <span className="ml-3 font-semibold text-gray-900">View Analytics</span>
                 </button>
               </div>
             </div>

@@ -73,7 +73,6 @@ function ContentReview() {
           type: baseItem.type || 'Post',
           versions: versions.map((version, index) => ({
             id: version._id,
-            assignment_id: version.assignment_id, // <-- add this line
             versionNumber: index + 1,
             imageUrl: version.images?.[0] || '',
             caption: version.caption || '',
@@ -175,50 +174,38 @@ function ContentReview() {
           status: 'active'
         };
 
-        // Find the version object for this comment
-        const versionObj = selectedContent.versions.find(v => v.id === comment.versionId);
-        const assignmentIdForPatch = versionObj?.assignment_id;
-        const versionIdForPatch = versionObj?.id || comment.versionId;
+        // Use the assignment ID directly from selectedContent
+        const assignmentId = selectedContent.id;
+        const versionId = selectedContent.versions[selectedVersionIndex]?.id;
 
-        if (!assignmentIdForPatch) {
-          console.error('No assignment_id found for version, cannot submit comment.');
-          return;
-        }
+        console.log('Submitting comment:', { assignmentId, versionId, comment: newCommentObj });
 
         // Save comment to backend: PATCH the submission to add comment to the correct version
-        const response = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions/${assignmentIdForPatch}/comment`, {
+        const response = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(assignmentId)}/comment`, {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            versionId: versionIdForPatch,
+            versionId: versionId,
             comment: newCommentObj
           })
         });
 
         if (response.ok) {
-          // Update only the comments for the current version in state
+          const result = await response.json();
+          console.log('Comment saved successfully:', result);
+          
+          // Update the local state to reflect the saved comment
           setComments(comments.map((c) => (c.id === id ? { ...c, editing: false } : c)));
           setActiveComment(null);
-
-          // Update selectedContent in state to include the new comment for the current version
-          setSelectedContent(prevContent => {
-            if (!prevContent) return prevContent;
-            const updatedVersions = prevContent.versions.map((v, idx) => {
-              if (v.id === versionIdForPatch) {
-                return {
-                  ...v,
-                  comments: [...(v.comments || []), newCommentObj]
-                };
-              }
-              return v;
-            });
-            return { ...prevContent, versions: updatedVersions };
-          });
+          
+          // Refresh the content submissions to get updated data
+          await fetchContentSubmissions();
         } else {
           const errorData = await response.json();
           console.error('Failed to save comment:', errorData);
+          // Still update UI even if save fails
           setComments(comments.map((c) => (c.id === id ? { ...c, editing: false } : c)));
           setActiveComment(null);
         }
@@ -240,7 +227,7 @@ function ContentReview() {
     if (comment) {
       try {
         // Update comment status on backend
-        const response = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions/${selectedContent.id}/comments/${comment.id}`, {
+        const response = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(selectedContent.id)}/comments/${comment.id}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -364,7 +351,79 @@ function ContentReview() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-     
+      {/* Enhanced Header */}
+      <header className="bg-white/80 backdrop-blur-sm shadow-sm border-b border-gray-200/50 sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center">
+              <button
+                onClick={() => navigate('/customer')}
+                className="mr-4 p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all duration-200"
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </button>
+              <div className="flex items-center">
+                <div className="h-8 w-8 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center">
+                  <span className="text-white font-bold text-sm">A</span>
+                </div>
+                <div className="ml-3">
+                  <h1 className="text-xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
+                    Content Review
+                  </h1>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex items-center space-x-4">
+              <button className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all duration-200 relative">
+                <Bell className="h-5 w-5" />
+                <span className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full"></span>
+              </button>
+              
+              <div className="relative">
+                <button
+                  onClick={handleUserMenuToggle}
+                  className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-100 transition-all duration-200"
+                >
+                  <div className="h-8 w-8 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full flex items-center justify-center">
+                    <span className="text-white text-sm font-semibold">C</span>
+                  </div>
+                  <div className="hidden sm:block text-left">
+                    <p className="text-sm font-medium text-gray-900">Customer</p>
+                    <p className="text-xs text-gray-500">customer@example.com</p>
+                  </div>
+                  <ChevronDown className="h-4 w-4 text-gray-500" />
+                </button>
+
+                {isUserMenuOpen && (
+                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg border border-gray-200/50 py-2 z-20">
+                    <div className="px-4 py-3 border-b border-gray-100">
+                      <p className="text-sm font-medium text-gray-900">Customer User</p>
+                      <p className="text-xs text-gray-500">customer@example.com</p>
+                    </div>
+                    
+                    <button
+                      onClick={() => handleNavigation('/customer/settings')}
+                      className="flex items-center w-full px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                    >
+                      <Settings className="h-4 w-4 mr-3" />
+                      Settings
+                    </button>
+                    
+                    <button
+                      onClick={handleLogout}
+                      className="flex items-center w-full px-4 py-3 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                    >
+                      <LogOut className="h-4 w-4 mr-3" />
+                      Logout
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

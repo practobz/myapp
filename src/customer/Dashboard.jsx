@@ -70,14 +70,14 @@ function Dashboard() {
           approvedContent
         });
 
-        // Recent activity: last 5 items, sorted by date descending
+        // Recent activity: last 4 items, sorted by date descending
         const recent = [...allItems]
           .filter(i => i.date)
           .sort((a, b) => new Date(b.date) - new Date(a.date))
-          .slice(0, 5)
+          .slice(0, 4) // Only 4 items
           .map(item => ({
             id: item.id,
-            platform: (item.platforms && item.platforms[0]) || item.platform || 'Content',
+            platform: item.title || item.description || item.creator || 'Content',
             date: item.date,
             status: item.status ? item.status.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'Unknown'
           }));
@@ -219,16 +219,7 @@ function Dashboard() {
                         <p className="font-semibold text-gray-900">{activity.platform}</p>
                         <p className="text-sm text-gray-600">{activity.date ? format(new Date(activity.date), 'MMM dd, yyyy') : ''}</p>
                       </div>
-                      <span className={`px-3 py-1 rounded-full text-sm font-medium border ${
-                        activity.status === 'Published' ? 'bg-green-100 text-green-800 border-green-200' :
-                        activity.status === 'Under Review' ? 'bg-yellow-100 text-yellow-800 border-yellow-200' :
-                        activity.status === 'Approved' ? 'bg-green-100 text-green-800 border-green-200' :
-                        activity.status === 'Scheduled' ? 'bg-blue-100 text-blue-800 border-blue-200' :
-                        activity.status === 'Waiting Input' ? 'bg-orange-100 text-orange-800 border-orange-200' :
-                        'bg-gray-100 text-gray-800 border-gray-200'
-                      }`}>
-                        {activity.status}
-                      </span>
+                    
                     </div>
                   ))
                 )}

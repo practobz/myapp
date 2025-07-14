@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import AdminLayout from '../../components/layout/AdminLayout';
-import { Users, Calendar, Clock, TrendingUp, BarChart3, Target, Activity, Zap, Award, UserCheck } from 'lucide-react';
+import { Users, Calendar, Clock, TrendingUp, BarChart3, Target, Activity, Zap, Award, UserCheck, Send } from 'lucide-react';
 
 function Dashboard() {
   const [customers, setCustomers] = useState([]);
@@ -231,7 +231,7 @@ function Dashboard() {
         {/* Quick Actions */}
         <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 p-8">
           <h2 className="text-2xl font-bold text-gray-900 mb-6">Quick Actions</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <button 
               onClick={() => navigate('/admin/customers-list')}
               className="flex items-center justify-center p-6 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
@@ -254,6 +254,14 @@ function Dashboard() {
             >
               <Calendar className="h-6 w-6 mr-3" />
               <span className="font-semibold">Content Calendar</span>
+            </button>
+
+            <button 
+              onClick={() => navigate('/admin/scheduled-posts')}
+              className="flex items-center justify-center p-6 bg-gradient-to-r from-orange-600 to-red-600 text-white rounded-xl hover:from-orange-700 hover:to-red-700 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
+            >
+              <Send className="h-6 w-6 mr-3" />
+              <span className="font-semibold">Scheduled Posts</span>
             </button>
           </div>
         </div>

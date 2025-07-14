@@ -29,6 +29,18 @@ function FacebookIntegration() {
   const [instagramPosts, setInstagramPosts] = useState({});
   const [loadingInstagramPosts, setLoadingInstagramPosts] = useState({});
 
+  // Add state for showing/hiding posts
+  const [showFacebookPosts, setShowFacebookPosts] = useState({});
+  const [showInstagramPosts, setShowInstagramPosts] = useState({});
+
+  // --- New state for post upload modal ---
+  const [showPostModal, setShowPostModal] = useState(false);
+  const [postTarget, setPostTarget] = useState(null); // { type: 'facebook'|'instagram', page, instagramId }
+  const [postMessage, setPostMessage] = useState('');
+  const [postImageUrl, setPostImageUrl] = useState('');
+  const [uploadingPost, setUploadingPost] = useState(false);
+  const [uploadResult, setUploadResult] = useState(null);
+
   // Time period options
   const TIME_PERIOD_OPTIONS = [
     { value: 7, label: 'Last 7 days' },
@@ -89,8 +101,9 @@ function FacebookIntegration() {
   // Facebook login with enhanced permissions
   const fbLogin = () => {
     window.FB.login(statusChangeCallback, {
-      scope: 'pages_show_list,pages_read_engagement,pages_manage_metadata,instagram_basic,email,public_profile',
-      return_scopes: true
+      scope: 'pages_show_list,pages_read_engagement,pages_manage_metadata,instagram_basic,email,public_profile,pages_manage_posts,instagram_content_publish',
+      return_scopes: true,
+      auth_type: 'rerequest' // <-- Force re-prompt for permissions if previously declined
     });
   };
 
@@ -116,6 +129,59 @@ function FacebookIntegration() {
     });
   };
 
+  // Add function to fetch analytics from database
+  const fetchStoredAnalytics = async (pageId) => {
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/analytics/${pageId}`);
+      const result = await response.json();
+      
+      if (result.success && result.data.length > 0) {
+        // Use the most recent analytics data
+        const latestAnalytics = result.data[0];
+        console.log('✅ Loaded analytics from database:', latestAnalytics.createdAt);
+        
+        setAnalyticsData(prev => ({
+          ...prev,
+          [pageId]: latestAnalytics.analytics
+        }));
+        
+        // Update time period to match stored data
+        setTimePeriods(prev => ({ ...prev, [pageId]: latestAnalytics.timePeriod }));
+        
+        return true; // Successfully loaded from DB
+      }
+      return false; // No data in DB
+    } catch (error) {
+      console.warn('Failed to fetch stored analytics:', error);
+      return false; // Fallback to live API
+    }
+  };
+
+  // Add function to store connected page information
+  const storeConnectedPage = async (page) => {
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/connected-pages/store`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pageId: page.id,
+          pageName: page.name,
+          accessToken: page.access_token,
+          instagramId: page.instagram_details?.id || null,
+          instagramUsername: page.instagram_details?.username || null,
+          userId: fbUserData?.id || 'unknown'
+        })
+      });
+      
+      const result = await response.json();
+      if (result.success) {
+        console.log('✅ Stored connected page:', page.name);
+      }
+    } catch (error) {
+      console.warn('Failed to store connected page:', error);
+    }
+  };
+
   // Enhanced fetch pages with detailed information
   const fetchFbPages = () => {
     window.FB.api('/me/accounts', {
@@ -126,8 +192,10 @@ function FacebookIntegration() {
       } else {
         setFbPages(response.data);
         
-        // For each page, fetch Instagram details if available
+        // Store each connected page in database
         response.data.forEach(page => {
+          storeConnectedPage(page);
+          
           if (page.instagram_business_account) {
             fetchInstagramDetails(page.instagram_business_account.id, page.access_token);
           }
@@ -256,41 +324,68 @@ function FacebookIntegration() {
     // Update selected time period
     setTimePeriods(prev => ({ ...prev, [pageId]: days }));
     
-    // First try to get Facebook Insights, then fallback to post-based analytics
+    // Skip Facebook Insights API entirely and go straight to post-based analytics
+    console.log('Using post-based analytics (Facebook Insights API not available for this app type)');
+    fetchPostBasedAnalytics(pageId, pageAccessToken, instagramId, days);
+  };
+
+  // Add missing processAnalyticsData function (placeholder since Facebook Insights API isn't working)
+  const processAnalyticsData = (insightsData, days = 30) => {
+    // This is a fallback function since Facebook Insights API is not available
+    // It creates empty data structure that matches what generatePostBasedAnalytics returns
     const endDate = new Date();
-    const startDate = subDays(endDate, days);
-    
-    window.FB.api(
-      `/${pageId}/insights`,
-      {
-        metric: 'page_fans,page_post_engagements,page_impressions,page_views',
-        since: Math.floor(startDate.getTime() / 1000),
-        until: Math.floor(endDate.getTime() / 1000),
-        period: 'day',
-        access_token: pageAccessToken
-      },
-      function(response) {
-        if (!response || response.error) {
-          console.warn('Facebook Insights not available, using post-based analytics:', response.error);
-          // Fallback to post-based analytics
-          fetchPostBasedAnalytics(pageId, pageAccessToken, instagramId, days);
-        } else {
-          // Process Facebook analytics data
-          const processedData = processAnalyticsData(response.data, days);
-          
-          if (instagramId) {
-            // Try to get Instagram insights
-            fetchInstagramAnalytics(instagramId, pageAccessToken, pageId, processedData, days);
-          } else {
-            setAnalyticsData(prev => ({
-              ...prev,
-              [pageId]: { facebook: processedData }
-            }));
-            setLoadingAnalytics(prev => ({ ...prev, [pageId]: false }));
-          }
-        }
-      }
-    );
+    const result = {
+      engagement: [],
+      likes: [],
+      comments: [],
+      shares: []
+    };
+
+    // Create empty data points for each day
+    for (let i = days - 1; i >= 0; i--) {
+      const date = subDays(endDate, i);
+      const dateStr = format(date, 'yyyy-MM-dd');
+      
+      result.engagement.push({ date: dateStr, value: 0 });
+      result.likes.push({ date: dateStr, value: 0 });
+      result.comments.push({ date: dateStr, value: 0 });
+      result.shares.push({ date: dateStr, value: 0 });
+    }
+
+    return result;
+  };
+
+  // Generate Instagram analytics from post data with time period
+  const generateInstagramPostAnalytics = (posts, days = 30) => {
+    const endDate = new Date();
+    const result = {
+      likes: [],
+      comments: [],
+      posts: []
+    };
+
+    // Group Instagram posts by day for the specified period
+    for (let i = days - 1; i >= 0; i--) {
+      const date = subDays(endDate, i);
+      const dateStr = format(date, 'yyyy-MM-dd');
+      
+      // Filter posts from this day
+      const dayPosts = posts.filter(post => {
+        const postDate = new Date(post.timestamp);
+        return format(postDate, 'yyyy-MM-dd') === dateStr;
+      });
+
+      // Calculate metrics for this day
+      const dayLikes = dayPosts.reduce((sum, post) => sum + (post.like_count || 0), 0);
+      const dayComments = dayPosts.reduce((sum, post) => sum + (post.comments_count || 0), 0);
+      const postCount = dayPosts.length;
+
+      result.likes.push({ date: dateStr, value: dayLikes });
+      result.comments.push({ date: dateStr, value: dayComments });
+      result.posts.push({ date: dateStr, value: postCount });
+    }
+
+    return result;
   };
 
   // Fallback analytics using recent posts data with time period
@@ -325,6 +420,18 @@ function FacebookIntegration() {
             [pageId]: { facebook: analyticsData }
           }));
           setLoadingAnalytics(prev => ({ ...prev, [pageId]: false }));
+          
+          // Store Facebook-only analytics data
+          fetch(`${process.env.REACT_APP_API_URL}/api/analytics/store`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              pageId,
+              platform: 'facebook',
+              analytics: analyticsData,
+              timePeriod: days
+            })
+          }).catch(err => console.warn('Failed to store analytics:', err));
         }
       }
     );
@@ -388,6 +495,18 @@ function FacebookIntegration() {
             ...prev,
             [pageId]: { facebook: fbData }
           }));
+          
+          // Store Facebook-only analytics data
+          fetch(`${process.env.REACT_APP_API_URL}/api/analytics/store`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              pageId,
+              platform: 'facebook',
+              analytics: fbData,
+              timePeriod: days
+            })
+          }).catch(err => console.warn('Failed to store analytics:', err));
           return;
         }
 
@@ -401,49 +520,70 @@ function FacebookIntegration() {
             instagram: igAnalytics
           }
         }));
+        
+        // Store combined Facebook and Instagram analytics data
+        fetch(`${process.env.REACT_APP_API_URL}/api/analytics/store`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            pageId,
+            platform: 'facebook_instagram',
+            analytics: {
+              facebook: fbData,
+              instagram: igAnalytics
+            },
+            timePeriod: days
+          })
+        }).catch(err => console.warn('Failed to store analytics:', err));
       }
     );
   };
 
-  // Generate Instagram analytics from post data with time period
-  const generateInstagramPostAnalytics = (posts, days = 30) => {
-    const endDate = new Date();
-    const result = {
-      likes: [],
-      comments: [],
-      posts: []
-    };
-
-    // Group Instagram posts by day for the specified period
-    for (let i = days - 1; i >= 0; i--) {
-      const date = subDays(endDate, i);
-      const dateStr = format(date, 'yyyy-MM-dd');
+  // Modified analytics fetcher with database-first approach
+  const fetchPageAnalyticsWithDbFirst = async (pageId, pageAccessToken, instagramId = null, days = 30) => {
+    setLoadingAnalytics(prev => ({ ...prev, [pageId]: true }));
+    
+    // Update selected time period
+    setTimePeriods(prev => ({ ...prev, [pageId]: days }));
+    
+    try {
+      // Step 1: Try to load from database first
+      const loadedFromDb = await fetchStoredAnalytics(pageId);
       
-      // Filter posts from this day
-      const dayPosts = posts.filter(post => {
-        const postDate = new Date(post.timestamp);
-        return format(postDate, 'yyyy-MM-dd') === dateStr;
-      });
-
-      // Calculate metrics for this day
-      const dayLikes = dayPosts.reduce((sum, post) => sum + (post.like_count || 0), 0);
-      const dayComments = dayPosts.reduce((sum, post) => sum + (post.comments_count || 0), 0);
-      const postCount = dayPosts.length;
-
-      result.likes.push({ date: dateStr, value: dayLikes });
-      result.comments.push({ date: dateStr, value: dayComments });
-      result.posts.push({ date: dateStr, value: postCount });
+      if (loadedFromDb) {
+        console.log('📊 Using stored analytics data');
+        setLoadingAnalytics(prev => ({ ...prev, [pageId]: false }));
+        return;
+      }
+      
+      // Step 2: Fallback to live API + store result
+      console.log('🔄 No stored data found, fetching live analytics...');
+      await fetchPageAnalyticsLive(pageId, pageAccessToken, instagramId, days);
+      
+    } catch (error) {
+      console.error('Analytics fetch error:', error);
+      setLoadingAnalytics(prev => ({ ...prev, [pageId]: false }));
     }
-
-    return result;
   };
 
-  // Enhanced analytics rendering with time period selector
+  // Renamed original function for live API calls
+  const fetchPageAnalyticsLive = async (pageId, pageAccessToken, instagramId = null, days = 30) => {
+    console.log('📡 Fetching live analytics from Facebook APIs...');
+    fetchPostBasedAnalytics(pageId, pageAccessToken, instagramId, days);
+  };
+
+  // Enhanced analytics rendering with data source indicator
   const renderAnalytics = (pageId) => {
     const analytics = analyticsData[pageId];
     const selectedPeriod = timePeriods[pageId] || 30;
     
     if (!analytics) return null;
+
+    // Check if this is recent stored data (less than 24 hours old)
+    const isStoredData = () => {
+      // You could add a timestamp check here if you store when the data was fetched
+      return true; // For now, assume it could be stored data
+    };
 
     return (
       <div className="mt-6 space-y-6">
@@ -464,7 +604,7 @@ function FacebookIntegration() {
                 const days = parseInt(e.target.value);
                 const page = fbPages.find(p => p.id === pageId);
                 if (page) {
-                  fetchPageAnalytics(pageId, page.access_token, page.instagram_details?.id, days);
+                  fetchPageAnalyticsWithDbFirst(pageId, page.access_token, page.instagram_details?.id, days);
                 }
               }}
               className="border border-gray-300 rounded-md px-3 py-1 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -476,8 +616,8 @@ function FacebookIntegration() {
               ))}
             </select>
             
-            <div className="text-xs text-gray-500 bg-green-50 px-2 py-1 rounded">
-              ✅ Live Data from Posts
+            <div className="text-xs text-gray-500 bg-blue-50 px-2 py-1 rounded">
+              🗄️ DB + Live Data
             </div>
           </div>
         </div>
@@ -615,14 +755,15 @@ function FacebookIntegration() {
         </div>
 
         {/* Data Source Information */}
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-          <h6 className="font-medium text-yellow-800 mb-2">📊 Real-Time Analytics Information</h6>
-          <div className="text-sm text-yellow-700 space-y-1">
-            <p>✅ <strong>Live Data:</strong> Analytics calculated from your actual posts and engagement</p>
-            <p>🔄 <strong>Real-Time:</strong> Data updates every time you fetch analytics</p>
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <h6 className="font-medium text-blue-800 mb-2">📊 Smart Analytics Loading</h6>
+          <div className="text-sm text-blue-700 space-y-1">
+            <p>🗄️ <strong>Database First:</strong> Loads stored analytics instantly when available</p>
+            <p>📡 <strong>Live Fallback:</strong> Fetches from Facebook/Instagram APIs only when needed</p>
+            <p>⚡ <strong>Fast Loading:</strong> Stored data loads immediately, no API delays</p>
+            <p>🔄 <strong>Auto-Store:</strong> New data is automatically saved for future quick access</p>
             <p>📈 <strong>Period:</strong> Showing data for the last {selectedPeriod} days</p>
-            <p>📊 <strong>Scope:</strong> Based on up to {Math.min(500, Math.max(50, selectedPeriod * 3))} recent posts for comprehensive analysis</p>
-            <p>💡 <strong>Tip:</strong> Select different time periods to see trends over various durations</p>
+            <p>💡 <strong>Tip:</strong> Background scripts can collect analytics daily for instant loading</p>
           </div>
         </div>
       </div>
@@ -632,38 +773,78 @@ function FacebookIntegration() {
   // Fetch page posts
   const fetchPagePosts = (pageId, pageAccessToken) => {
     setLoadingPosts(prev => ({ ...prev, [pageId]: true }));
-    
+
+    // Only request safe fields for posts, then fetch attachments/media for each post
     window.FB.api(
       `/${pageId}/posts`,
       {
-        fields: 'id,message,created_time,likes.summary(true),comments.summary(true),shares,permalink_url,full_picture',
-        limit: 5,
+        fields: 'id,message,created_time,permalink_url', // only safe fields
+        limit: 10,
         access_token: pageAccessToken
       },
-      function(response) {
+      async function(response) {
         setLoadingPosts(prev => ({ ...prev, [pageId]: false }));
         if (!response || response.error) {
           console.error('Posts fetch error:', response.error);
           setFbError(response.error);
         } else {
+          // For each post, fetch attachments/media if needed
+          const postsWithImages = await Promise.all(
+            response.data.map(async post => {
+              let imageUrl = null;
+              try {
+                const attachRes = await new Promise(resolve =>
+                  window.FB.api(
+                    `/${post.id}?fields=attachments{media_type,media,url}`,
+                    { access_token: pageAccessToken },
+                    resolve
+                  )
+                );
+                if (
+                  attachRes &&
+                  attachRes.attachments &&
+                  attachRes.attachments.data &&
+                  attachRes.attachments.data[0] &&
+                  attachRes.attachments.data[0].media &&
+                  attachRes.attachments.data[0].media.image &&
+                  attachRes.attachments.data[0].media.image.src
+                ) {
+                  imageUrl = attachRes.attachments.data[0].media.image.src;
+                } else if (
+                  attachRes &&
+                  attachRes.attachments &&
+                  attachRes.attachments.data &&
+                  attachRes.attachments.data[0] &&
+                  attachRes.attachments.data[0].media &&
+                  attachRes.attachments.data[0].media.image_url
+                ) {
+                  imageUrl = attachRes.attachments.data[0].media.image_url;
+                }
+              } catch (e) {
+                // ignore
+              }
+              return { ...post, full_picture: imageUrl };
+            })
+          );
           setPagePosts(prev => ({
             ...prev,
-            [pageId]: response.data
+            [pageId]: postsWithImages
           }));
+          setShowFacebookPosts(prev => ({ ...prev, [pageId]: true }));
         }
       }
     );
   };
 
-  // Fetch Instagram posts separately
+  // Enhanced fetch Instagram posts with better display
   const fetchInstagramPosts = (instagramId, pageAccessToken) => {
     setLoadingInstagramPosts(prev => ({ ...prev, [instagramId]: true }));
     
     window.FB.api(
       `/${instagramId}/media`,
       {
-        fields: 'id,caption,media_type,media_url,permalink,timestamp,like_count,comments_count,thumbnail_url',
-        limit: 5,
+        fields: 'id,caption,media_type,media_url,permalink,timestamp,like_count,comments_count,thumbnail_url,children{media_url,media_type}',
+        limit: 10,
         access_token: pageAccessToken
       },
       function(response) {
@@ -675,6 +856,8 @@ function FacebookIntegration() {
             ...prev,
             [instagramId]: response.data
           }));
+          // Auto-show posts after fetching
+          setShowInstagramPosts(prev => ({ ...prev, [instagramId]: true }));
         }
       }
     );
@@ -707,95 +890,315 @@ function FacebookIntegration() {
     );
   };
 
-  // Render page posts
+  // Enhanced render page posts with toggle functionality
   const renderPagePosts = (pageId) => {
     const posts = pagePosts[pageId];
+    const isVisible = showFacebookPosts[pageId];
+    
     if (!posts || posts.length === 0) return null;
 
     return (
       <div className="mt-4 p-4 bg-green-50 rounded-lg">
-        <h5 className="font-medium text-green-700 mb-3 flex items-center">
-          <Calendar className="h-4 w-4 mr-2" />
-          Recent Posts
-        </h5>
-        <div className="space-y-3 max-h-60 overflow-y-auto">
-          {posts.map((post) => (
-            <div key={post.id} className="bg-white p-3 rounded border">
-              <div className="flex items-start space-x-3">
-                {post.full_picture && (
-                  <img 
-                    src={post.full_picture} 
-                    alt="Post" 
-                    className="w-16 h-16 object-cover rounded"
-                  />
-                )}
-                <div className="flex-1">
-                  <p className="text-sm text-gray-800 mb-2">
-                    {post.message ? 
-                      (post.message.length > 100 ? post.message.substring(0, 100) + '...' : post.message)
-                      : 'No message'
-                    }
-                  </p>
-                  <div className="flex items-center space-x-4 text-xs text-gray-500">
-                    <span>{new Date(post.created_time).toLocaleDateString()}</span>
-                    <span>👍 {post.likes?.summary?.total_count || 0}</span>
-                    <span>💬 {post.comments?.summary?.total_count || 0}</span>
-                    <span>🔄 {post.shares?.count || 0}</span>
+        <div className="flex items-center justify-between mb-3">
+          <h5 className="font-medium text-green-700 flex items-center">
+            <Facebook className="h-4 w-4 mr-2" />
+            Facebook Posts ({posts.length})
+          </h5>
+          <button
+            onClick={() => setShowFacebookPosts(prev => ({ ...prev, [pageId]: !prev[pageId] }))
+            }
+            className="text-sm text-green-600 hover:text-green-800 font-medium"
+          >
+            {isVisible ? 'Hide Posts' : 'Show Posts'}
+          </button>
+        </div>
+        
+        {isVisible && (
+          <div className="space-y-4 max-h-96 overflow-y-auto">
+            {posts.map((post) => (
+              <div key={post.id} className="bg-white p-4 rounded-lg border shadow-sm">
+                <div className="flex items-start space-x-3">
+                  {post.full_picture && (
+                    <img 
+                      src={post.full_picture} 
+                      alt="Post media" 
+                      className="w-20 h-20 object-cover rounded-lg flex-shrink-0"
+                    />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                        {post.type || 'post'}
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        {new Date(post.created_time).toLocaleDateString('en-US', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </span>
+                    </div>
+                    
+                    {post.message && (
+                      <p className="text-sm text-gray-800 mb-3 leading-relaxed">
+                        {post.message.length > 200 ? (
+                          <>
+                            {post.message.substring(0, 200)}...
+                            <span className="text-blue-600 text-xs ml-1 cursor-pointer">read more</span>
+                          </>
+                        ) : post.message}
+                      </p>
+                    )}
+                    
+                    {post.story && !post.message && (
+                      <p className="text-sm text-gray-600 mb-3 italic">
+                        {post.story}
+                      </p>
+                    )}
+                    
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-4 text-xs text-gray-600">
+                        <span className="flex items-center space-x-1">
+                          <span>👍</span>
+                          <span>{post.likes?.summary?.total_count || 0}</span>
+                        </span>
+                        <span className="flex items-center space-x-1">
+                          <span>💬</span>
+                          <span>{post.comments?.summary?.total_count || 0}</span>
+                        </span>
+                        <span className="flex items-center space-x-1">
+                          <span>🔄</span>
+                          <span>{post.shares?.count || 0}</span>
+                        </span>
+                      </div>
+                      
+                      {post.permalink_url && (
+                        <a 
+                          href={post.permalink_url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                        >
+                          View on Facebook →
+                        </a>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     );
   };
 
-  // Render Instagram posts
+  // Enhanced render Instagram posts with toggle functionality
   const renderInstagramPosts = (instagramId) => {
     const posts = instagramPosts[instagramId];
+    const isVisible = showInstagramPosts[instagramId];
+    
     if (!posts || posts.length === 0) return null;
 
     return (
       <div className="mt-4 p-4 bg-pink-50 rounded-lg">
-        <h5 className="font-medium text-pink-700 mb-3 flex items-center">
-          <Instagram className="h-4 w-4 mr-2" />
-          Recent Instagram Posts
-        </h5>
-        <div className="space-y-3 max-h-60 overflow-y-auto">
-          {posts.map((post) => (
-            <div key={post.id} className="bg-white p-3 rounded border">
-              <div className="flex items-start space-x-3">
-                {(post.media_url || post.thumbnail_url) && (
-                  <img 
-                    src={post.thumbnail_url || post.media_url} 
-                    alt="Instagram Post" 
-                    className="w-16 h-16 object-cover rounded"
-                  />
-                )}
-                <div className="flex-1">
-                  <p className="text-sm text-gray-800 mb-2">
-                    {post.caption ? 
-                      (post.caption.length > 100 ? post.caption.substring(0, 100) + '...' : post.caption)
-                      : 'No caption'
-                    }
-                  </p>
-                  <div className="flex items-center space-x-4 text-xs text-gray-500">
-                    <span>{new Date(post.timestamp).toLocaleDateString()}</span>
-                    <span>❤️ {post.like_count || 0}</span>
-                    <span>💬 {post.comments_count || 0}</span>
-                    <span className="text-pink-600 capitalize">{post.media_type}</span>
+        <div className="flex items-center justify-between mb-3">
+          <h5 className="font-medium text-pink-700 flex items-center">
+            <Instagram className="h-4 w-4 mr-2" />
+            Instagram Posts ({posts.length})
+          </h5>
+          <button
+            onClick={() => setShowInstagramPosts(prev => ({ ...prev, [instagramId]: !prev[instagramId] }))
+            }
+            className="text-sm text-pink-600 hover:text-pink-800 font-medium"
+          >
+            {isVisible ? 'Hide Posts' : 'Show Posts'}
+          </button>
+        </div>
+        
+        {isVisible && (
+          <div className="space-y-4 max-h-96 overflow-y-auto">
+            {posts.map((post) => (
+              <div key={post.id} className="bg-white p-4 rounded-lg border shadow-sm">
+                <div className="flex items-start space-x-3">
+                  {(post.media_url || post.thumbnail_url) && (
+                    <div className="flex-shrink-0">
+                      <img 
+                        src={post.thumbnail_url || post.media_url} 
+                        alt="Instagram media" 
+                        className="w-20 h-20 object-cover rounded-lg"
+                      />
+                      {post.media_type && (
+                        <div className="text-xs text-center mt-1">
+                          <span className={`px-2 py-1 rounded text-white text-xs ${
+                            post.media_type === 'VIDEO' ? 'bg-red-500' : 
+                            post.media_type === 'CAROUSEL_ALBUM' ? 'bg-purple-500' : 'bg-blue-500'
+                          }`}>
+                            {post.media_type === 'IMAGE' ? '📷' : 
+                             post.media_type === 'VIDEO' ? '🎥' : 
+                             post.media_type === 'CAROUSEL_ALBUM' ? '🎠' : '📱'}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className={`text-xs px-2 py-1 rounded text-white ${
+                        post.media_type === 'VIDEO' ? 'bg-red-500' : 
+                        post.media_type === 'CAROUSEL_ALBUM' ? 'bg-purple-500' : 'bg-pink-500'
+                      }`}>
+                        {post.media_type === 'IMAGE' ? 'Photo' : 
+                         post.media_type === 'VIDEO' ? 'Video' : 
+                         post.media_type === 'CAROUSEL_ALBUM' ? 'Album' : 'Post'}
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        {new Date(post.timestamp).toLocaleDateString('en-US', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </span>
+                    </div>
+                    
+                    {post.caption && (
+                      <p className="text-sm text-gray-800 mb-3 leading-relaxed">
+                        {post.caption.length > 200 ? (
+                          <>
+                            {post.caption.substring(0, 200)}...
+                            <span className="text-pink-600 text-xs ml-1 cursor-pointer">read more</span>
+                          </>
+                        ) : post.caption}
+                      </p>
+                    )}
+                    
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-4 text-xs text-gray-600">
+                        <span className="flex items-center space-x-1">
+                          <span>❤️</span>
+                          <span>{post.like_count || 0}</span>
+                        </span>
+                        <span className="flex items-center space-x-1">
+                          <span>💬</span>
+                          <span>{post.comments_count || 0}</span>
+                        </span>
+                      </div>
+                      
+                      {post.permalink && (
+                        <a 
+                          href={post.permalink} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-xs text-pink-600 hover:text-pink-800 font-medium"
+                        >
+                          View on Instagram →
+                        </a>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // --- Modal for creating a post ---
+  const renderPostModal = () => {
+    if (!showPostModal || !postTarget) return null;
+    const { type, page, instagramId } = postTarget;
+
+    // --- handle file upload and get a public URL ---
+    const handleFileChange = async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      // You must upload the file to a public image host and use the resulting URL for Instagram
+      // Example: Use Cloudinary, S3, or your own backend API
+      // For demo, we'll just show a warning and clear the field
+      setUploadResult({
+        success: false,
+        error: 'Instagram requires a public image URL. Please upload your image to a public host (e.g. imgur, Cloudinary, S3) and paste the URL below.'
+      });
+      setPostImageUrl('');
+    };
+
+    return (
+      <div className="fixed inset-0 z-50 bg-black bg-opacity-30 flex items-center justify-center">
+        <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md relative">
+          <button
+            className="absolute top-2 right-2 text-gray-400 hover:text-gray-700"
+            onClick={() => {
+              setShowPostModal(false);
+              setPostMessage('');
+              setPostImageUrl('');
+              setUploadResult(null);
+            }}
+          >✕</button>
+          <h4 className="font-bold mb-4">
+            {type === 'facebook' ? 'Create Facebook Post' : 'Create Instagram Post'}
+          </h4>
+          <div className="space-y-3">
+            <textarea
+              className="w-full border rounded p-2"
+              rows={3}
+              placeholder="Write your post message..."
+              value={postMessage}
+              onChange={e => setPostMessage(e.target.value)}
+            />
+            {/* File upload field (shows warning for Instagram) */}
+            <input
+              className="w-full border rounded p-2"
+              type="file"
+              accept="image/*"
+              onChange={handleFileChange}
+            />
+            {/* Show preview if image is selected */}
+            {postImageUrl && (
+              <img src={postImageUrl} alt="Preview" className="w-full h-32 object-contain rounded border" />
+            )}
+            {/* URL input for public image */}
+            <input
+              className="w-full border rounded p-2"
+              type="text"
+              placeholder="Image URL (publicly accessible, optional for FB, required for IG)"
+              value={postImageUrl}
+              onChange={e => setPostImageUrl(e.target.value)}
+            />
+            <div className="text-xs text-gray-500">
+              {type === 'instagram'
+                ? 'Instagram requires a public image URL. Upload your image to a public host (e.g. imgur, Cloudinary, S3) and paste the URL above.'
+                : 'Image is optional for Facebook posts.'}
             </div>
-          ))}
+            <button
+              className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:opacity-50 mt-2"
+              disabled={uploadingPost || (!postMessage && !postImageUrl)}
+              onClick={() => {
+                if (type === 'facebook') uploadFacebookPost(page);
+                else if (type === 'instagram') uploadInstagramPost(page, instagramId);
+              }}
+            >
+              {uploadingPost ? 'Posting...' : 'Post'}
+            </button>
+            {uploadResult && (
+              <div className={`mt-2 text-sm ${uploadResult.success ? 'text-green-600' : 'text-red-600'}`}>
+                {uploadResult.success
+                  ? `✅ Post uploaded! ID: ${uploadResult.id}`
+                  : `❌ Error: ${uploadResult.error}`}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     );
   };
 
-  // Enhanced page details rendering
+  // --- Enhanced page details rendering ---
   const renderPageDetails = (page) => (
     <div key={page.id} className="border rounded-lg p-6 mb-4 bg-white shadow-sm">
       <div className="flex items-start space-x-4">
@@ -879,6 +1282,36 @@ function FacebookIntegration() {
           )}
 
           <div className="flex flex-wrap gap-2">
+            {/* --- Add Create Post button for Facebook --- */}
+            <button
+              className="bg-blue-700 text-white px-4 py-2 rounded text-sm hover:bg-blue-800 flex items-center space-x-2"
+              onClick={() => {
+                setPostTarget({ type: 'facebook', page });
+                setShowPostModal(true);
+                setPostMessage('');
+                setPostImageUrl('');
+                setUploadResult(null);
+              }}
+            >
+              <Facebook className="h-4 w-4" />
+              <span>Create FB Post</span>
+            </button>
+            {/* --- Add Create Post button for Instagram if connected --- */}
+            {page.instagram_details && (
+              <button
+                className="bg-pink-600 text-white px-4 py-2 rounded text-sm hover:bg-pink-700 flex items-center space-x-2"
+                onClick={() => {
+                  setPostTarget({ type: 'instagram', page, instagramId: page.instagram_details.id });
+                  setShowPostModal(true);
+                  setPostMessage('');
+                  setPostImageUrl('');
+                  setUploadResult(null);
+                }}
+              >
+                <Instagram className="h-4 w-4" />
+                <span>Create IG Post</span>
+              </button>
+            )}
             <button
               onClick={() => fetchPageInsights(page.id, page.access_token, page.instagram_details?.id)}
               disabled={loadingInsights[page.id]}
@@ -889,21 +1322,30 @@ function FacebookIntegration() {
             </button>
             
             <button
-              onClick={() => fetchPageAnalytics(page.id, page.access_token, page.instagram_details?.id, timePeriods[page.id] || 30)}
+              onClick={() => fetchPageAnalyticsWithDbFirst(page.id, page.access_token, page.instagram_details?.id, timePeriods[page.id] || 30)}
               disabled={loadingAnalytics[page.id]}
               className="bg-purple-500 text-white px-4 py-2 rounded text-sm hover:bg-purple-600 disabled:opacity-50 flex items-center space-x-2"
             >
               <TrendingUp className="h-4 w-4" />
-              <span>{loadingAnalytics[page.id] ? 'Loading...' : 'View Analytics'}</span>
+              <span>{loadingAnalytics[page.id] ? 'Loading...' : 'Smart Analytics'}</span>
             </button>
             
+            <button
+              onClick={() => fetchPageAnalyticsLive(page.id, page.access_token, page.instagram_details?.id, timePeriods[page.id] || 30)}
+              disabled={loadingAnalytics[page.id]}
+              className="bg-orange-500 text-white px-4 py-2 rounded text-sm hover:bg-orange-600 disabled:opacity-50 flex items-center space-x-2"
+            >
+              <span>📡</span>
+              <span>{loadingAnalytics[page.id] ? 'Loading...' : 'Live API Call'}</span>
+            </button>
+
             <button
               onClick={() => fetchPagePosts(page.id, page.access_token)}
               disabled={loadingPosts[page.id]}
               className="bg-green-500 text-white px-4 py-2 rounded text-sm hover:bg-green-600 disabled:opacity-50 flex items-center space-x-2"
             >
-              <Eye className="h-4 w-4" />
-              <span>{loadingPosts[page.id] ? 'Loading...' : 'Get Facebook Posts'}</span>
+              <Facebook className="h-4 w-4" />
+              <span>{loadingPosts[page.id] ? 'Loading...' : 'Show FB Posts'}</span>
             </button>
 
             {page.instagram_details && (
@@ -913,7 +1355,7 @@ function FacebookIntegration() {
                 className="bg-pink-500 text-white px-4 py-2 rounded text-sm hover:bg-pink-600 disabled:opacity-50 flex items-center space-x-2"
               >
                 <Instagram className="h-4 w-4" />
-                <span>{loadingInstagramPosts[page.instagram_details.id] ? 'Loading...' : 'Get Instagram Posts'}</span>
+                <span>{loadingInstagramPosts[page.instagram_details.id] ? 'Loading...' : 'Show IG Posts'}</span>
               </button>
             )}
           </div>
@@ -927,6 +1369,86 @@ function FacebookIntegration() {
       </div>
     </div>
   );
+
+  // --- Facebook post upload ---
+  const uploadFacebookPost = async (page) => {
+    setUploadingPost(true);
+    setUploadResult(null);
+
+    // Check for required permissions before posting
+    window.FB.api(
+      '/me/permissions',
+      (permRes) => {
+        const perms = permRes?.data || [];
+        const hasManagePosts = perms.some(p => p.permission === 'pages_manage_posts' && p.status === 'granted');
+        const hasReadEngagement = perms.some(p => p.permission === 'pages_read_engagement' && p.status === 'granted');
+        if (!hasManagePosts || !hasReadEngagement) {
+          setUploadingPost(false);
+          setUploadResult({ success: false, error: 'Missing required permissions: pages_manage_posts and pages_read_engagement. Please log out and log in again, granting all permissions.' });
+          return;
+        }
+
+        // Proceed with posting
+        window.FB.api(
+          `/${page.id}/feed`,
+          'POST',
+          {
+            message: postMessage,
+            picture: postImageUrl || undefined,
+            access_token: page.access_token
+          },
+          function(response) {
+            setUploadingPost(false);
+            if (!response || response.error) {
+              setUploadResult({ success: false, error: response?.error?.message || 'Unknown error' });
+            } else {
+              setUploadResult({ success: true, id: response.id });
+            }
+          }
+        );
+      }
+    );
+  };
+
+  // --- Instagram post upload (photo only) ---
+  const uploadInstagramPost = async (page, instagramId) => {
+    setUploadingPost(true);
+    setUploadResult(null);
+    // Step 1: Create media container
+    window.FB.api(
+      `/${instagramId}/media`,
+      'POST',
+      {
+        image_url: postImageUrl,
+        caption: postMessage,
+        access_token: page.access_token
+      },
+      function(response) {
+        if (response && response.id) {
+          // Step 2: Publish container
+          window.FB.api(
+            `/${instagramId}/media_publish`,
+            'POST',
+            {
+              creation_id: response.id,
+              access_token: page.access_token
+            },
+            function(pubRes) {
+              setUploadingPost(false);
+              if (!pubRes || pubRes.error) {
+                setUploadResult({ success: false, error: pubRes?.error?.message || 'Unknown error' });
+              } else {
+                setUploadResult({ success: true, id: pubRes.id });
+              }
+            }
+          );
+        } else {
+          setUploadingPost(false);
+          setUploadResult({ success: false, error: response?.error?.message || 'Container creation failed' });
+        }
+      }
+    );
+  };
 
   return (
     <div className="border rounded-lg p-6 mb-6 bg-gradient-to-r from-blue-50 to-indigo-50">
@@ -1004,6 +1526,7 @@ function FacebookIntegration() {
           )}
         </>
       )}
+      {renderPostModal()}
     </div>
   );
 }

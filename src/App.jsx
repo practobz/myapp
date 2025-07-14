@@ -14,6 +14,7 @@ import CustomerDetailsView from './admin/pages/admin/CustomerDetailsView';
 import Customers from './admin/pages/admin/Customers';
 import ContentCreators from './admin/pages/admin/ContentCreators';
 import ContentCreatorDetails from './admin/pages/admin/ContentCreatorDetails';
+import ScheduledPosts from './admin/ScheduledPosts';
 
 // Customer imports
 import CustomerDashboard from './customer/Dashboard';
@@ -27,6 +28,12 @@ import ContentReview from './customer/ContentReview';
 import ContentApproval from './customer/ContentApproval';
 import MediaLibrary from './customer/MediaLibrary';
 import Analytics from './customer/Analytics';
+
+// Integration imports
+import FacebookIntegration from './customer/Integration/FacebookIntegration';
+import InstagramIntegration from './customer/Integration/InstagramIntegration';
+import YouTubeIntegration from './customer/Integration/YouTubeIntegration';
+import LinkedInIntegration from './customer/Integration/LinkedInIntegration';
 
 // Content Creator imports
 import ContentCreatorDashboard from './content-creators/Dashboard';
@@ -127,6 +134,11 @@ function App() {
                   <ContentCreatorDetails />
                 </ProtectedRoutePortal>
               } />
+              <Route path="/admin/scheduled-posts" element={
+                <ProtectedRoutePortal role="admin">
+                  <ScheduledPosts />
+                </ProtectedRoutePortal>
+              } />
 
               {/* Customer Portal (protected) */}
               <Route path="/customer" element={
@@ -176,6 +188,28 @@ function App() {
                   <CustomerLayout>
                     <ContentUpload />
                   </CustomerLayout>
+                </ProtectedRoutePortal>
+              } />
+
+              {/* Customer Integration Routes (without CustomerLayout wrapper) */}
+              <Route path="/customer/integration/facebook" element={
+                <ProtectedRoutePortal role="customer">
+                  <FacebookIntegration />
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/customer/integration/instagram" element={
+                <ProtectedRoutePortal role="customer">
+                  <InstagramIntegration />
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/customer/integration/youtube" element={
+                <ProtectedRoutePortal role="customer">
+                  <YouTubeIntegration />
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/customer/integration/linkedin" element={
+                <ProtectedRoutePortal role="customer">
+                  <LinkedInIntegration />
                 </ProtectedRoutePortal>
               } />
 

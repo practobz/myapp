@@ -3,6 +3,7 @@ import { Calendar, Clock, Facebook, Instagram, Image, Send, Eye, Edit, Trash2, C
 import { useNavigate } from 'react-router-dom';
 
 const FACEBOOK_APP_ID = '1678447316162226';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://my-backend-593529385135.asia-south1.run.app';
 
 function ScheduledPosts() {
   const navigate = useNavigate();
@@ -128,11 +129,23 @@ function ScheduledPosts() {
   const fetchScheduledPosts = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/scheduled-posts`);
+      console.log('🔍 Fetching scheduled posts from:', `${API_BASE_URL}/api/scheduled-posts`);
+      
+      const response = await fetch(`${API_BASE_URL}/api/scheduled-posts`);
+      console.log('📡 Response status:', response.status);
+      
       if (!response.ok) {
+        if (response.status === 404) {
+          console.warn('Scheduled posts endpoint not found, using empty array');
+          setScheduledPosts([]);
+          return;
+        }
         throw new Error(`HTTP error! status: ${response.status}`);
       }
+      
       const data = await response.json();
+      console.log('📊 Fetched scheduled posts:', data);
+      
       // Ensure data is always an array
       setScheduledPosts(Array.isArray(data) ? data : []);
     } catch (error) {
@@ -148,14 +161,31 @@ function ScheduledPosts() {
   const fetchBucketImages = async () => {
     setLoadingImages(true);
     try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/gcs/list-images?limit=100`);
+      console.log('🔍 Fetching images from:', `${API_BASE_URL}/api/gcs/list-images?limit=100`);
+      
+      const response = await fetch(`${API_BASE_URL}/api/gcs/list-images?limit=100`);
+      console.log('📡 Image response status:', response.status);
+      
+      if (!response.ok) {
+        if (response.status === 404) {
+          console.warn('Image listing endpoint not found');
+          setBucketImages([]);
+          return;
+        }
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
       const result = await response.json();
+      console.log('📊 Fetched images:', result);
       
       if (result.success) {
         setBucketImages(result.images);
+      } else {
+        setBucketImages([]);
       }
     } catch (error) {
       console.error('Failed to fetch bucket images:', error);
+      setBucketImages([]);
     } finally {
       setLoadingImages(false);
     }
@@ -175,7 +205,9 @@ function ScheduledPosts() {
         try {
           const base64Data = e.target.result.split(',')[1]; // Remove data:image/...;base64, prefix
           
-          const response = await fetch(`${process.env.REACT_APP_API_URL}/api/gcs/upload-base64`, {
+          console.log('📤 Uploading image to:', `${API_BASE_URL}/api/gcs/upload-base64`);
+          
+          const response = await fetch(`${API_BASE_URL}/api/gcs/upload-base64`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json'
@@ -187,16 +219,22 @@ function ScheduledPosts() {
             })
           });
 
+          console.log('📡 Upload response status:', response.status);
+
           if (!response.ok) {
+            if (response.status === 404) {
+              throw new Error('Upload endpoint not found. Please check your backend configuration.');
+            }
             throw new Error(`Upload failed: ${response.status}`);
           }
 
           const result = await response.json();
+          console.log('✅ Upload result:', result);
           setFormData(prev => ({ ...prev, imageUrl: result.publicUrl }));
           
         } catch (error) {
           console.error('Base64 upload failed:', error);
-          alert('Image upload failed. Please try again.');
+          alert(`Image upload failed: ${error.message}`);
         }
       };
       
@@ -266,16 +304,19 @@ function ScheduledPosts() {
         status: 'pending'
       };
 
-      console.log('📝 Scheduling post:', {
+      console.log('📝 Scheduling post to:', `${API_BASE_URL}/api/scheduled-posts`);
+      console.log('📝 Post data:', {
         ...postData,
         accessToken: '[HIDDEN]'
       });
 
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/scheduled-posts`, {
+      const response = await fetch(`${API_BASE_URL}/api/scheduled-posts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(postData)
       });
+
+      console.log('📡 Schedule response status:', response.status);
 
       if (response.ok) {
         const result = await response.json();
@@ -294,6 +335,9 @@ function ScheduledPosts() {
         });
         fetchScheduledPosts();
       } else {
+        if (response.status === 404) {
+          throw new Error('Scheduling endpoint not found. Please check your backend configuration.');
+        }
         const errorData = await response.json();
         console.error('❌ Failed to schedule post:', errorData);
         throw new Error(errorData.error || 'Failed to schedule post');
@@ -310,35 +354,50 @@ function ScheduledPosts() {
     if (!confirm('Are you sure you want to delete this scheduled post?')) return;
 
     try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/scheduled-posts/${postId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/scheduled-posts/${postId}`, {
         method: 'DELETE'
       });
 
       if (response.ok) {
         setScheduledPosts(prev => prev.filter(post => post._id !== postId));
+      } else if (response.status === 404) {
+        alert('Post not found or already deleted');
+        fetchScheduledPosts(); // Refresh the list
+      } else {
+        throw new Error(`Delete failed: ${response.status}`);
       }
     } catch (error) {
       console.error('Delete post error:', error);
-      alert('Failed to delete post');
+      alert(`Failed to delete post: ${error.message}`);
     }
   };
 
   // Add manual trigger function for testing
   const handleManualTrigger = async () => {
     try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/scheduled-posts/trigger`, {
+      console.log('🔧 Triggering scheduler at:', `${API_BASE_URL}/api/scheduled-posts/trigger`);
+      
+      const response = await fetch(`${API_BASE_URL}/api/scheduled-posts/trigger`, {
         method: 'POST'
       });
       
+      console.log('📡 Trigger response status:', response.status);
+      
       if (response.ok) {
+        const result = await response.json();
+        console.log('✅ Trigger result:', result);
         alert('Scheduler triggered manually! Check console for results.');
         fetchScheduledPosts(); // Refresh the list
+      } else if (response.status === 404) {
+        alert('Manual trigger endpoint not found. Please check your backend configuration.');
       } else {
-        alert('Failed to trigger scheduler');
+        const errorData = await response.json();
+        console.error('❌ Trigger failed:', errorData);
+        alert(`Failed to trigger scheduler: ${errorData.error || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Manual trigger error:', error);
-      alert('Failed to trigger scheduler');
+      alert(`Failed to trigger scheduler: ${error.message}`);
     }
   };
 

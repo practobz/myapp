@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, MessageSquare, CheckCircle, Edit3, Trash2, Move, Bell, ChevronDown, LogOut, Settings, User, Calendar, Clock, Eye, Image, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, MessageSquare, CheckCircle, Edit3, Trash2, Move, Bell, ChevronDown, LogOut, Settings, User, Calendar, Clock, Eye, Image, ChevronLeft, ChevronRight, Play, Video } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { useAuth } from '../admin/contexts/AuthContext';
 
@@ -10,10 +10,12 @@ function ContentReview() {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [selectedContentIndex, setSelectedContentIndex] = useState(0);
   const [selectedVersionIndex, setSelectedVersionIndex] = useState(0);
+  const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
 
   const [contentItems, setContentItems] = useState([]);
   const [selectedContent, setSelectedContent] = useState(null);
   const [comments, setComments] = useState([]);
+  const [commentsForCurrentMedia, setCommentsForCurrentMedia] = useState([]);
   const [activeComment, setActiveComment] = useState(null);
   const [hoveredComment, setHoveredComment] = useState(null);
 
@@ -31,7 +33,19 @@ function ContentReview() {
       setComments([]);
     }
     setActiveComment(null);
+    setSelectedMediaIndex(0); // Reset media index when version changes
   }, [selectedContent, selectedVersionIndex]);
+
+  // Add new useEffect to filter comments by media index
+  useEffect(() => {
+    // Filter comments for the currently selected media item
+    const filteredComments = comments.filter(comment => {
+      // If comment has mediaIndex, use it; otherwise assume it's for media index 0 (backward compatibility)
+      const commentMediaIndex = comment.mediaIndex !== undefined ? comment.mediaIndex : 0;
+      return commentMediaIndex === selectedMediaIndex;
+    });
+    setCommentsForCurrentMedia(filteredComments);
+  }, [comments, selectedMediaIndex]);
 
   const fetchContentSubmissions = async () => {
     try {
@@ -74,7 +88,7 @@ function ContentReview() {
           versions: versions.map((version, index) => ({
             id: version._id,
             versionNumber: index + 1,
-            imageUrl: version.images?.[0] || '',
+            media: normalizeMedia(version.media || version.images || []),
             caption: version.caption || '',
             notes: version.notes || '',
             createdAt: version.created_at,
@@ -93,6 +107,46 @@ function ContentReview() {
       console.error('Failed to fetch content submissions:', err.message);
       setContentItems([]);
     }
+  };
+
+  // Add helper function to normalize media URLs
+  const normalizeMedia = (media) => {
+    if (!media || !Array.isArray(media)) return [];
+    
+    return media.map(item => {
+      // If item is already a string (URL), convert to object
+      if (typeof item === 'string') {
+        return {
+          url: item,
+          type: getMediaType(item)
+        };
+      }
+      
+      // If item is an object with url property
+      if (item && typeof item === 'object') {
+        const url = item.url || item.src || item.href || String(item);
+        
+        // Validate URL is actually a string
+        if (typeof url === 'string' && url.trim()) {
+          return {
+            url: url,
+            type: item.type || getMediaType(url)
+          };
+        }
+      }
+      
+      return null;
+    }).filter(Boolean); // Remove any null/invalid entries
+  };
+
+  // Add helper function to determine media type
+  const getMediaType = (url) => {
+    if (!url || typeof url !== 'string') return 'image';
+    
+    const extension = url.toLowerCase().split('.').pop();
+    const videoExtensions = ['mp4', 'webm', 'ogg', 'mov', 'avi'];
+    
+    return videoExtensions.includes(extension) ? 'video' : 'image';
   };
 
   const handleUserMenuToggle = () => {
@@ -139,7 +193,7 @@ function ContentReview() {
     const rect = e.target.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    if (comments.some((c) => c.editing)) return;
+    if (commentsForCurrentMedia.some((c) => c.editing)) return;
     
     const newComment = {
       id: uuidv4(),
@@ -151,18 +205,21 @@ function ContentReview() {
       repositioning: false,
       versionId: selectedContent.versions[selectedVersionIndex]?.id,
       versionNumber: selectedContent.versions[selectedVersionIndex]?.versionNumber || 1,
+      mediaIndex: selectedMediaIndex, // Associate comment with current media item
       timestamp: new Date().toISOString()
     };
     setComments([...comments, newComment]);
+    setCommentsForCurrentMedia([...commentsForCurrentMedia, newComment]);
     setActiveComment(newComment.id);
   };
 
   const handleCommentChange = (id, text) => {
     setComments(comments.map((c) => (c.id === id ? { ...c, comment: text } : c)));
+    setCommentsForCurrentMedia(commentsForCurrentMedia.map((c) => (c.id === id ? { ...c, comment: text } : c)));
   };
 
   const handleCommentSubmit = async (id) => {
-    const comment = comments.find(c => c.id === id);
+    const comment = commentsForCurrentMedia.find(c => c.id === id);
     if (comment && comment.comment.trim()) {
       try {
         // Prepare comment object to save
@@ -170,6 +227,7 @@ function ContentReview() {
           id: comment.id,
           comment: comment.comment,
           position: { x: comment.x, y: comment.y },
+          mediaIndex: selectedMediaIndex, // Include media index
           timestamp: comment.timestamp,
           status: 'active'
         };
@@ -198,6 +256,7 @@ function ContentReview() {
           
           // Update the local state to reflect the saved comment
           setComments(comments.map((c) => (c.id === id ? { ...c, editing: false } : c)));
+          setCommentsForCurrentMedia(commentsForCurrentMedia.map((c) => (c.id === id ? { ...c, editing: false } : c)));
           setActiveComment(null);
           
           // Refresh the content submissions to get updated data
@@ -207,11 +266,13 @@ function ContentReview() {
           console.error('Failed to save comment:', errorData);
           // Still update UI even if save fails
           setComments(comments.map((c) => (c.id === id ? { ...c, editing: false } : c)));
+          setCommentsForCurrentMedia(commentsForCurrentMedia.map((c) => (c.id === id ? { ...c, editing: false } : c)));
           setActiveComment(null);
         }
       } catch (error) {
         console.error('Error saving comment:', error);
         setComments(comments.map((c) => (c.id === id ? { ...c, editing: false } : c)));
+        setCommentsForCurrentMedia(commentsForCurrentMedia.map((c) => (c.id === id ? { ...c, editing: false } : c)));
         setActiveComment(null);
       }
     }
@@ -219,11 +280,12 @@ function ContentReview() {
 
   const handleCommentCancel = (id) => {
     setComments(comments.filter((c) => c.id !== id));
+    setCommentsForCurrentMedia(commentsForCurrentMedia.filter((c) => c.id !== id));
     setActiveComment(null);
   };
 
   const handleMarkDone = async (id) => {
-    const comment = comments.find(c => c.id === id);
+    const comment = commentsForCurrentMedia.find(c => c.id === id);
     if (comment) {
       try {
         // Update comment status on backend
@@ -240,16 +302,19 @@ function ContentReview() {
 
         if (response.ok) {
           setComments(comments.map((c) => (c.id === id ? { ...c, done: true } : c)));
+          setCommentsForCurrentMedia(commentsForCurrentMedia.map((c) => (c.id === id ? { ...c, done: true } : c)));
           setActiveComment(null);
         } else {
           console.error('Failed to update comment status');
           // Still update UI
           setComments(comments.map((c) => (c.id === id ? { ...c, done: true } : c)));
+          setCommentsForCurrentMedia(commentsForCurrentMedia.map((c) => (c.id === id ? { ...c, done: true } : c)));
           setActiveComment(null);
         }
       } catch (error) {
         console.error('Error updating comment:', error);
         setComments(comments.map((c) => (c.id === id ? { ...c, done: true } : c)));
+        setCommentsForCurrentMedia(commentsForCurrentMedia.map((c) => (c.id === id ? { ...c, done: true } : c)));
         setActiveComment(null);
       }
     }
@@ -257,22 +322,29 @@ function ContentReview() {
 
   const handleEditComment = (id) => {
     setComments(comments.map((c) => (c.id === id ? { ...c, editing: true, done: false } : c)));
+    setCommentsForCurrentMedia(commentsForCurrentMedia.map((c) => (c.id === id ? { ...c, editing: true, done: false } : c)));
     setActiveComment(id);
   };
 
   const handleRepositionStart = (id) => {
     setComments(comments.map((c) => (c.id === id ? { ...c, repositioning: true } : c)));
+    setCommentsForCurrentMedia(commentsForCurrentMedia.map((c) => (c.id === id ? { ...c, repositioning: true } : c)));
     setActiveComment(id);
   };
 
   const handleImageClickWithReposition = (e) => {
-    const repositioningComment = comments.find((c) => c.repositioning);
+    const repositioningComment = commentsForCurrentMedia.find((c) => c.repositioning);
     if (repositioningComment) {
       const rect = e.target.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
       setComments(
         comments.map((c) =>
+          c.id === repositioningComment.id ? { ...c, x, y, repositioning: false } : c
+        )
+      );
+      setCommentsForCurrentMedia(
+        commentsForCurrentMedia.map((c) =>
           c.id === repositioningComment.id ? { ...c, x, y, repositioning: false } : c
         )
       );
@@ -291,6 +363,7 @@ function ContentReview() {
     setSelectedContent(item);
     setSelectedContentIndex(index);
     setSelectedVersionIndex(item.versions.length - 1); // Show latest version
+    setSelectedMediaIndex(0); // Reset media index
     setComments(item.versions[item.versions.length - 1].comments || []);
     setActiveComment(null);
   };
@@ -304,8 +377,20 @@ function ContentReview() {
       newIndex = selectedVersionIndex + 1;
     }
     setSelectedVersionIndex(newIndex);
+    setSelectedMediaIndex(0); // Reset media index
     setComments(selectedContent.versions[newIndex].comments || []);
     setActiveComment(null);
+  };
+
+  const handleMediaChange = (direction) => {
+    const currentVersion = selectedContent.versions[selectedVersionIndex];
+    const mediaLength = currentVersion.media.length;
+    
+    if (direction === 'prev' && selectedMediaIndex > 0) {
+      setSelectedMediaIndex(selectedMediaIndex - 1);
+    } else if (direction === 'next' && selectedMediaIndex < mediaLength - 1) {
+      setSelectedMediaIndex(selectedMediaIndex + 1);
+    }
   };
 
   const formatDate = (dateString) => {
@@ -348,11 +433,10 @@ function ContentReview() {
   }
 
   const currentVersion = selectedContent.versions[selectedVersionIndex];
+  const currentMedia = currentVersion?.media?.[selectedMediaIndex];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-      
-
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex flex-col xl:flex-row gap-8">
@@ -413,22 +497,22 @@ function ContentReview() {
               <div className="px-6 py-4 border-b border-gray-200/50 bg-gradient-to-r from-purple-50 to-pink-50">
                 <h3 className="text-lg font-bold text-gray-900 flex items-center">
                   <MessageSquare className="h-5 w-5 text-purple-600 mr-2" />
-                  Comments ({comments.length})
+                  Comments - Media {selectedMediaIndex + 1} ({commentsForCurrentMedia.length})
                 </h3>
               </div>
               
               <div className="max-h-80 overflow-y-auto p-4">
-                {comments.length === 0 ? (
+                {commentsForCurrentMedia.length === 0 ? (
                   <div className="text-center py-8">
                     <div className="bg-gray-100 rounded-full w-12 h-12 flex items-center justify-center mx-auto mb-3">
                       <MessageSquare className="h-6 w-6 text-gray-400" />
                     </div>
-                    <p className="text-gray-500 text-sm">No comments yet</p>
-                    <p className="text-gray-400 text-xs mt-1">Click on the image to add comments</p>
+                    <p className="text-gray-500 text-sm">No comments for this media item</p>
+                    <p className="text-gray-400 text-xs mt-1">Click on the media to add comments</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {comments.map((comment, index) => (
+                    {commentsForCurrentMedia.map((comment, index) => (
                       <div
                         key={comment.id}
                         className={`p-3 rounded-lg cursor-pointer transition-all duration-200 border ${
@@ -522,164 +606,263 @@ function ContentReview() {
                 </div>
               )}
 
-              {/* Image with Comments */}
+              {/* Media with Comments */}
               <div className="p-8">
                 <div className="flex justify-center mb-8">
                   <div className="relative inline-block max-w-full">
-                    <img
-                      src={currentVersion?.imageUrl}
-                      alt={`${selectedContent.title} - Version ${currentVersion?.versionNumber}`}
-                      className="max-w-full h-auto max-h-[70vh] rounded-2xl shadow-2xl border-2 border-gray-200/50 object-contain cursor-crosshair"
-                      onClick={handleImageClickWithReposition}
-                    />
+                    {/* Media Navigation for multiple items */}
+                    {currentVersion?.media && currentVersion.media.length > 1 && (
+                      <div className="flex items-center justify-between mb-4">
+                        <span className="text-sm text-gray-500">
+                          {selectedMediaIndex + 1} of {currentVersion.media.length}
+                        </span>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleMediaChange('prev')}
+                            disabled={selectedMediaIndex === 0}
+                            className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                          >
+                            <ChevronLeft className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleMediaChange('next')}
+                            disabled={selectedMediaIndex === currentVersion.media.length - 1}
+                            className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                          >
+                            <ChevronRight className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Current Media Display */}
+                    {currentMedia ? (
+                      currentMedia.url && typeof currentMedia.url === 'string' ? (
+                        currentMedia.type === 'image' ? (
+                          <img
+                            src={currentMedia.url}
+                            alt={`${selectedContent.title} - Version ${currentVersion?.versionNumber} - Media ${selectedMediaIndex + 1}`}
+                            className="max-w-full h-auto max-h-[70vh] rounded-2xl shadow-2xl border-2 border-gray-200/50 object-contain cursor-crosshair"
+                            onClick={handleImageClickWithReposition}
+                            onError={(e) => {
+                              e.target.style.display = 'none';
+                              e.target.nextSibling.style.display = 'flex';
+                            }}
+                          />
+                        ) : (
+                          <video
+                            src={currentMedia.url}
+                            controls
+                            className="max-w-full h-auto max-h-[70vh] rounded-2xl shadow-2xl border-2 border-gray-200/50 object-contain cursor-crosshair"
+                            onClick={handleImageClickWithReposition}
+                            onError={(e) => {
+                              e.target.style.display = 'none';
+                              e.target.nextSibling.style.display = 'flex';
+                            }}
+                          />
+                        )
+                      ) : null
+                    ) : null}
                     
-                    {/* Comment Markers */}
-                    {comments.map((comment, index) => {
-                      // Calculate floating box position
-                      let boxLeft = 40;
-                      let boxRight = "auto";
-                      const img = document.querySelector(`img[alt*="${selectedContent.title}"]`);
-                      if (img && img.width && (comment.x || comment.position?.x) > img.width / 2) {
-                        boxLeft = "auto";
-                        boxRight = 40;
-                      }
+                    {/* Fallback for invalid/missing media */}
+                    <div 
+                      className="max-w-full h-96 bg-gray-200 rounded-2xl flex items-center justify-center border-2 border-gray-200/50"
+                      style={{ 
+                        display: (currentMedia?.url && typeof currentMedia.url === 'string') ? 'none' : 'flex' 
+                      }}
+                    >
+                      <div className="text-center">
+                        <Image className="h-12 w-12 text-gray-400 mx-auto mb-2" />
+                        <p className="text-gray-500">No media available</p>
+                      </div>
+                    </div>
 
-                      const commentX = comment.x || comment.position?.x || 0;
-                      const commentY = comment.y || comment.position?.y || 0;
+                    {/* Media Thumbnails */}
+                    {currentVersion?.media && currentVersion.media.length > 1 && (
+                      <div className="flex justify-center gap-2 mt-4">
+                        {currentVersion.media.map((media, index) => (
+                          <button
+                            key={index}
+                            onClick={() => setSelectedMediaIndex(index)}
+                            className={`w-16 h-16 rounded-lg overflow-hidden border-2 transition-all ${
+                              selectedMediaIndex === index 
+                                ? 'border-purple-500 ring-2 ring-purple-200' 
+                                : 'border-gray-200 hover:border-gray-300'
+                            }`}
+                          >
+                            {media.type === 'image' && media.url && typeof media.url === 'string' ? (
+                              <img
+                                src={media.url}
+                                alt={`Thumbnail ${index + 1}`}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  e.target.style.display = 'none';
+                                  e.target.nextSibling.style.display = 'flex';
+                                }}
+                              />
+                            ) : (
+                              <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                                <Video className="h-6 w-6 text-gray-400" />
+                              </div>
+                            )}
+                            {/* Fallback for failed thumbnails */}
+                            <div className="w-full h-full bg-gray-200 flex items-center justify-center" style={{ display: 'none' }}>
+                              <Video className="h-6 w-6 text-gray-400" />
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {/* Comment Markers - Only show on images or videos when they support it */}
+                    {currentMedia && (
+                      commentsForCurrentMedia.map((comment, index) => {
+                        // Calculate floating box position
+                        let boxLeft = 40;
+                        let boxRight = "auto";
+                        const mediaElement = document.querySelector(`img[alt*="${selectedContent.title}"], video`);
+                        if (mediaElement && mediaElement.width && (comment.x || comment.position?.x) > mediaElement.width / 2) {
+                          boxLeft = "auto";
+                          boxRight = 40;
+                        }
 
-                      return (
-                        <div
-                          key={comment.id}
-                          style={{
-                            position: "absolute",
-                            top: commentY - 16,
-                            left: commentX - 16,
-                            width: 32,
-                            height: 32,
-                            background: comment.done ? "#10b981" : comment.editing ? "#3b82f6" : "#ef4444",
-                            color: "#fff",
-                            borderRadius: "50%",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            fontWeight: "bold",
-                            fontSize: "14px",
-                            boxShadow: "0 4px 12px rgba(0,0,0,0.25)",
-                            cursor: "pointer",
-                            zIndex: 2,
-                            border: "3px solid #fff",
-                            transition: "all 0.3s",
-                          }}
-                          onMouseEnter={() => setHoveredComment(comment.id)}
-                          onMouseLeave={() => setHoveredComment(null)}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleCommentListClick(comment.id);
-                          }}
-                        >
-                          {index + 1}
-                          
-                          {/* Floating Comment Box */}
-                          {(comment.editing || activeComment === comment.id || hoveredComment === comment.id) && (
-                            <div
-                              style={{
-                                position: "absolute",
-                                left: boxLeft,
-                                right: boxRight,
-                                top: "50%",
-                                transform: "translateY(-50%)",
-                                background: "#fff",
-                                border: "2px solid #3b82f6",
-                                borderRadius: "12px",
-                                padding: "16px",
-                                minWidth: "280px",
-                                maxWidth: "320px",
-                                zIndex: 10,
-                                boxShadow: "0 8px 32px rgba(59,130,246,0.2)",
-                              }}
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              {comment.editing ? (
-                                <>
-                                  <textarea
-                                    value={comment.comment}
-                                    onChange={(e) => handleCommentChange(comment.id, e.target.value)}
-                                    placeholder="Add a comment..."
-                                    className="w-full p-3 border-2 border-gray-200 rounded-lg resize-none text-sm text-gray-900 bg-white focus:border-blue-500 focus:outline-none transition-colors"
-                                    rows={3}
-                                    autoFocus
-                                  />
-                                  <div className="flex gap-2 mt-3">
-                                    <Button
-                                      onClick={() => handleCommentSubmit(comment.id)}
-                                      variant="success"
-                                      size="sm"
-                                    >
-                                      Submit
-                                    </Button>
-                                    <Button
-                                      onClick={() => handleCommentCancel(comment.id)}
-                                      variant="danger"
-                                      size="sm"
-                                    >
-                                      Cancel
-                                    </Button>
-                                  </div>
-                                </>
-                              ) : (
-                                <>
-                                  <div className="mb-3">
-                                    <p className="font-semibold text-gray-900 text-sm leading-relaxed break-words">
-                                      {comment.comment}
-                                      {comment.done && <span className="text-green-600 ml-2">✓ Done</span>}
-                                      {comment.repositioning && (
-                                        <span className="text-blue-600 italic ml-2">(Repositioning...)</span>
-                                      )}
-                                    </p>
-                                  </div>
-                                  <div className="grid grid-cols-2 gap-2">
-                                    {!comment.done && (
+                        const commentX = comment.x || comment.position?.x || 0;
+                        const commentY = comment.y || comment.position?.y || 0;
+
+                        return (
+                          <div
+                            key={comment.id}
+                            style={{
+                              position: "absolute",
+                              top: commentY - 16,
+                              left: commentX - 16,
+                              width: 32,
+                              height: 32,
+                              background: comment.done ? "#10b981" : comment.editing ? "#3b82f6" : "#ef4444",
+                              color: "#fff",
+                              borderRadius: "50%",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              fontWeight: "bold",
+                              fontSize: "14px",
+                              boxShadow: "0 4px 12px rgba(0,0,0,0.25)",
+                              cursor: "pointer",
+                              zIndex: 2,
+                              border: "3px solid #fff",
+                              transition: "all 0.3s",
+                            }}
+                            onMouseEnter={() => setHoveredComment(comment.id)}
+                            onMouseLeave={() => setHoveredComment(null)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleCommentListClick(comment.id);
+                            }}
+                          >
+                            {index + 1}
+                            
+                            {/* Floating Comment Box */}
+                            {(comment.editing || activeComment === comment.id || hoveredComment === comment.id) && (
+                              <div
+                                style={{
+                                  position: "absolute",
+                                  left: boxLeft,
+                                  right: boxRight,
+                                  top: "50%",
+                                  transform: "translateY(-50%)",
+                                  background: "#fff",
+                                  border: "2px solid #3b82f6",
+                                  borderRadius: "12px",
+                                  padding: "16px",
+                                  minWidth: "280px",
+                                  maxWidth: "320px",
+                                  zIndex: 10,
+                                  boxShadow: "0 8px 32px rgba(59,130,246,0.2)",
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {comment.editing ? (
+                                  <>
+                                    <textarea
+                                      value={comment.comment}
+                                      onChange={(e) => handleCommentChange(comment.id, e.target.value)}
+                                      placeholder="Add a comment..."
+                                      className="w-full p-3 border-2 border-gray-200 rounded-lg resize-none text-sm text-gray-900 bg-white focus:border-blue-500 focus:outline-none transition-colors"
+                                      rows={3}
+                                      autoFocus
+                                    />
+                                    <div className="flex gap-2 mt-3">
                                       <Button
-                                        onClick={() => handleMarkDone(comment.id)}
+                                        onClick={() => handleCommentSubmit(comment.id)}
                                         variant="success"
                                         size="sm"
                                       >
-                                        <CheckCircle className="h-3 w-3 mr-1" />
-                                        Done
+                                        Submit
                                       </Button>
-                                    )}
-                                    <Button
-                                      onClick={() => handleEditComment(comment.id)}
-                                      variant="warning"
-                                      size="sm"
-                                    >
-                                      <Edit3 className="h-3 w-3 mr-1" />
-                                      Edit
-                                    </Button>
-                                    <Button
-                                      onClick={() => handleCommentCancel(comment.id)}
-                                      variant="danger"
-                                      size="sm"
-                                    >
-                                      <Trash2 className="h-3 w-3 mr-1" />
-                                      Delete
-                                    </Button>
-                                    <Button
-                                      onClick={() => handleRepositionStart(comment.id)}
-                                      variant="info"
-                                      size="sm"
-                                    >
-                                      <Move className="h-3 w-3 mr-1" />
-                                      Move
-                                    </Button>
-                                  </div>
-                                </>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                                      <Button
+                                        onClick={() => handleCommentCancel(comment.id)}
+                                        variant="danger"
+                                        size="sm"
+                                      >
+                                        Cancel
+                                      </Button>
+                                    </div>
+                                  </>
+                                ) : (
+                                  <>
+                                    <div className="mb-3">
+                                      <p className="font-semibold text-gray-900 text-sm leading-relaxed break-words">
+                                        {comment.comment}
+                                        {comment.done && <span className="text-green-600 ml-2">✓ Done</span>}
+                                        {comment.repositioning && (
+                                          <span className="text-blue-600 italic ml-2">(Repositioning...)</span>
+                                        )}
+                                      </p>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                      {!comment.done && (
+                                        <Button
+                                          onClick={() => handleMarkDone(comment.id)}
+                                          variant="success"
+                                          size="sm"
+                                        >
+                                          <CheckCircle className="h-3 w-3 mr-1" />
+                                          Done
+                                        </Button>
+                                      )}
+                                      <Button
+                                        onClick={() => handleEditComment(comment.id)}
+                                        variant="warning"
+                                        size="sm"
+                                      >
+                                        <Edit3 className="h-3 w-3 mr-1" />
+                                        Edit
+                                      </Button>
+                                      <Button
+                                        onClick={() => handleCommentCancel(comment.id)}
+                                        variant="danger"
+                                        size="sm"
+                                      >
+                                        <Trash2 className="h-3 w-3 mr-1" />
+                                        Delete
+                                      </Button>
+                                      <Button
+                                        onClick={() => handleRepositionStart(comment.id)}
+                                        variant="info"
+                                        size="sm"
+                                      >
+                                        <Move className="h-3 w-3 mr-1" />
+                                        Move
+                                      </Button>
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
                   </div>
                 </div>
 

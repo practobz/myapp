@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Upload, Image, X, Check, FileText, Calendar, Clock, Palette, Send, MapPin, Tag, MessageSquare } from 'lucide-react';
+import { ArrowLeft, Upload, Image, X, Check, FileText, Calendar, Clock, Palette, Send, MapPin, Tag, MessageSquare, Play, Video } from 'lucide-react';
 
 // Helper to get creator email from localStorage
 function getCreatorEmail() {
@@ -115,7 +115,7 @@ function ContentUpload() {
 
   const handleFiles = (files) => {
     Array.from(files).forEach(file => {
-      if (file.type.startsWith('image/')) {
+      if (file.type.startsWith('image/') || file.type.startsWith('video/')) {
         const reader = new FileReader();
         reader.onload = (e) => {
           const newFile = {
@@ -123,7 +123,8 @@ function ContentUpload() {
             file: file,
             preview: e.target.result,
             name: file.name,
-            size: file.size
+            size: file.size,
+            type: file.type.startsWith('image/') ? 'image' : 'video'
           };
           setUploadedFiles(prev => [...prev, newFile]);
         };
@@ -146,45 +147,68 @@ function ContentUpload() {
 
   const handleSubmit = async () => {
     if (uploadedFiles.length === 0) {
-      alert('Please upload at least one image');
+      alert('Please upload at least one image or video');
       return;
     }
 
     setSubmitting(true);
-    const uploadedImageUrls = [];
+    const uploadedMediaUrls = [];
 
     try {
-      // Upload each image to GCS
+      // Upload each media file through backend proxy
       for (const fileObj of uploadedFiles) {
         const safeFileName = fileObj.name.replace(/[^\w.-]/g, '_');
+        
+        // Convert file to base64
+        const base64Data = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const base64 = reader.result.split(',')[1]; // Remove data:image/png;base64, prefix
+            resolve(base64);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(fileObj.file);
+        });
 
-        const res = await fetch(
-          `${process.env.REACT_APP_API_URL}/api/gcs/generate-upload-url?filename=${encodeURIComponent(safeFileName)}&contentType=${encodeURIComponent(fileObj.file.type)}`
-        );
+        console.log('Uploading file via backend proxy:', {
+          name: fileObj.name,
+          safeFileName,
+          type: fileObj.file.type,
+          size: fileObj.file.size
+        });
 
-        if (!res.ok) {
-          throw new Error(`Failed to get signed URL (Status: ${res.status})`);
-        }
-
-        const { url } = await res.json();
-        if (!url) {
-          throw new Error(`Signed URL missing in response`);
-        }
-
-        const uploadRes = await fetch(url, {
-          method: 'PUT',
+        // Upload via backend proxy
+        const uploadRes = await fetch(`${process.env.REACT_APP_API_URL}/api/gcs/upload-base64`, {
+          method: 'POST',
           headers: {
-            'Content-Type': fileObj.file.type,
+            'Content-Type': 'application/json',
           },
-          body: fileObj.file,
+          body: JSON.stringify({
+            filename: safeFileName,
+            contentType: fileObj.file.type,
+            base64Data: base64Data
+          }),
         });
 
         if (!uploadRes.ok) {
-          throw new Error(`Upload failed for ${fileObj.name} (Status: ${uploadRes.status})`);
+          const errorData = await uploadRes.json();
+          console.error('Backend upload failed:', errorData);
+          throw new Error(`Upload failed for ${fileObj.name}: ${errorData.error || 'Unknown error'}`);
         }
 
-        const publicUrl = `https://storage.googleapis.com/mediaupload-adcore/${safeFileName}`;
-        uploadedImageUrls.push(publicUrl);
+        const uploadResult = await uploadRes.json();
+        
+        if (!uploadResult.success || !uploadResult.publicUrl) {
+          throw new Error(`Invalid response for ${fileObj.name}`);
+        }
+
+        uploadedMediaUrls.push({
+          url: uploadResult.publicUrl,
+          type: fileObj.type,
+          name: fileObj.name
+        });
+        
+        console.log('Successfully uploaded via backend:', uploadResult.filename);
       }
 
       // Send metadata to backend
@@ -198,12 +222,14 @@ function ContentUpload() {
           caption,
           hashtags,
           notes,
-          images: uploadedImageUrls,
+          images: uploadedMediaUrls, // Keep as 'images' for backend compatibility
           created_by: creatorEmail
         })
       });
 
       if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Failed to save submission:', errorData);
         throw new Error('Failed to save submission to database');
       }
 
@@ -211,7 +237,7 @@ function ContentUpload() {
       navigate('/content-creator/assignments');
     } catch (err) {
       console.error('Upload error:', err);
-      alert('Upload failed. Please try again.');
+      alert(`Upload failed: ${err.message}. Please try again.`);
     } finally {
       setSubmitting(false);
     }
@@ -319,7 +345,7 @@ function ContentUpload() {
             <div className="bg-white rounded-lg shadow-sm p-6">
               <h2 className="text-lg font-semibold mb-4 flex items-center">
                 <Upload className="h-5 w-5 mr-2 text-purple-600" />
-                Upload Content
+                Upload Media
               </h2>
               
               <div
@@ -337,18 +363,19 @@ function ContentUpload() {
                   ref={fileInputRef}
                   type="file"
                   multiple
-                  accept="image/*"
+                  accept="image/*,video/*"
                   onChange={handleChange}
                   className="hidden"
                 />
                 
                 <div className="space-y-3">
-                  <div className="flex justify-center">
+                  <div className="flex justify-center space-x-2">
                     <Upload className="h-8 w-8 text-gray-400" />
+                    <Video className="h-8 w-8 text-gray-400" />
                   </div>
                   <div>
                     <p className="text-base font-medium text-gray-900">
-                      Drag and drop your images here
+                      Drag and drop your images and videos here
                     </p>
                     <p className="text-sm text-gray-500">or</p>
                     <button
@@ -360,28 +387,44 @@ function ContentUpload() {
                     </button>
                   </div>
                   <p className="text-xs text-gray-400">
-                    Supports: JPG, PNG, GIF (Max 10MB per file)
+                    Supports: JPG, PNG, GIF, MP4, MOV, AVI (Max 100MB per file)
                   </p>
                 </div>
               </div>
             </div>
 
-            {/* Image Preview Grid */}
+            {/* Media Preview Grid */}
             {uploadedFiles.length > 0 && (
               <div className="bg-white rounded-lg shadow-sm p-6">
                 <h3 className="font-semibold text-gray-900 mb-4 flex items-center">
                   <Image className="h-5 w-5 mr-2 text-purple-600" />
-                  Uploaded Images ({uploadedFiles.length})
+                  Uploaded Media ({uploadedFiles.length})
                 </h3>
                 <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
                   {uploadedFiles.map((file) => (
                     <div key={file.id} className="relative group">
-                      <div className="aspect-square rounded-lg overflow-hidden bg-gray-100 ring-2 ring-transparent group-hover:ring-purple-200 transition-all">
-                        <img
-                          src={file.preview}
-                          alt={file.name}
-                          className="w-full h-full object-cover"
-                        />
+                      <div className="aspect-square rounded-lg overflow-hidden bg-gray-100 ring-2 ring-transparent group-hover:ring-purple-200 transition-all relative">
+                        {file.type === 'image' ? (
+                          <img
+                            src={file.preview}
+                            alt={file.name}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="relative w-full h-full">
+                            <video
+                              src={file.preview}
+                              className="w-full h-full object-cover"
+                              muted
+                            />
+                            <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30">
+                              <Play className="h-8 w-8 text-white" />
+                            </div>
+                            <div className="absolute top-2 left-2 bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded">
+                              VIDEO
+                            </div>
+                          </div>
+                        )}
                       </div>
                       <button
                         onClick={() => removeFile(file.id)}
@@ -391,7 +434,16 @@ function ContentUpload() {
                       </button>
                       <div className="mt-2">
                         <p className="text-xs font-medium text-gray-900 truncate">{file.name}</p>
-                        <p className="text-xs text-gray-500">{formatFileSize(file.size)}</p>
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs text-gray-500">{formatFileSize(file.size)}</p>
+                          <span className={`text-xs px-2 py-1 rounded-full ${
+                            file.type === 'image' 
+                              ? 'bg-green-100 text-green-800' 
+                              : 'bg-blue-100 text-blue-800'
+                          }`}>
+                            {file.type.toUpperCase()}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   ))}

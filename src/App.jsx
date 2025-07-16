@@ -15,6 +15,7 @@ import Customers from './admin/pages/admin/Customers';
 import ContentCreators from './admin/pages/admin/ContentCreators';
 import ContentCreatorDetails from './admin/pages/admin/ContentCreatorDetails';
 import ScheduledPosts from './admin/ScheduledPosts';
+import AdminContentPortfolio from './admin/pages/admin/AdminContentPortfolio';
 
 // Customer imports
 import CustomerDashboard from './customer/Dashboard';
@@ -137,6 +138,16 @@ function App() {
               <Route path="/admin/scheduled-posts" element={
                 <ProtectedRoutePortal role="admin">
                   <ScheduledPosts />
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/admin/content-portfolio" element={
+                <ProtectedRoutePortal role="admin">
+                  <AdminContentPortfolio />
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/admin/approve/:id" element={
+                <ProtectedRoutePortal role="admin">
+                  <ContentApproval />
                 </ProtectedRoutePortal>
               } />
 

@@ -52,30 +52,131 @@ function ContentUpload() {
     const fetchAssignment = async () => {
       setLoading(true);
       try {
+        // First fetch customers to build a map
+        const customersRes = await fetch(`${process.env.REACT_APP_API_URL}/api/customers`);
+        const customersData = await customersRes.json();
+        console.log('🔍 Customers data received:', customersData);
+        
+        const customerMap = {};
+        if (Array.isArray(customersData.customers)) {
+          customersData.customers.forEach(c => {
+            customerMap[c._id || c.id] = {
+              name: c.name || c.customerName || c.email || '',
+              email: c.email || '',
+              id: c._id || c.id
+            };
+          });
+        }
+        
+        console.log('🔍 Customer map built:', customerMap);
+        
+        // Then fetch calendars with customer context
         const res = await fetch(`${process.env.REACT_APP_API_URL}/calendars`);
         const calendars = await res.json();
+        
+        console.log('🔍 All calendars fetched:', calendars.length);
+        console.log('🔍 Looking for assignment ID:', assignmentId);
+        
         let found = null;
-        calendars.forEach(calendar => {
+        calendars.forEach((calendar, calIndex) => {
+          const customerId = calendar.customerId || calendar.customer_id || calendar.customer?._id || '';
+          const customerInfo = customerMap[customerId] || {};
+          
+          console.log(`📅 Calendar ${calIndex + 1}:`, {
+            calendarId: calendar._id,
+            calendarName: calendar.name,
+            customerId: customerId,
+            customerInfo: customerInfo,
+            contentItemsCount: calendar.contentItems?.length || 0
+          });
+          
           if (Array.isArray(calendar.contentItems)) {
-            calendar.contentItems.forEach(item => {
-              const id = item.id || item._id || item.title;
-              if (id === assignmentId) {
+            calendar.contentItems.forEach((item, itemIndex) => {
+              const itemId = item.id || item._id || item.title;
+              const isMatch = itemId === assignmentId;
+              
+              console.log(`📋 Content item ${itemIndex + 1}:`, {
+                itemId: itemId,
+                itemTitle: item.title,
+                itemDescription: item.description,
+                lookingFor: assignmentId,
+                match: isMatch
+              });
+              
+              if (isMatch) {
+                // Ensure we get the customer information properly
+                const finalCustomerId = customerId;
+                const finalCustomerName = customerInfo.name || calendar.customerName || calendar.name || '';
+                
+                console.log('🔍 Customer info extracted:', {
+                  customerId: finalCustomerId,
+                  customerName: finalCustomerName,
+                  customerInfo: customerInfo,
+                  calendarName: calendar.name
+                });
+                
                 found = {
                   ...item,
                   calendarName: calendar.name || calendar.customerName || calendar.customer || '',
-                  customerId: calendar.customerId || calendar.customer_id || calendar.customer?._id || '',
-                  customerName: calendar.customerName || calendar.customer || '',
-                  id,
-                  dueDate: item.dueDate || item.due_date,
+                  calendarId: calendar._id,
+                  customerId: finalCustomerId,
+                  customerName: finalCustomerName,
+                  customerEmail: customerInfo.email || '',
+                  id: itemId,
+                  dueDate: item.dueDate || item.due_date || item.date,
                   platform: item.platform || 'Instagram',
                   requirements: item.requirements || [],
                 };
+                
+                console.log('✅ MATCH FOUND! Assignment with complete data:', {
+                  assignmentId: found.id,
+                  customerId: found.customerId,
+                  customerName: found.customerName,
+                  customerEmail: found.customerEmail,
+                  calendarId: found.calendarId,
+                  calendarName: found.calendarName,
+                  platform: found.platform
+                });
+                
+                // Validate customer data is present
+                if (!found.customerId) {
+                  console.error('❌ Customer ID is missing for assignment:', assignmentId);
+                }
+                if (!found.customerName) {
+                  console.error('❌ Customer name is missing for assignment:', assignmentId);
+                }
               }
             });
           }
         });
+        
+        if (!found) {
+          console.error('❌ Assignment not found:', assignmentId);
+          console.log('🔍 All available assignments:');
+          calendars.forEach(cal => {
+            if (cal.contentItems) {
+              cal.contentItems.forEach(item => {
+                console.log('  - ID:', item.id || item._id || item.title, 'Title:', item.title, 'Calendar:', cal.name);
+              });
+            }
+          });
+        } else {
+          // Final validation
+          if (!found.customerId || !found.customerName) {
+            console.warn('⚠️ Assignment found but missing customer info:', {
+              customerId: found.customerId,
+              customerName: found.customerName,
+              calendarId: found.calendarId,
+              calendarName: found.calendarName
+            });
+          } else {
+            console.log('✅ Assignment has complete customer information');
+          }
+        }
+        
         setAssignment(found);
       } catch (err) {
+        console.error('❌ Error fetching assignment:', err);
         setAssignment(null);
       } finally {
         setLoading(false);
@@ -151,6 +252,61 @@ function ContentUpload() {
       return;
     }
 
+    // Validate assignment data
+    if (!assignment) {
+      alert('Assignment data not found. Please try again.');
+      return;
+    }
+
+    console.log('🔍 Current assignment data before submission:', assignment);
+
+    // Enhanced validation and fallback for customer information
+    let finalCustomerId = assignment.customerId;
+    let finalCustomerName = assignment.customerName;
+    let finalCustomerEmail = assignment.customerEmail;
+
+    if (!finalCustomerId || !finalCustomerName) {
+      console.error('❌ Missing customer information in assignment:', {
+        customerId: finalCustomerId,
+        customerName: finalCustomerName,
+        customerEmail: finalCustomerEmail,
+        assignment: assignment
+      });
+      
+      // Use calendar data as fallback
+      finalCustomerId = finalCustomerId || assignment.calendarId || '';
+      finalCustomerName = finalCustomerName || assignment.calendarName || 'Unknown Customer';
+      
+      console.warn('⚠️ Using fallback customer info:', {
+        customerId: finalCustomerId,
+        customerName: finalCustomerName
+      });
+    }
+
+    // Additional validation to ensure we have proper customer name
+    if (!finalCustomerName || finalCustomerName === 'Unknown Customer') {
+      // Try to extract from other assignment fields
+      finalCustomerName = finalCustomerName || 
+                         assignment.customer || 
+                         assignment.client || 
+                         assignment.calendarName || 
+                         'Unknown Customer';
+      
+      console.log('🔄 Final customer name after all fallbacks:', finalCustomerName);
+    }
+
+    // CRITICAL: Ensure we have valid customer information before proceeding
+    if (!finalCustomerId || !finalCustomerName || finalCustomerName === 'Unknown Customer') {
+      console.error('❌ CRITICAL: Cannot proceed without valid customer information!', {
+        customerId: finalCustomerId,
+        customerName: finalCustomerName,
+        assignment: assignment
+      });
+      
+      alert(`Missing customer information. Please contact support.\n\nDetails:\n- Customer ID: ${finalCustomerId || 'Missing'}\n- Customer Name: ${finalCustomerName || 'Missing'}\n- Assignment ID: ${assignment.id}`);
+      return;
+    }
+
     setSubmitting(true);
     const uploadedMediaUrls = [];
 
@@ -163,7 +319,7 @@ function ContentUpload() {
         const base64Data = await new Promise((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => {
-            const base64 = reader.result.split(',')[1]; // Remove data:image/png;base64, prefix
+            const base64 = reader.result.split(',')[1];
             resolve(base64);
           };
           reader.onerror = reject;
@@ -211,32 +367,127 @@ function ContentUpload() {
         console.log('Successfully uploaded via backend:', uploadResult.filename);
       }
 
-      // Send metadata to backend
+      // Prepare submission data with comprehensive customer information
+      const submissionData = {
+        assignment_id: assignment.id,
+        caption: caption || '',
+        hashtags: hashtags || '',
+        notes: notes || '',
+        images: uploadedMediaUrls,
+        media: uploadedMediaUrls, // Also store as 'media' for consistency
+        created_by: creatorEmail,
+        // MANDATORY CUSTOMER FIELDS
+        customer_id: finalCustomerId,
+        customer_name: finalCustomerName,
+        customer_email: finalCustomerEmail || assignment.customerEmail || '',
+        platform: assignment.platform || 'Instagram',
+        // Additional assignment context for better tracking
+        calendar_id: assignment.calendarId,
+        calendar_name: assignment.calendarName,
+        assignment_title: assignment.title,
+        assignment_description: assignment.description,
+        due_date: assignment.dueDate,
+        status: 'submitted',
+        // Add timestamp for better tracking
+        created_at: new Date().toISOString(),
+        // Add type for document identification
+        type: 'submission'
+      };
+
+      // FINAL VALIDATION - Ensure all critical fields are present
+      const missingFields = [];
+      if (!submissionData.customer_id) missingFields.push('customer_id');
+      if (!submissionData.customer_name) missingFields.push('customer_name');
+      if (!submissionData.assignment_id) missingFields.push('assignment_id');
+      if (!submissionData.created_by) missingFields.push('created_by');
+      if (!submissionData.images || submissionData.images.length === 0) missingFields.push('images');
+
+      if (missingFields.length > 0) {
+        console.error('❌ VALIDATION FAILED: Missing required fields:', missingFields);
+        console.error('❌ Submission data:', submissionData);
+        alert(`Validation failed. Missing required fields: ${missingFields.join(', ')}`);
+        setSubmitting(false);
+        return;
+      }
+
+      // Additional validation for customer info quality
+      if (submissionData.customer_name === 'Unknown Customer' || 
+          submissionData.customer_name.length < 2 ||
+          !submissionData.customer_id ||
+          submissionData.customer_id.length < 5) {
+        console.error('❌ QUALITY CHECK FAILED: Invalid customer information quality', {
+          customer_id: submissionData.customer_id,
+          customer_name: submissionData.customer_name,
+          customerIdLength: submissionData.customer_id?.length || 0,
+          customerNameLength: submissionData.customer_name?.length || 0
+        });
+        alert('Invalid customer information detected. Please refresh the page and try again.');
+        setSubmitting(false);
+        return;
+      }
+
+      // Log the exact data being sent with emphasis on customer fields
+      console.log('📝 FINAL VALIDATION PASSED - Sending submission data:');
+      console.log('✅ Customer Information:', {
+        customer_id: submissionData.customer_id,
+        customer_name: submissionData.customer_name,
+        customer_email: submissionData.customer_email,
+        customerIdLength: submissionData.customer_id?.length,
+        customerNameLength: submissionData.customer_name?.length
+      });
+      console.log('✅ Assignment Information:', {
+        assignment_id: submissionData.assignment_id,
+        assignment_title: submissionData.assignment_title,
+        calendar_id: submissionData.calendar_id,
+        calendar_name: submissionData.calendar_name
+      });
+      console.log('✅ Content Information:', {
+        mediaCount: submissionData.images.length,
+        platform: submissionData.platform,
+        created_by: submissionData.created_by,
+        hasCaption: !!submissionData.caption,
+        hasNotes: !!submissionData.notes
+      });
+
+      // Log complete submission data as JSON
+      console.log('📝 COMPLETE SUBMISSION DATA JSON:', JSON.stringify(submissionData, null, 2));
+
       const response = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          assignment_id: assignment.id,
-          caption,
-          hashtags,
-          notes,
-          images: uploadedMediaUrls, // Keep as 'images' for backend compatibility
-          created_by: creatorEmail
-        })
+        body: JSON.stringify(submissionData)
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        console.error('Failed to save submission:', errorData);
-        throw new Error('Failed to save submission to database');
+        console.error('❌ Backend submission failed:', errorData);
+        throw new Error(`Backend error: ${errorData.error || 'Unknown error'}`);
+      }
+
+      const result = await response.json();
+      console.log('✅ Content submission saved successfully:', result);
+
+      // Verify the saved data includes customer information
+      if (result && (result._id || result.id)) {
+        console.log('✅ Submission saved with ID:', result._id || result.id);
+        if (result.customer_name) {
+          console.log('✅ Customer name saved:', result.customer_name);
+        } else {
+          console.warn('⚠️ Customer name missing in saved result');
+        }
+        if (result.customer_id) {
+          console.log('✅ Customer ID saved:', result.customer_id);
+        } else {
+          console.warn('⚠️ Customer ID missing in saved result');
+        }
       }
 
       alert('Content submitted successfully! The customer will review your work.');
       navigate('/content-creator/assignments');
     } catch (err) {
-      console.error('Upload error:', err);
+      console.error('❌ Upload error:', err);
       alert(`Upload failed: ${err.message}. Please try again.`);
     } finally {
       setSubmitting(false);

@@ -2,11 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, MessageSquare, CheckCircle, Edit3, Trash2, Move, Bell, ChevronDown, LogOut, Settings, User, Calendar, Clock, Eye, Image, ChevronLeft, ChevronRight, Play, Video } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
-import { useAuth } from '../admin/contexts/AuthContext';
 
 function ContentReview() {
   const navigate = useNavigate();
-  const { logout } = useAuth();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [selectedContentIndex, setSelectedContentIndex] = useState(0);
   const [selectedVersionIndex, setSelectedVersionIndex] = useState(0);
@@ -18,10 +16,32 @@ function ContentReview() {
   const [commentsForCurrentMedia, setCommentsForCurrentMedia] = useState([]);
   const [activeComment, setActiveComment] = useState(null);
   const [hoveredComment, setHoveredComment] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Get logged-in customer info from localStorage (like in ContentCalendar)
+  let user = null;
+  try {
+    user = JSON.parse(localStorage.getItem('user'));
+  } catch {
+    user = null;
+  }
+
+  const customerId = user?.id || user?._id;
+  const customerEmail = user?.email;
+
+  console.log('Current user:', user);
+  console.log('Customer ID:', customerId);
+  console.log('Customer Email:', customerEmail);
 
   useEffect(() => {
-    fetchContentSubmissions();
-  }, []);
+    if (customerId || customerEmail) {
+      fetchContentSubmissions();
+    } else {
+      setError('User not authenticated');
+      setLoading(false);
+    }
+  }, [customerId, customerEmail]);
 
   // Fetch comments for the selected version when content or version changes
   useEffect(() => {
@@ -48,18 +68,55 @@ function ContentReview() {
   }, [comments, selectedMediaIndex]);
 
   const fetchContentSubmissions = async () => {
+    setLoading(true);
+    setError(null);
     try {
       const submissionsRes = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions`);
-      const submissions = await submissionsRes.json();
-      
+      if (!submissionsRes.ok) {
+        throw new Error(`HTTP error! status: ${submissionsRes.status}`);
+      }
+      let submissions = await submissionsRes.json();
       if (!Array.isArray(submissions)) {
         throw new Error('Invalid data received');
+      }
+      console.log('All submissions:', submissions);
+
+      // Filter submissions to only those belonging to the logged-in customer
+      const filteredSubmissions = submissions.filter(sub => {
+        // Check multiple possible fields for customer identification
+        let matches = false;
+        // Match by customer_id (user._id or user.id)
+        if (user && (user._id || user.id) && sub.customer_id && (sub.customer_id === user._id || sub.customer_id === user.id)) {
+          matches = true;
+          console.log('✅ Match by customer_id');
+        }
+        // Match by customer_email
+        else if (user && user.email && sub.customer_email && sub.customer_email === user.email) {
+          matches = true;
+          console.log('✅ Match by customer_email');
+        }
+        // Match by created_by (fallback)
+        else if (user && user.email && sub.created_by && sub.created_by === user.email && !sub.customer_id && !sub.customer_email) {
+          matches = true;
+          console.log('✅ Match by created_by (fallback)');
+        } else {
+          console.log('❌ No match found', { subId: sub._id, sub });
+        }
+        return matches;
+      });
+
+      console.log('Filtered submissions:', filteredSubmissions);
+
+      if (filteredSubmissions.length === 0) {
+        setContentItems([]);
+        setSelectedContent(null);
+        setLoading(false);
+        return;
       }
 
       // Group submissions by assignment ID to handle versions
       const groupedSubmissions = {};
-      
-      submissions.forEach(submission => {
+      filteredSubmissions.forEach(submission => {
         const assignmentId = submission.assignment_id || submission.assignmentId || 'unknown';
         if (!groupedSubmissions[assignmentId]) {
           groupedSubmissions[assignmentId] = [];
@@ -69,12 +126,10 @@ function ContentReview() {
 
       // Create content items with versions
       const contentData = [];
-      
       Object.keys(groupedSubmissions).forEach(assignmentId => {
-        const versions = groupedSubmissions[assignmentId].sort((a, b) => 
+        const versions = groupedSubmissions[assignmentId].sort((a, b) =>
           new Date(a.created_at) - new Date(b.created_at)
         );
-        
         const baseItem = versions[0];
         contentData.push({
           id: assignmentId,
@@ -82,9 +137,12 @@ function ContentReview() {
           description: baseItem.notes || '',
           createdBy: baseItem.created_by || 'Unknown',
           createdAt: baseItem.created_at || '',
-          status: 'under_review',
+          status: baseItem.status || 'under_review',
           platform: baseItem.platform || 'Instagram',
           type: baseItem.type || 'Post',
+          customer_id: baseItem.customer_id,
+          customer_name: baseItem.customer_name,
+          customer_email: baseItem.customer_email,
           versions: versions.map((version, index) => ({
             id: version._id,
             versionNumber: index + 1,
@@ -98,14 +156,20 @@ function ContentReview() {
         });
       });
 
+      console.log('Final content data:', contentData);
+
       setContentItems(contentData);
       if (contentData.length > 0) {
         setSelectedContent(contentData[0]);
         setSelectedVersionIndex(contentData[0].versions.length - 1); // Show latest version by default
       }
     } catch (err) {
-      console.error('Failed to fetch content submissions:', err.message);
+      console.error('Failed to fetch content submissions:', err);
+      setError(err.message);
       setContentItems([]);
+      setSelectedContent(null);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -154,7 +218,7 @@ function ContentReview() {
   };
 
   const handleLogout = () => {
-    logout();
+    localStorage.removeItem('user');
     navigate('/customer/login');
   };
 
@@ -421,7 +485,8 @@ function ContentReview() {
     }
   };
 
-  if (!selectedContent) {
+  // Handle loading state
+  if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
         <div className="text-center">
@@ -432,11 +497,53 @@ function ContentReview() {
     );
   }
 
+  // Handle error state
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="bg-red-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
+            <AlertCircle className="h-8 w-8 text-red-600" />
+          </div>
+          <p className="text-red-600 font-medium mb-2">Error loading content</p>
+          <p className="text-gray-600 text-sm mb-4">{error}</p>
+          <Button onClick={fetchContentSubmissions} variant="primary">
+            Retry
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Handle no content state
+  if (contentItems.length === 0) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="bg-gray-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
+            <MessageSquare className="h-8 w-8 text-gray-400" />
+          </div>
+          <p className="text-gray-600 font-medium mb-2">No content submissions found</p>
+          <p className="text-gray-500 text-sm mb-4">
+            {user ? `No content found for ${user.name || user.email}` : 'Please log in to view content'}
+          </p>
+          {!user && (
+            <Button onClick={() => navigate('/customer/login')} variant="primary">
+              Go to Login
+            </Button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   const currentVersion = selectedContent.versions[selectedVersionIndex];
   const currentMedia = currentVersion?.media?.[selectedMediaIndex];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+      
+
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex flex-col xl:flex-row gap-8">
@@ -448,6 +555,11 @@ function ContentReview() {
                   <MessageSquare className="h-5 w-5 text-blue-600 mr-2" />
                   Content Items ({contentItems.length})
                 </h3>
+                {user && (
+                  <p className="text-sm text-gray-600 mt-1">
+                    Showing content for {user.name || user.email}
+                  </p>
+                )}
               </div>
               
               <div className="max-h-96 overflow-y-auto">
@@ -485,6 +597,10 @@ function ContentReview() {
                           </span>
                         </div>
                         <div className="text-xs text-gray-400 mt-1">{formatDate(item.createdAt)}</div>
+                        {/* Customer info for debugging */}
+                        <div className="text-xs text-green-600 mt-1">
+                          Customer: {item.customer_name || item.customer_email}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -885,6 +1001,8 @@ function ContentReview() {
                 )}
 
                 {/* Action Buttons */}
+                {/* Removed Approve Content and Request Changes buttons */}
+                {/*
                 <div className="flex flex-col sm:flex-row justify-center gap-4">
                   <Button
                     onClick={() => navigate(`/customer/approve/${selectedContent.id}`)}
@@ -905,6 +1023,7 @@ function ContentReview() {
                     Request Changes
                   </Button>
                 </div>
+                */}
               </div>
             </div>
           </div>

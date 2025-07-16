@@ -100,7 +100,10 @@ function ContentPortfolio() {
         portfolioData.push({
           id: assignmentId,
           title: baseItem.caption || 'Untitled Post',
-          customer: 'Customer',
+          customer: baseItem.customer_name || baseItem.customerName || 'Customer', // Prioritize customer_name from database
+          customerId: baseItem.customer_id || baseItem.customerId || '', // Use customer_id from database
+          customerEmail: baseItem.customer_email || baseItem.customerEmail || '', // Add customer email
+          hashtags: baseItem.hashtags || '', // Add hashtags
           platform: baseItem.platform || 'Instagram',
           status: getLatestStatus(versions),
           createdDate: baseItem.created_at,
@@ -112,10 +115,14 @@ function ContentPortfolio() {
             versionNumber: index + 1,
             media: normalizeMedia(version.media || version.images || []),
             caption: version.caption || '',
+            hashtags: version.hashtags || '', // Add hashtags to versions
             notes: version.notes || '',
             createdAt: version.created_at,
             status: version.status || 'submitted',
-            comments: version.comments || []
+            comments: version.comments || [],
+            customer_name: version.customer_name || version.customerName || 'Customer', // Store customer info in versions
+            customer_id: version.customer_id || version.customerId || '',
+            customer_email: version.customer_email || version.customerEmail || ''
           })),
           totalVersions: versions.length,
           customerFeedback: getAllFeedback(versions)
@@ -425,25 +432,31 @@ function ContentPortfolio() {
                   const firstMedia = latestVersion?.media?.[0];
                   
                   return (
-                    <div key={item.id} className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden hover:shadow-xl transition-all duration-300 group">
+                    <div
+                      key={item.id}
+                      className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden hover:shadow-xl transition-all duration-300 group"
+                      style={{ width: 340, minWidth: 340, maxWidth: 340, height: 480, minHeight: 480, maxHeight: 480, display: 'flex', flexDirection: 'column' }}
+                    >
                       {/* Content Preview */}
-                      <div className="relative">
+                      <div className="relative" style={{ width: '100%', height: 192 /* 48 * 4 = 192px */ }}>
                         {firstMedia && firstMedia.url && typeof firstMedia.url === 'string' ? (
                           firstMedia.type === 'image' ? (
                             <img 
                               src={firstMedia.url} 
                               alt={item.title}
-                              className="w-full h-48 object-cover"
+                              className="w-full h-full object-cover"
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                               onError={(e) => {
                                 e.target.style.display = 'none';
                                 e.target.nextSibling.style.display = 'flex';
                               }}
                             />
                           ) : (
-                            <div className="relative w-full h-48">
+                            <div className="relative w-full h-full" style={{ width: '100%', height: '100%' }}>
                               <video
                                 src={firstMedia.url}
                                 className="w-full h-full object-cover"
+                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                                 muted
                                 onError={(e) => {
                                   e.target.style.display = 'none';
@@ -458,7 +471,10 @@ function ContentPortfolio() {
                         ) : null}
                         
                         {/* Fallback when no media or media fails to load */}
-                        <div className="w-full h-48 bg-gray-200 flex items-center justify-center" style={{ display: firstMedia?.url ? 'none' : 'flex' }}>
+                        <div
+                          className="w-full h-full bg-gray-200 flex items-center justify-center"
+                          style={{ display: firstMedia?.url ? 'none' : 'flex', width: '100%', height: '100%' }}
+                        >
                           <Image className="h-12 w-12 text-gray-400" />
                         </div>
                         
@@ -490,21 +506,39 @@ function ContentPortfolio() {
                       </div>
 
                       {/* Content Details */}
-                      <div className="p-6">
-                        <h3 className="font-bold text-lg text-gray-900 mb-2">{item.title}</h3>
+                      <div className="p-6 flex-1 flex flex-col" style={{ overflow: 'hidden' }}>
+                        <h3 className="font-bold text-lg text-gray-900 mb-2 line-clamp-1">{item.title}</h3>
                         <p className="text-sm text-gray-600 mb-4 line-clamp-2">{item.description}</p>
                         
-                        <div className="space-y-3">
+                        <div className="space-y-3 flex-1">
                           <div className="flex items-center justify-between text-sm">
                             <div className="flex items-center text-gray-500">
                               <User className="h-4 w-4 mr-1" />
-                              {item.customer}
+                              <span className="font-medium">{item.customer}</span>
+                              {item.customerId && (
+                                <span className="ml-2 text-xs text-gray-400">
+                                  (ID: {item.customerId.substring(0, 8)}...)
+                                </span>
+                              )}
+                              {item.customerEmail && (
+                                <span className="ml-2 text-xs text-gray-400">
+                                  ({item.customerEmail})
+                                </span>
+                              )}
                             </div>
                             <div className="flex items-center text-gray-500">
                               <Calendar className="h-4 w-4 mr-1" />
                               {formatDate(item.createdDate)}
                             </div>
                           </div>
+
+                          {/* Add hashtags display */}
+                          {item.hashtags && (
+                            <div className="text-sm">
+                              <span className="text-gray-500">Hashtags: </span>
+                              <span className="text-blue-600 font-medium">{item.hashtags}</span>
+                            </div>
+                          )}
 
                           <div className="flex items-center justify-between text-sm">
                             <span className="text-gray-500">Platform: {item.platform}</span>
@@ -563,6 +597,12 @@ function ContentPortfolio() {
                       <div>
                         <span className="text-sm font-medium text-gray-500">Customer</span>
                         <p className="text-sm text-gray-900 font-semibold">{selectedContent.customer}</p>
+                        {selectedContent.customerId && (
+                          <p className="text-xs text-gray-500">ID: {selectedContent.customerId}</p>
+                        )}
+                        {selectedContent.customerEmail && (
+                          <p className="text-xs text-gray-500">Email: {selectedContent.customerEmail}</p>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center space-x-2">
@@ -851,6 +891,14 @@ function ContentPortfolio() {
                             </div>
                           </div>
 
+                          {/* Add hashtags display in detailed view */}
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Hashtags</label>
+                            <div className="bg-gray-50 rounded-lg p-4">
+                              <p className="text-blue-600 font-medium">{selectedContent.versions[selectedVersionIndex].hashtags || 'No hashtags'}</p>
+                            </div>
+                          </div>
+
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
                             <div className="bg-gray-50 rounded-lg p-4">
@@ -913,7 +961,7 @@ function ContentPortfolio() {
                                 <div className="flex items-center mt-1 text-xs text-gray-500 gap-2">
                                   <span className="flex items-center">
                                     <User className="h-3 w-3 mr-1" />
-                                    {selectedContent.customer || "Customer"}
+                                    {version.customer_name || selectedContent.customer || "Customer"}
                                   </span>
                                   <span className="flex items-center ml-2">
                                     <span className={`h-2 w-2 rounded-full mr-1 ${
@@ -928,6 +976,16 @@ function ContentPortfolio() {
                                     </span>
                                   )}
                                 </div>
+                                {(version.customer_id || selectedContent.customerId) && (
+                                  <div className="mt-1 text-xs text-gray-400">
+                                    Customer ID: {version.customer_id || selectedContent.customerId}
+                                  </div>
+                                )}
+                                {(version.customer_email || selectedContent.customerEmail) && (
+                                  <div className="mt-1 text-xs text-gray-400">
+                                    Email: {version.customer_email || selectedContent.customerEmail}
+                                  </div>
+                                )}
                               </button>
                             );
                           })}

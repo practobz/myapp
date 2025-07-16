@@ -3,6 +3,7 @@ import { Calendar, Clock, Facebook, Instagram, Image, Send, Eye, Edit, Trash2, C
 import { useNavigate } from 'react-router-dom';
 
 const FACEBOOK_APP_ID = '1678447316162226';
+const API_URL = process.env.REACT_APP_API_URL;
 
 function ScheduledPosts() {
   const navigate = useNavigate();
@@ -128,7 +129,7 @@ function ScheduledPosts() {
   const fetchScheduledPosts = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`http://localhost:3001/api/scheduled-posts`);
+      const response = await fetch(`${API_URL}/api/scheduled-posts`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -148,7 +149,7 @@ function ScheduledPosts() {
   const fetchBucketImages = async () => {
     setLoadingImages(true);
     try {
-      const response = await fetch('http://localhost:3001/api/gcs/list-images?limit=100');
+      const response = await fetch(`${API_URL}/api/gcs/list-images?limit=100`);
       const result = await response.json();
       
       if (result.success) {
@@ -175,7 +176,7 @@ function ScheduledPosts() {
         try {
           const base64Data = e.target.result.split(',')[1]; // Remove data:image/...;base64, prefix
           
-          const response = await fetch('http://localhost:3001/api/gcs/upload-base64', {
+          const response = await fetch(`${API_URL}/api/gcs/upload-base64`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json'
@@ -271,7 +272,7 @@ function ScheduledPosts() {
         accessToken: '[HIDDEN]'
       });
 
-      const response = await fetch(`http://localhost:3001/api/scheduled-posts`, {
+      const response = await fetch(`${API_URL}/api/scheduled-posts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(postData)
@@ -310,7 +311,7 @@ function ScheduledPosts() {
     if (!confirm('Are you sure you want to delete this scheduled post?')) return;
 
     try {
-      const response = await fetch(`http://localhost:3001/api/scheduled-posts/${postId}`, {
+      const response = await fetch(`${API_URL}/api/scheduled-posts/${postId}`, {
         method: 'DELETE'
       });
 
@@ -326,7 +327,7 @@ function ScheduledPosts() {
   // Add manual trigger function for testing
   const handleManualTrigger = async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/scheduled-posts/trigger', {
+      const response = await fetch(`${API_URL}/api/scheduled-posts/trigger`, {
         method: 'POST'
       });
       

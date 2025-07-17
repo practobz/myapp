@@ -4,7 +4,7 @@ import {
   ArrowLeft, Upload, Eye, MessageSquare, Calendar, User, Palette, Clock, 
   CheckCircle, AlertCircle, ChevronLeft, ChevronRight, Image, FileText, 
   Play, Video, Filter, Search, Facebook, Instagram, Send, Plus, 
-  MoreVertical, Edit, Trash2, Users, Grid, List, XCircle, Loader2
+  MoreVertical, Edit, Trash2, Users, Grid, List, XCircle, Loader2, Hash
 } from 'lucide-react';
 
 // Facebook SDK integration
@@ -45,6 +45,7 @@ function AdminContentPortfolio() {
   const [selectedContentForSchedule, setSelectedContentForSchedule] = useState(null);
   const [scheduleFormData, setScheduleFormData] = useState({
     caption: '',
+    hashtags: '',
     imageUrl: '',
     platform: 'facebook',
     pageId: '',
@@ -227,6 +228,7 @@ function AdminContentPortfolio() {
               versionNumber: index + 1,
               media: normalizeMedia(version.media || version.images || []),
               caption: version.caption || '',
+              hashtags: version.hashtags || extractHashtags(version.caption || ''),
               notes: version.notes || '',
               createdAt: version.created_at,
               status: version.status || 'submitted',
@@ -250,6 +252,12 @@ function AdminContentPortfolio() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const extractHashtags = (text) => {
+    const hashtagRegex = /#[a-zA-Z0-9_]+/g;
+    const hashtags = text.match(hashtagRegex);
+    return hashtags ? hashtags.join(' ') : '';
   };
 
   const normalizeMedia = (media) => {
@@ -352,9 +360,15 @@ function AdminContentPortfolio() {
     const latestVersion = item.versions[item.versions.length - 1];
     const firstMedia = latestVersion?.media?.[0];
     
+    // Extract caption without hashtags
+    const captionText = latestVersion.caption || '';
+    const hashtagsText = latestVersion.hashtags || extractHashtags(captionText);
+    const captionWithoutHashtags = captionText.replace(/#[a-zA-Z0-9_]+/g, '').trim();
+    
     setSelectedContentForSchedule(item);
     setScheduleFormData({
-      caption: latestVersion.caption || '',
+      caption: captionWithoutHashtags,
+      hashtags: hashtagsText,
       imageUrl: firstMedia?.url || '',
       platform: 'facebook',
       pageId: '',
@@ -365,18 +379,20 @@ function AdminContentPortfolio() {
     setShowScheduleModal(true);
   };
 
-  const handleApproveContent = (item) => {
-    navigate(`/admin/approve/${item.id}`);
-  };
-
   const handleSchedulePost = async () => {
     if (!scheduleFormData.caption || !scheduleFormData.scheduledDate || !scheduleFormData.scheduledTime) {
       alert('Please fill in all required fields');
       return;
     }
 
-    if (scheduleFormData.platform === 'instagram' && !scheduleFormData.imageUrl) {
-      alert('Instagram posts require an image');
+    // Require image for Instagram or Both, and always for Facebook as well
+    if (
+      (!scheduleFormData.imageUrl) &&
+      (scheduleFormData.platform === 'instagram' ||
+        scheduleFormData.platform === 'both' ||
+        scheduleFormData.platform === 'facebook')
+    ) {
+      alert('Please upload an image for your post.');
       return;
     }
 
@@ -400,9 +416,13 @@ function AdminContentPortfolio() {
     setSubmitting(true);
     try {
       const scheduledDateTime = new Date(`${scheduleFormData.scheduledDate}T${scheduleFormData.scheduledTime}`);
-      
+      // Combine caption and hashtags
+      const fullCaption = scheduleFormData.hashtags 
+        ? `${scheduleFormData.caption}\n\n${scheduleFormData.hashtags}`
+        : scheduleFormData.caption;
+
       const postData = {
-        caption: scheduleFormData.caption,
+        caption: fullCaption,
         imageUrl: scheduleFormData.imageUrl,
         platform: scheduleFormData.platform,
         pageId: scheduleFormData.pageId,
@@ -425,11 +445,31 @@ function AdminContentPortfolio() {
       });
 
       if (response.ok) {
-        alert('Post scheduled successfully!');
+        // Try to parse the response for partial success/failure
+        let result;
+        try {
+          result = await response.json();
+        } catch {
+          result = {};
+        }
+        // Check for partial success/failure keys
+        if (result.partialSuccess) {
+          let msg = '';
+          if (result.facebook && result.facebook.success) {
+            msg += `✅ FB: ${result.facebook.id || 'Success'}\n`;
+          }
+          if (result.instagram && !result.instagram.success) {
+            msg += `❌ IG Failed\nInstagram: ${result.instagram.error || 'Unknown error.'}`;
+          }
+          alert(msg.trim());
+        } else {
+          alert('Post scheduled successfully!');
+        }
         setShowScheduleModal(false);
         setSelectedContentForSchedule(null);
         setScheduleFormData({
           caption: '',
+          hashtags: '',
           imageUrl: '',
           platform: 'facebook',
           pageId: '',
@@ -438,8 +478,26 @@ function AdminContentPortfolio() {
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
         });
       } else {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to schedule post');
+        // Try to parse error for partial success/failure
+        let errorData;
+        try {
+          errorData = await response.json();
+        } catch {
+          errorData = {};
+        }
+        // If partial success, show details
+        if (errorData.partialSuccess) {
+          let msg = '';
+          if (errorData.facebook && errorData.facebook.success) {
+            msg += `✅ FB: ${errorData.facebook.id || 'Success'}\n`;
+          }
+          if (errorData.instagram && !errorData.instagram.success) {
+            msg += `❌ IG Failed\nInstagram: ${errorData.instagram.error || 'Unknown error.'}`;
+          }
+          alert(msg.trim());
+        } else {
+          throw new Error(errorData.error || 'Failed to schedule post');
+        }
       }
     } catch (error) {
       console.error('Schedule post error:', error);
@@ -655,8 +713,8 @@ function AdminContentPortfolio() {
                   const pendingCount = customerData.portfolios.filter(p => p.status === 'under_review').length;
                   
                   return (
-                    <div key={customerData.customerId} className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden hover:shadow-xl transition-all duration-300 group">
-                      <div className="p-6">
+                    <div key={customerData.customerId} className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden hover:shadow-xl transition-all duration-300 group h-[420px] flex flex-col">
+                      <div className="p-6 flex-1 flex flex-col">
                         <div className="flex items-start justify-between mb-4">
                           <div className="flex items-center space-x-3">
                             <div className="h-12 w-12 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
@@ -666,7 +724,7 @@ function AdminContentPortfolio() {
                             </div>
                             <div>
                               <h3 className="font-bold text-lg text-gray-900">{customerName}</h3>
-                              <p className="text-sm text-gray-600">{customer?.email}</p>
+                              <p className="text-sm text-gray-600 truncate">{customer?.email}</p>
                             </div>
                           </div>
                         </div>
@@ -686,14 +744,14 @@ function AdminContentPortfolio() {
                           </div>
                         </div>
 
-                        <div className="space-y-2">
+                        <div className="space-y-2 flex-1 overflow-y-auto">
                           {customerData.portfolios.slice(0, 3).map((portfolio, index) => (
                             <div key={portfolio.id} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
-                              <div className="flex items-center space-x-2">
-                                <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                              <div className="flex items-center space-x-2 min-w-0 flex-1">
+                                <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></div>
                                 <span className="text-sm font-medium truncate">{portfolio.title}</span>
                               </div>
-                              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(portfolio.status)}`}>
+                              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(portfolio.status)} flex-shrink-0`}>
                                 {portfolio.status.replace('_', ' ')}
                               </span>
                             </div>
@@ -750,25 +808,24 @@ function AdminContentPortfolio() {
                 {selectedCustomer.portfolios.map((item) => {
                   const latestVersion = item.versions[item.versions.length - 1];
                   const firstMedia = latestVersion?.media?.[0];
-                  const isApproved = item.status === 'approved';
                   
                   return (
-                    <div key={item.id} className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden hover:shadow-xl transition-all duration-300 group">
+                    <div key={item.id} className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden hover:shadow-xl transition-all duration-300 group h-[500px] flex flex-col">
                       {/* Content Preview */}
-                      <div className="relative">
+                      <div className="relative h-48 flex-shrink-0">
                         {firstMedia && firstMedia.url && typeof firstMedia.url === 'string' ? (
                           firstMedia.type === 'image' ? (
                             <img 
                               src={firstMedia.url} 
                               alt={item.title}
-                              className="w-full h-48 object-cover"
+                              className="w-full h-full object-cover"
                               onError={(e) => {
                                 e.target.style.display = 'none';
                                 e.target.nextSibling.style.display = 'flex';
                               }}
                             />
                           ) : (
-                            <div className="relative w-full h-48">
+                            <div className="relative w-full h-full">
                               <video
                                 src={firstMedia.url}
                                 className="w-full h-full object-cover"
@@ -785,7 +842,7 @@ function AdminContentPortfolio() {
                           )
                         ) : null}
                         
-                        <div className="w-full h-48 bg-gray-200 flex items-center justify-center" style={{ display: firstMedia?.url ? 'none' : 'flex' }}>
+                        <div className="w-full h-full bg-gray-200 flex items-center justify-center" style={{ display: firstMedia?.url ? 'none' : 'flex' }}>
                           <Image className="h-12 w-12 text-gray-400" />
                         </div>
                         
@@ -810,11 +867,11 @@ function AdminContentPortfolio() {
                       </div>
 
                       {/* Content Details */}
-                      <div className="p-6">
-                        <h3 className="font-bold text-lg text-gray-900 mb-2">{item.title}</h3>
-                        <p className="text-sm text-gray-600 mb-4 line-clamp-2">{item.description}</p>
+                      <div className="p-6 flex-1 flex flex-col">
+                        <h3 className="font-bold text-lg text-gray-900 mb-2 line-clamp-2">{item.title}</h3>
+                        <p className="text-sm text-gray-600 mb-4 line-clamp-2 flex-1">{item.description}</p>
                         
-                        <div className="space-y-3">
+                        <div className="space-y-3 mb-4">
                           <div className="flex items-center justify-between text-sm">
                             <span className="text-gray-500">Platform: {item.platform}</span>
                             <span className="text-gray-500">
@@ -831,7 +888,7 @@ function AdminContentPortfolio() {
                         </div>
 
                         {/* Action Buttons */}
-                        <div className="mt-4 flex gap-2">
+                        <div className="flex gap-2 mt-auto">
                           <button
                             onClick={() => handleViewContent(item)}
                             className="flex-1 bg-gradient-to-r from-purple-600 to-indigo-600 text-white py-2 px-4 rounded-xl hover:from-purple-700 hover:to-indigo-700 text-sm font-medium flex items-center justify-center transition-all duration-200"
@@ -841,1051 +898,12 @@ function AdminContentPortfolio() {
                           </button>
                           
                           <button
-                            onClick={() => handleApproveContent(item)}
-                            className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 text-white py-2 px-4 rounded-xl hover:from-green-700 hover:to-emerald-700 text-sm font-medium flex items-center justify-center transition-all duration-200"
+                            onClick={() => handleScheduleContent(item)}
+                            className="flex-1 bg-gradient-to-r from-blue-600 to-cyan-600 text-white py-2 px-4 rounded-xl hover:from-blue-700 hover:to-cyan-700 text-sm font-medium flex items-center justify-center transition-all duration-200"
                           >
-                            <CheckCircle className="h-4 w-4 mr-2" />
-                            Approve
+                            <Send className="h-4 w-4 mr-2" />
+                            Schedule
                           </button>
-                          
-                          {item.status === 'approved' && (
-                            <button
-                              onClick={() => handleScheduleContent(item)}
-                              className="flex-1 bg-gradient-to-r from-blue-600 to-cyan-600 text-white py-2 px-4 rounded-xl hover:from-blue-700 hover:to-cyan-700 text-sm font-medium flex items-center justify-center transition-all duration-200"
-                            >
-                              <Send className="h-4 w-4 mr-2" />
-                              Schedule
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        ) : selectedCustomer && !selectedContent ? (
-          // Individual Customer Portfolio View
-          <div className="space-y-8">
-            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 p-8">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center space-x-4">
-                  <div className="h-16 w-16 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
-                    <span className="text-white font-bold text-2xl">
-                      {getCustomerName(selectedCustomer.customerId).charAt(0).toUpperCase()}
-                    </span>
-                  </div>
-                  <div>
-                    <h1 className="text-3xl font-bold text-gray-900">{getCustomerName(selectedCustomer.customerId)}</h1>
-                    <p className="text-gray-600">Content Portfolio ({selectedCustomer.portfolios.length} items)</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {selectedCustomer.portfolios.length === 0 ? (
-              <div className="text-center py-16">
-                <div className="bg-gray-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-                  <FileText className="h-8 w-8 text-gray-400" />
-                </div>
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No content created yet</h3>
-                <p className="text-gray-500">This customer doesn't have any content in their portfolio.</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-                {selectedCustomer.portfolios.map((item) => {
-                  const latestVersion = item.versions[item.versions.length - 1];
-                  const firstMedia = latestVersion?.media?.[0];
-                  const isApproved = item.status === 'approved';
-                  
-                  return (
-                    <div key={item.id} className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden hover:shadow-xl transition-all duration-300 group">
-                      {/* Content Preview */}
-                      <div className="relative">
-                        {firstMedia && firstMedia.url && typeof firstMedia.url === 'string' ? (
-                          firstMedia.type === 'image' ? (
-                            <img 
-                              src={firstMedia.url} 
-                              alt={item.title}
-                              className="w-full h-48 object-cover"
-                              onError={(e) => {
-                                e.target.style.display = 'none';
-                                e.target.nextSibling.style.display = 'flex';
-                              }}
-                            />
-                          ) : (
-                            <div className="relative w-full h-48">
-                              <video
-                                src={firstMedia.url}
-                                className="w-full h-full object-cover"
-                                muted
-                                onError={(e) => {
-                                  e.target.style.display = 'none';
-                                  e.target.nextSibling.style.display = 'flex';
-                                }}
-                              />
-                              <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30">
-                                <Play className="h-12 w-12 text-white" />
-                              </div>
-                            </div>
-                          )
-                        ) : null}
-                        
-                        <div className="w-full h-48 bg-gray-200 flex items-center justify-center" style={{ display: firstMedia?.url ? 'none' : 'flex' }}>
-                          <Image className="h-12 w-12 text-gray-400" />
-                        </div>
-                        
-                        <div className="absolute top-4 right-4 flex gap-2">
-                          <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(item.status)}`}>
-                            {getStatusIcon(item.status)}
-                            <span className="ml-1">{item.status.replace('_', ' ').toUpperCase()}</span>
-                          </span>
-                        </div>
-                        
-                        <div className="absolute top-4 left-4 flex gap-2">
-                          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200">
-                            <Image className="h-3 w-3 mr-1" />
-                            {item.totalVersions} Version{item.totalVersions !== 1 ? 's' : ''}
-                          </span>
-                          {latestVersion?.media && latestVersion.media.length > 1 && (
-                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200">
-                              {latestVersion.media.length} Media
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Content Details */}
-                      <div className="p-6">
-                        <h3 className="font-bold text-lg text-gray-900 mb-2">{item.title}</h3>
-                        <p className="text-sm text-gray-600 mb-4 line-clamp-2">{item.description}</p>
-                        
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-gray-500">Platform: {item.platform}</span>
-                            <span className="text-gray-500">
-                              Updated: {formatDate(item.lastUpdated)}
-                            </span>
-                          </div>
-
-                          {item.customerFeedback.length > 0 && (
-                            <div className="flex items-center text-sm text-blue-600">
-                              <MessageSquare className="h-4 w-4 mr-1" />
-                              {item.customerFeedback.length} Comment{item.customerFeedback.length !== 1 ? 's' : ''}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Action Buttons */}
-                        <div className="mt-4 flex gap-2">
-                          <button
-                            onClick={() => handleViewContent(item)}
-                            className="flex-1 bg-gradient-to-r from-purple-600 to-indigo-600 text-white py-2 px-4 rounded-xl hover:from-purple-700 hover:to-indigo-700 text-sm font-medium flex items-center justify-center transition-all duration-200"
-                          >
-                            <Eye className="h-4 w-4 mr-2" />
-                            View Details
-                          </button>
-                          
-                          <button
-                            onClick={() => handleApproveContent(item)}
-                            className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 text-white py-2 px-4 rounded-xl hover:from-green-700 hover:to-emerald-700 text-sm font-medium flex items-center justify-center transition-all duration-200"
-                          >
-                            <CheckCircle className="h-4 w-4 mr-2" />
-                            Approve
-                          </button>
-                          
-                          {item.status === 'approved' && (
-                            <button
-                              onClick={() => handleScheduleContent(item)}
-                              className="flex-1 bg-gradient-to-r from-blue-600 to-cyan-600 text-white py-2 px-4 rounded-xl hover:from-blue-700 hover:to-cyan-700 text-sm font-medium flex items-center justify-center transition-all duration-200"
-                            >
-                              <Send className="h-4 w-4 mr-2" />
-                              Schedule
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        ) : selectedCustomer && !selectedContent ? (
-          // Individual Customer Portfolio View
-          <div className="space-y-8">
-            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 p-8">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center space-x-4">
-                  <div className="h-16 w-16 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
-                    <span className="text-white font-bold text-2xl">
-                      {getCustomerName(selectedCustomer.customerId).charAt(0).toUpperCase()}
-                    </span>
-                  </div>
-                  <div>
-                    <h1 className="text-3xl font-bold text-gray-900">{getCustomerName(selectedCustomer.customerId)}</h1>
-                    <p className="text-gray-600">Content Portfolio ({selectedCustomer.portfolios.length} items)</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {selectedCustomer.portfolios.length === 0 ? (
-              <div className="text-center py-16">
-                <div className="bg-gray-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-                  <FileText className="h-8 w-8 text-gray-400" />
-                </div>
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No content created yet</h3>
-                <p className="text-gray-500">This customer doesn't have any content in their portfolio.</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-                {selectedCustomer.portfolios.map((item) => {
-                  const latestVersion = item.versions[item.versions.length - 1];
-                  const firstMedia = latestVersion?.media?.[0];
-                  const isApproved = item.status === 'approved';
-                  
-                  return (
-                    <div key={item.id} className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden hover:shadow-xl transition-all duration-300 group">
-                      {/* Content Preview */}
-                      <div className="relative">
-                        {firstMedia && firstMedia.url && typeof firstMedia.url === 'string' ? (
-                          firstMedia.type === 'image' ? (
-                            <img 
-                              src={firstMedia.url} 
-                              alt={item.title}
-                              className="w-full h-48 object-cover"
-                              onError={(e) => {
-                                e.target.style.display = 'none';
-                                e.target.nextSibling.style.display = 'flex';
-                              }}
-                            />
-                          ) : (
-                            <div className="relative w-full h-48">
-                              <video
-                                src={firstMedia.url}
-                                className="w-full h-full object-cover"
-                                muted
-                                onError={(e) => {
-                                  e.target.style.display = 'none';
-                                  e.target.nextSibling.style.display = 'flex';
-                                }}
-                              />
-                              <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30">
-                                <Play className="h-12 w-12 text-white" />
-                              </div>
-                            </div>
-                          )
-                        ) : null}
-                        
-                        <div className="w-full h-48 bg-gray-200 flex items-center justify-center" style={{ display: firstMedia?.url ? 'none' : 'flex' }}>
-                          <Image className="h-12 w-12 text-gray-400" />
-                        </div>
-                        
-                        <div className="absolute top-4 right-4 flex gap-2">
-                          <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(item.status)}`}>
-                            {getStatusIcon(item.status)}
-                            <span className="ml-1">{item.status.replace('_', ' ').toUpperCase()}</span>
-                          </span>
-                        </div>
-                        
-                        <div className="absolute top-4 left-4 flex gap-2">
-                          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200">
-                            <Image className="h-3 w-3 mr-1" />
-                            {item.totalVersions} Version{item.totalVersions !== 1 ? 's' : ''}
-                          </span>
-                          {latestVersion?.media && latestVersion.media.length > 1 && (
-                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200">
-                              {latestVersion.media.length} Media
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Content Details */}
-                      <div className="p-6">
-                        <h3 className="font-bold text-lg text-gray-900 mb-2">{item.title}</h3>
-                        <p className="text-sm text-gray-600 mb-4 line-clamp-2">{item.description}</p>
-                        
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-gray-500">Platform: {item.platform}</span>
-                            <span className="text-gray-500">
-                              Updated: {formatDate(item.lastUpdated)}
-                            </span>
-                          </div>
-
-                          {item.customerFeedback.length > 0 && (
-                            <div className="flex items-center text-sm text-blue-600">
-                              <MessageSquare className="h-4 w-4 mr-1" />
-                              {item.customerFeedback.length} Comment{item.customerFeedback.length !== 1 ? 's' : ''}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Action Buttons */}
-                        <div className="mt-4 flex gap-2">
-                          <button
-                            onClick={() => handleViewContent(item)}
-                            className="flex-1 bg-gradient-to-r from-purple-600 to-indigo-600 text-white py-2 px-4 rounded-xl hover:from-purple-700 hover:to-indigo-700 text-sm font-medium flex items-center justify-center transition-all duration-200"
-                          >
-                            <Eye className="h-4 w-4 mr-2" />
-                            View Details
-                          </button>
-                          
-                          <button
-                            onClick={() => handleApproveContent(item)}
-                            className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 text-white py-2 px-4 rounded-xl hover:from-green-700 hover:to-emerald-700 text-sm font-medium flex items-center justify-center transition-all duration-200"
-                          >
-                            <CheckCircle className="h-4 w-4 mr-2" />
-                            Approve
-                          </button>
-                          
-                          {item.status === 'approved' && (
-                            <button
-                              onClick={() => handleScheduleContent(item)}
-                              className="flex-1 bg-gradient-to-r from-blue-600 to-cyan-600 text-white py-2 px-4 rounded-xl hover:from-blue-700 hover:to-cyan-700 text-sm font-medium flex items-center justify-center transition-all duration-200"
-                            >
-                              <Send className="h-4 w-4 mr-2" />
-                              Schedule
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        ) : selectedCustomer && !selectedContent ? (
-          // Individual Customer Portfolio View
-          <div className="space-y-8">
-            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 p-8">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center space-x-4">
-                  <div className="h-16 w-16 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
-                    <span className="text-white font-bold text-2xl">
-                      {getCustomerName(selectedCustomer.customerId).charAt(0).toUpperCase()}
-                    </span>
-                  </div>
-                  <div>
-                    <h1 className="text-3xl font-bold text-gray-900">{getCustomerName(selectedCustomer.customerId)}</h1>
-                    <p className="text-gray-600">Content Portfolio ({selectedCustomer.portfolios.length} items)</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {selectedCustomer.portfolios.length === 0 ? (
-              <div className="text-center py-16">
-                <div className="bg-gray-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-                  <FileText className="h-8 w-8 text-gray-400" />
-                </div>
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No content created yet</h3>
-                <p className="text-gray-500">This customer doesn't have any content in their portfolio.</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-                {selectedCustomer.portfolios.map((item) => {
-                  const latestVersion = item.versions[item.versions.length - 1];
-                  const firstMedia = latestVersion?.media?.[0];
-                  const isApproved = item.status === 'approved';
-                  
-                  return (
-                    <div key={item.id} className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden hover:shadow-xl transition-all duration-300 group">
-                      {/* Content Preview */}
-                      <div className="relative">
-                        {firstMedia && firstMedia.url && typeof firstMedia.url === 'string' ? (
-                          firstMedia.type === 'image' ? (
-                            <img 
-                              src={firstMedia.url} 
-                              alt={item.title}
-                              className="w-full h-48 object-cover"
-                              onError={(e) => {
-                                e.target.style.display = 'none';
-                                e.target.nextSibling.style.display = 'flex';
-                              }}
-                            />
-                          ) : (
-                            <div className="relative w-full h-48">
-                              <video
-                                src={firstMedia.url}
-                                className="w-full h-full object-cover"
-                                muted
-                                onError={(e) => {
-                                  e.target.style.display = 'none';
-                                  e.target.nextSibling.style.display = 'flex';
-                                }}
-                              />
-                              <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30">
-                                <Play className="h-12 w-12 text-white" />
-                              </div>
-                            </div>
-                          )
-                        ) : null}
-                        
-                        <div className="w-full h-48 bg-gray-200 flex items-center justify-center" style={{ display: firstMedia?.url ? 'none' : 'flex' }}>
-                          <Image className="h-12 w-12 text-gray-400" />
-                        </div>
-                        
-                        <div className="absolute top-4 right-4 flex gap-2">
-                          <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(item.status)}`}>
-                            {getStatusIcon(item.status)}
-                            <span className="ml-1">{item.status.replace('_', ' ').toUpperCase()}</span>
-                          </span>
-                        </div>
-                        
-                        <div className="absolute top-4 left-4 flex gap-2">
-                          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200">
-                            <Image className="h-3 w-3 mr-1" />
-                            {item.totalVersions} Version{item.totalVersions !== 1 ? 's' : ''}
-                          </span>
-                          {latestVersion?.media && latestVersion.media.length > 1 && (
-                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200">
-                              {latestVersion.media.length} Media
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Content Details */}
-                      <div className="p-6">
-                        <h3 className="font-bold text-lg text-gray-900 mb-2">{item.title}</h3>
-                        <p className="text-sm text-gray-600 mb-4 line-clamp-2">{item.description}</p>
-                        
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-gray-500">Platform: {item.platform}</span>
-                            <span className="text-gray-500">
-                              Updated: {formatDate(item.lastUpdated)}
-                            </span>
-                          </div>
-
-                          {item.customerFeedback.length > 0 && (
-                            <div className="flex items-center text-sm text-blue-600">
-                              <MessageSquare className="h-4 w-4 mr-1" />
-                              {item.customerFeedback.length} Comment{item.customerFeedback.length !== 1 ? 's' : ''}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Action Buttons */}
-                        <div className="mt-4 flex gap-2">
-                          <button
-                            onClick={() => handleViewContent(item)}
-                            className="flex-1 bg-gradient-to-r from-purple-600 to-indigo-600 text-white py-2 px-4 rounded-xl hover:from-purple-700 hover:to-indigo-700 text-sm font-medium flex items-center justify-center transition-all duration-200"
-                          >
-                            <Eye className="h-4 w-4 mr-2" />
-                            View Details
-                          </button>
-                          
-                          <button
-                            onClick={() => handleApproveContent(item)}
-                            className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 text-white py-2 px-4 rounded-xl hover:from-green-700 hover:to-emerald-700 text-sm font-medium flex items-center justify-center transition-all duration-200"
-                          >
-                            <CheckCircle className="h-4 w-4 mr-2" />
-                            Approve
-                          </button>
-                          
-                          {item.status === 'approved' && (
-                            <button
-                              onClick={() => handleScheduleContent(item)}
-                              className="flex-1 bg-gradient-to-r from-blue-600 to-cyan-600 text-white py-2 px-4 rounded-xl hover:from-blue-700 hover:to-cyan-700 text-sm font-medium flex items-center justify-center transition-all duration-200"
-                            >
-                              <Send className="h-4 w-4 mr-2" />
-                              Schedule
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        ) : selectedCustomer && !selectedContent ? (
-          // Individual Customer Portfolio View
-          <div className="space-y-8">
-            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 p-8">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center space-x-4">
-                  <div className="h-16 w-16 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
-                    <span className="text-white font-bold text-2xl">
-                      {getCustomerName(selectedCustomer.customerId).charAt(0).toUpperCase()}
-                    </span>
-                  </div>
-                  <div>
-                    <h1 className="text-3xl font-bold text-gray-900">{getCustomerName(selectedCustomer.customerId)}</h1>
-                    <p className="text-gray-600">Content Portfolio ({selectedCustomer.portfolios.length} items)</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {selectedCustomer.portfolios.length === 0 ? (
-              <div className="text-center py-16">
-                <div className="bg-gray-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-                  <FileText className="h-8 w-8 text-gray-400" />
-                </div>
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No content created yet</h3>
-                <p className="text-gray-500">This customer doesn't have any content in their portfolio.</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-                {selectedCustomer.portfolios.map((item) => {
-                  const latestVersion = item.versions[item.versions.length - 1];
-                  const firstMedia = latestVersion?.media?.[0];
-                  const isApproved = item.status === 'approved';
-                  
-                  return (
-                    <div key={item.id} className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden hover:shadow-xl transition-all duration-300 group">
-                      {/* Content Preview */}
-                      <div className="relative">
-                        {firstMedia && firstMedia.url && typeof firstMedia.url === 'string' ? (
-                          firstMedia.type === 'image' ? (
-                            <img 
-                              src={firstMedia.url} 
-                              alt={item.title}
-                              className="w-full h-48 object-cover"
-                              onError={(e) => {
-                                e.target.style.display = 'none';
-                                e.target.nextSibling.style.display = 'flex';
-                              }}
-                            />
-                          ) : (
-                            <div className="relative w-full h-48">
-                              <video
-                                src={firstMedia.url}
-                                className="w-full h-full object-cover"
-                                muted
-                                onError={(e) => {
-                                  e.target.style.display = 'none';
-                                  e.target.nextSibling.style.display = 'flex';
-                                }}
-                              />
-                              <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30">
-                                <Play className="h-12 w-12 text-white" />
-                              </div>
-                            </div>
-                          )
-                        ) : null}
-                        
-                        <div className="w-full h-48 bg-gray-200 flex items-center justify-center" style={{ display: firstMedia?.url ? 'none' : 'flex' }}>
-                          <Image className="h-12 w-12 text-gray-400" />
-                        </div>
-                        
-                        <div className="absolute top-4 right-4 flex gap-2">
-                          <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(item.status)}`}>
-                            {getStatusIcon(item.status)}
-                            <span className="ml-1">{item.status.replace('_', ' ').toUpperCase()}</span>
-                          </span>
-                        </div>
-                        
-                        <div className="absolute top-4 left-4 flex gap-2">
-                          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200">
-                            <Image className="h-3 w-3 mr-1" />
-                            {item.totalVersions} Version{item.totalVersions !== 1 ? 's' : ''}
-                          </span>
-                          {latestVersion?.media && latestVersion.media.length > 1 && (
-                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200">
-                              {latestVersion.media.length} Media
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Content Details */}
-                      <div className="p-6">
-                        <h3 className="font-bold text-lg text-gray-900 mb-2">{item.title}</h3>
-                        <p className="text-sm text-gray-600 mb-4 line-clamp-2">{item.description}</p>
-                        
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-gray-500">Platform: {item.platform}</span>
-                            <span className="text-gray-500">
-                              Updated: {formatDate(item.lastUpdated)}
-                            </span>
-                          </div>
-
-                          {item.customerFeedback.length > 0 && (
-                            <div className="flex items-center text-sm text-blue-600">
-                              <MessageSquare className="h-4 w-4 mr-1" />
-                              {item.customerFeedback.length} Comment{item.customerFeedback.length !== 1 ? 's' : ''}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Action Buttons */}
-                        <div className="mt-4 flex gap-2">
-                          <button
-                            onClick={() => handleViewContent(item)}
-                            className="flex-1 bg-gradient-to-r from-purple-600 to-indigo-600 text-white py-2 px-4 rounded-xl hover:from-purple-700 hover:to-indigo-700 text-sm font-medium flex items-center justify-center transition-all duration-200"
-                          >
-                            <Eye className="h-4 w-4 mr-2" />
-                            View Details
-                          </button>
-                          
-                          <button
-                            onClick={() => handleApproveContent(item)}
-                            className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 text-white py-2 px-4 rounded-xl hover:from-green-700 hover:to-emerald-700 text-sm font-medium flex items-center justify-center transition-all duration-200"
-                          >
-                            <CheckCircle className="h-4 w-4 mr-2" />
-                            Approve
-                          </button>
-                          
-                          {item.status === 'approved' && (
-                            <button
-                              onClick={() => handleScheduleContent(item)}
-                              className="flex-1 bg-gradient-to-r from-blue-600 to-cyan-600 text-white py-2 px-4 rounded-xl hover:from-blue-700 hover:to-cyan-700 text-sm font-medium flex items-center justify-center transition-all duration-200"
-                            >
-                              <Send className="h-4 w-4 mr-2" />
-                              Schedule
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        ) : selectedCustomer && !selectedContent ? (
-          // Individual Customer Portfolio View
-          <div className="space-y-8">
-            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 p-8">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center space-x-4">
-                  <div className="h-16 w-16 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
-                    <span className="text-white font-bold text-2xl">
-                      {getCustomerName(selectedCustomer.customerId).charAt(0).toUpperCase()}
-                    </span>
-                  </div>
-                  <div>
-                    <h1 className="text-3xl font-bold text-gray-900">{getCustomerName(selectedCustomer.customerId)}</h1>
-                    <p className="text-gray-600">Content Portfolio ({selectedCustomer.portfolios.length} items)</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {selectedCustomer.portfolios.length === 0 ? (
-              <div className="text-center py-16">
-                <div className="bg-gray-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-                  <FileText className="h-8 w-8 text-gray-400" />
-                </div>
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No content created yet</h3>
-                <p className="text-gray-500">This customer doesn't have any content in their portfolio.</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-                {selectedCustomer.portfolios.map((item) => {
-                  const latestVersion = item.versions[item.versions.length - 1];
-                  const firstMedia = latestVersion?.media?.[0];
-                  const isApproved = item.status === 'approved';
-                  
-                  return (
-                    <div key={item.id} className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden hover:shadow-xl transition-all duration-300 group">
-                      {/* Content Preview */}
-                      <div className="relative">
-                        {firstMedia && firstMedia.url && typeof firstMedia.url === 'string' ? (
-                          firstMedia.type === 'image' ? (
-                            <img 
-                              src={firstMedia.url} 
-                              alt={item.title}
-                              className="w-full h-48 object-cover"
-                              onError={(e) => {
-                                e.target.style.display = 'none';
-                                e.target.nextSibling.style.display = 'flex';
-                              }}
-                            />
-                          ) : (
-                            <div className="relative w-full h-48">
-                              <video
-                                src={firstMedia.url}
-                                className="w-full h-full object-cover"
-                                muted
-                                onError={(e) => {
-                                  e.target.style.display = 'none';
-                                  e.target.nextSibling.style.display = 'flex';
-                                }}
-                              />
-                              <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30">
-                                <Play className="h-12 w-12 text-white" />
-                              </div>
-                            </div>
-                          )
-                        ) : null}
-                        
-                        <div className="w-full h-48 bg-gray-200 flex items-center justify-center" style={{ display: firstMedia?.url ? 'none' : 'flex' }}>
-                          <Image className="h-12 w-12 text-gray-400" />
-                        </div>
-                        
-                        <div className="absolute top-4 right-4 flex gap-2">
-                          <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(item.status)}`}>
-                            {getStatusIcon(item.status)}
-                            <span className="ml-1">{item.status.replace('_', ' ').toUpperCase()}</span>
-                          </span>
-                        </div>
-                        
-                        <div className="absolute top-4 left-4 flex gap-2">
-                          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200">
-                            <Image className="h-3 w-3 mr-1" />
-                            {item.totalVersions} Version{item.totalVersions !== 1 ? 's' : ''}
-                          </span>
-                          {latestVersion?.media && latestVersion.media.length > 1 && (
-                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200">
-                              {latestVersion.media.length} Media
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Content Details */}
-                      <div className="p-6">
-                        <h3 className="font-bold text-lg text-gray-900 mb-2">{item.title}</h3>
-                        <p className="text-sm text-gray-600 mb-4 line-clamp-2">{item.description}</p>
-                        
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-gray-500">Platform: {item.platform}</span>
-                            <span className="text-gray-500">
-                              Updated: {formatDate(item.lastUpdated)}
-                            </span>
-                          </div>
-
-                          {item.customerFeedback.length > 0 && (
-                            <div className="flex items-center text-sm text-blue-600">
-                              <MessageSquare className="h-4 w-4 mr-1" />
-                              {item.customerFeedback.length} Comment{item.customerFeedback.length !== 1 ? 's' : ''}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Action Buttons */}
-                        <div className="mt-4 flex gap-2">
-                          <button
-                            onClick={() => handleViewContent(item)}
-                            className="flex-1 bg-gradient-to-r from-purple-600 to-indigo-600 text-white py-2 px-4 rounded-xl hover:from-purple-700 hover:to-indigo-700 text-sm font-medium flex items-center justify-center transition-all duration-200"
-                          >
-                            <Eye className="h-4 w-4 mr-2" />
-                            View Details
-                          </button>
-                          
-                          <button
-                            onClick={() => handleApproveContent(item)}
-                            className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 text-white py-2 px-4 rounded-xl hover:from-green-700 hover:to-emerald-700 text-sm font-medium flex items-center justify-center transition-all duration-200"
-                          >
-                            <CheckCircle className="h-4 w-4 mr-2" />
-                            Approve
-                          </button>
-                          
-                          {item.status === 'approved' && (
-                            <button
-                              onClick={() => handleScheduleContent(item)}
-                              className="flex-1 bg-gradient-to-r from-blue-600 to-cyan-600 text-white py-2 px-4 rounded-xl hover:from-blue-700 hover:to-cyan-700 text-sm font-medium flex items-center justify-center transition-all duration-200"
-                            >
-                              <Send className="h-4 w-4 mr-2" />
-                              Schedule
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        ) : selectedCustomer && !selectedContent ? (
-          // Individual Customer Portfolio View
-          <div className="space-y-8">
-            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 p-8">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center space-x-4">
-                  <div className="h-16 w-16 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
-                    <span className="text-white font-bold text-2xl">
-                      {getCustomerName(selectedCustomer.customerId).charAt(0).toUpperCase()}
-                    </span>
-                  </div>
-                  <div>
-                    <h1 className="text-3xl font-bold text-gray-900">{getCustomerName(selectedCustomer.customerId)}</h1>
-                    <p className="text-gray-600">Content Portfolio ({selectedCustomer.portfolios.length} items)</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {selectedCustomer.portfolios.length === 0 ? (
-              <div className="text-center py-16">
-                <div className="bg-gray-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-                  <FileText className="h-8 w-8 text-gray-400" />
-                </div>
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No content created yet</h3>
-                <p className="text-gray-500">This customer doesn't have any content in their portfolio.</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-                {selectedCustomer.portfolios.map((item) => {
-                  const latestVersion = item.versions[item.versions.length - 1];
-                  const firstMedia = latestVersion?.media?.[0];
-                  const isApproved = item.status === 'approved';
-                  
-                  return (
-                    <div key={item.id} className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden hover:shadow-xl transition-all duration-300 group">
-                      {/* Content Preview */}
-                      <div className="relative">
-                        {firstMedia && firstMedia.url && typeof firstMedia.url === 'string' ? (
-                          firstMedia.type === 'image' ? (
-                            <img 
-                              src={firstMedia.url} 
-                              alt={item.title}
-                              className="w-full h-48 object-cover"
-                              onError={(e) => {
-                                e.target.style.display = 'none';
-                                e.target.nextSibling.style.display = 'flex';
-                              }}
-                            />
-                          ) : (
-                            <div className="relative w-full h-48">
-                              <video
-                                src={firstMedia.url}
-                                className="w-full h-full object-cover"
-                                muted
-                                onError={(e) => {
-                                  e.target.style.display = 'none';
-                                  e.target.nextSibling.style.display = 'flex';
-                                }}
-                              />
-                              <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30">
-                                <Play className="h-12 w-12 text-white" />
-                              </div>
-                            </div>
-                          )
-                        ) : null}
-                        
-                        <div className="w-full h-48 bg-gray-200 flex items-center justify-center" style={{ display: firstMedia?.url ? 'none' : 'flex' }}>
-                          <Image className="h-12 w-12 text-gray-400" />
-                        </div>
-                        
-                        <div className="absolute top-4 right-4 flex gap-2">
-                          <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(item.status)}`}>
-                            {getStatusIcon(item.status)}
-                            <span className="ml-1">{item.status.replace('_', ' ').toUpperCase()}</span>
-                          </span>
-                        </div>
-                        
-                        <div className="absolute top-4 left-4 flex gap-2">
-                          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200">
-                            <Image className="h-3 w-3 mr-1" />
-                            {item.totalVersions} Version{item.totalVersions !== 1 ? 's' : ''}
-                          </span>
-                          {latestVersion?.media && latestVersion.media.length > 1 && (
-                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200">
-                              {latestVersion.media.length} Media
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Content Details */}
-                      <div className="p-6">
-                        <h3 className="font-bold text-lg text-gray-900 mb-2">{item.title}</h3>
-                        <p className="text-sm text-gray-600 mb-4 line-clamp-2">{item.description}</p>
-                        
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-gray-500">Platform: {item.platform}</span>
-                            <span className="text-gray-500">
-                              Updated: {formatDate(item.lastUpdated)}
-                            </span>
-                          </div>
-
-                          {item.customerFeedback.length > 0 && (
-                            <div className="flex items-center text-sm text-blue-600">
-                              <MessageSquare className="h-4 w-4 mr-1" />
-                              {item.customerFeedback.length} Comment{item.customerFeedback.length !== 1 ? 's' : ''}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Action Buttons */}
-                        <div className="mt-4 flex gap-2">
-                          <button
-                            onClick={() => handleViewContent(item)}
-                            className="flex-1 bg-gradient-to-r from-purple-600 to-indigo-600 text-white py-2 px-4 rounded-xl hover:from-purple-700 hover:to-indigo-700 text-sm font-medium flex items-center justify-center transition-all duration-200"
-                          >
-                            <Eye className="h-4 w-4 mr-2" />
-                            View Details
-                          </button>
-                          
-                          <button
-                            onClick={() => handleApproveContent(item)}
-                            className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 text-white py-2 px-4 rounded-xl hover:from-green-700 hover:to-emerald-700 text-sm font-medium flex items-center justify-center transition-all duration-200"
-                          >
-                            <CheckCircle className="h-4 w-4 mr-2" />
-                            Approve
-                          </button>
-                          
-                          {item.status === 'approved' && (
-                            <button
-                              onClick={() => handleScheduleContent(item)}
-                              className="flex-1 bg-gradient-to-r from-blue-600 to-cyan-600 text-white py-2 px-4 rounded-xl hover:from-blue-700 hover:to-cyan-700 text-sm font-medium flex items-center justify-center transition-all duration-200"
-                            >
-                              <Send className="h-4 w-4 mr-2" />
-                              Schedule
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        ) : selectedCustomer && !selectedContent ? (
-          // Individual Customer Portfolio View
-          <div className="space-y-8">
-            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 p-8">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center space-x-4">
-                  <div className="h-16 w-16 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
-                    <span className="text-white font-bold text-2xl">
-                      {getCustomerName(selectedCustomer.customerId).charAt(0).toUpperCase()}
-                    </span>
-                  </div>
-                  <div>
-                    <h1 className="text-3xl font-bold text-gray-900">{getCustomerName(selectedCustomer.customerId)}</h1>
-                    <p className="text-gray-600">Content Portfolio ({selectedCustomer.portfolios.length} items)</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {selectedCustomer.portfolios.length === 0 ? (
-              <div className="text-center py-16">
-                <div className="bg-gray-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-                  <FileText className="h-8 w-8 text-gray-400" />
-                </div>
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No content created yet</h3>
-                <p className="text-gray-500">This customer doesn't have any content in their portfolio.</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-                {selectedCustomer.portfolios.map((item) => {
-                  const latestVersion = item.versions[item.versions.length - 1];
-                  const firstMedia = latestVersion?.media?.[0];
-                  const isApproved = item.status === 'approved';
-                  
-                  return (
-                    <div key={item.id} className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden hover:shadow-xl transition-all duration-300 group">
-                      {/* Content Preview */}
-                      <div className="relative">
-                        {firstMedia && firstMedia.url && typeof firstMedia.url === 'string' ? (
-                          firstMedia.type === 'image' ? (
-                            <img 
-                              src={firstMedia.url} 
-                              alt={item.title}
-                              className="w-full h-48 object-cover"
-                              onError={(e) => {
-                                e.target.style.display = 'none';
-                                e.target.nextSibling.style.display = 'flex';
-                              }}
-                            />
-                          ) : (
-                            <div className="relative w-full h-48">
-                              <video
-                                src={firstMedia.url}
-                                className="w-full h-full object-cover"
-                                muted
-                                onError={(e) => {
-                                  e.target.style.display = 'none';
-                                  e.target.nextSibling.style.display = 'flex';
-                                }}
-                              />
-                              <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30">
-                                <Play className="h-12 w-12 text-white" />
-                              </div>
-                            </div>
-                          )
-                        ) : null}
-                        
-                        <div className="w-full h-48 bg-gray-200 flex items-center justify-center" style={{ display: firstMedia?.url ? 'none' : 'flex' }}>
-                          <Image className="h-12 w-12 text-gray-400" />
-                        </div>
-                        
-                        <div className="absolute top-4 right-4 flex gap-2">
-                          <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(item.status)}`}>
-                            {getStatusIcon(item.status)}
-                            <span className="ml-1">{item.status.replace('_', ' ').toUpperCase()}</span>
-                          </span>
-                        </div>
-                        
-                        <div className="absolute top-4 left-4 flex gap-2">
-                          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200">
-                            <Image className="h-3 w-3 mr-1" />
-                            {item.totalVersions} Version{item.totalVersions !== 1 ? 's' : ''}
-                          </span>
-                          {latestVersion?.media && latestVersion.media.length > 1 && (
-                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200">
-                              {latestVersion.media.length} Media
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Content Details */}
-                      <div className="p-6">
-                        <h3 className="font-bold text-lg text-gray-900 mb-2">{item.title}</h3>
-                        <p className="text-sm text-gray-600 mb-4 line-clamp-2">{item.description}</p>
-                        
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-gray-500">Platform: {item.platform}</span>
-                            <span className="text-gray-500">
-                              Updated: {formatDate(item.lastUpdated)}
-                            </span>
-                          </div>
-
-                          {item.customerFeedback.length > 0 && (
-                            <div className="flex items-center text-sm text-blue-600">
-                              <MessageSquare className="h-4 w-4 mr-1" />
-                              {item.customerFeedback.length} Comment{item.customerFeedback.length !== 1 ? 's' : ''}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Action Buttons */}
-                        <div className="mt-4 flex gap-2">
-                          <button
-                            onClick={() => handleViewContent(item)}
-                            className="flex-1 bg-gradient-to-r from-purple-600 to-indigo-600 text-white py-2 px-4 rounded-xl hover:from-purple-700 hover:to-indigo-700 text-sm font-medium flex items-center justify-center transition-all duration-200"
-                          >
-                            <Eye className="h-4 w-4 mr-2" />
-                            View Details
-                          </button>
-                          
-                          <button
-                            onClick={() => handleApproveContent(item)}
-                            className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 text-white py-2 px-4 rounded-xl hover:from-green-700 hover:to-emerald-700 text-sm font-medium flex items-center justify-center transition-all duration-200"
-                          >
-                            <CheckCircle className="h-4 w-4 mr-2" />
-                            Approve
-                          </button>
-                          
-                          {item.status === 'approved' && (
-                            <button
-                              onClick={() => handleScheduleContent(item)}
-                              className="flex-1 bg-gradient-to-r from-blue-600 to-cyan-600 text-white py-2 px-4 rounded-xl hover:from-blue-700 hover:to-cyan-700 text-sm font-medium flex items-center justify-center transition-all duration-200"
-                            >
-                              <Send className="h-4 w-4 mr-2" />
-                              Schedule
-                            </button>
-                          )}
                         </div>
                       </div>
                     </div>
@@ -1935,22 +953,12 @@ function AdminContentPortfolio() {
                   </span>
                   
                   <button
-                    onClick={() => handleApproveContent(selectedContent)}
-                    className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold rounded-xl hover:from-green-700 hover:to-emerald-700 transition-all duration-200"
+                    onClick={() => handleScheduleContent(selectedContent)}
+                    className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-cyan-700 transition-all duration-200"
                   >
-                    <CheckCircle className="h-5 w-5 mr-2" />
-                    Approve Content
+                    <Send className="h-5 w-5 mr-2" />
+                    Schedule Post
                   </button>
-                  
-                  {selectedContent.status === 'approved' && (
-                    <button
-                      onClick={() => handleScheduleContent(selectedContent)}
-                      className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-cyan-700 transition-all duration-200"
-                    >
-                      <Send className="h-5 w-5 mr-2" />
-                      Schedule Post
-                    </button>
-                  )}
                 </div>
               </div>
             </div>
@@ -2113,9 +1121,8 @@ function AdminContentPortfolio() {
                                 </div>
                               )}
 
-                              {/* Comment Markers - Display comments as floating markers on the media */}
+                              {/* Comment Markers */}
                               {commentsForCurrentMedia.map((comment, index) => {
-                                // Calculate floating box position
                                 let boxLeft = 40;
                                 let boxRight = "auto";
                                 const mediaElement = document.querySelector(`img[alt*="Version ${selectedContent.versions[selectedVersionIndex].versionNumber}"], video`);
@@ -2211,6 +1218,15 @@ function AdminContentPortfolio() {
                               <p className="text-gray-900">{selectedContent.versions[selectedVersionIndex].caption || 'No caption'}</p>
                             </div>
                           </div>
+
+                          {selectedContent.versions[selectedVersionIndex].hashtags && (
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Hashtags</label>
+                              <div className="bg-gray-50 rounded-lg p-4">
+                                <p className="text-gray-900">{selectedContent.versions[selectedVersionIndex].hashtags}</p>
+                              </div>
+                            </div>
+                          )}
 
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
@@ -2382,8 +1398,7 @@ function AdminContentPortfolio() {
                           name="platform"
                           value={platform}
                           checked={scheduleFormData.platform === platform}
-                          onChange={(e) => setScheduleFormData(prev => ({ ...prev, platform: e.target.value }))
-                          }
+                          onChange={(e) => setScheduleFormData(prev => ({ ...prev, platform: e.target.value }))}
                           className="mr-2"
                         />
                         <span className="text-sm">
@@ -2401,8 +1416,7 @@ function AdminContentPortfolio() {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Facebook Page</label>
                   <select
                     value={scheduleFormData.pageId}
-                    onChange={(e) => setScheduleFormData(prev => ({ ...prev, pageId: e.target.value }))
-                    }
+                    onChange={(e) => setScheduleFormData(prev => ({ ...prev, pageId: e.target.value }))}
                     className="w-full border border-gray-300 rounded-md px-3 py-2"
                   >
                     <option value="">Select a page</option>
@@ -2420,11 +1434,25 @@ function AdminContentPortfolio() {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Caption</label>
                   <textarea
                     value={scheduleFormData.caption}
-                    onChange={(e) => setScheduleFormData(prev => ({ ...prev, caption: e.target.value }))
-                    }
+                    onChange={(e) => setScheduleFormData(prev => ({ ...prev, caption: e.target.value }))}
                     rows={4}
                     className="w-full border border-gray-300 rounded-md px-3 py-2"
                     placeholder="Write your post caption..."
+                  />
+                </div>
+
+                {/* Hashtags */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+                    <Hash className="h-4 w-4 mr-1" />
+                    Hashtags
+                  </label>
+                  <textarea
+                    value={scheduleFormData.hashtags}
+                    onChange={(e) => setScheduleFormData(prev => ({ ...prev, hashtags: e.target.value }))}
+                    rows={3}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2"
+                    placeholder="#example #hashtags #social"
                   />
                 </div>
 
@@ -2438,8 +1466,7 @@ function AdminContentPortfolio() {
                         <div className="text-center">
                           <button
                             type="button"
-                            onClick={() => setScheduleFormData(prev => ({ ...prev, imageUrl: '' }))
-                            }
+                            onClick={() => setScheduleFormData(prev => ({ ...prev, imageUrl: '' }))}
                             className="text-red-600 hover:text-red-800 text-sm"
                           >
                             Remove Image
@@ -2479,8 +1506,7 @@ function AdminContentPortfolio() {
                     <input
                       type="date"
                       value={scheduleFormData.scheduledDate}
-                      onChange={(e) => setScheduleFormData(prev => ({ ...prev, scheduledDate: e.target.value }))
-                      }
+                      onChange={(e) => setScheduleFormData(prev => ({ ...prev, scheduledDate: e.target.value }))}
                       className="w-full border border-gray-300 rounded-md px-3 py-2"
                     />
                   </div>
@@ -2489,8 +1515,7 @@ function AdminContentPortfolio() {
                     <input
                       type="time"
                       value={scheduleFormData.scheduledTime}
-                      onChange={(e) => setScheduleFormData(prev => ({ ...prev, scheduledTime: e.target.value }))
-                      }
+                      onChange={(e) => setScheduleFormData(prev => ({ ...prev, scheduledTime: e.target.value }))}
                       className="w-full border border-gray-300 rounded-md px-3 py-2"
                     />
                   </div>

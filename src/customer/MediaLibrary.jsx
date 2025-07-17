@@ -3,8 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Upload, Search, Filter, Grid, List, Eye, Download, Edit3, Trash2, Tag, Image, Video, FileText, Plus, X } from 'lucide-react';
 import Logo from '../admin/components/layout/Logo';
 
-const API_URL = process.env.REACT_APP_API_URL;
-
 function MediaLibrary() {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
@@ -31,7 +29,7 @@ function MediaLibrary() {
   // Fetch media items from backend (filtered by customer)
   useEffect(() => {
     setLoading(true);
-    fetch(`${API_URL}/api/media-library?customer_id=${encodeURIComponent(customer_id)}`)
+    fetch(`/api/media-library?customer_id=${encodeURIComponent(customer_id)}`)
       .then(res => res.json())
       .then(data => {
         setMediaItems(Array.isArray(data) ? data : []);
@@ -85,7 +83,7 @@ function MediaLibrary() {
           customer_email
         };
         try {
-          const resp = await fetch(`${API_URL}/api/media-library/upload`, {
+          const resp = await fetch('/api/media-library/upload', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -142,7 +140,7 @@ function MediaLibrary() {
     if (editingItem && newTags.trim()) {
       const tagsArray = newTags.split(',').map(tag => tag.trim()).filter(tag => tag);
       try {
-        const resp = await fetch(`${API_URL}/api/media-library/${editingItem._id}/tags`, {
+        const resp = await fetch(`/api/media-library/${editingItem._id}/tags`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ tags: [...new Set([...(editingItem.tags || []), ...tagsArray])] })
@@ -167,7 +165,7 @@ function MediaLibrary() {
     if (!item) return;
     const tags = (item.tags || []).filter(tag => tag !== tagToRemove);
     try {
-      const resp = await fetch(`${API_URL}/api/media-library/${itemId}/tags`, {
+      const resp = await fetch(`/api/media-library/${itemId}/tags`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tags })
@@ -185,7 +183,7 @@ function MediaLibrary() {
     const confirmed = window.confirm('Are you sure you want to delete this media file?');
     if (!confirmed) return;
     try {
-      const resp = await fetch(`${API_URL}/api/media-library/${itemId}`, { method: 'DELETE' });
+      const resp = await fetch(`/api/media-library/${itemId}`, { method: 'DELETE' });
       if (!resp.ok) throw new Error();
       setMediaItems(prev => prev.filter(item => item._id !== itemId));
       setSelectedMedia(null);

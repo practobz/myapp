@@ -1,75 +1,21 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Upload, Search, Filter, Grid, List, Eye, Download, Edit3, Trash2, Tag, Image, Video, FileText, Plus, X } from 'lucide-react';
+import Logo from '../admin/components/layout/Logo';
 
 function MediaLibrary() {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
-  
-  // Mock media data
-  const [mediaItems, setMediaItems] = useState([
-    {
-      id: 1,
-      name: 'summer-collection-hero.jpg',
-      type: 'image',
-      size: '2.4 MB',
-      uploadDate: '2024-03-15',
-      tags: ['summer', 'collection', 'hero', 'banner'],
-      url: 'https://images.pexels.com/photos/996329/pexels-photo-996329.jpeg?auto=compress&cs=tinysrgb&w=800',
-      thumbnail: 'https://images.pexels.com/photos/996329/pexels-photo-996329.jpeg?auto=compress&cs=tinysrgb&w=300'
-    },
-    {
-      id: 2,
-      name: 'product-showcase.mp4',
-      type: 'video',
-      size: '15.7 MB',
-      uploadDate: '2024-03-14',
-      tags: ['product', 'showcase', 'demo'],
-      url: 'https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_1mb.mp4',
-      thumbnail: 'https://images.pexels.com/photos/1884581/pexels-photo-1884581.jpeg?auto=compress&cs=tinysrgb&w=300'
-    },
-    {
-      id: 3,
-      name: 'brand-logo.svg',
-      type: 'icon',
-      size: '45 KB',
-      uploadDate: '2024-03-13',
-      tags: ['logo', 'brand', 'icon'],
-      url: 'https://images.pexels.com/photos/1667088/pexels-photo-1667088.jpeg?auto=compress&cs=tinysrgb&w=800',
-      thumbnail: 'https://images.pexels.com/photos/1667088/pexels-photo-1667088.jpeg?auto=compress&cs=tinysrgb&w=300'
-    },
-    {
-      id: 4,
-      name: 'winter-campaign.jpg',
-      type: 'image',
-      size: '3.1 MB',
-      uploadDate: '2024-03-12',
-      tags: ['winter', 'campaign', 'seasonal'],
-      url: 'https://images.pexels.com/photos/1040881/pexels-photo-1040881.jpeg?auto=compress&cs=tinysrgb&w=800',
-      thumbnail: 'https://images.pexels.com/photos/1040881/pexels-photo-1040881.jpeg?auto=compress&cs=tinysrgb&w=300'
-    },
-    {
-      id: 5,
-      name: 'testimonial-video.mp4',
-      type: 'video',
-      size: '22.3 MB',
-      uploadDate: '2024-03-11',
-      tags: ['testimonial', 'customer', 'review'],
-      url: 'https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_2mb.mp4',
-      thumbnail: 'https://images.pexels.com/photos/3184291/pexels-photo-3184291.jpeg?auto=compress&cs=tinysrgb&w=300'
-    },
-    {
-      id: 6,
-      name: 'social-icons-pack.zip',
-      type: 'document',
-      size: '156 KB',
-      uploadDate: '2024-03-10',
-      tags: ['social', 'icons', 'pack', 'assets'],
-      url: '#',
-      thumbnail: null
-    }
-  ]);
 
+  // TODO: Replace with actual customer info from context/auth/session
+  const customer_id = "customer123";
+  const customer_name = "John Doe";
+  const customer_email = "john@example.com";
+
+  // Dynamic state
+  const [mediaItems, setMediaItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list'
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
@@ -79,6 +25,21 @@ function MediaLibrary() {
   const [editingItem, setEditingItem] = useState(null);
   const [newTags, setNewTags] = useState('');
   const [dragActive, setDragActive] = useState(false);
+
+  // Fetch media items from backend (filtered by customer)
+  useEffect(() => {
+    setLoading(true);
+    fetch(`/api/media-library?customer_id=${encodeURIComponent(customer_id)}`)
+      .then(res => res.json())
+      .then(data => {
+        setMediaItems(Array.isArray(data) ? data : []);
+        setLoading(false);
+      })
+      .catch(err => {
+        setError('Failed to load media');
+        setLoading(false);
+      });
+  }, [customer_id]);
 
   // Upload handling
   const handleDrag = (e) => {
@@ -95,7 +56,6 @@ function MediaLibrary() {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
-    
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       handleFiles(e.dataTransfer.files);
     }
@@ -107,21 +67,33 @@ function MediaLibrary() {
     }
   };
 
+  // Upload files to backend (base64)
   const handleFiles = (files) => {
     Array.from(files).forEach(file => {
       const reader = new FileReader();
-      reader.onload = (e) => {
-        const newItem = {
-          id: Date.now() + Math.random(),
-          name: file.name,
-          type: getFileType(file.type),
-          size: formatFileSize(file.size),
-          uploadDate: new Date().toISOString().split('T')[0],
+      reader.onload = async (e) => {
+        const base64Data = e.target.result.split(',')[1];
+        const payload = {
+          filename: file.name,
+          contentType: file.type,
+          base64Data,
           tags: [],
-          url: e.target.result,
-          thumbnail: file.type.startsWith('image/') ? e.target.result : null
+          customer_id,
+          customer_name,
+          customer_email
         };
-        setMediaItems(prev => [newItem, ...prev]);
+        try {
+          const resp = await fetch('/api/media-library/upload', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          if (!resp.ok) throw new Error('Upload failed');
+          const saved = await resp.json();
+          setMediaItems(prev => [saved, ...prev]);
+        } catch (err) {
+          setError('Upload failed');
+        }
       };
       reader.readAsDataURL(file);
     });
@@ -157,37 +129,67 @@ function MediaLibrary() {
   };
 
   const filteredItems = mediaItems.filter(item => {
-    const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         item.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
+    const matchesSearch = item.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         (item.tags || []).some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesFilter = filterType === 'all' || item.type === filterType;
     return matchesSearch && matchesFilter;
   });
 
-  const handleAddTags = () => {
+  // Update tags in backend
+  const handleAddTags = async () => {
     if (editingItem && newTags.trim()) {
       const tagsArray = newTags.split(',').map(tag => tag.trim()).filter(tag => tag);
-      setMediaItems(prev => prev.map(item => 
-        item.id === editingItem.id 
-          ? { ...item, tags: [...new Set([...item.tags, ...tagsArray])] }
-          : item
-      ));
+      try {
+        const resp = await fetch(`/api/media-library/${editingItem._id}/tags`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tags: [...new Set([...(editingItem.tags || []), ...tagsArray])] })
+        });
+        if (!resp.ok) throw new Error();
+        const updated = await resp.json();
+        setMediaItems(prev => prev.map(item =>
+          item._id === updated._id ? updated : item
+        ));
+      } catch {
+        setError('Failed to update tags');
+      }
       setNewTags('');
       setEditingItem(null);
       setShowTagModal(false);
     }
   };
 
-  const handleRemoveTag = (itemId, tagToRemove) => {
-    setMediaItems(prev => prev.map(item => 
-      item.id === itemId 
-        ? { ...item, tags: item.tags.filter(tag => tag !== tagToRemove) }
-        : item
-    ));
+  // Remove tag (update backend)
+  const handleRemoveTag = async (itemId, tagToRemove) => {
+    const item = mediaItems.find(i => i._id === itemId);
+    if (!item) return;
+    const tags = (item.tags || []).filter(tag => tag !== tagToRemove);
+    try {
+      const resp = await fetch(`/api/media-library/${itemId}/tags`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tags })
+      });
+      if (!resp.ok) throw new Error();
+      const updated = await resp.json();
+      setMediaItems(prev => prev.map(i => i._id === updated._id ? updated : i));
+    } catch {
+      setError('Failed to remove tag');
+    }
   };
 
-  const handleDeleteItem = (itemId) => {
-    setMediaItems(prev => prev.filter(item => item.id !== itemId));
-    setSelectedMedia(null);
+  // Delete media from backend with confirmation
+  const handleDeleteItem = async (itemId) => {
+    const confirmed = window.confirm('Are you sure you want to delete this media file?');
+    if (!confirmed) return;
+    try {
+      const resp = await fetch(`/api/media-library/${itemId}`, { method: 'DELETE' });
+      if (!resp.ok) throw new Error();
+      setMediaItems(prev => prev.filter(item => item._id !== itemId));
+      setSelectedMedia(null);
+    } catch {
+      setError('Failed to delete');
+    }
   };
 
   return (
@@ -203,7 +205,7 @@ function MediaLibrary() {
               <ArrowLeft className="h-5 w-5" />
             </button>
             <div className="flex items-center">
-              <img src="/aureum-logo.png" alt="Aureum Solutions" className="h-8 w-8" />
+              <Logo size="medium" />
               <span className="ml-2 text-xl font-bold text-[#1a1f2e]">Media Library</span>
             </div>
           </div>
@@ -276,135 +278,145 @@ function MediaLibrary() {
             <h3 className="text-lg font-semibold mb-4">
               Media Files ({filteredItems.length})
             </h3>
-
-            {viewMode === 'grid' ? (
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
-                {filteredItems.map((item) => (
-                  <div
-                    key={item.id}
-                    className="group relative bg-gray-50 rounded-lg p-3 hover:bg-gray-100 transition-colors cursor-pointer"
-                    onClick={() => setSelectedMedia(item)}
-                  >
-                    {/* Thumbnail */}
-                    <div className="aspect-square bg-gray-200 rounded-lg mb-3 flex items-center justify-center overflow-hidden">
-                      {item.thumbnail ? (
-                        <img
-                          src={item.thumbnail}
-                          alt={item.name}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="text-gray-400">
-                          {getTypeIcon(item.type)}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* File Info */}
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium text-gray-900 truncate">{item.name}</p>
-                      <p className="text-xs text-gray-500">{item.size}</p>
-                      
-                      {/* Tags */}
-                      {item.tags.length > 0 && (
-                        <div className="flex flex-wrap gap-1">
-                          {item.tags.slice(0, 2).map((tag) => (
-                            <span
-                              key={tag}
-                              className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-800"
-                            >
-                              {tag}
-                            </span>
-                          ))}
-                          {item.tags.length > 2 && (
-                            <span className="text-xs text-gray-500">+{item.tags.length - 2}</span>
+            {loading && (
+              <div className="text-center py-12 text-gray-400">Loading...</div>
+            )}
+            {error && (
+              <div className="text-center py-2 text-red-500">{error}</div>
+            )}
+            {!loading && !error && (
+              <>
+                {viewMode === 'grid' ? (
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+                    {filteredItems.map((item) => (
+                      <div
+                        key={item._id}
+                        className="group relative bg-gray-50 rounded-lg p-3 hover:bg-gray-100 transition-colors cursor-pointer"
+                        onClick={() => setSelectedMedia(item)}
+                      >
+                        {/* Thumbnail */}
+                        <div className="aspect-square bg-gray-200 rounded-lg mb-3 flex items-center justify-center overflow-hidden">
+                          {item.type === 'image' && item.url ? (
+                            <img
+                              src={item.url}
+                              alt={item.name}
+                              className="w-full h-full object-cover"
+                              onError={e => { e.target.style.opacity = 0.3; e.target.src = ""; }}
+                            />
+                          ) : (
+                            <div className="text-gray-400">
+                              {getTypeIcon(item.type)}
+                            </div>
                           )}
                         </div>
-                      )}
-                    </div>
 
-                    {/* Actions */}
-                    <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditingItem(item);
-                          setShowTagModal(true);
-                        }}
-                        className="p-1 bg-white rounded-full shadow-md hover:bg-gray-50"
-                      >
-                        <Tag className="h-3 w-3 text-gray-600" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {filteredItems.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
-                    onClick={() => setSelectedMedia(item)}
-                  >
-                    <div className="flex items-center space-x-4">
-                      <div className="flex-shrink-0">
-                        {getTypeIcon(item.type)}
-                      </div>
-                      <div>
-                        <p className="font-medium text-gray-900">{item.name}</p>
-                        <p className="text-sm text-gray-500">{item.size} • {item.uploadDate}</p>
-                      </div>
-                      {item.tags.length > 0 && (
-                        <div className="flex flex-wrap gap-1">
-                          {item.tags.map((tag) => (
-                            <span
-                              key={tag}
-                              className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-800"
-                            >
-                              {tag}
-                            </span>
-                          ))}
+                        {/* File Info */}
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium text-gray-900 truncate">{item.name}</p>
+                          <p className="text-xs text-gray-500">{item.size ? formatFileSize(item.size) : ''}</p>
+                          
+                          {/* Tags */}
+                          {(item.tags && item.tags.length > 0) && (
+                            <div className="flex flex-wrap gap-1">
+                              {item.tags.slice(0, 2).map((tag) => (
+                                <span
+                                  key={tag}
+                                  className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-800"
+                                >
+                                  {tag}
+                                </span>
+                              ))}
+                              {item.tags.length > 2 && (
+                                <span className="text-xs text-gray-500">+{item.tags.length - 2}</span>
+                              )}
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditingItem(item);
-                          setShowTagModal(true);
-                        }}
-                        className="p-2 text-gray-400 hover:text-gray-600"
-                      >
-                        <Edit3 className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedMedia(item);
-                        }}
-                        className="p-2 text-gray-400 hover:text-gray-600"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
 
-            {filteredItems.length === 0 && (
-              <div className="text-center py-12">
-                <Upload className="h-12 w-12 text-gray-400 mx-auto mb-3" />
-                <p className="text-gray-500">No media files found.</p>
-                <button
-                  onClick={() => setShowUploadModal(true)}
-                  className="mt-2 text-[#1a1f2e] hover:text-[#2d3546]"
-                >
-                  Upload your first file
-                </button>
-              </div>
+                        {/* Actions */}
+                        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingItem(item);
+                              setShowTagModal(true);
+                            }}
+                            className="p-1 bg-white rounded-full shadow-md hover:bg-gray-50"
+                          >
+                            <Tag className="h-3 w-3 text-gray-600" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {filteredItems.map((item) => (
+                      <div
+                        key={item._id}
+                        className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+                        onClick={() => setSelectedMedia(item)}
+                      >
+                        <div className="flex items-center space-x-4">
+                          <div className="flex-shrink-0">
+                            {getTypeIcon(item.type)}
+                          </div>
+                          <div>
+                            <p className="font-medium text-gray-900">{item.name}</p>
+                            <p className="text-sm text-gray-500">{item.size ? formatFileSize(item.size) : ''} • {item.uploadDate}</p>
+                          </div>
+                          {(item.tags && item.tags.length > 0) && (
+                            <div className="flex flex-wrap gap-1">
+                              {item.tags.map((tag) => (
+                                <span
+                                  key={tag}
+                                  className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-800"
+                                >
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingItem(item);
+                              setShowTagModal(true);
+                            }}
+                            className="p-2 text-gray-400 hover:text-gray-600"
+                          >
+                            <Edit3 className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedMedia(item);
+                            }}
+                            className="p-2 text-gray-400 hover:text-gray-600"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {filteredItems.length === 0 && (
+                  <div className="text-center py-12">
+                    <Upload className="h-12 w-12 text-gray-400 mx-auto mb-3" />
+                    <p className="text-gray-500">No media files found.</p>
+                    <button
+                      onClick={() => setShowUploadModal(true)}
+                      className="mt-2 text-[#1a1f2e] hover:text-[#2d3546]"
+                    >
+                      Upload your first file
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -498,7 +510,7 @@ function MediaLibrary() {
                           >
                             {tag}
                             <button
-                              onClick={() => handleRemoveTag(editingItem.id, tag)}
+                              onClick={() => handleRemoveTag(editingItem._id, tag)}
                               className="ml-2 text-blue-600 hover:text-blue-800"
                             >
                               <X className="h-3 w-3" />
@@ -568,7 +580,7 @@ function MediaLibrary() {
                   <Edit3 className="h-4 w-4" />
                 </button>
                 <button
-                  onClick={() => handleDeleteItem(selectedMedia.id)}
+                  onClick={() => handleDeleteItem(selectedMedia._id)}
                   className="p-2 text-gray-400 hover:text-red-600"
                 >
                   <Trash2 className="h-4 w-4" />

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   User, Smartphone, Mail, MapPin, FileText,
-  Instagram, Facebook, Linkedin, Youtube,
+  Instagram, Facebook, Linkedin, Youtube, Twitter,
   ExternalLink, Settings as SettingsIcon,
   ArrowLeft, CheckCircle, AlertCircle, 
   TrendingUp, Users, BarChart3, Eye,
@@ -12,13 +12,17 @@ import { useAuth } from '../admin/contexts/AuthContext';
 import FacebookIntegration from './Integration/FacebookIntegration';
 import InstagramIntegration from './Integration/InstagramIntegration';
 import YouTubeIntegration from './Integration/YouTubeIntegration';
+import TwitterIntegration from './Integration/TwitterIntegration';
+import LinkedInIntegration from './Integration/LinkedInIntegration';
+import CustomerSocialMediaLinks from '../components/CustomerSocialMediaLinks';
 
 // Enhanced platform configuration with better styling
 const platformIcons = {
   instagram: <Instagram className="h-6 w-6" />,
   facebook: <Facebook className="h-6 w-6" />,
   linkedin: <Linkedin className="h-6 w-6" />,
-  youtube: <Youtube className="h-6 w-6" />
+  youtube: <Youtube className="h-6 w-6" />,
+  twitter: <Twitter className="h-6 w-6" /> // <-- Add Twitter icon
 };
 
 const platforms = [
@@ -65,6 +69,17 @@ const platforms = [
     bgColor: 'bg-blue-50',
     textColor: 'text-blue-700',
     features: ['Professional Networks', 'Company Updates', 'Lead Generation', 'Industry Analytics']
+  },
+  { 
+    key: 'twitter', 
+    label: 'Twitter/X', 
+    description: 'Connect your Twitter/X account for tweet management and analytics',
+    route: '/customer/integration/twitter',
+    icon: platformIcons.twitter,
+    color: 'from-blue-400 to-blue-500',
+    bgColor: 'bg-blue-50',
+    textColor: 'text-blue-500',
+    features: ['Tweet Management', 'Real Analytics', 'Audience Insights', 'Engagement Metrics']
   }
 ];
 
@@ -87,7 +102,8 @@ function Settings() {
     facebook: false,
     instagram: false,
     youtube: false,
-    linkedin: false
+    linkedin: false,
+    twitter: false // <-- Add Twitter status
   });
 
   // Handle URL-based navigation
@@ -271,6 +287,9 @@ function Settings() {
           Contact Support
         </button>
       </div>
+
+      {/* Social Media Links Section */}
+      <CustomerSocialMediaLinks />
     </div>
   );
 
@@ -345,61 +364,9 @@ function Settings() {
         ))}
       </div>
 
-      <div className="bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-200 rounded-2xl p-6">
-        <div className="flex items-center space-x-3 mb-4">
-          <Zap className="h-6 w-6 text-indigo-600" />
-          <h3 className="text-lg font-semibold text-indigo-900">Quick Setup Guide</h3>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <h4 className="font-medium text-indigo-800 mb-3">Recommended Setup Order:</h4>
-            <ol className="space-y-2 text-sm text-indigo-700">
-              <li className="flex items-center space-x-2">
-                <span className="bg-indigo-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">1</span>
-                <span>Start with <strong>Facebook Integration</strong> for comprehensive management</span>
-              </li>
-              <li className="flex items-center space-x-2">
-                <span className="bg-indigo-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">2</span>
-                <span>Connect <strong>Instagram</strong> through Facebook for best results</span>
-              </li>
-              <li className="flex items-center space-x-2">
-                <span className="bg-indigo-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">3</span>
-                <span>Add <strong>YouTube</strong> for video content analytics</span>
-              </li>
-              <li className="flex items-center space-x-2">
-                <span className="bg-indigo-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">4</span>
-                <span>Complete with <strong>LinkedIn</strong> for professional content</span>
-              </li>
-            </ol>
-          </div>
-          <div>
-            <h4 className="font-medium text-indigo-800 mb-3">Pro Tips:</h4>
-            <ul className="space-y-2 text-sm text-indigo-700">
-              <li>• Use business accounts for better analytics access</li>
-              <li>• Enable all permissions for comprehensive data</li>
-              <li>• Regular reconnection may be needed for some platforms</li>
-              <li>• Check our media library for content management</li>
-            </ul>
-          </div>
-        </div>
-        <div className="mt-6 flex flex-wrap gap-3">
-          <button
-            onClick={() => handleIntegrationSelect('facebook')}
-            className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium"
-          >
-            Start with Facebook
-          </button>
-          <button
-            onClick={() => {
-              // Navigate to integrations tab instead of non-existent route
-              setActiveTab('integrations');
-            }}
-            className="bg-white text-blue-600 border border-blue-600 px-6 py-3 rounded-lg hover:bg-blue-50 transition-colors font-medium"
-          >
-            View All Integrations
-          </button>
-        </div>
-      </div>
+      
+        
+          
 
       <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
@@ -464,18 +431,8 @@ function Settings() {
             {activeIntegration === 'facebook' && <FacebookIntegration />}
             {activeIntegration === 'instagram' && <InstagramIntegration />}
             {activeIntegration === 'youtube' && <YouTubeIntegration />}
-            {activeIntegration === 'linkedin' && (
-              <div className="text-center py-12">
-                <Linkedin className="h-16 w-16 mx-auto text-blue-600 mb-4" />
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">LinkedIn Integration</h3>
-                <p className="text-gray-600 mb-4">LinkedIn integration is coming soon!</p>
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 max-w-md mx-auto">
-                  <p className="text-sm text-blue-800">
-                    We're working on LinkedIn integration. Stay tuned for updates!
-                  </p>
-                </div>
-              </div>
-            )}
+            {activeIntegration === 'linkedin' && <LinkedInIntegration />} {/* <-- Add LinkedInIntegration */}
+            {activeIntegration === 'twitter' && <TwitterIntegration />} {/* <-- Add TwitterIntegration */}
           </div>
         </div>
       </div>

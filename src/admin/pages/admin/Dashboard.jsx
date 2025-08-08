@@ -231,7 +231,7 @@ function Dashboard() {
         {/* Quick Actions */}
         <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 p-8">
           <h2 className="text-2xl font-bold text-gray-900 mb-6">Quick Actions</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
             <button 
               onClick={() => navigate('/admin/customers-list')}
               className="flex items-center justify-center p-6 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
@@ -270,6 +270,14 @@ function Dashboard() {
             >
               <Send className="h-6 w-6 mr-3" />
               <span className="font-semibold">Scheduled Posts</span>
+            </button>
+
+            <button 
+              onClick={() => navigate('/admin/customer-social-manager')}
+              className="flex items-center justify-center p-6 bg-gradient-to-r from-cyan-600 to-blue-600 text-white rounded-xl hover:from-cyan-700 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
+            >
+              <Activity className="h-6 w-6 mr-3" />
+              <span className="font-semibold">Social Manager</span>
             </button>
           </div>
         </div>

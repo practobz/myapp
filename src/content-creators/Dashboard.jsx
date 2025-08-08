@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { PlusCircle, Clock, MessageSquare, CheckCircle, Globe, User, Bell, ChevronDown, Palette, Eye } from 'lucide-react';
+import { PlusCircle, Clock, MessageSquare, CheckCircle, Globe, User, Bell, ChevronDown, Palette, Eye, Image } from 'lucide-react';
 import { format } from 'date-fns';
 import { useAuth } from "../admin/contexts/AuthContext";
 import Logo from '../admin/components/layout/Logo';
@@ -325,6 +325,16 @@ function Dashboard() {
                     <div className="flex items-center">
                       <Clock className="h-5 w-5 text-gray-600 mr-3" />
                       <span>Settings</span>
+                    </div>
+                  </button>
+                  {/* AI Image Generator Quick Action */}
+                  <button 
+                    onClick={() => navigate('/content-creator/ai-image-generator')}
+                    className="w-full text-left p-3 bg-gray-50 rounded-md hover:bg-gray-100 transition-colors"
+                  >
+                    <div className="flex items-center">
+                      <Image className="h-5 w-5 text-gray-600 mr-3" />
+                      <span>AI Image Generator</span>
                     </div>
                   </button>
                 </div>

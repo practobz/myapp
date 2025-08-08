@@ -1,41 +1,39 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Facebook, BarChart3, Eye, Calendar, Instagram, Trash2, TrendingUp
+  Facebook, BarChart3, Eye, Calendar, Instagram, Trash2, TrendingUp, Plus, Users, UserCheck
 } from 'lucide-react';
 import TrendChart from '../../components/TrendChart';
 import { subDays, format } from 'date-fns';
+import { getUserData, setUserData, removeUserData, migrateToUserSpecificStorage } from '../../utils/sessionUtils';
 
 // Your Facebook App ID
-const FACEBOOK_APP_ID = '1678447316162226';
+const FACEBOOK_APP_ID = '4416243821942660';
 
 function FacebookIntegration() {
-  // Facebook integration state
+  // Multi-account state
   const [fbSdkLoaded, setFbSdkLoaded] = useState(false);
-  const [fbLoggedIn, setFbLoggedIn] = useState(false);
-  const [fbUserData, setFbUserData] = useState(null);
-  const [fbPages, setFbPages] = useState([]);
+  const [connectedAccounts, setConnectedAccounts] = useState([]);
+  const [activeAccountId, setActiveAccountId] = useState(null);
   const [fbError, setFbError] = useState(null);
+  
+  // Current active account data
+  const [activeAccount, setActiveAccount] = useState(null);
+  const [fbPages, setFbPages] = useState([]);
   const [pageInsights, setPageInsights] = useState({});
   const [pagePosts, setPagePosts] = useState({});
   const [loadingInsights, setLoadingInsights] = useState({});
   const [loadingPosts, setLoadingPosts] = useState({});
   const [analyticsData, setAnalyticsData] = useState({});
   const [loadingAnalytics, setLoadingAnalytics] = useState({});
-
-  // Add time period state
   const [timePeriods, setTimePeriods] = useState({});
-
-  // Add Instagram posts state
   const [instagramPosts, setInstagramPosts] = useState({});
   const [loadingInstagramPosts, setLoadingInstagramPosts] = useState({});
-
-  // Add state for showing/hiding posts
   const [showFacebookPosts, setShowFacebookPosts] = useState({});
   const [showInstagramPosts, setShowInstagramPosts] = useState({});
 
-  // --- New state for post upload modal ---
+  // Post upload modal state
   const [showPostModal, setShowPostModal] = useState(false);
-  const [postTarget, setPostTarget] = useState(null); // { type: 'facebook'|'instagram', page, instagramId }
+  const [postTarget, setPostTarget] = useState(null);
   const [postMessage, setPostMessage] = useState('');
   const [postImageUrl, setPostImageUrl] = useState('');
   const [uploadingPost, setUploadingPost] = useState(false);
@@ -52,28 +50,72 @@ function FacebookIntegration() {
     { value: 365, label: 'Last 1 year' }
   ];
 
-  // --- Facebook SDK load ---
+  // Helper function to check if Facebook API is ready
+  const isFacebookApiReady = () => {
+    return window.FB && window.FB.api && typeof window.FB.api === 'function';
+  };
+
+  // Load connected accounts from localStorage on component mount
   useEffect(() => {
-    // Load Facebook SDK script
+    // First, migrate any existing data to user-specific storage
+    migrateToUserSpecificStorage([
+      'fb_connected_accounts',
+      'fb_active_account_id'
+    ]);
+
+    const savedAccounts = getUserData('fb_connected_accounts');
+    const savedActiveId = getUserData('fb_active_account_id');
+    
+    if (savedAccounts) {
+      setConnectedAccounts(savedAccounts);
+      
+      if (savedActiveId && savedAccounts.some(acc => acc.id === savedActiveId)) {
+        setActiveAccountId(savedActiveId);
+        const activeAcc = savedAccounts.find(acc => acc.id === savedActiveId);
+        setActiveAccount(activeAcc);
+      } else if (savedAccounts.length > 0) {
+        // Set first account as active if no valid active account
+        setActiveAccountId(savedAccounts[0].id);
+        setActiveAccount(savedAccounts[0]);
+        setUserData('fb_active_account_id', savedAccounts[0].id);
+      }
+    }
+  }, []);
+
+  // Load Facebook SDK
+  useEffect(() => {
     if (document.getElementById('facebook-jssdk')) {
-      setFbSdkLoaded(true);
+      // SDK already loaded, check if it's ready
+      const checkReady = () => {
+        if (isFacebookApiReady()) {
+          setFbSdkLoaded(true);
+        } else {
+          setTimeout(checkReady, 100);
+        }
+      };
+      checkReady();
       return;
     }
+    
     window.fbAsyncInit = function() {
       window.FB.init({
         appId: FACEBOOK_APP_ID,
         cookie: true,
         xfbml: false,
-        version: 'v19.0' // Updated to latest version
+        version: 'v19.0'
       });
-      setFbSdkLoaded(true);
-
-      // Check login status on init
-      window.FB.getLoginStatus(response => {
-        statusChangeCallback(response);
-      });
+      
+      // Wait for FB to be fully ready
+      const checkReady = () => {
+        if (isFacebookApiReady()) {
+          setFbSdkLoaded(true);
+        } else {
+          setTimeout(checkReady, 100);
+        }
+      };
+      checkReady();
     };
-    // Load SDK script
+    
     (function(d, s, id){
       var js, fjs = d.getElementsByTagName(s)[0];
       if (d.getElementById(id)) {return;}
@@ -83,118 +125,265 @@ function FacebookIntegration() {
     }(document, 'script', 'facebook-jssdk'));
   }, []);
 
-  // Handle status response
-  const statusChangeCallback = (response) => {
-    if (response.status === 'connected') {
-      setFbLoggedIn(true);
-      fetchFbUserData();
+  // Fetch pages for active account (only when SDK is ready and we have an active account)
+  useEffect(() => {
+    if (activeAccount && fbSdkLoaded && isFacebookApiReady()) {
       fetchFbPages();
-    } else {
-      setFbLoggedIn(false);
-      setFbUserData(null);
-      setFbPages([]);
-      setPageInsights({});
-      setPagePosts({});
     }
+  }, [activeAccount, fbSdkLoaded]);
+
+  // Save accounts to localStorage
+  const saveAccountsToStorage = (accounts) => {
+    setUserData('fb_connected_accounts', accounts);
   };
 
-  // Facebook login with enhanced permissions
+  // Handle Facebook login for new account
   const fbLogin = () => {
-    window.FB.login(statusChangeCallback, {
-      scope: 'pages_show_list,pages_read_engagement,pages_manage_metadata,instagram_basic,email,public_profile,pages_manage_posts,instagram_content_publish',
-      return_scopes: true,
-      auth_type: 'rerequest' // <-- Force re-prompt for permissions if previously declined
-    });
-  };
+    if (!isFacebookApiReady()) {
+      setFbError({ message: 'Facebook SDK is not ready. Please wait and try again.' });
+      return;
+    }
 
-  // Facebook logout
-  const fbLogout = () => {
-    window.FB.logout(response => {
-      setFbLoggedIn(false);
-      setFbUserData(null);
-      setFbPages([]);
-      setPageInsights({});
-      setPagePosts({});
-    });
-  };
+    window.FB.login((response) => {
+      if (response.status === 'connected') {
+        const accessToken = response.authResponse.accessToken;
+        const userId = response.authResponse.userID;
+        
+        // Fetch user data for the new account
+        window.FB.api('/me', { 
+          fields: 'id,name,email,picture',
+          access_token: accessToken 
+        }, function(userResponse) {
+          if (!userResponse || userResponse.error) {
+            setFbError(userResponse.error);
+            return;
+          }
+          
+          const newAccount = {
+            id: userId,
+            name: userResponse.name,
+            email: userResponse.email,
+            picture: userResponse.picture,
+            accessToken: accessToken,
+            connectedAt: new Date().toISOString(),
+            tokenExpiresAt: response.authResponse.expiresIn ? 
+              new Date(Date.now() + (response.authResponse.expiresIn * 1000)).toISOString() : null
+          };
+          
+          // Check if account already exists
+          const existingAccountIndex = connectedAccounts.findIndex(acc => acc.id === userId);
+          let updatedAccounts;
+          
+          if (existingAccountIndex >= 0) {
+            // Update existing account
+            updatedAccounts = [...connectedAccounts];
+            updatedAccounts[existingAccountIndex] = { ...updatedAccounts[existingAccountIndex], ...newAccount };
+          } else {
+            // Add new account
+            updatedAccounts = [...connectedAccounts, newAccount];
+          }
+          
+          setConnectedAccounts(updatedAccounts);
+          saveAccountsToStorage(updatedAccounts);
+          
+          // Set as active account
+          setActiveAccountId(userId);
+          setActiveAccount(newAccount);
+          setUserData('fb_active_account_id', userId);
+          
+          // Clear any existing error
+          setFbError(null);
 
-  // Fetch basic user info
-  const fetchFbUserData = () => {
-    window.FB.api('/me', { fields: 'id,name,email,picture' }, function(response) {
-      if (!response || response.error) {
-        setFbError(response.error);
+          // Request long-lived token
+          requestLongLivedToken(accessToken, newAccount);
+        });
       } else {
-        setFbUserData(response);
+        setFbError({ message: 'Facebook login failed or was cancelled' });
       }
+    }, {
+      scope: 'pages_show_list,pages_read_engagement,pages_manage_metadata,instagram_basic,email,public_profile',
+      return_scopes: true,
+      auth_type: 'rerequest'
     });
   };
 
-  // Add function to fetch analytics from database
-  const fetchStoredAnalytics = async (pageId) => {
+  // Request long-lived token
+  const requestLongLivedToken = async (shortLivedToken, account) => {
     try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/analytics/${pageId}`);
-      const result = await response.json();
+      console.log('🔄 Requesting long-lived token...');
       
-      if (result.success && result.data.length > 0) {
-        // Use the most recent analytics data
-        const latestAnalytics = result.data[0];
-        console.log('✅ Loaded analytics from database:', latestAnalytics.createdAt);
+      const response = await fetch(
+        `https://graph.facebook.com/oauth/access_token?` +
+        `grant_type=fb_exchange_token&` +
+        `client_id=${FACEBOOK_APP_ID}&` +
+        `client_secret=${process.env.REACT_APP_FACEBOOK_APP_SECRET}&` +
+        `fb_exchange_token=${shortLivedToken}`
+      );
+      
+      const data = await response.json();
+      
+      if (data.access_token) {
+        console.log('✅ Received long-lived token');
         
-        setAnalyticsData(prev => ({
-          ...prev,
-          [pageId]: latestAnalytics.analytics
-        }));
+        // Update account with long-lived token
+        const updatedAccount = {
+          ...account,
+          accessToken: data.access_token,
+          tokenType: 'long_lived',
+          tokenExpiresAt: data.expires_in ? 
+            new Date(Date.now() + (data.expires_in * 1000)).toISOString() : null
+        };
         
-        // Update time period to match stored data
-        setTimePeriods(prev => ({ ...prev, [pageId]: latestAnalytics.timePeriod }));
+        // Update in state and storage
+        const updatedAccounts = connectedAccounts.map(acc => 
+          acc.id === account.id ? updatedAccount : acc
+        );
         
-        return true; // Successfully loaded from DB
+        setConnectedAccounts(updatedAccounts);
+        saveAccountsToStorage(updatedAccounts);
+        
+        if (activeAccountId === account.id) {
+          setActiveAccount(updatedAccount);
+        }
+      } else {
+        console.warn('⚠️ Failed to get long-lived token:', data);
       }
-      return false; // No data in DB
     } catch (error) {
-      console.warn('Failed to fetch stored analytics:', error);
-      return false; // Fallback to live API
+      console.warn('⚠️ Error requesting long-lived token:', error);
+      // Continue with short-lived token
     }
   };
 
-  // Add function to store connected page information
-  const storeConnectedPage = async (page) => {
-    try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/connected-pages/store`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          pageId: page.id,
-          pageName: page.name,
-          accessToken: page.access_token,
-          instagramId: page.instagram_details?.id || null,
-          instagramUsername: page.instagram_details?.username || null,
-          userId: fbUserData?.id || 'unknown'
-        })
-      });
+  // Check if token is expired or about to expire
+  const isTokenExpired = (account) => {
+    if (!account.tokenExpiresAt) return false;
+    
+    const expiryTime = new Date(account.tokenExpiresAt);
+    const now = new Date();
+    const bufferTime = 5 * 60 * 1000; // 5 minutes buffer
+    
+    return (expiryTime.getTime() - now.getTime()) < bufferTime;
+  };
+
+  // Handle API errors and token refresh
+  const handleApiError = async (error, pageId = null) => {
+    console.error('Facebook API Error:', error);
+    
+    if (error.code === 190 || error.message?.includes('expired') || error.message?.includes('Session has expired')) {
+      console.log('🔄 Token expired, attempting refresh...');
       
-      const result = await response.json();
-      if (result.success) {
-        console.log('✅ Stored connected page:', page.name);
+      // Try to refresh the current session
+      const refreshSuccess = await refreshCurrentSession();
+      
+      if (refreshSuccess) {
+        console.log('✅ Session refreshed successfully');
+        setFbError(null);
+        
+        // Retry the failed operation if we have a pageId
+        if (pageId && activeAccount) {
+          setTimeout(() => {
+            fetchFbPages();
+          }, 1000);
+        }
+      } else {
+        console.log('❌ Session refresh failed');
+        setFbError({ 
+          message: 'Your Facebook session has expired. Please reconnect your account.',
+          code: 'SESSION_EXPIRED',
+          action: 'reconnect'
+        });
       }
-    } catch (error) {
-      console.warn('Failed to store connected page:', error);
+    } else {
+      setFbError(error);
     }
   };
 
-  // Enhanced fetch pages with detailed information
+  // Refresh current session
+  const refreshCurrentSession = async () => {
+    return new Promise((resolve) => {
+      if (!isFacebookApiReady()) {
+        resolve(false);
+        return;
+      }
+
+      window.FB.getLoginStatus((response) => {
+        if (response.status === 'connected') {
+          // Update token in our storage
+          const newToken = response.authResponse.accessToken;
+          const userId = response.authResponse.userID;
+          
+          if (activeAccount && activeAccount.id === userId) {
+            const updatedAccount = {
+              ...activeAccount,
+              accessToken: newToken,
+              tokenExpiresAt: response.authResponse.expiresIn ? 
+                new Date(Date.now() + (response.authResponse.expiresIn * 1000)).toISOString() : null
+            };
+            
+            setActiveAccount(updatedAccount);
+            
+            // Update in connectedAccounts
+            const updatedAccounts = connectedAccounts.map(acc =>
+              acc.id === userId ? updatedAccount : acc
+            );
+            
+            setConnectedAccounts(updatedAccounts);
+            saveAccountsToStorage(updatedAccounts);
+            
+            resolve(true);
+          } else {
+            resolve(false);
+          }
+        } else {
+          resolve(false);
+        }
+      }, true); // Force fresh status check
+    });
+  };
+
+  // Modified fetchFbPages with error handling
   const fetchFbPages = () => {
+    if (!activeAccount || !isFacebookApiReady()) {
+      setFbError({ message: 'Facebook API is not ready or no active account' });
+      return;
+    }
+    
+    // Check if token is expired before making API call
+    if (isTokenExpired(activeAccount)) {
+      console.log('⚠️ Token appears to be expired, refreshing...');
+      refreshCurrentSession().then(success => {
+        if (success) {
+          // Retry after refresh
+          setTimeout(() => fetchFbPages(), 1000);
+        } else {
+          handleApiError({ 
+            message: 'Session expired', 
+            code: 190 
+          });
+        }
+      });
+      return;
+    }
+    
+    console.log('🔍 Fetching pages...');
+    
     window.FB.api('/me/accounts', {
-      fields: 'id,name,access_token,category,about,fan_count,link,picture,username,website,phone,verification_status,instagram_business_account'
+      fields: 'id,name,access_token,category,about,fan_count,link,picture,username,website,phone,verification_status,instagram_business_account,tasks',
+      access_token: activeAccount.accessToken
     }, function(response) {
       if (!response || response.error) {
-        setFbError(response.error);
+        handleApiError(response.error);
+        console.error('❌ Failed to fetch pages:', response.error);
       } else {
+        console.log('✅ Fetched pages successfully:', response.data.length);
         setFbPages(response.data);
+        setFbError(null); // Clear any previous errors
         
-        // Store each connected page in database
-        response.data.forEach(page => {
-          storeConnectedPage(page);
+        // Store each page
+        response.data.forEach(async (page) => {
+          console.log(`📄 Processing page: ${page.name} (${page.id})`);
+          
+          await storeConnectedPage(page);
           
           if (page.instagram_business_account) {
             fetchInstagramDetails(page.instagram_business_account.id, page.access_token);
@@ -204,35 +393,15 @@ function FacebookIntegration() {
     });
   };
 
-  // Fetch Instagram business account details with correct fields
-  const fetchInstagramDetails = (instagramId, pageAccessToken) => {
-    window.FB.api(
-      `/${instagramId}`,
-      {
-        fields: 'id,username,media_count,followers_count,follows_count,profile_picture_url,biography,website',
-        access_token: pageAccessToken
-      },
-      function(response) {
-        if (!response || response.error) {
-          console.error('Instagram fetch error:', response.error);
-          // Don't set error state for Instagram failures as it's optional
-        } else {
-          // Update state with Instagram details
-          setFbPages(prev => prev.map(page => 
-            page.instagram_business_account?.id === instagramId 
-              ? { ...page, instagram_details: response }
-              : page
-          ));
-        }
-      }
-    );
-  };
-
-  // Remove insights entirely and focus on post engagement metrics
+  // Modified fetchPageInsights with error handling
   const fetchPageInsights = (pageId, pageAccessToken, instagramId = null) => {
+    if (!isFacebookApiReady()) {
+      setFbError({ message: 'Facebook API is not ready' });
+      return;
+    }
+
     setLoadingInsights(prev => ({ ...prev, [pageId]: true }));
     
-    // Fetch Facebook posts
     window.FB.api(
       `/${pageId}/posts`,
       {
@@ -244,12 +413,12 @@ function FacebookIntegration() {
         setLoadingInsights(prev => ({ ...prev, [pageId]: false }));
         if (!response || response.error) {
           console.error('Posts fetch error:', response.error);
+          handleApiError(response.error, pageId);
           setPageInsights(prev => ({
             ...prev,
             [pageId]: []
           }));
         } else {
-          // Calculate Facebook engagement metrics
           const posts = response.data;
           const totalLikes = posts.reduce((sum, post) => sum + (post.likes?.summary?.total_count || 0), 0);
           const totalComments = posts.reduce((sum, post) => sum + (post.comments?.summary?.total_count || 0), 0);
@@ -263,7 +432,6 @@ function FacebookIntegration() {
             { name: 'FB Reactions', value: totalReactions, title: 'Facebook Reactions (Last 10 posts)' }
           ];
           
-          // If Instagram is connected, also fetch Instagram metrics
           if (instagramId) {
             fetchInstagramMetrics(instagramId, pageAccessToken, pageId, engagementMetrics);
           } else {
@@ -277,8 +445,9 @@ function FacebookIntegration() {
     );
   };
 
-  // Fetch Instagram metrics and combine with Facebook metrics
   const fetchInstagramMetrics = (instagramId, pageAccessToken, pageId, fbMetrics) => {
+    if (!isFacebookApiReady()) return;
+
     window.FB.api(
       `/${instagramId}/media`,
       {
@@ -289,13 +458,11 @@ function FacebookIntegration() {
       function(response) {
         if (!response || response.error) {
           console.error('Instagram metrics fetch error:', response.error);
-          // Use only Facebook metrics if Instagram fails
           setPageInsights(prev => ({
             ...prev,
             [pageId]: fbMetrics
           }));
         } else {
-          // Calculate Instagram engagement metrics
           const instagramPosts = response.data;
           const totalInstagramLikes = instagramPosts.reduce((sum, post) => sum + (post.like_count || 0), 0);
           const totalInstagramComments = instagramPosts.reduce((sum, post) => sum + (post.comments_count || 0), 0);
@@ -305,7 +472,6 @@ function FacebookIntegration() {
             { name: 'IG Comments', value: totalInstagramComments, title: 'Instagram Comments (Last 10 posts)' }
           ];
           
-          // Combine Facebook and Instagram metrics
           const combinedMetrics = [...fbMetrics, ...instagramMetrics];
           
           setPageInsights(prev => ({
@@ -317,22 +483,41 @@ function FacebookIntegration() {
     );
   };
 
-  // Enhanced real-time analytics using post data
+  const fetchStoredAnalytics = async (pageId) => {
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/analytics/${pageId}`);
+      const result = await response.json();
+      
+      if (result.success && result.data.length > 0) {
+        const latestAnalytics = result.data[0];
+        console.log('✅ Loaded analytics from database:', latestAnalytics.createdAt);
+        
+        setAnalyticsData(prev => ({
+          ...prev,
+          [pageId]: latestAnalytics.analytics
+        }));
+        
+        setTimePeriods(prev => ({ ...prev, [pageId]: latestAnalytics.timePeriod }));
+        
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.warn('Failed to fetch stored analytics:', error);
+      return false;
+    }
+  };
+
   const fetchPageAnalytics = (pageId, pageAccessToken, instagramId = null, days = 30) => {
     setLoadingAnalytics(prev => ({ ...prev, [pageId]: true }));
     
-    // Update selected time period
     setTimePeriods(prev => ({ ...prev, [pageId]: days }));
     
-    // Skip Facebook Insights API entirely and go straight to post-based analytics
     console.log('Using post-based analytics (Facebook Insights API not available for this app type)');
     fetchPostBasedAnalytics(pageId, pageAccessToken, instagramId, days);
   };
 
-  // Add missing processAnalyticsData function (placeholder since Facebook Insights API isn't working)
   const processAnalyticsData = (insightsData, days = 30) => {
-    // This is a fallback function since Facebook Insights API is not available
-    // It creates empty data structure that matches what generatePostBasedAnalytics returns
     const endDate = new Date();
     const result = {
       engagement: [],
@@ -341,7 +526,6 @@ function FacebookIntegration() {
       shares: []
     };
 
-    // Create empty data points for each day
     for (let i = days - 1; i >= 0; i--) {
       const date = subDays(endDate, i);
       const dateStr = format(date, 'yyyy-MM-dd');
@@ -355,7 +539,6 @@ function FacebookIntegration() {
     return result;
   };
 
-  // Generate Instagram analytics from post data with time period
   const generateInstagramPostAnalytics = (posts, days = 30) => {
     const endDate = new Date();
     const result = {
@@ -364,18 +547,15 @@ function FacebookIntegration() {
       posts: []
     };
 
-    // Group Instagram posts by day for the specified period
     for (let i = days - 1; i >= 0; i--) {
       const date = subDays(endDate, i);
       const dateStr = format(date, 'yyyy-MM-dd');
       
-      // Filter posts from this day
       const dayPosts = posts.filter(post => {
         const postDate = new Date(post.timestamp);
         return format(postDate, 'yyyy-MM-dd') === dateStr;
       });
 
-      // Calculate metrics for this day
       const dayLikes = dayPosts.reduce((sum, post) => sum + (post.like_count || 0), 0);
       const dayComments = dayPosts.reduce((sum, post) => sum + (post.comments_count || 0), 0);
       const postCount = dayPosts.length;
@@ -388,12 +568,15 @@ function FacebookIntegration() {
     return result;
   };
 
-  // Fallback analytics using recent posts data with time period
   const fetchPostBasedAnalytics = (pageId, pageAccessToken, instagramId = null, days = 30) => {
-    // Calculate how many posts to fetch based on days (more days = more posts needed)
-    const postsLimit = Math.min(500, Math.max(50, days * 3)); // Scale posts with days
+    if (!isFacebookApiReady()) {
+      setLoadingAnalytics(prev => ({ ...prev, [pageId]: false }));
+      setFbError({ message: 'Facebook API is not ready' });
+      return;
+    }
+
+    const postsLimit = Math.min(500, Math.max(50, days * 3));
     
-    // Fetch more posts for better analytics
     window.FB.api(
       `/${pageId}/posts`,
       {
@@ -412,7 +595,6 @@ function FacebookIntegration() {
         const analyticsData = generatePostBasedAnalytics(posts, days);
         
         if (instagramId) {
-          // Try to get Instagram data
           fetchInstagramPostAnalytics(instagramId, pageAccessToken, pageId, analyticsData, days);
         } else {
           setAnalyticsData(prev => ({
@@ -421,7 +603,6 @@ function FacebookIntegration() {
           }));
           setLoadingAnalytics(prev => ({ ...prev, [pageId]: false }));
           
-          // Store Facebook-only analytics data
           fetch(`${process.env.REACT_APP_API_URL}/api/analytics/store`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -437,7 +618,6 @@ function FacebookIntegration() {
     );
   };
 
-  // Generate analytics from post data with custom time period
   const generatePostBasedAnalytics = (posts, days = 30) => {
     const endDate = new Date();
     const result = {
@@ -447,18 +627,15 @@ function FacebookIntegration() {
       shares: []
     };
 
-    // Group posts by day for the specified period
     for (let i = days - 1; i >= 0; i--) {
       const date = subDays(endDate, i);
       const dateStr = format(date, 'yyyy-MM-dd');
       
-      // Filter posts from this day
       const dayPosts = posts.filter(post => {
         const postDate = new Date(post.created_time);
         return format(postDate, 'yyyy-MM-dd') === dateStr;
       });
 
-      // Calculate metrics for this day
       const dayLikes = dayPosts.reduce((sum, post) => sum + (post.likes?.summary?.total_count || 0), 0);
       const dayComments = dayPosts.reduce((sum, post) => sum + (post.comments?.summary?.total_count || 0), 0);
       const dayShares = dayPosts.reduce((sum, post) => sum + (post.shares?.count || 0), 0);
@@ -474,9 +651,13 @@ function FacebookIntegration() {
     return result;
   };
 
-  // Fetch Instagram analytics using post data with time period
   const fetchInstagramPostAnalytics = (instagramId, pageAccessToken, pageId, fbData, days = 30) => {
-    const postsLimit = Math.min(500, Math.max(50, days * 2)); // Scale Instagram posts with days
+    if (!isFacebookApiReady()) {
+      setLoadingAnalytics(prev => ({ ...prev, [pageId]: false }));
+      return;
+    }
+
+    const postsLimit = Math.min(500, Math.max(50, days * 2));
     
     window.FB.api(
       `/${instagramId}/media`,
@@ -490,13 +671,11 @@ function FacebookIntegration() {
         
         if (!response || response.error) {
           console.warn('Instagram posts fetch error:', response.error);
-          // Use only Facebook data
           setAnalyticsData(prev => ({
             ...prev,
             [pageId]: { facebook: fbData }
           }));
           
-          // Store Facebook-only analytics data
           fetch(`${process.env.REACT_APP_API_URL}/api/analytics/store`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -521,7 +700,6 @@ function FacebookIntegration() {
           }
         }));
         
-        // Store combined Facebook and Instagram analytics data
         fetch(`${process.env.REACT_APP_API_URL}/api/analytics/store`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -539,15 +717,12 @@ function FacebookIntegration() {
     );
   };
 
-  // Modified analytics fetcher with database-first approach
   const fetchPageAnalyticsWithDbFirst = async (pageId, pageAccessToken, instagramId = null, days = 30) => {
     setLoadingAnalytics(prev => ({ ...prev, [pageId]: true }));
     
-    // Update selected time period
     setTimePeriods(prev => ({ ...prev, [pageId]: days }));
     
     try {
-      // Step 1: Try to load from database first
       const loadedFromDb = await fetchStoredAnalytics(pageId);
       
       if (loadedFromDb) {
@@ -556,7 +731,6 @@ function FacebookIntegration() {
         return;
       }
       
-      // Step 2: Fallback to live API + store result
       console.log('🔄 No stored data found, fetching live analytics...');
       await fetchPageAnalyticsLive(pageId, pageAccessToken, instagramId, days);
       
@@ -566,24 +740,16 @@ function FacebookIntegration() {
     }
   };
 
-  // Renamed original function for live API calls
   const fetchPageAnalyticsLive = async (pageId, pageAccessToken, instagramId = null, days = 30) => {
     console.log('📡 Fetching live analytics from Facebook APIs...');
     fetchPostBasedAnalytics(pageId, pageAccessToken, instagramId, days);
   };
 
-  // Enhanced analytics rendering with data source indicator
   const renderAnalytics = (pageId) => {
     const analytics = analyticsData[pageId];
     const selectedPeriod = timePeriods[pageId] || 30;
     
     if (!analytics) return null;
-
-    // Check if this is recent stored data (less than 24 hours old)
-    const isStoredData = () => {
-      // You could add a timestamp check here if you store when the data was fetched
-      return true; // For now, assume it could be stored data
-    };
 
     return (
       <div className="mt-6 space-y-6">
@@ -623,7 +789,6 @@ function FacebookIntegration() {
         </div>
         
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-          {/* Facebook Analytics */}
           {analytics.facebook?.engagement && (
             <TrendChart
               data={analytics.facebook.engagement}
@@ -660,7 +825,6 @@ function FacebookIntegration() {
             />
           )}
 
-          {/* Instagram Analytics */}
           {analytics.instagram?.likes && (
             <TrendChart
               data={analytics.instagram.likes}
@@ -689,7 +853,6 @@ function FacebookIntegration() {
           )}
         </div>
 
-        {/* Real-time Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
           {analytics.facebook && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
@@ -754,7 +917,6 @@ function FacebookIntegration() {
           </div>
         </div>
 
-        {/* Data Source Information */}
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
           <h6 className="font-medium text-blue-800 mb-2">📊 Smart Analytics Loading</h6>
           <div className="text-sm text-blue-700 space-y-1">
@@ -770,15 +932,18 @@ function FacebookIntegration() {
     );
   };
 
-  // Fetch page posts
   const fetchPagePosts = (pageId, pageAccessToken) => {
+    if (!isFacebookApiReady()) {
+      setFbError({ message: 'Facebook API is not ready' });
+      return;
+    }
+
     setLoadingPosts(prev => ({ ...prev, [pageId]: true }));
 
-    // Only request safe fields for posts, then fetch attachments/media for each post
     window.FB.api(
       `/${pageId}/posts`,
       {
-        fields: 'id,message,created_time,permalink_url', // only safe fields
+        fields: 'id,message,created_time,permalink_url',
         limit: 10,
         access_token: pageAccessToken
       },
@@ -788,7 +953,6 @@ function FacebookIntegration() {
           console.error('Posts fetch error:', response.error);
           setFbError(response.error);
         } else {
-          // For each post, fetch attachments/media if needed
           const postsWithImages = await Promise.all(
             response.data.map(async post => {
               let imageUrl = null;
@@ -836,8 +1000,12 @@ function FacebookIntegration() {
     );
   };
 
-  // Enhanced fetch Instagram posts with better display
   const fetchInstagramPosts = (instagramId, pageAccessToken) => {
+    if (!isFacebookApiReady()) {
+      setFbError({ message: 'Facebook API is not ready' });
+      return;
+    }
+
     setLoadingInstagramPosts(prev => ({ ...prev, [instagramId]: true }));
     
     window.FB.api(
@@ -856,14 +1024,12 @@ function FacebookIntegration() {
             ...prev,
             [instagramId]: response.data
           }));
-          // Auto-show posts after fetching
           setShowInstagramPosts(prev => ({ ...prev, [instagramId]: true }));
         }
       }
     );
   };
 
-  // Render page insights
   const renderPageInsights = (pageId) => {
     const insights = pageInsights[pageId];
     if (!insights || insights.length === 0) return null;
@@ -890,7 +1056,6 @@ function FacebookIntegration() {
     );
   };
 
-  // Enhanced render page posts with toggle functionality
   const renderPagePosts = (pageId) => {
     const posts = pagePosts[pageId];
     const isVisible = showFacebookPosts[pageId];
@@ -995,7 +1160,6 @@ function FacebookIntegration() {
     );
   };
 
-  // Enhanced render Instagram posts with toggle functionality
   const renderInstagramPosts = (instagramId) => {
     const posts = instagramPosts[instagramId];
     const isVisible = showInstagramPosts[instagramId];
@@ -1109,18 +1273,13 @@ function FacebookIntegration() {
     );
   };
 
-  // --- Modal for creating a post ---
   const renderPostModal = () => {
     if (!showPostModal || !postTarget) return null;
     const { type, page, instagramId } = postTarget;
 
-    // --- handle file upload and get a public URL ---
     const handleFileChange = async (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      // You must upload the file to a public image host and use the resulting URL for Instagram
-      // Example: Use Cloudinary, S3, or your own backend API
-      // For demo, we'll just show a warning and clear the field
       setUploadResult({
         success: false,
         error: 'Instagram requires a public image URL. Please upload your image to a public host (e.g. imgur, Cloudinary, S3) and paste the URL below.'
@@ -1151,18 +1310,15 @@ function FacebookIntegration() {
               value={postMessage}
               onChange={e => setPostMessage(e.target.value)}
             />
-            {/* File upload field (shows warning for Instagram) */}
             <input
               className="w-full border rounded p-2"
               type="file"
               accept="image/*"
               onChange={handleFileChange}
             />
-            {/* Show preview if image is selected */}
             {postImageUrl && (
               <img src={postImageUrl} alt="Preview" className="w-full h-32 object-contain rounded border" />
             )}
-            {/* URL input for public image */}
             <input
               className="w-full border rounded p-2"
               type="text"
@@ -1198,7 +1354,6 @@ function FacebookIntegration() {
     );
   };
 
-  // --- Enhanced page details rendering ---
   const renderPageDetails = (page) => (
     <div key={page.id} className="border rounded-lg p-6 mb-4 bg-white shadow-sm">
       <div className="flex items-start space-x-4">
@@ -1282,7 +1437,6 @@ function FacebookIntegration() {
           )}
 
           <div className="flex flex-wrap gap-2">
-            {/* --- Add Create Post button for Facebook --- */}
             <button
               className="bg-blue-700 text-white px-4 py-2 rounded text-sm hover:bg-blue-800 flex items-center space-x-2"
               onClick={() => {
@@ -1292,11 +1446,11 @@ function FacebookIntegration() {
                 setPostImageUrl('');
                 setUploadResult(null);
               }}
+              disabled={!isFacebookApiReady()}
             >
               <Facebook className="h-4 w-4" />
               <span>Create FB Post</span>
             </button>
-            {/* --- Add Create Post button for Instagram if connected --- */}
             {page.instagram_details && (
               <button
                 className="bg-pink-600 text-white px-4 py-2 rounded text-sm hover:bg-pink-700 flex items-center space-x-2"
@@ -1307,6 +1461,7 @@ function FacebookIntegration() {
                   setPostImageUrl('');
                   setUploadResult(null);
                 }}
+                disabled={!isFacebookApiReady()}
               >
                 <Instagram className="h-4 w-4" />
                 <span>Create IG Post</span>
@@ -1314,7 +1469,7 @@ function FacebookIntegration() {
             )}
             <button
               onClick={() => fetchPageInsights(page.id, page.access_token, page.instagram_details?.id)}
-              disabled={loadingInsights[page.id]}
+              disabled={loadingInsights[page.id] || !isFacebookApiReady()}
               className="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600 disabled:opacity-50 flex items-center space-x-2"
             >
               <BarChart3 className="h-4 w-4" />
@@ -1323,7 +1478,7 @@ function FacebookIntegration() {
             
             <button
               onClick={() => fetchPageAnalyticsWithDbFirst(page.id, page.access_token, page.instagram_details?.id, timePeriods[page.id] || 30)}
-              disabled={loadingAnalytics[page.id]}
+              disabled={loadingAnalytics[page.id] || !isFacebookApiReady()}
               className="bg-purple-500 text-white px-4 py-2 rounded text-sm hover:bg-purple-600 disabled:opacity-50 flex items-center space-x-2"
             >
               <TrendingUp className="h-4 w-4" />
@@ -1332,7 +1487,7 @@ function FacebookIntegration() {
             
             <button
               onClick={() => fetchPageAnalyticsLive(page.id, page.access_token, page.instagram_details?.id, timePeriods[page.id] || 30)}
-              disabled={loadingAnalytics[page.id]}
+              disabled={loadingAnalytics[page.id] || !isFacebookApiReady()}
               className="bg-orange-500 text-white px-4 py-2 rounded text-sm hover:bg-orange-600 disabled:opacity-50 flex items-center space-x-2"
             >
               <span>📡</span>
@@ -1341,7 +1496,7 @@ function FacebookIntegration() {
 
             <button
               onClick={() => fetchPagePosts(page.id, page.access_token)}
-              disabled={loadingPosts[page.id]}
+              disabled={loadingPosts[page.id] || !isFacebookApiReady()}
               className="bg-green-500 text-white px-4 py-2 rounded text-sm hover:bg-green-600 disabled:opacity-50 flex items-center space-x-2"
             >
               <Facebook className="h-4 w-4" />
@@ -1351,7 +1506,7 @@ function FacebookIntegration() {
             {page.instagram_details && (
               <button
                 onClick={() => fetchInstagramPosts(page.instagram_details.id, page.access_token)}
-                disabled={loadingInstagramPosts[page.instagram_details.id]}
+                disabled={loadingInstagramPosts[page.instagram_details.id] || !isFacebookApiReady()}
                 className="bg-pink-500 text-white px-4 py-2 rounded text-sm hover:bg-pink-600 disabled:opacity-50 flex items-center space-x-2"
               >
                 <Instagram className="h-4 w-4" />
@@ -1360,7 +1515,6 @@ function FacebookIntegration() {
             )}
           </div>
 
-          {/* Display insights and posts */}
           {renderPageInsights(page.id)}
           {renderAnalytics(page.id)}
           {renderPagePosts(page.id)}
@@ -1370,83 +1524,403 @@ function FacebookIntegration() {
     </div>
   );
 
-  // --- Facebook post upload ---
-  const uploadFacebookPost = async (page) => {
-    setUploadingPost(true);
-    setUploadResult(null);
+  // Switch active account
+  const switchAccount = (accountId) => {
+    const account = connectedAccounts.find(acc => acc.id === accountId);
+    if (account) {
+      setActiveAccountId(accountId);
+      setActiveAccount(account);
+      setUserData('fb_active_account_id', accountId);
+      
+      // Clear current data
+      setFbPages([]);
+      setPageInsights({});
+      setPagePosts({});
+      setAnalyticsData({});
+      setInstagramPosts({});
+    }
+  };
 
-    // Check for required permissions before posting
-    window.FB.api(
-      '/me/permissions',
-      (permRes) => {
-        const perms = permRes?.data || [];
-        const hasManagePosts = perms.some(p => p.permission === 'pages_manage_posts' && p.status === 'granted');
-        const hasReadEngagement = perms.some(p => p.permission === 'pages_read_engagement' && p.status === 'granted');
-        if (!hasManagePosts || !hasReadEngagement) {
-          setUploadingPost(false);
-          setUploadResult({ success: false, error: 'Missing required permissions: pages_manage_posts and pages_read_engagement. Please log out and log in again, granting all permissions.' });
-          return;
-        }
+  // Remove account
+  const removeAccount = (accountId) => {
+    const updatedAccounts = connectedAccounts.filter(acc => acc.id !== accountId);
+    setConnectedAccounts(updatedAccounts);
+    saveAccountsToStorage(updatedAccounts);
+    
+    if (activeAccountId === accountId) {
+      if (updatedAccounts.length > 0) {
+        // Switch to first remaining account
+        switchAccount(updatedAccounts[0].id);
+      } else {
+        // No accounts left
+        setActiveAccountId(null);
+        setActiveAccount(null);
+        setFbPages([]);
+        setPageInsights({});
+        setPagePosts({});
+        setAnalyticsData({});
+        setInstagramPosts({});
+        removeUserData('fb_active_account_id');
+      }
+    }
+  };
 
-        // Proceed with posting
-        window.FB.api(
-          `/${page.id}/feed`,
-          'POST',
+  // Logout all accounts
+  const fbLogoutAll = () => {
+    if (!isFacebookApiReady()) {
+      // Just clear local state if FB API is not available
+      clearAllAccountData();
+      return;
+    }
+
+    // Check if we have a valid Facebook session before calling logout
+    window.FB.getLoginStatus((response) => {
+      if (response.status === 'connected') {
+        // Only call logout if user is actually logged in
+        window.FB.logout(() => {
+          clearAllAccountData();
+        });
+      } else {
+        // User is not logged in to Facebook, just clear local data
+        clearAllAccountData();
+      }
+    });
+  };
+
+  // Helper function to clear all account data
+  const clearAllAccountData = () => {
+    setConnectedAccounts([]);
+    setActiveAccountId(null);
+    setActiveAccount(null);
+    setFbPages([]);
+    setPageInsights({});
+    setPagePosts({});
+    setAnalyticsData({});
+    setInstagramPosts({});
+    removeUserData('fb_connected_accounts');
+    removeUserData('fb_active_account_id');
+  };
+
+  // Store connected page information
+  const storeConnectedPage = async (page) => {
+    try {
+      // First store the page data
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/connected-pages/store`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pageId: page.id,
+          pageName: page.name,
+          accessToken: page.access_token,
+          instagramId: page.instagram_details?.id || null,
+          instagramUsername: page.instagram_details?.username || null,
+          userId: activeAccount?.id || 'unknown',
+          accountName: activeAccount?.name || 'unknown'
+        })
+      });
+      
+      const result = await response.json();
+      if (result.success) {
+        console.log('✅ Stored connected page:', page.name);
+      }
+
+      // Store customer social account for admin access
+      await storeCustomerSocialAccount(page);
+      
+    } catch (error) {
+      console.warn('Failed to store connected page:', error);
+    }
+  };
+
+  // Store customer social account for admin access
+  const storeCustomerSocialAccount = async (page) => {
+    try {
+      // Get current user/customer ID from auth context or localStorage
+      let customerId = null;
+      
+      // Try multiple ways to get customer ID (similar to contentRoutes.js pattern)
+      const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
+      customerId = currentUser.userId || currentUser.id || currentUser._id || currentUser.customer_id;
+      
+      // If still no customer ID, try getting from other possible sources
+      if (!customerId) {
+        const authUser = JSON.parse(localStorage.getItem('user') || '{}');
+        customerId = authUser.userId || authUser.id || authUser._id || authUser.customer_id;
+      }
+      
+      // Log what we found for debugging
+      console.log('🔍 Customer ID search:', {
+        currentUser,
+        customerId,
+        found: !!customerId
+      });
+      
+      if (!customerId) {
+        console.warn('No customer ID found, cannot store social account');
+        return;
+      }
+
+      const accountData = {
+        customerId: customerId,
+        platform: 'facebook',
+        platformUserId: activeAccount.id,
+        name: activeAccount.name,
+        email: activeAccount.email,
+        profilePicture: activeAccount.picture?.data?.url,
+        accessToken: activeAccount.accessToken,
+        pages: [
           {
-            message: postMessage,
-            picture: postImageUrl || undefined,
-            access_token: page.access_token
-          },
-          function(response) {
-            setUploadingPost(false);
-            if (!response || response.error) {
-              setUploadResult({ success: false, error: response?.error?.message || 'Unknown error' });
-            } else {
-              setUploadResult({ success: true, id: response.id });
-            }
+            id: page.id,
+            name: page.name,
+            accessToken: page.access_token,
+            category: page.category,
+            fanCount: page.fan_count,
+            permissions: ['pages_read_engagement'],
+            tasks: page.tasks || [],
+            instagramBusinessAccount: page.instagram_business_account ? {
+              id: page.instagram_business_account.id
+            } : null,
+            tokenValidatedAt: new Date().toISOString()
           }
-        );
+        ],
+        connectedAt: new Date().toISOString()
+      };
+
+      console.log('📤 Sending account data:', { 
+        customerId, 
+        platform: 'facebook', 
+        platformUserId: activeAccount.id,
+        pageTokenLength: accountData.pages[0].accessToken.length,
+        userTokenLength: accountData.accessToken.length
+      });
+
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/customer-social-links`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(accountData)
+      });
+      
+      const result = await response.json();
+      if (result.success) {
+        console.log('✅ Stored customer social account for admin access');
+      } else {
+        console.warn('Failed to store customer social account:', result.error);
+      }
+      
+    } catch (error) {
+      console.warn('Failed to store customer social account:', error);
+    }
+  };
+
+  // Fetch Instagram details
+  const fetchInstagramDetails = (instagramId, pageAccessToken) => {
+    if (!isFacebookApiReady()) return;
+
+    window.FB.api(
+      `/${instagramId}`,
+      {
+        fields: 'id,username,media_count,followers_count,follows_count,profile_picture_url,biography,website',
+        access_token: pageAccessToken
+      },
+      function(response) {
+        if (!response || response.error) {
+          console.error('Instagram fetch error:', response.error);
+        } else {
+          setFbPages(prev => prev.map(page => 
+            page.instagram_business_account?.id === instagramId 
+              ? { ...page, instagram_details: response }
+              : page
+          ));
+        }
       }
     );
   };
 
-  // --- Instagram post upload (photo only) ---
-  const uploadInstagramPost = async (page, instagramId) => {
-    setUploadingPost(true);
-    setUploadResult(null);
-    // Step 1: Create media container
-    window.FB.api(
-      `/${instagramId}/media`,
-      'POST',
-      {
-        image_url: postImageUrl,
-        caption: postMessage,
-        access_token: page.access_token
-      },
-      function(response) {
-        if (response && response.id) {
-          // Step 2: Publish container
-          window.FB.api(
-            `/${instagramId}/media_publish`,
-            'POST',
-            {
-              creation_id: response.id,
-              access_token: page.access_token
-            },
-            function(pubRes) {
-              setUploadingPost(false);
-              if (!pubRes || pubRes.error) {
-                setUploadResult({ success: false, error: pubRes?.error?.message || 'Unknown error' });
-              } else {
-                setUploadResult({ success: true, id: pubRes.id });
-              }
-            }
-          );
-        } else {
-          setUploadingPost(false);
-          setUploadResult({ success: false, error: response?.error?.message || 'Container creation failed' });
-        }
+  // Add token refresh functionality
+  const refreshPageTokens = async () => {
+    if (!activeAccount || !isFacebookApiReady()) {
+      console.warn('Cannot refresh tokens: no active account or FB API not ready');
+      return;
+    }
+
+    console.log('🔄 Refreshing page access tokens...');
+    
+    try {
+      // First refresh the user session
+      const sessionRefreshed = await refreshCurrentSession();
+      
+      if (sessionRefreshed) {
+        // Then re-fetch pages to get fresh page tokens
+        fetchFbPages();
+        alert('✅ Tokens refreshed successfully!');
+      } else {
+        alert('❌ Failed to refresh session. Please try reconnecting your Facebook account.');
       }
+    } catch (error) {
+      console.error('❌ Failed to refresh tokens:', error);
+      alert('❌ Failed to refresh tokens. Please try reconnecting your Facebook account.');
+    }
+  };
+
+  // Enhanced error display
+  const renderError = () => {
+    if (!fbError) return null;
+
+    return (
+      <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+        <div className="flex items-start space-x-3">
+          <div className="flex-shrink-0">
+            <span className="text-red-600 text-xl">⚠️</span>
+          </div>
+          <div className="flex-1">
+            <h4 className="font-medium text-red-800 mb-2">
+              {fbError.code === 'SESSION_EXPIRED' ? 'Session Expired' : 'Facebook API Error'}
+            </h4>
+            <p className="text-red-600 text-sm mb-3">
+              <strong>Error:</strong> {fbError.message || JSON.stringify(fbError)}
+            </p>
+            
+            {fbError.code === 'SESSION_EXPIRED' && (
+              <div className="space-y-2">
+                <p className="text-sm text-red-700">
+                  Your Facebook session has expired. You can try refreshing the tokens or reconnect your account.
+                </p>
+                <div className="flex space-x-2">
+                  <button
+                    onClick={refreshPageTokens}
+                    className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
+                  >
+                    🔄 Refresh Tokens
+                  </button>
+                  <button
+                    onClick={fbLogin}
+                    className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700"
+                  >
+                    🔗 Reconnect Account
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+          <button
+            onClick={() => setFbError(null)}
+            className="flex-shrink-0 text-red-400 hover:text-red-600"
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  // Render account selector with token status
+  const renderAccountSelector = () => {
+    return (
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h4 className="font-medium text-gray-700 flex items-center">
+            <Users className="h-5 w-5 mr-2" />
+            Connected Facebook Accounts ({connectedAccounts.length})
+          </h4>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={refreshPageTokens}
+              disabled={!fbSdkLoaded || !isFacebookApiReady() || !activeAccount}
+              className="bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 text-sm"
+            >
+              <span>🔄</span>
+              <span>Refresh Tokens</span>
+            </button>
+            <button
+              onClick={fbLogin}
+              disabled={!fbSdkLoaded || !isFacebookApiReady()}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 text-sm"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Add Account</span>
+            </button>
+          </div>
+        </div>
+        
+        {connectedAccounts.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {connectedAccounts.map((account) => {
+              const expired = isTokenExpired(account);
+              
+              return (
+                <div
+                  key={account.id}
+                  className={`border rounded-lg p-4 transition-all cursor-pointer ${
+                    activeAccountId === account.id
+                      ? 'border-blue-500 bg-blue-50 shadow-md'
+                      : 'border-gray-200 bg-white hover:border-gray-300'
+                  } ${expired ? 'border-orange-300 bg-orange-50' : ''}`}
+                  onClick={() => switchAccount(account.id)}
+                >
+                  <div className="flex items-center space-x-3">
+                    {account.picture && (
+                      <img
+                        src={account.picture.data.url}
+                        alt={account.name}
+                        className="w-12 h-12 rounded-full"
+                      />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center space-x-2">
+                        <h5 className="font-medium text-gray-900 truncate">{account.name}</h5>
+                        {activeAccountId === account.id && (
+                          <UserCheck className="h-4 w-4 text-blue-600" />
+                        )}
+                        {expired && (
+                          <span className="text-xs bg-orange-200 text-orange-800 px-2 py-1 rounded">
+                            Expired
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-600 truncate">{account.email}</p>
+                      <p className="text-xs text-gray-500">
+                        Connected {new Date(account.connectedAt).toLocaleDateString()}
+                      </p>
+                      {account.tokenExpiresAt && (
+                        <p className="text-xs text-gray-500">
+                          Token expires: {new Date(account.tokenExpiresAt).toLocaleDateString()}
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeAccount(account.id);
+                      }}
+                      className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                      title="Remove account"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Enhanced Token Status Information */}
+        {activeAccount && (
+          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <h6 className="font-medium text-blue-800 mb-2">🔑 Token Management</h6>
+            <div className="text-sm text-blue-700 space-y-1">
+              <p>📝 <strong>Active Account:</strong> {activeAccount.name}</p>
+              <p>🔄 <strong>Auto-Refresh:</strong> Tokens are automatically refreshed when needed</p>
+              <p>⏰ <strong>Session Management:</strong> Only expires when you manually disconnect</p>
+              <p>🔗 <strong>Manual Actions:</strong> Use "Refresh Tokens" if you encounter issues</p>
+              <p>✅ <strong>Permissions:</strong> pages_read_engagement, pages_manage_metadata</p>
+              {activeAccount.tokenExpiresAt && (
+                <p>⏳ <strong>Token Expires:</strong> {new Date(activeAccount.tokenExpiresAt).toLocaleString()}</p>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
     );
   };
 
@@ -1464,14 +1938,15 @@ function FacebookIntegration() {
         </div>
       ) : (
         <>
-          {!fbLoggedIn ? (
+          {connectedAccounts.length === 0 ? (
             <div className="space-y-4">
               <p className="text-sm text-gray-600">
-                Connect your Facebook account to manage your pages and access detailed analytics.
+                Connect your Facebook accounts to manage your pages and access detailed analytics.
               </p>
               <button
                 onClick={fbLogin}
-                className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 flex items-center space-x-2 transition-colors"
+                disabled={!isFacebookApiReady()}
+                className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 transition-colors"
               >
                 <Facebook className="h-5 w-5" />
                 <span>Connect Facebook Account</span>
@@ -1479,51 +1954,54 @@ function FacebookIntegration() {
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  {fbUserData?.picture && (
-                    <img 
-                      src={fbUserData.picture.data.url} 
-                      alt="Profile"
-                      className="w-10 h-10 rounded-full"
-                    />
-                  )}
-                  <div>
-                    <p className="font-medium">Connected as: {fbUserData?.name}</p>
-                    <p className="text-sm text-gray-600">{fbUserData?.email}</p>
+              {renderAccountSelector()}
+              
+              {activeAccount && (
+                <>
+                  <div className="flex items-center justify-between p-4 bg-white rounded-lg border">
+                    <div className="flex items-center space-x-3">
+                      {activeAccount.picture && (
+                        <img 
+                          src={activeAccount.picture.data.url} 
+                          alt="Profile"
+                          className="w-10 h-10 rounded-full"
+                        />
+                      )}
+                      <div>
+                        <p className="font-medium">Active Account: {activeAccount.name}</p>
+                        <p className="text-sm text-gray-600">{activeAccount.email}</p>
+                        {isTokenExpired(activeAccount) && (
+                          <p className="text-xs text-orange-600 font-medium">⚠️ Token expired - refresh recommended</p>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      onClick={fbLogoutAll}
+                      className="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400 transition-colors text-sm"
+                    >
+                      Disconnect All
+                    </button>
                   </div>
-                </div>
-                <button
-                  onClick={fbLogout}
-                  className="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400 transition-colors"
-                >
-                  Disconnect
-                </button>
-              </div>
 
-              <div>
-                <h4 className="font-medium mb-3">Your Facebook Pages:</h4>
-                {fbPages.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">
-                    <Facebook className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                    <p>No pages found or you don't manage any pages.</p>
-                    <p className="text-sm">Make sure you're an admin or editor of at least one Facebook page.</p>
+                  <div>
+                    <h4 className="font-medium mb-3">Pages for {activeAccount.name}:</h4>
+                    {fbPages.length === 0 ? (
+                      <div className="text-center py-8 text-gray-500">
+                        <Facebook className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                        <p>No pages found or you don't manage any pages.</p>
+                        <p className="text-sm">Make sure you're an admin or editor of at least one Facebook page.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {fbPages.map(page => renderPageDetails(page))}
+                      </div>
+                    )}
                   </div>
-                ) : (
-                  <div className="space-y-4">
-                    {fbPages.map(page => renderPageDetails(page))}
-                  </div>
-                )}
-              </div>
+                </>
+              )}
             </div>
           )}
-          {fbError && (
-            <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded">
-              <p className="text-red-600 text-sm">
-                <strong>Error:</strong> {fbError.message || JSON.stringify(fbError)}
-              </p>
-            </div>
-          )}
+          {renderError()}
         </>
       )}
       {renderPostModal()}

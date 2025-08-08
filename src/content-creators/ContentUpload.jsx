@@ -37,6 +37,7 @@ function ContentUpload() {
   const [hashtags, setHashtags] = useState('');
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState({});
 
   const creatorEmail = getCreatorEmail();
 
@@ -55,8 +56,7 @@ function ContentUpload() {
         // First fetch customers to build a map
         const customersRes = await fetch(`${process.env.REACT_APP_API_URL}/api/customers`);
         const customersData = await customersRes.json();
-        console.log('🔍 Customers data received:', customersData);
-        
+
         const customerMap = {};
         if (Array.isArray(customersData.customers)) {
           customersData.customers.forEach(c => {
@@ -68,52 +68,24 @@ function ContentUpload() {
           });
         }
         
-        console.log('🔍 Customer map built:', customerMap);
-        
         // Then fetch calendars with customer context
         const res = await fetch(`${process.env.REACT_APP_API_URL}/calendars`);
         const calendars = await res.json();
         
-        console.log('🔍 All calendars fetched:', calendars.length);
-        console.log('🔍 Looking for assignment ID:', assignmentId);
-        
         let found = null;
-        calendars.forEach((calendar, calIndex) => {
+        calendars.forEach((calendar) => {
           const customerId = calendar.customerId || calendar.customer_id || calendar.customer?._id || '';
           const customerInfo = customerMap[customerId] || {};
           
-          console.log(`📅 Calendar ${calIndex + 1}:`, {
-            calendarId: calendar._id,
-            calendarName: calendar.name,
-            customerId: customerId,
-            customerInfo: customerInfo,
-            contentItemsCount: calendar.contentItems?.length || 0
-          });
-          
           if (Array.isArray(calendar.contentItems)) {
-            calendar.contentItems.forEach((item, itemIndex) => {
+            calendar.contentItems.forEach((item) => {
               const itemId = item.id || item._id || item.title;
               const isMatch = itemId === assignmentId;
-              
-              console.log(`📋 Content item ${itemIndex + 1}:`, {
-                itemId: itemId,
-                itemTitle: item.title,
-                itemDescription: item.description,
-                lookingFor: assignmentId,
-                match: isMatch
-              });
               
               if (isMatch) {
                 // Ensure we get the customer information properly
                 const finalCustomerId = customerId;
                 const finalCustomerName = customerInfo.name || calendar.customerName || calendar.name || '';
-                
-                console.log('🔍 Customer info extracted:', {
-                  customerId: finalCustomerId,
-                  customerName: finalCustomerName,
-                  customerInfo: customerInfo,
-                  calendarName: calendar.name
-                });
                 
                 found = {
                   ...item,
@@ -128,17 +100,7 @@ function ContentUpload() {
                   requirements: item.requirements || [],
                 };
                 
-                console.log('✅ MATCH FOUND! Assignment with complete data:', {
-                  assignmentId: found.id,
-                  customerId: found.customerId,
-                  customerName: found.customerName,
-                  customerEmail: found.customerEmail,
-                  calendarId: found.calendarId,
-                  calendarName: found.calendarName,
-                  platform: found.platform
-                });
-                
-                // Validate customer data is present
+                // Only log if customer data is missing
                 if (!found.customerId) {
                   console.error('❌ Customer ID is missing for assignment:', assignmentId);
                 }
@@ -152,26 +114,6 @@ function ContentUpload() {
         
         if (!found) {
           console.error('❌ Assignment not found:', assignmentId);
-          console.log('🔍 All available assignments:');
-          calendars.forEach(cal => {
-            if (cal.contentItems) {
-              cal.contentItems.forEach(item => {
-                console.log('  - ID:', item.id || item._id || item.title, 'Title:', item.title, 'Calendar:', cal.name);
-              });
-            }
-          });
-        } else {
-          // Final validation
-          if (!found.customerId || !found.customerName) {
-            console.warn('⚠️ Assignment found but missing customer info:', {
-              customerId: found.customerId,
-              customerName: found.customerName,
-              calendarId: found.calendarId,
-              calendarName: found.calendarName
-            });
-          } else {
-            console.log('✅ Assignment has complete customer information');
-          }
         }
         
         setAssignment(found);
@@ -201,7 +143,7 @@ function ContentUpload() {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
-    
+
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       handleFiles(e.dataTransfer.files);
     }
@@ -225,7 +167,11 @@ function ContentUpload() {
             preview: e.target.result,
             name: file.name,
             size: file.size,
-            type: file.type.startsWith('image/') ? 'image' : 'video'
+            type: file.type.startsWith('image/') ? 'image' : 'video',
+            uploaded: false,
+            uploading: false,
+            publicUrl: null,
+            error: null
           };
           setUploadedFiles(prev => [...prev, newFile]);
         };
@@ -246,19 +192,101 @@ function ContentUpload() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
+  // Upload single file using base64 upload through backend API
+  const uploadFileToGCS = async (fileObj) => {
+    try {
+      console.log(`📤 Starting upload for ${fileObj.name} (${formatFileSize(fileObj.size)})`);
+      
+      // Update file status to uploading
+      setUploadedFiles(prev => 
+        prev.map(f => f.id === fileObj.id ? { ...f, uploading: true, error: null } : f)
+      );
+
+      // Convert file to base64
+      const base64Data = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result;
+          // Remove the data URL prefix (e.g., "data:image/png;base64,")
+          const base64 = result.split(',')[1];
+          resolve(base64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(fileObj.file);
+      });
+
+      // Upload using base64 through backend API
+      const uploadResponse = await fetch(`${process.env.REACT_APP_API_URL}/api/gcs/upload-base64`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          filename: fileObj.name,
+          contentType: fileObj.file.type,
+          base64Data: base64Data
+        }),
+      });
+
+      if (!uploadResponse.ok) {
+        const errorData = await uploadResponse.json();
+        throw new Error(`Upload failed: ${errorData.error || uploadResponse.statusText}`);
+      }
+
+      const { publicUrl } = await uploadResponse.json();
+
+      if (!publicUrl) {
+        throw new Error('No public URL returned from upload');
+      }
+
+      console.log(`✅ Successfully uploaded ${fileObj.name} via base64`);
+
+      // Update file status to uploaded
+      setUploadedFiles(prev => 
+        prev.map(f => f.id === fileObj.id ? { 
+          ...f, 
+          uploading: false, 
+          uploaded: true, 
+          publicUrl: publicUrl,
+          error: null 
+        } : f)
+      );
+
+      return {
+        url: publicUrl,
+        type: fileObj.type,
+        name: fileObj.name,
+        size: fileObj.file.size,
+        originalName: fileObj.name
+      };
+
+    } catch (error) {
+      console.error(`❌ Upload failed for ${fileObj.name}:`, error);
+      
+      // Update file status to error
+      setUploadedFiles(prev => 
+        prev.map(f => f.id === fileObj.id ? { 
+          ...f, 
+          uploading: false, 
+          uploaded: false, 
+          error: error.message 
+        } : f)
+      );
+
+      throw error;
+    }
+  };
+
   const handleSubmit = async () => {
     if (uploadedFiles.length === 0) {
       alert('Please upload at least one image or video');
       return;
     }
 
-    // Validate assignment data
     if (!assignment) {
       alert('Assignment data not found. Please try again.');
       return;
     }
-
-    console.log('🔍 Current assignment data before submission:', assignment);
 
     // Enhanced validation and fallback for customer information
     let finalCustomerId = assignment.customerId;
@@ -266,43 +294,25 @@ function ContentUpload() {
     let finalCustomerEmail = assignment.customerEmail;
 
     if (!finalCustomerId || !finalCustomerName) {
-      console.error('❌ Missing customer information in assignment:', {
-        customerId: finalCustomerId,
-        customerName: finalCustomerName,
-        customerEmail: finalCustomerEmail,
-        assignment: assignment
-      });
+      console.error('❌ Missing customer information in assignment');
       
       // Use calendar data as fallback
       finalCustomerId = finalCustomerId || assignment.calendarId || '';
       finalCustomerName = finalCustomerName || assignment.calendarName || 'Unknown Customer';
-      
-      console.warn('⚠️ Using fallback customer info:', {
-        customerId: finalCustomerId,
-        customerName: finalCustomerName
-      });
     }
 
     // Additional validation to ensure we have proper customer name
     if (!finalCustomerName || finalCustomerName === 'Unknown Customer') {
-      // Try to extract from other assignment fields
       finalCustomerName = finalCustomerName || 
                          assignment.customer || 
                          assignment.client || 
                          assignment.calendarName || 
                          'Unknown Customer';
-      
-      console.log('🔄 Final customer name after all fallbacks:', finalCustomerName);
     }
 
     // CRITICAL: Ensure we have valid customer information before proceeding
     if (!finalCustomerId || !finalCustomerName || finalCustomerName === 'Unknown Customer') {
-      console.error('❌ CRITICAL: Cannot proceed without valid customer information!', {
-        customerId: finalCustomerId,
-        customerName: finalCustomerName,
-        assignment: assignment
-      });
-      
+      console.error('❌ CRITICAL: Cannot proceed without valid customer information!');
       alert(`Missing customer information. Please contact support.\n\nDetails:\n- Customer ID: ${finalCustomerId || 'Missing'}\n- Customer Name: ${finalCustomerName || 'Missing'}\n- Assignment ID: ${assignment.id}`);
       return;
     }
@@ -311,61 +321,40 @@ function ContentUpload() {
     const uploadedMediaUrls = [];
 
     try {
-      // Upload each media file through backend proxy
-      for (const fileObj of uploadedFiles) {
-        const safeFileName = fileObj.name.replace(/[^\w.-]/g, '_');
-        
-        // Convert file to base64
-        const base64Data = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => {
-            const base64 = reader.result.split(',')[1];
-            resolve(base64);
-          };
-          reader.onerror = reject;
-          reader.readAsDataURL(fileObj.file);
-        });
+      // Upload all files that haven't been uploaded yet
+      const filesToUpload = uploadedFiles.filter(f => !f.uploaded);
+      const alreadyUploaded = uploadedFiles.filter(f => f.uploaded);
 
-        console.log('Uploading file via backend proxy:', {
-          name: fileObj.name,
-          safeFileName,
-          type: fileObj.file.type,
-          size: fileObj.file.size
-        });
+      console.log(`📤 Uploading ${filesToUpload.length} files, ${alreadyUploaded.length} already uploaded`);
 
-        // Upload via backend proxy
-        const uploadRes = await fetch(`${process.env.REACT_APP_API_URL}/api/gcs/upload-base64`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            filename: safeFileName,
-            contentType: fileObj.file.type,
-            base64Data: base64Data
-          }),
-        });
+      // Upload files in parallel (but limit concurrency to avoid overwhelming the server)
+      const uploadPromises = filesToUpload.map(fileObj => uploadFileToGCS(fileObj));
+      const uploadResults = await Promise.allSettled(uploadPromises);
 
-        if (!uploadRes.ok) {
-          const errorData = await uploadRes.json();
-          console.error('Backend upload failed:', errorData);
-          throw new Error(`Upload failed for ${fileObj.name}: ${errorData.error || 'Unknown error'}`);
+      // Process upload results
+      uploadResults.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          uploadedMediaUrls.push(result.value);
+        } else {
+          console.error(`❌ Failed to upload file ${filesToUpload[index].name}:`, result.reason);
+          throw new Error(`Upload failed for ${filesToUpload[index].name}: ${result.reason.message}`);
         }
+      });
 
-        const uploadResult = await uploadRes.json();
-        
-        if (!uploadResult.success || !uploadResult.publicUrl) {
-          throw new Error(`Invalid response for ${fileObj.name}`);
+      // Add already uploaded files
+      alreadyUploaded.forEach(fileObj => {
+        if (fileObj.publicUrl) {
+          uploadedMediaUrls.push({
+            url: fileObj.publicUrl,
+            type: fileObj.type,
+            name: fileObj.name,
+            size: fileObj.size,
+            originalName: fileObj.name
+          });
         }
+      });
 
-        uploadedMediaUrls.push({
-          url: uploadResult.publicUrl,
-          type: fileObj.type,
-          name: fileObj.name
-        });
-        
-        console.log('Successfully uploaded via backend:', uploadResult.filename);
-      }
+      console.log(`✅ All files uploaded successfully. Total: ${uploadedMediaUrls.length}`);
 
       // Prepare submission data with comprehensive customer information
       const submissionData = {
@@ -373,24 +362,20 @@ function ContentUpload() {
         caption: caption || '',
         hashtags: hashtags || '',
         notes: notes || '',
-        images: uploadedMediaUrls,
-        media: uploadedMediaUrls, // Also store as 'media' for consistency
+        images: uploadedMediaUrls, // ✅ This contains the media URLs and metadata
+        media: uploadedMediaUrls,  // ✅ Duplicate for backward compatibility
         created_by: creatorEmail,
-        // MANDATORY CUSTOMER FIELDS
         customer_id: finalCustomerId,
         customer_name: finalCustomerName,
         customer_email: finalCustomerEmail || assignment.customerEmail || '',
         platform: assignment.platform || 'Instagram',
-        // Additional assignment context for better tracking
         calendar_id: assignment.calendarId,
         calendar_name: assignment.calendarName,
         assignment_title: assignment.title,
         assignment_description: assignment.description,
         due_date: assignment.dueDate,
         status: 'submitted',
-        // Add timestamp for better tracking
         created_at: new Date().toISOString(),
-        // Add type for document identification
         type: 'submission'
       };
 
@@ -404,7 +389,6 @@ function ContentUpload() {
 
       if (missingFields.length > 0) {
         console.error('❌ VALIDATION FAILED: Missing required fields:', missingFields);
-        console.error('❌ Submission data:', submissionData);
         alert(`Validation failed. Missing required fields: ${missingFields.join(', ')}`);
         setSubmitting(false);
         return;
@@ -415,43 +399,13 @@ function ContentUpload() {
           submissionData.customer_name.length < 2 ||
           !submissionData.customer_id ||
           submissionData.customer_id.length < 5) {
-        console.error('❌ QUALITY CHECK FAILED: Invalid customer information quality', {
-          customer_id: submissionData.customer_id,
-          customer_name: submissionData.customer_name,
-          customerIdLength: submissionData.customer_id?.length || 0,
-          customerNameLength: submissionData.customer_name?.length || 0
-        });
+        console.error('❌ QUALITY CHECK FAILED: Invalid customer information quality');
         alert('Invalid customer information detected. Please refresh the page and try again.');
         setSubmitting(false);
         return;
       }
 
-      // Log the exact data being sent with emphasis on customer fields
-      console.log('📝 FINAL VALIDATION PASSED - Sending submission data:');
-      console.log('✅ Customer Information:', {
-        customer_id: submissionData.customer_id,
-        customer_name: submissionData.customer_name,
-        customer_email: submissionData.customer_email,
-        customerIdLength: submissionData.customer_id?.length,
-        customerNameLength: submissionData.customer_name?.length
-      });
-      console.log('✅ Assignment Information:', {
-        assignment_id: submissionData.assignment_id,
-        assignment_title: submissionData.assignment_title,
-        calendar_id: submissionData.calendar_id,
-        calendar_name: submissionData.calendar_name
-      });
-      console.log('✅ Content Information:', {
-        mediaCount: submissionData.images.length,
-        platform: submissionData.platform,
-        created_by: submissionData.created_by,
-        hasCaption: !!submissionData.caption,
-        hasNotes: !!submissionData.notes
-      });
-
-      // Log complete submission data as JSON
-      console.log('📝 COMPLETE SUBMISSION DATA JSON:', JSON.stringify(submissionData, null, 2));
-
+      console.log('📤 Submitting content to API...');
       const response = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions`, {
         method: 'POST',
         headers: {
@@ -467,22 +421,7 @@ function ContentUpload() {
       }
 
       const result = await response.json();
-      console.log('✅ Content submission saved successfully:', result);
-
-      // Verify the saved data includes customer information
-      if (result && (result._id || result.id)) {
-        console.log('✅ Submission saved with ID:', result._id || result.id);
-        if (result.customer_name) {
-          console.log('✅ Customer name saved:', result.customer_name);
-        } else {
-          console.warn('⚠️ Customer name missing in saved result');
-        }
-        if (result.customer_id) {
-          console.log('✅ Customer ID saved:', result.customer_id);
-        } else {
-          console.warn('⚠️ Customer ID missing in saved result');
-        }
-      }
+      console.log('✅ Content submission successful:', result);
 
       alert('Content submitted successfully! The customer will review your work.');
       navigate('/content-creator/assignments');
@@ -496,6 +435,15 @@ function ContentUpload() {
 
   const onButtonClick = () => {
     fileInputRef.current?.click();
+  };
+
+  // Retry upload for failed files
+  const retryUpload = async (fileObj) => {
+    try {
+      await uploadFileToGCS(fileObj);
+    } catch (error) {
+      console.error('Retry failed:', error);
+    }
   };
 
   if (loading) {
@@ -545,7 +493,7 @@ function ContentUpload() {
                 <span className="ml-3 text-xl font-bold text-gray-900">Content Upload</span>
               </div>
             </div>
-            
+
             {/* Assignment Info in Header */}
             <div className="hidden md:flex items-center space-x-4">
               <div className="text-right">
@@ -649,7 +597,7 @@ function ContentUpload() {
               <div className="bg-white rounded-lg shadow-sm p-6">
                 <h3 className="font-semibold text-gray-900 mb-4 flex items-center">
                   <Image className="h-5 w-5 mr-2 text-purple-600" />
-                  Uploaded Media ({uploadedFiles.length})
+                  Media Files ({uploadedFiles.length})
                 </h3>
                 <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
                   {uploadedFiles.map((file) => (
@@ -676,13 +624,46 @@ function ContentUpload() {
                             </div>
                           </div>
                         )}
+                        
+                        {/* Upload Status Overlay */}
+                        {file.uploading && (
+                          <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+                            <div className="text-white text-center">
+                              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mx-auto mb-2"></div>
+                              <p className="text-xs">Uploading...</p>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {file.uploaded && (
+                          <div className="absolute top-2 right-2 bg-green-500 text-white rounded-full p-1">
+                            <Check className="h-3 w-3" />
+                          </div>
+                        )}
+                        
+                        {file.error && (
+                          <div className="absolute inset-0 bg-red-500 bg-opacity-50 flex items-center justify-center">
+                            <div className="text-white text-center p-2">
+                              <X className="h-4 w-4 mx-auto mb-1" />
+                              <p className="text-xs">Failed</p>
+                              <button
+                                onClick={() => retryUpload(file)}
+                                className="text-xs underline mt-1"
+                              >
+                                Retry
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
+                      
                       <button
                         onClick={() => removeFile(file.id)}
                         className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
                       >
                         <X className="h-3 w-3" />
                       </button>
+                      
                       <div className="mt-2">
                         <p className="text-xs font-medium text-gray-900 truncate">{file.name}</p>
                         <div className="flex items-center justify-between">
@@ -695,6 +676,11 @@ function ContentUpload() {
                             {file.type.toUpperCase()}
                           </span>
                         </div>
+                        {file.error && (
+                          <p className="text-xs text-red-500 mt-1 truncate" title={file.error}>
+                            {file.error}
+                          </p>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -803,7 +789,7 @@ function ContentUpload() {
                 </p>
                 <button
                   onClick={handleSubmit}
-                  disabled={submitting || uploadedFiles.length === 0}
+                  disabled={submitting || uploadedFiles.length === 0 || uploadedFiles.some(f => f.uploading)}
                   className="w-full inline-flex items-center justify-center px-6 py-3 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
                 >
                   {submitting ? (
@@ -818,6 +804,11 @@ function ContentUpload() {
                     </>
                   )}
                 </button>
+                {uploadedFiles.some(f => f.uploading) && (
+                  <p className="text-xs text-gray-500 mt-2">
+                    Please wait for all uploads to complete
+                  </p>
+                )}
               </div>
             </div>
           </div>

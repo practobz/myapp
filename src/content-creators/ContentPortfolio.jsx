@@ -432,31 +432,25 @@ function ContentPortfolio() {
                   const firstMedia = latestVersion?.media?.[0];
                   
                   return (
-                    <div
-                      key={item.id}
-                      className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden hover:shadow-xl transition-all duration-300 group"
-                      style={{ width: 340, minWidth: 340, maxWidth: 340, height: 480, minHeight: 480, maxHeight: 480, display: 'flex', flexDirection: 'column' }}
-                    >
+                    <div key={item.id} className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden hover:shadow-xl transition-all duration-300 group w-80 h-[480px] flex flex-col">
                       {/* Content Preview */}
-                      <div className="relative" style={{ width: '100%', height: 192 /* 48 * 4 = 192px */ }}>
+                      <div className="relative w-80 h-48 flex-shrink-0">
                         {firstMedia && firstMedia.url && typeof firstMedia.url === 'string' ? (
                           firstMedia.type === 'image' ? (
                             <img 
                               src={firstMedia.url} 
                               alt={item.title}
-                              className="w-full h-full object-cover"
-                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                              className="w-80 h-48 object-cover"
                               onError={(e) => {
                                 e.target.style.display = 'none';
                                 e.target.nextSibling.style.display = 'flex';
                               }}
                             />
                           ) : (
-                            <div className="relative w-full h-full" style={{ width: '100%', height: '100%' }}>
+                            <div className="relative w-80 h-48">
                               <video
                                 src={firstMedia.url}
-                                className="w-full h-full object-cover"
-                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                className="w-80 h-48 object-cover"
                                 muted
                                 onError={(e) => {
                                   e.target.style.display = 'none';
@@ -471,10 +465,7 @@ function ContentPortfolio() {
                         ) : null}
                         
                         {/* Fallback when no media or media fails to load */}
-                        <div
-                          className="w-full h-full bg-gray-200 flex items-center justify-center"
-                          style={{ display: firstMedia?.url ? 'none' : 'flex', width: '100%', height: '100%' }}
-                        >
+                        <div className="w-80 h-48 bg-gray-200 flex items-center justify-center" style={{ display: firstMedia?.url ? 'none' : 'flex' }}>
                           <Image className="h-12 w-12 text-gray-400" />
                         </div>
                         
@@ -506,7 +497,7 @@ function ContentPortfolio() {
                       </div>
 
                       {/* Content Details */}
-                      <div className="p-6 flex-1 flex flex-col" style={{ overflow: 'hidden' }}>
+                      <div className="p-6 flex flex-col flex-1">
                         <h3 className="font-bold text-lg text-gray-900 mb-2 line-clamp-1">{item.title}</h3>
                         <p className="text-sm text-gray-600 mb-4 line-clamp-2">{item.description}</p>
                         
@@ -564,16 +555,14 @@ function ContentPortfolio() {
                             <Eye className="h-4 w-4 mr-2" />
                             View Details
                           </button>
-                          
-                          {(item.status === 'revision_requested' || item.customerFeedback.some(f => f.status === 'revision_requested')) && (
-                            <button
-                              onClick={() => handleUploadRevision(item.id)}
-                              className="flex-1 bg-gradient-to-r from-orange-500 to-yellow-500 text-white py-2 px-4 rounded-xl hover:from-orange-600 hover:to-yellow-600 text-sm font-medium flex items-center justify-center transition-all duration-200"
-                            >
-                              <Upload className="h-4 w-4 mr-2" />
-                              Upload Revision
-                            </button>
-                          )}
+                          {/* Remove approve/upload revision button, add Schedule button directly */}
+                          <button
+                            onClick={() => navigate(`/content-creator/schedule/${item.id}`)}
+                            className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 text-white py-2 px-4 rounded-xl hover:from-green-700 hover:to-emerald-700 text-sm font-medium flex items-center justify-center transition-all duration-200"
+                          >
+                            <Calendar className="h-4 w-4 mr-2" />
+                            Schedule
+                          </button>
                         </div>
                       </div>
                     </div>

@@ -29,6 +29,8 @@ import ContentReview from './customer/ContentReview';
 import ContentApproval from './customer/ContentApproval';
 import MediaLibrary from './customer/MediaLibrary';
 import Analytics from './customer/Analytics';
+import CustomerSocialMediaLinks from './components/CustomerSocialMediaLinks';
+import AdminCustomerSocialManager from './components/AdminCustomerSocialManager';
 
 // Integration imports
 import FacebookIntegration from './customer/Integration/FacebookIntegration';
@@ -46,6 +48,7 @@ import ContentUpload from './content-creators/ContentUpload';
 import Profile from './content-creators/Profile';
 import Settings from './content-creators/Settings';
 import { useAuth } from './admin/contexts/AuthContext';
+import AIImageGenerator from './components/AIImageGenerator';
 
 // --- ProtectedRoute for all portals ---
 function ProtectedRoutePortal({ children, role }) {
@@ -148,6 +151,13 @@ function App() {
               <Route path="/admin/approve/:id" element={
                 <ProtectedRoutePortal role="admin">
                   <ContentApproval />
+                </ProtectedRoutePortal>
+              } />
+              
+              {/* Admin Social Manager Route */}
+              <Route path="/admin/customer-social-manager" element={
+                <ProtectedRoutePortal role="admin">
+                  <AdminCustomerSocialManager />
                 </ProtectedRoutePortal>
               } />
 
@@ -258,6 +268,13 @@ function App() {
               <Route path="/content-creator/settings" element={
                 <ProtectedRoutePortal role="content_creator">
                   <Settings />
+                </ProtectedRoutePortal>
+              } />
+              
+              {/* AI Image Generator route for content creators */}
+              <Route path="/content-creator/ai-image-generator" element={
+                <ProtectedRoutePortal role="content_creator">
+                  <AIImageGenerator />
                 </ProtectedRoutePortal>
               } />
 

@@ -4,11 +4,9 @@ import {
   ArrowLeft, Upload, Eye, MessageSquare, Calendar, User, Palette, Clock, 
   CheckCircle, AlertCircle, ChevronLeft, ChevronRight, Image, FileText, 
   Play, Video, Filter, Search, Facebook, Instagram, Send, Plus, 
-  MoreVertical, Edit, Trash2, Users, Grid, List, XCircle, Loader2, Hash
+  MoreVertical, Edit, Trash2, Users, Grid, List, XCircle, Loader2, Hash,
+  Youtube, Twitter, Check, X
 } from 'lucide-react';
-
-// Facebook SDK integration
-const FACEBOOK_APP_ID = '1678447316162226';
 
 function AdminContentPortfolio() {
   const navigate = useNavigate();
@@ -34,11 +32,9 @@ function AdminContentPortfolio() {
   const [activeComment, setActiveComment] = useState(null);
   const [hoveredComment, setHoveredComment] = useState(null);
   
-  // Facebook SDK state
-  const [fbSdkLoaded, setFbSdkLoaded] = useState(false);
-  const [fbLoggedIn, setFbLoggedIn] = useState(false);
-  const [fbPages, setFbPages] = useState([]);
-  const [fbUserData, setFbUserData] = useState(null);
+  // Customer social accounts from database
+  const [customerSocialAccounts, setCustomerSocialAccounts] = useState([]);
+  const [loadingSocialAccounts, setLoadingSocialAccounts] = useState(false);
   
   // Schedule modal state
   const [showScheduleModal, setShowScheduleModal] = useState(false);
@@ -46,30 +42,25 @@ function AdminContentPortfolio() {
   const [scheduleFormData, setScheduleFormData] = useState({
     caption: '',
     hashtags: '',
-    imageUrl: '',
+    selectedImages: [], // Changed from imageUrl to selectedImages array
+    availableImages: [], // All available images from the version
     platform: 'facebook',
+    accountId: '',
     pageId: '',
+    channelId: '',
+    twitterAccountId: '',
     scheduledDate: '',
     scheduledTime: '',
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
   });
   const [submitting, setSubmitting] = useState(false);
   
-  // Image browser state
-  const [showImageBrowser, setShowImageBrowser] = useState(false);
-  const [bucketImages, setBucketImages] = useState([]);
-  const [loadingImages, setLoadingImages] = useState(false);
-  
   const fileInputRef = useRef(null);
-
-  // Load Facebook SDK
-  useEffect(() => {
-    loadFacebookSDK();
-  }, []);
 
   useEffect(() => {
     fetchCustomers();
     fetchAllPortfolioItems();
+    fetchAllCustomerSocialAccounts();
   }, []);
 
   useEffect(() => {
@@ -88,79 +79,38 @@ function AdminContentPortfolio() {
     setCommentsForCurrentMedia(filteredComments);
   }, [commentsForVersion, selectedMediaIndex]);
 
-  const loadFacebookSDK = () => {
-    if (document.getElementById('facebook-jssdk')) {
-      setFbSdkLoaded(true);
-      return;
+  // Fetch all customer social accounts from database
+  const fetchAllCustomerSocialAccounts = async () => {
+    try {
+      setLoadingSocialAccounts(true);
+      console.log('📱 Fetching all customer social accounts from database...');
+      
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/admin/customer-social-links`);
+      const data = await response.json();
+      
+      if (data.success) {
+        setCustomerSocialAccounts(data.data || []);
+        console.log('✅ Loaded customer social accounts:', data.data?.length || 0);
+      } else {
+        console.error('❌ Failed to fetch customer social accounts:', data.error);
+      }
+    } catch (error) {
+      console.error('❌ Error fetching customer social accounts:', error);
+    } finally {
+      setLoadingSocialAccounts(false);
     }
-
-    window.fbAsyncInit = function() {
-      window.FB.init({
-        appId: FACEBOOK_APP_ID,
-        cookie: true,
-        xfbml: false,
-        version: 'v19.0'
-      });
-      setFbSdkLoaded(true);
-
-      window.FB.getLoginStatus(response => {
-        if (response.status === 'connected') {
-          setFbLoggedIn(true);
-          fetchFbUserData();
-          fetchFbPages();
-        }
-      });
-    };
-
-    (function(d, s, id){
-      var js, fjs = d.getElementsByTagName(s)[0];
-      if (d.getElementById(id)) {return;}
-      js = d.createElement(s); js.id = id;
-      js.src = "https://connect.facebook.net/en_US/sdk.js";
-      fjs.parentNode.insertBefore(js, fjs);
-    }(document, 'script', 'facebook-jssdk'));
   };
 
-  const handleFbLogin = () => {
-    window.FB.login(response => {
-      if (response.status === 'connected') {
-        setFbLoggedIn(true);
-        fetchFbUserData();
-        fetchFbPages();
-      }
-    }, {
-      scope: 'pages_show_list,pages_read_engagement,pages_manage_posts,instagram_content_publish,instagram_basic'
-    });
+  // Get available social accounts for a customer
+  const getCustomerSocialAccounts = (customerId) => {
+    const customerData = customerSocialAccounts.find(c => c.customerId === customerId);
+    return customerData ? customerData.socialAccounts : [];
   };
 
-  const fetchFbUserData = () => {
-    window.FB.api('/me', { fields: 'id,name,email,picture' }, function(response) {
-      setFbUserData(response);
-    });
-  };
-
-  const fetchFbPages = () => {
-    window.FB.api('/me/accounts', {
-      fields: 'id,name,access_token,instagram_business_account'
-    }, function(response) {
-      if (response && response.data) {
-        const pagesWithDetails = response.data.map(page => {
-          if (page.instagram_business_account) {
-            window.FB.api(`/${page.instagram_business_account.id}`, {
-              fields: 'id,username',
-              access_token: page.access_token
-            }, function(igResponse) {
-              if (igResponse) {
-                page.instagram_details = igResponse;
-                setFbPages(prev => [...prev.filter(p => p.id !== page.id), page]);
-              }
-            });
-          }
-          return page;
-        });
-        setFbPages(pagesWithDetails);
-      }
-    });
+  // Get available pages/accounts for scheduling
+  const getAvailableAccountsForPlatform = (customerId, platform) => {
+    const accounts = getCustomerSocialAccounts(customerId);
+    return accounts.filter(account => account.platform === platform);
   };
 
   const fetchCustomers = async () => {
@@ -358,7 +308,11 @@ function AdminContentPortfolio() {
 
   const handleScheduleContent = (item) => {
     const latestVersion = item.versions[item.versions.length - 1];
-    const firstMedia = latestVersion?.media?.[0];
+    
+    // Get all images from the latest version (filter out videos for carousel)
+    const availableImages = latestVersion?.media?.filter(media => 
+      media.type === 'image' && media.url
+    ) || [];
     
     // Extract caption without hashtags
     const captionText = latestVersion.caption || '';
@@ -369,14 +323,62 @@ function AdminContentPortfolio() {
     setScheduleFormData({
       caption: captionWithoutHashtags,
       hashtags: hashtagsText,
-      imageUrl: firstMedia?.url || '',
+      selectedImages: availableImages.length > 0 ? [availableImages[0]] : [], // Select first image by default
+      availableImages: availableImages,
       platform: 'facebook',
+      accountId: '',
       pageId: '',
+      channelId: '',
+      twitterAccountId: '',
       scheduledDate: '',
       scheduledTime: '',
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
     });
     setShowScheduleModal(true);
+  };
+
+  // Toggle image selection for carousel
+  const toggleImageSelection = (image) => {
+    setScheduleFormData(prev => {
+      const isSelected = prev.selectedImages.some(img => img.url === image.url);
+      
+      if (isSelected) {
+        // Remove from selection
+        return {
+          ...prev,
+          selectedImages: prev.selectedImages.filter(img => img.url !== image.url)
+        };
+      } else {
+        // Add to selection (limit to 10 for Instagram/Facebook)
+        if (prev.selectedImages.length < 10) {
+          return {
+            ...prev,
+            selectedImages: [...prev.selectedImages, image]
+          };
+        }
+      }
+      
+      return prev;
+    });
+  };
+
+  // Select all images for carousel
+  const selectAllImages = () => {
+    const maxImages = (scheduleFormData.platform === 'instagram' || scheduleFormData.platform === 'facebook') ? 10 : 1;
+    const imagesToSelect = scheduleFormData.availableImages.slice(0, maxImages);
+    
+    setScheduleFormData(prev => ({
+      ...prev,
+      selectedImages: imagesToSelect
+    }));
+  };
+
+  // Clear all selected images
+  const clearAllImages = () => {
+    setScheduleFormData(prev => ({
+      ...prev,
+      selectedImages: []
+    }));
   };
 
   const handleSchedulePost = async () => {
@@ -385,119 +387,211 @@ function AdminContentPortfolio() {
       return;
     }
 
-    // Require image for Instagram or Both, and always for Facebook as well
-    if (
-      (!scheduleFormData.imageUrl) &&
-      (scheduleFormData.platform === 'instagram' ||
-        scheduleFormData.platform === 'both' ||
-        scheduleFormData.platform === 'facebook')
-    ) {
-      alert('Please upload an image for your post.');
+    if (!scheduleFormData.accountId) {
+      alert('Please select a social media account');
       return;
     }
 
-    if (!scheduleFormData.pageId) {
-      alert('Please select a Facebook page');
-      return;
-    }
-
-    const selectedPage = fbPages.find(page => page.id === scheduleFormData.pageId);
-    if (!selectedPage) {
-      alert('Selected page not found. Please refresh and try again.');
-      return;
-    }
-
-    if ((scheduleFormData.platform === 'instagram' || scheduleFormData.platform === 'both') && 
-        !selectedPage.instagram_business_account?.id) {
-      alert('Selected page does not have Instagram connected. Please connect Instagram or select Facebook only.');
-      return;
+    // Platform-specific validation
+    if (scheduleFormData.platform === 'facebook' || scheduleFormData.platform === 'instagram') {
+      if (!scheduleFormData.pageId) {
+        alert('Please select a Facebook page');
+        return;
+      }
+      if (scheduleFormData.platform === 'instagram' && scheduleFormData.selectedImages.length === 0) {
+        alert('Instagram requires at least one image');
+        return;
+      }
+    } else if (scheduleFormData.platform === 'youtube') {
+      if (!scheduleFormData.channelId) {
+        alert('Please select a YouTube channel');
+        return;
+      }
+      if (scheduleFormData.selectedImages.length === 0) {
+        alert('Please upload a video for YouTube post');
+        return;
+      }
     }
 
     setSubmitting(true);
     try {
       const scheduledDateTime = new Date(`${scheduleFormData.scheduledDate}T${scheduleFormData.scheduledTime}`);
-      // Combine caption and hashtags
       const fullCaption = scheduleFormData.hashtags 
         ? `${scheduleFormData.caption}\n\n${scheduleFormData.hashtags}`
         : scheduleFormData.caption;
 
-      const postData = {
+      // Get the selected account details
+      const selectedAccount = getCustomerSocialAccounts(selectedContentForSchedule.customerId)
+        .find(acc => acc._id === scheduleFormData.accountId);
+
+      if (!selectedAccount) {
+        throw new Error('Selected social media account not found');
+      }
+
+      // Get page details if needed
+      let selectedPage = null;
+      if (scheduleFormData.pageId && selectedAccount.pages) {
+        selectedPage = selectedAccount.pages.find(page => page.id === scheduleFormData.pageId);
+        
+        // CRITICAL: Validate page has access token
+        if (!selectedPage) {
+          throw new Error('Selected page not found in account data.');
+        }
+        
+        if (!selectedPage.accessToken || selectedPage.accessToken.length < 50) {
+          throw new Error('Selected page does not have a valid access token. Please reconnect the Facebook account to obtain page access tokens.');
+        }
+        
+        console.log('✅ Using page access token for posting:', {
+          pageName: selectedPage.name,
+          pageId: selectedPage.id,
+          hasToken: !!selectedPage.accessToken,
+          tokenLength: selectedPage.accessToken.length,
+          tokenType: selectedPage.accessToken.length > 200 ? 'likely-page-token' : 'likely-user-token'
+        });
+      }
+
+      // Get YouTube channel details if needed
+      let selectedChannel = null;
+      if (scheduleFormData.channelId && selectedAccount.channels) {
+        selectedChannel = selectedAccount.channels.find(channel => channel.id === scheduleFormData.channelId);
+        
+        if (!selectedChannel) {
+          throw new Error('Selected YouTube channel not found in account data.');
+        }
+        
+        if (!selectedAccount.accessToken || selectedAccount.accessToken.length < 50) {
+          throw new Error('Selected YouTube account does not have a valid access token. Please reconnect the YouTube account.');
+        }
+        
+        console.log('✅ Using YouTube access token for posting:', {
+          channelName: selectedChannel.name,
+          channelId: selectedChannel.id,
+          hasToken: !!selectedAccount.accessToken,
+          tokenLength: selectedAccount.accessToken.length
+        });
+      }
+
+      const endpoint = `${process.env.REACT_APP_API_URL}/api/scheduled-posts`;
+      let postData = {
         caption: fullCaption,
-        imageUrl: scheduleFormData.imageUrl,
-        platform: scheduleFormData.platform,
-        pageId: scheduleFormData.pageId,
-        pageName: selectedPage.name,
-        accessToken: selectedPage.access_token,
-        instagramId: scheduleFormData.platform === 'instagram' || scheduleFormData.platform === 'both' 
-          ? selectedPage.instagram_business_account?.id
-          : null,
         scheduledAt: scheduledDateTime.toISOString(),
         timezone: scheduleFormData.timezone,
         status: 'pending',
         contentId: selectedContentForSchedule.id,
-        customerId: selectedContentForSchedule.customerId
+        customerId: selectedContentForSchedule.customerId,
+        platform: scheduleFormData.platform,
+        // Account details from database
+        accountId: selectedAccount._id,
+        platformUserId: selectedAccount.platformUserId,
+        accessToken: selectedAccount.accessToken, // User token for reference
+        // Multiple images for carousel
+        imageUrls: scheduleFormData.selectedImages.map(img => img.url),
+        isCarousel: scheduleFormData.selectedImages.length > 1
       };
 
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/scheduled-posts`, {
+      if (scheduleFormData.platform === 'facebook' || scheduleFormData.platform === 'instagram') {
+        // CRITICAL: Ensure page access token is included
+        if (!selectedPage.accessToken) {
+          throw new Error('Page access token is required for Facebook/Instagram posting');
+        }
+        
+        Object.assign(postData, {
+          imageUrl: scheduleFormData.selectedImages[0]?.url || '', // Keep backward compatibility
+          imageUrls: scheduleFormData.selectedImages.map(img => img.url), // Multiple images
+          pageId: scheduleFormData.pageId,
+          pageName: selectedPage?.name,
+          pageAccessToken: selectedPage.accessToken, // This is the critical page token
+          instagramId: scheduleFormData.platform === 'instagram' 
+            ? selectedPage?.instagramBusinessAccount?.id
+            : null,
+          isCarousel: scheduleFormData.selectedImages.length > 1
+        });
+        
+        // Extra validation for Instagram
+        if (scheduleFormData.platform === 'instagram') {
+          if (!selectedPage?.instagramBusinessAccount?.id) {
+            throw new Error('Selected page does not have an Instagram Business Account connected.');
+          }
+        }
+        
+        // Final validation log
+        console.log('📋 Final post data validation:', {
+          hasPageAccessToken: !!postData.pageAccessToken,
+          pageAccessTokenLength: postData.pageAccessToken?.length,
+          pageId: postData.pageId,
+          platform: postData.platform,
+          imageCount: postData.imageUrls?.length || 0,
+          isCarousel: postData.isCarousel
+        });
+        
+      } else if (scheduleFormData.platform === 'youtube') {
+        // CRITICAL: Include all required YouTube fields
+        Object.assign(postData, {
+          videoUrl: scheduleFormData.selectedImages[0]?.url || '', // Keep backward compatibility
+          imageUrls: scheduleFormData.selectedImages.map(img => img.url), // For multiple videos (if supported)
+          channelId: scheduleFormData.channelId,
+          channelName: selectedChannel.name,
+          youtubeAccessToken: selectedAccount.accessToken // Use the user access token
+        });
+        
+        // Final validation log for YouTube
+        console.log('📋 Final YouTube post data validation:', {
+          hasAccessToken: !!postData.youtubeAccessToken,
+          accessTokenLength: postData.youtubeAccessToken?.length,
+          channelId: postData.channelId,
+          channelName: postData.channelName,
+          hasVideoUrl: !!postData.videoUrl,
+          mediaCount: postData.imageUrls?.length || 0
+        });
+        
+      } else if (scheduleFormData.platform === 'twitter') {
+        Object.assign(postData, {
+          twitterAccountId: selectedAccount.platformUserId,
+          sessionId: selectedAccount.sessionId, // If you store this
+          imageUrls: scheduleFormData.selectedImages.map(img => img.url), // Twitter supports up to 4 images
+        });
+      }
+
+      console.log('📤 Scheduling post with validated data:', {
+        platform: postData.platform,
+        pageId: postData.pageId,
+        channelId: postData.channelId,
+        hasPageToken: !!postData.pageAccessToken,
+        hasYouTubeToken: !!postData.youtubeAccessToken,
+        hasUserToken: !!postData.accessToken,
+        scheduledAt: postData.scheduledAt,
+        imageCount: postData.imageUrls?.length || 0,
+        isCarousel: postData.isCarousel
+      });
+
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(postData)
       });
 
       if (response.ok) {
-        // Try to parse the response for partial success/failure
-        let result;
-        try {
-          result = await response.json();
-        } catch {
-          result = {};
-        }
-        // Check for partial success/failure keys
-        if (result.partialSuccess) {
-          let msg = '';
-          if (result.facebook && result.facebook.success) {
-            msg += `✅ FB: ${result.facebook.id || 'Success'}\n`;
-          }
-          if (result.instagram && !result.instagram.success) {
-            msg += `❌ IG Failed\nInstagram: ${result.instagram.error || 'Unknown error.'}`;
-          }
-          alert(msg.trim());
-        } else {
-          alert('Post scheduled successfully!');
-        }
+        alert(`Post with ${scheduleFormData.selectedImages.length} ${scheduleFormData.selectedImages.length === 1 ? 'image' : 'images'} scheduled successfully!`);
         setShowScheduleModal(false);
         setSelectedContentForSchedule(null);
         setScheduleFormData({
           caption: '',
           hashtags: '',
-          imageUrl: '',
+          selectedImages: [],
+          availableImages: [],
           platform: 'facebook',
+          accountId: '',
           pageId: '',
+          channelId: '',
+          twitterAccountId: '',
           scheduledDate: '',
           scheduledTime: '',
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
         });
       } else {
-        // Try to parse error for partial success/failure
-        let errorData;
-        try {
-          errorData = await response.json();
-        } catch {
-          errorData = {};
-        }
-        // If partial success, show details
-        if (errorData.partialSuccess) {
-          let msg = '';
-          if (errorData.facebook && errorData.facebook.success) {
-            msg += `✅ FB: ${errorData.facebook.id || 'Success'}\n`;
-          }
-          if (errorData.instagram && !errorData.instagram.success) {
-            msg += `❌ IG Failed\nInstagram: ${errorData.instagram.error || 'Unknown error.'}`;
-          }
-          alert(msg.trim());
-        } else {
-          throw new Error(errorData.error || 'Failed to schedule post');
-        }
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to schedule post');
       }
     } catch (error) {
       console.error('Schedule post error:', error);
@@ -536,7 +630,14 @@ function AdminContentPortfolio() {
           }
 
           const result = await response.json();
-          setScheduleFormData(prev => ({ ...prev, imageUrl: result.publicUrl }));
+          const newImage = { url: result.publicUrl, type: 'image' };
+          
+          // Add to available images and select it
+          setScheduleFormData(prev => ({
+            ...prev,
+            availableImages: [...prev.availableImages, newImage],
+            selectedImages: [...prev.selectedImages, newImage]
+          }));
           
         } catch (error) {
           console.error('Base64 upload failed:', error);
@@ -568,7 +669,7 @@ function AdminContentPortfolio() {
 
   const filteredCustomerPortfolios = allPortfolioItems.filter(customerData => {
     const customer = customers.find(c => c._id === customerData.customerId);
-    const customerName = customer ? customer.name.toLowerCase() : '';
+    const customerName = customer ? customer.name : `Customer ${customerData.customerId}`;
     
     if (searchTerm && !customerName.includes(searchTerm.toLowerCase())) {
       return false;
@@ -581,6 +682,13 @@ function AdminContentPortfolio() {
     return true;
   });
 
+  // Helper to detect video URLs
+  const isVideoUrl = (url) => {
+    if (!url) return false;
+    const ext = url.split('.').pop().toLowerCase();
+    return ['mp4', 'webm', 'ogg', 'mov', 'avi'].includes(ext);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
@@ -592,7 +700,7 @@ function AdminContentPortfolio() {
     );
   }
 
-  return (
+   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       {/* Header */}
       <header className="bg-white/80 backdrop-blur-sm shadow-sm border-b border-gray-200/50 sticky top-0 z-10">
@@ -621,28 +729,29 @@ function AdminContentPortfolio() {
         </div>
       </header>
 
-      {/* Facebook Connection Status */}
-      {!fbLoggedIn && (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <Facebook className="h-6 w-6 text-blue-600" />
-                <div>
-                  <h3 className="font-medium text-gray-900">Connect Facebook Account</h3>
-                  <p className="text-sm text-gray-600">Connect your Facebook account to schedule posts</p>
-                </div>
+      {/* Platform Connection Status */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-1">
+                <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                <span className="text-sm font-medium">Social Media Accounts</span>
               </div>
-              <button
-                onClick={handleFbLogin}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-              >
-                Connect
-              </button>
+              <span className="text-sm text-gray-600">
+                Connected via database ({customerSocialAccounts.reduce((total, customer) => total + customer.socialAccounts.length, 0)} total accounts)
+              </span>
             </div>
+            <button
+              onClick={fetchAllCustomerSocialAccounts}
+              disabled={loadingSocialAccounts}
+              className="bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-700 disabled:opacity-50"
+            >
+              {loadingSocialAccounts ? 'Loading...' : 'Refresh'}
+            </button>
           </div>
         </div>
-      )}
+      </div>
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -814,22 +923,13 @@ function AdminContentPortfolio() {
                       {/* Content Preview */}
                       <div className="relative h-48 flex-shrink-0">
                         {firstMedia && firstMedia.url && typeof firstMedia.url === 'string' ? (
-                          firstMedia.type === 'image' ? (
-                            <img 
-                              src={firstMedia.url} 
-                              alt={item.title}
-                              className="w-full h-full object-cover"
-                              onError={(e) => {
-                                e.target.style.display = 'none';
-                                e.target.nextSibling.style.display = 'flex';
-                              }}
-                            />
-                          ) : (
+                          isVideoUrl(firstMedia.url) ? (
                             <div className="relative w-full h-full">
                               <video
                                 src={firstMedia.url}
                                 className="w-full h-full object-cover"
                                 muted
+                                controls
                                 onError={(e) => {
                                   e.target.style.display = 'none';
                                   e.target.nextSibling.style.display = 'flex';
@@ -839,6 +939,16 @@ function AdminContentPortfolio() {
                                 <Play className="h-12 w-12 text-white" />
                               </div>
                             </div>
+                          ) : (
+                            <img 
+                              src={firstMedia.url} 
+                              alt={item.title}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                e.target.style.display = 'none';
+                                e.target.nextSibling.style.display = 'flex';
+                              }}
+                            />
                           )
                         ) : null}
                         
@@ -1050,10 +1160,10 @@ function AdminContentPortfolio() {
                               {selectedContent.versions[selectedVersionIndex].media[selectedMediaIndex] && 
                                selectedContent.versions[selectedVersionIndex].media[selectedMediaIndex].url &&
                                typeof selectedContent.versions[selectedVersionIndex].media[selectedMediaIndex].url === 'string' ? (
-                                selectedContent.versions[selectedVersionIndex].media[selectedMediaIndex].type === 'image' ? (
-                                  <img
+                                isVideoUrl(selectedContent.versions[selectedVersionIndex].media[selectedMediaIndex].url) ? (
+                                  <video
                                     src={selectedContent.versions[selectedVersionIndex].media[selectedMediaIndex].url}
-                                    alt={`Version ${selectedContent.versions[selectedVersionIndex].versionNumber} - Media ${selectedMediaIndex + 1}`}
+                                    controls
                                     className="max-w-full h-auto max-h-96 mx-auto rounded-xl shadow-lg border border-gray-200"
                                     onError={(e) => {
                                       e.target.style.display = 'none';
@@ -1061,9 +1171,9 @@ function AdminContentPortfolio() {
                                     }}
                                   />
                                 ) : (
-                                  <video
+                                  <img
                                     src={selectedContent.versions[selectedVersionIndex].media[selectedMediaIndex].url}
-                                    controls
+                                    alt={`Version ${selectedContent.versions[selectedVersionIndex].versionNumber} - Media ${selectedMediaIndex + 1}`}
                                     className="max-w-full h-auto max-h-96 mx-auto rounded-xl shadow-lg border border-gray-200"
                                     onError={(e) => {
                                       e.target.style.display = 'none';
@@ -1087,39 +1197,6 @@ function AdminContentPortfolio() {
                                   <p className="text-gray-500">Media unavailable</p>
                                 </div>
                               </div>
-                              
-                              {/* Media Thumbnails */}
-                              {selectedContent.versions[selectedVersionIndex].media.length > 1 && (
-                                <div className="flex justify-center gap-2 mt-4">
-                                  {selectedContent.versions[selectedVersionIndex].media.map((media, index) => (
-                                    <button
-                                      key={index}
-                                      onClick={() => setSelectedMediaIndex(index)}
-                                      className={`w-16 h-16 rounded-lg overflow-hidden border-2 transition-all ${
-                                        selectedMediaIndex === index 
-                                          ? 'border-purple-500 ring-2 ring-purple-200' 
-                                          : 'border-gray-200 hover:border-gray-300'
-                                      }`}
-                                    >
-                                      {media.type === 'image' && media.url && typeof media.url === 'string' ? (
-                                        <img
-                                          src={media.url}
-                                          alt={`Thumbnail ${index + 1}`}
-                                          className="w-full h-full object-cover"
-                                          onError={(e) => {
-                                            e.target.style.display = 'none';
-                                            e.target.nextSibling.style.display = 'flex';
-                                          }}
-                                        />
-                                      ) : (
-                                        <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-                                          <Video className="h-6 w-6 text-gray-400" />
-                                        </div>
-                                      )}
-                                    </button>
-                                  ))}
-                                </div>
-                              )}
 
                               {/* Comment Markers */}
                               {commentsForCurrentMedia.map((comment, index) => {
@@ -1374,7 +1451,7 @@ function AdminContentPortfolio() {
       {/* Schedule Post Modal */}
       {showScheduleModal && (
         <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-lg shadow-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-bold text-gray-900">Schedule Post</h2>
@@ -1390,44 +1467,155 @@ function AdminContentPortfolio() {
                 {/* Platform Selection */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Platform</label>
-                  <div className="flex space-x-4">
-                    {['facebook', 'instagram', 'both'].map(platform => (
-                      <label key={platform} className="flex items-center">
-                        <input
-                          type="radio"
-                          name="platform"
-                          value={platform}
-                          checked={scheduleFormData.platform === platform}
-                          onChange={(e) => setScheduleFormData(prev => ({ ...prev, platform: e.target.value }))}
-                          className="mr-2"
-                        />
-                        <span className="text-sm">
-                          {platform === 'facebook' && 'Facebook'}
-                          {platform === 'instagram' && 'Instagram'}
-                          {platform === 'both' && 'Both'}
-                        </span>
-                      </label>
-                    ))}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
+                      <input
+                        type="radio"
+                        name="platform"
+                        value="facebook"
+                        checked={scheduleFormData.platform === 'facebook'}
+                        onChange={(e) => setScheduleFormData(prev => ({ 
+                          ...prev, 
+                          platform: e.target.value,
+                          accountId: '',
+                          pageId: ''
+                        }))}
+                        className="mr-2"
+                      />
+                      <Facebook className="h-4 w-4 text-blue-600 mr-2" />
+                      <span className="text-sm">Facebook</span>
+                    </label>
+                    <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
+                      <input
+                        type="radio"
+                        name="platform"
+                        value="instagram"
+                        checked={scheduleFormData.platform === 'instagram'}
+                        onChange={(e) => setScheduleFormData(prev => ({ 
+                          ...prev, 
+                          platform: e.target.value,
+                          accountId: '',
+                          pageId: ''
+                        }))}
+                        className="mr-2"
+                      />
+                      <Instagram className="h-4 w-4 text-pink-600 mr-2" />
+                      <span className="text-sm">Instagram</span>
+                    </label>
+                    <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
+                      <input
+                        type="radio"
+                        name="platform"
+                        value="youtube"
+                        checked={scheduleFormData.platform === 'youtube'}
+                        onChange={(e) => setScheduleFormData(prev => ({ 
+                          ...prev, 
+                          platform: e.target.value,
+                          accountId: '',
+                          channelId: ''
+                        }))}
+                        className="mr-2"
+                      />
+                      <Youtube className="h-4 w-4 text-red-600 mr-2" />
+                      <span className="text-sm">YouTube</span>
+                    </label>
+                    <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
+                      <input
+                        type="radio"
+                        name="platform"
+                        value="twitter"
+                        checked={scheduleFormData.platform === 'twitter'}
+                        onChange={(e) => setScheduleFormData(prev => ({ 
+                          ...prev, 
+                          platform: e.target.value,
+                          accountId: ''
+                        }))}
+                        className="mr-2"
+                      />
+                      <Twitter className="h-4 w-4 text-blue-400 mr-2" />
+                      <span className="text-sm">Twitter</span>
+                    </label>
                   </div>
                 </div>
 
-                {/* Page Selection */}
+                {/* Account Selection */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Facebook Page</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Select {scheduleFormData.platform} Account
+                  </label>
                   <select
-                    value={scheduleFormData.pageId}
-                    onChange={(e) => setScheduleFormData(prev => ({ ...prev, pageId: e.target.value }))}
+                    value={scheduleFormData.accountId}
+                    onChange={(e) => setScheduleFormData(prev => ({ 
+                      ...prev, 
+                      accountId: e.target.value,
+                      pageId: '' // Reset page selection when account changes
+                    }))}
                     className="w-full border border-gray-300 rounded-md px-3 py-2"
+                    required
                   >
-                    <option value="">Select a page</option>
-                    {fbPages.map(page => (
-                      <option key={page.id} value={page.id}>
-                        {page.name}
-                        {page.instagram_business_account && ' (Instagram connected)'}
+                    <option value="">Select an account</option>
+                    {getAvailableAccountsForPlatform(selectedContentForSchedule?.customerId, scheduleFormData.platform).map(account => (
+                      <option key={account._id} value={account._id}>
+                        {account.name} ({account.platform})
                       </option>
                     ))}
                   </select>
                 </div>
+
+                {/* Page Selection for Facebook/Instagram */}
+                {(scheduleFormData.platform === 'facebook' || scheduleFormData.platform === 'instagram') && scheduleFormData.accountId && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Select Page
+                    </label>
+                    <select
+                      value={scheduleFormData.pageId}
+                      onChange={(e) => setScheduleFormData(prev => ({ ...prev, pageId: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2"
+                      required
+                    >
+                      <option value="">Select a page</option>
+                      {(() => {
+                        const selectedAccount = getCustomerSocialAccounts(selectedContentForSchedule?.customerId)
+                          .find(acc => acc._id === scheduleFormData.accountId);
+                        return selectedAccount?.pages?.map(page => (
+                          <option key={page.id} value={page.id}>
+                            {page.name}
+                            {!page.accessToken && ' (⚠️ No token)'}
+                            {scheduleFormData.platform === 'instagram' && !page.instagramBusinessAccount && ' (No Instagram)'}
+                          </option>
+                        )) || [];
+                      })()}
+                    </select>
+                  </div>
+                )}
+
+                {/* Channel Selection for YouTube */}
+                {scheduleFormData.platform === 'youtube' && scheduleFormData.accountId && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Select Channel
+                    </label>
+                    <select
+                      value={scheduleFormData.channelId}
+                      onChange={(e) => setScheduleFormData(prev => ({ ...prev, channelId: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2"
+                      required
+                    >
+                      <option value="">Select a channel</option>
+                      {(() => {
+                        const selectedAccount = getCustomerSocialAccounts(selectedContentForSchedule?.customerId)
+                          .find(acc => acc._id === scheduleFormData.accountId);
+                        return selectedAccount?.channels?.map(channel => (
+                          <option key={channel.id} value={channel.id}>
+                            {channel.name}
+                            {!selectedAccount.accessToken && ' (⚠️ No token)'}
+                          </option>
+                        )) || [];
+                      })()}
+                    </select>
+                  </div>
+                )}
 
                 {/* Caption */}
                 <div>
@@ -1456,48 +1644,139 @@ function AdminContentPortfolio() {
                   />
                 </div>
 
-                {/* Image */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Image</label>
-                  <div className="space-y-3">
-                    {scheduleFormData.imageUrl && (
-                      <div className="border rounded-lg p-3 bg-gray-50">
-                        <img src={scheduleFormData.imageUrl} alt="Selected" className="max-h-32 mx-auto mb-2" />
-                        <div className="text-center">
-                          <button
-                            type="button"
-                            onClick={() => setScheduleFormData(prev => ({ ...prev, imageUrl: '' }))}
-                            className="text-red-600 hover:text-red-800 text-sm"
-                          >
-                            Remove Image
-                          </button>
+                {/* Media Selection for Carousel (for platforms that support it) */}
+                {(scheduleFormData.platform === 'facebook' || 
+                  scheduleFormData.platform === 'instagram' || 
+                  scheduleFormData.platform === 'youtube') && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      {scheduleFormData.platform === 'youtube' ? 'Video' : 'Images'}
+                      {(scheduleFormData.platform === 'youtube' || scheduleFormData.platform === 'instagram') && <span className="text-red-500">*</span>}
+                      {(scheduleFormData.platform === 'facebook' || scheduleFormData.platform === 'instagram') && 
+                        scheduleFormData.availableImages.length > 1 && (
+                        <span className="text-sm text-gray-500 ml-2">
+                          (Carousel supported - up to 10 images)
+                        </span>
+                      )}
+                    </label>
+                    
+                    {/* Available Images from Version */}
+                    {scheduleFormData.availableImages.length > 0 && (
+                      <div className="mb-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="text-sm font-medium text-gray-700">
+                            Available Images from Content ({scheduleFormData.availableImages.length})
+                          </span>
+                          <div className="flex gap-2">
+                            {scheduleFormData.availableImages.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={selectAllImages}
+                                className="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                              >
+                                Select All
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={clearAllImages}
+                              className="text-xs px-2 py-1 bg-gray-600 text-white rounded hover:bg-gray-700"
+                            >
+                              Clear All
+                            </button>
+                          </div>
                         </div>
+                        
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                          {scheduleFormData.availableImages.map((image, index) => {
+                            const isSelected = scheduleFormData.selectedImages.some(img => img.url === image.url);
+                            
+                            return (
+                              <div 
+                                key={`${image.url}-${index}`}
+                                className={`relative border-2 rounded-lg overflow-hidden cursor-pointer transition-all duration-200 ${
+                                  isSelected 
+                                    ? 'border-blue-500 shadow-lg ring-2 ring-blue-200' 
+                                    : 'border-gray-200 hover:border-gray-300'
+                                }`}
+                                onClick={() => toggleImageSelection(image)}
+                              >
+                                <img 
+                                  src={image.url} 
+                                  alt={`Available image ${index + 1}`}
+                                  className="w-full h-24 object-cover"
+                                />
+                                
+                                {/* Selection Indicator */}
+                                <div className={`absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center ${
+                                  isSelected 
+                                    ? 'bg-blue-500 text-white' 
+                                    : 'bg-white border-2 border-gray-300'
+                                }`}>
+                                  {isSelected ? (
+                                    <Check className="h-4 w-4" />
+                                  ) : (
+                                    <span className="text-xs">{index + 1}</span>
+                                  )}
+                                </div>
+                                
+                                {/* Selection Order */}
+                                {isSelected && (
+                                  <div className="absolute top-2 left-2 bg-blue-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">
+                                    {scheduleFormData.selectedImages.findIndex(img => img.url === image.url) + 1}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        
+                        {scheduleFormData.selectedImages.length > 0 && (
+                          <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium text-blue-800">
+                                {scheduleFormData.selectedImages.length} image{scheduleFormData.selectedImages.length !== 1 ? 's' : ''} selected
+                                {scheduleFormData.selectedImages.length > 1 && ' (Carousel post)'}
+                              </span>
+                              {scheduleFormData.platform === 'instagram' && scheduleFormData.selectedImages.length > 10 && (
+                                <span className="text-xs text-red-600">
+                                  Instagram allows max 10 images
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
 
+                    {/* Additional Image Upload */}
                     <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
                       <input
                         ref={fileInputRef}
                         type="file"
-                        accept="image/*"
+                        accept={scheduleFormData.platform === 'youtube' ? "video/*" : "image/*"}
                         onChange={(e) => {
                           const file = e.target.files[0];
                           if (file) handleImageUpload(file);
                         }}
                         className="hidden"
                       />
-                      <Image className="h-6 w-6 mx-auto mb-2 text-gray-400" />
+                      {scheduleFormData.platform === 'youtube' ? (
+                        <Video className="h-6 w-6 mx-auto mb-2 text-gray-400" />
+                      ) : (
+                        <Image className="h-6 w-6 mx-auto mb-2 text-gray-400" />
+                      )}
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
                         className="text-blue-600 hover:text-blue-800 text-sm font-medium"
                       >
-                        Upload Image
+                        Upload Additional {scheduleFormData.platform === 'youtube' ? 'Video' : 'Image'}
                       </button>
                       <p className="text-xs text-gray-500 mt-1">Max 5MB</p>
                     </div>
                   </div>
-                </div>
+                )}
 
                 {/* Date and Time */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1531,7 +1810,7 @@ function AdminContentPortfolio() {
                   </button>
                   <button
                     onClick={handleSchedulePost}
-                    disabled={submitting || !fbLoggedIn}
+                    disabled={submitting}
                     className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center space-x-2"
                   >
                     {submitting ? (

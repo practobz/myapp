@@ -117,7 +117,7 @@ function InstagramIntegration() {
     setLoadingAccounts(true);
     
     window.FB.api('/me/accounts', {
-      fields: 'id,name,instagram_business_account',
+      fields: 'id,name,instagram_business_account,access_token', // ✅ Explicitly request access_token
       access_token: accessToken
     }, function(response) {
       setLoadingAccounts(false);
@@ -134,16 +134,44 @@ function InstagramIntegration() {
         return;
       }
 
-      // Transform the data to include page info
-      const accounts = pagesWithInstagram.map(page => ({
-        id: page.instagram_business_account.id,
-        pageId: page.id,
-        pageName: page.name,
-        pageAccessToken: page.access_token || accessToken,
-        connected: false,
-        profile: null,
-        media: []
-      }));
+      // ✅ CRITICAL FIX: Ensure we always have proper page access tokens
+      const accounts = pagesWithInstagram.map(page => {
+        // ✅ Validate that we have a proper page access token
+        if (!page.access_token || page.access_token === accessToken) {
+          console.warn(`⚠️ Page ${page.name} (${page.id}) has no separate page access token`);
+          console.log(`📋 Page token info:`, {
+            hasPageToken: !!page.access_token,
+            pageTokenLength: page.access_token?.length || 0,
+            userTokenLength: accessToken?.length || 0,
+            tokensAreSame: page.access_token === accessToken
+          });
+        }
+        
+        return {
+          id: page.instagram_business_account.id,
+          pageId: page.id,
+          pageName: page.name,
+          // ✅ CRITICAL: Only use page access token if it's different from user token
+          pageAccessToken: (page.access_token && page.access_token !== accessToken) 
+            ? page.access_token 
+            : null, // Don't fallback to user token - this causes the problem
+          connected: false,
+          profile: null,
+          media: [],
+          // ✅ Store token validation info
+          hasValidPageToken: !!(page.access_token && page.access_token !== accessToken),
+          tokenWarning: (page.access_token === accessToken) 
+            ? 'Page token is same as user token - refresh may not work' 
+            : null
+        };
+      });
+
+      // ✅ Log token analysis for debugging
+      console.log('🔍 Token Analysis:', {
+        totalAccounts: accounts.length,
+        accountsWithValidPageTokens: accounts.filter(acc => acc.hasValidPageToken).length,
+        accountsWithWarnings: accounts.filter(acc => acc.tokenWarning).length
+      });
 
       setAvailableAccounts(accounts);
     });
@@ -153,13 +181,38 @@ function InstagramIntegration() {
     setLoading(true);
     
     try {
+      // ✅ ENHANCED VALIDATION: Check if we have a proper page token before proceeding
+      if (!accountData.pageAccessToken) {
+        console.error('❌ No valid page access token available for Instagram connection');
+        setError('This Instagram account cannot be connected because the Facebook page does not have a proper page access token. This usually happens when:\n\n1. You are not an admin of the Facebook page\n2. The page was recently created and tokens haven\'t been generated\n3. Facebook permissions are incomplete\n\nPlease ensure you have admin access to the Facebook page and try reconnecting your Facebook account.');
+        setLoading(false);
+        return;
+      }
+
+      // ✅ Additional validation: ensure page token is different from user token
+      if (accountData.pageAccessToken === userAccessToken) {
+        console.error('❌ Page access token is identical to user access token');
+        setError('The page access token is identical to your user access token, which will cause refresh issues. Please disconnect and reconnect your Facebook account to generate proper page access tokens with admin permissions.');
+        setLoading(false);
+        return;
+      }
+
+      console.log('✅ Valid page access token found, proceeding with Instagram connection...');
+      
       // Fetch Instagram profile info
       window.FB.api(`/${accountData.id}`, {
         fields: 'id,username,media_count,profile_picture_url,biography,website,followers_count',
         access_token: accountData.pageAccessToken
       }, function(profileResponse) {
         if (!profileResponse || profileResponse.error) {
-          setError(`Unable to fetch Instagram profile for ${accountData.pageName}. Please ensure it's properly connected.`);
+          console.error('❌ Instagram profile fetch failed:', profileResponse.error);
+          
+          // ✅ Enhanced error handling for token issues
+          if (profileResponse.error?.code === 190) {
+            setError(`Unable to access Instagram profile: ${profileResponse.error.message}. This indicates a token permission issue. Please disconnect and reconnect your Facebook account with proper Instagram Business permissions.`);
+          } else {
+            setError(`Unable to fetch Instagram profile for ${accountData.pageName}. Please ensure it's properly connected.`);
+          }
           setLoading(false);
           return;
         }
@@ -292,7 +345,7 @@ function InstagramIntegration() {
         profilePicture: account.profile?.profile_picture_url,
         username: account.profile?.username,
         accessToken: account.userAccessToken || userAccessToken, // ✅ CRITICAL: Store actual user access token
-        userId: userId, // ✅ Store user ID for refresh operations
+        userId: userId, // ✅ CRITICAL: Store user ID for refresh operations
         pages: [{
           id: account.pageId,
           name: account.pageName,
@@ -327,15 +380,15 @@ function InstagramIntegration() {
         type: 'customer_social_link'
       };
 
-      // ✅ VALIDATION: Ensure we have DIFFERENT tokens
+      // ✅ ENHANCED VALIDATION: Check tokens, user ID, and token difference
       const hasUserToken = !!accountData.accessToken;
       const hasPageToken = !!accountData.pages[0].accessToken;
+      const hasUserId = !!accountData.userId;
       const tokensAreDifferent = accountData.accessToken !== accountData.pages[0].accessToken;
 
       // ✅ CRITICAL VALIDATION: Check if user and page tokens are the same (this is BAD)
       if (hasUserToken && hasPageToken && !tokensAreDifferent) {
         console.warn('⚠️ WARNING: User and page tokens are identical - this will cause refresh issues');
-        // Set a warning but don't fail - we'll try to get proper tokens
         accountData.tokenWarning = 'User and page tokens are identical - refresh may not work properly';
       }
 
@@ -354,15 +407,24 @@ function InstagramIntegration() {
         throw new Error('Page access token is required for Instagram posting. Please ensure you have admin access to the Facebook page connected to this Instagram account.');
       }
 
-      // ✅ Log token validation status with difference check
+      if (!hasUserId) {
+        console.warn('⚠️ Missing user ID - token refresh will not work');
+        accountData.needsReconnection = true;
+        accountData.refreshError = 'User ID not available - required for token refresh';
+        accountData.tokenStatus = 'missing_user_id';
+      }
+
+      // ✅ Log comprehensive token validation status
       console.log('🔑 Instagram Token Validation Summary:', {
         hasUserToken,
         hasPageToken,
+        hasUserId,
         tokensAreDifferent,
         userTokenLength: accountData.accessToken?.length || 0,
         pageTokenLength: accountData.pages[0].accessToken?.length || 0,
         userTokenPrefix: accountData.accessToken?.substring(0, 20) + '...',
         pageTokenPrefix: accountData.pages[0].accessToken?.substring(0, 20) + '...',
+        userId: accountData.userId,
         needsReconnection: accountData.needsReconnection,
         tokenStatus: accountData.tokenStatus
       });
@@ -675,21 +737,57 @@ function InstagramIntegration() {
                 <div className="w-10 h-10 bg-pink-100 rounded-full flex items-center justify-center">
                   <Instagram className="h-5 w-5 text-pink-600" />
                 </div>
-                <div>
+                <div className="flex-1">
                   <div className="font-medium text-gray-900">{account.pageName}</div>
                   <div className="text-sm text-gray-500">Instagram Business Account</div>
+                  {/* ✅ Show token status */}
+                  {account.tokenWarning && (
+                    <div className="text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded mt-1">
+                      ⚠️ {account.tokenWarning}
+                    </div>
+                  )}
+                  {account.hasValidPageToken && (
+                    <div className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded mt-1">
+                      ✅ Valid page access token
+                    </div>
+                  )}
+                  {!account.hasValidPageToken && !account.tokenWarning && (
+                    <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded mt-1">
+                      ❌ No valid page access token
+                    </div>
+                  )}
                 </div>
               </div>
               <button
                 onClick={() => connectInstagramAccount(account)}
-                disabled={loading}
-                className="bg-pink-600 text-white px-4 py-2 rounded-lg hover:bg-pink-700 transition-colors disabled:opacity-50 text-sm font-medium"
+                disabled={loading || !account.hasValidPageToken}
+                className="bg-pink-600 text-white px-4 py-2 rounded-lg hover:bg-pink-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                title={!account.hasValidPageToken ? 'Cannot connect - no valid page access token available' : ''}
               >
-                {loading ? 'Connecting...' : 'Connect'}
+                {loading ? 'Connecting...' : 
+                 !account.hasValidPageToken ? 'Cannot Connect' : 'Connect'}
               </button>
             </div>
           ))}
         </div>
+        
+        {/* ✅ Add helpful information about token issues */}
+        {availableAccounts.some(acc => !acc.hasValidPageToken) && (
+          <div className="mt-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+            <h6 className="font-medium text-orange-800 mb-1">⚠️ Token Issues Detected</h6>
+            <div className="text-sm text-orange-700 space-y-1">
+              <p>Some accounts cannot be connected due to missing or invalid page access tokens.</p>
+              <p><strong>Common causes:</strong></p>
+              <ul className="list-disc list-inside ml-4 space-y-1">
+                <li>You are not an admin of the Facebook page</li>
+                <li>Facebook permissions are incomplete</li>
+                <li>Page was recently created</li>
+                <li>Account needs to be reconnected</li>
+              </ul>
+              <p><strong>Solution:</strong> Disconnect and reconnect your Facebook account through the Facebook Integration page, ensuring you grant all permissions and have admin access to the pages.</p>
+            </div>
+          </div>
+        )}
       </div>
     );
   };

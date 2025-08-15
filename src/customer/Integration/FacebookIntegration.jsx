@@ -57,6 +57,8 @@ function FacebookIntegration() {
 
   // Load connected accounts from localStorage on component mount
   useEffect(() => {
+    console.log('🔍 Component mounted, loading accounts from storage...');
+    
     // First, migrate any existing data to user-specific storage
     migrateToUserSpecificStorage([
       'fb_connected_accounts',
@@ -66,19 +68,30 @@ function FacebookIntegration() {
     const savedAccounts = getUserData('fb_connected_accounts');
     const savedActiveId = getUserData('fb_active_account_id');
     
-    if (savedAccounts) {
+    console.log('📦 Storage check on mount:', {
+      savedAccounts: savedAccounts ? savedAccounts.length : 0,
+      savedActiveId,
+      accountsData: savedAccounts
+    });
+    
+    if (savedAccounts && Array.isArray(savedAccounts) && savedAccounts.length > 0) {
+      console.log('✅ Setting accounts from storage:', savedAccounts);
       setConnectedAccounts(savedAccounts);
       
       if (savedActiveId && savedAccounts.some(acc => acc.id === savedActiveId)) {
         setActiveAccountId(savedActiveId);
         const activeAcc = savedAccounts.find(acc => acc.id === savedActiveId);
         setActiveAccount(activeAcc);
+        console.log('✅ Set active account:', activeAcc?.name);
       } else if (savedAccounts.length > 0) {
         // Set first account as active if no valid active account
         setActiveAccountId(savedAccounts[0].id);
         setActiveAccount(savedAccounts[0]);
         setUserData('fb_active_account_id', savedAccounts[0].id);
+        console.log('✅ Set first account as active:', savedAccounts[0].name);
       }
+    } else {
+      console.log('ℹ️ No connected accounts found in storage');
     }
   }, []);
 
@@ -132,22 +145,38 @@ function FacebookIntegration() {
     }
   }, [activeAccount, fbSdkLoaded]);
 
-  // Save accounts to localStorage
+  // Save accounts to localStorage with better error handling
   const saveAccountsToStorage = (accounts) => {
-    setUserData('fb_connected_accounts', accounts);
+    console.log('💾 Saving accounts to storage:', accounts.length, 'accounts');
+    try {
+      setUserData('fb_connected_accounts', accounts);
+      console.log('✅ Accounts saved successfully');
+      
+      // Verify the save worked
+      const verification = getUserData('fb_connected_accounts');
+      console.log('🔍 Storage verification:', verification ? verification.length : 0, 'accounts');
+    } catch (error) {
+      console.error('❌ Failed to save accounts:', error);
+    }
   };
 
-  // Handle Facebook login for new account
+  // Handle Facebook login for new account with improved persistence
   const fbLogin = () => {
     if (!isFacebookApiReady()) {
       setFbError({ message: 'Facebook SDK is not ready. Please wait and try again.' });
       return;
     }
 
+    console.log('🔐 Starting Facebook login...');
+
     window.FB.login((response) => {
+      console.log('📨 Facebook login response:', response.status);
+      
       if (response.status === 'connected') {
         const accessToken = response.authResponse.accessToken;
         const userId = response.authResponse.userID;
+        
+        console.log('✅ Facebook login successful, fetching user data...');
         
         // Fetch user data for the new account
         window.FB.api('/me', { 
@@ -155,9 +184,12 @@ function FacebookIntegration() {
           access_token: accessToken 
         }, function(userResponse) {
           if (!userResponse || userResponse.error) {
+            console.error('❌ Failed to fetch user data:', userResponse.error);
             setFbError(userResponse.error);
             return;
           }
+          
+          console.log('👤 User data received:', userResponse.name);
           
           const newAccount = {
             id: userId,
@@ -170,34 +202,53 @@ function FacebookIntegration() {
               new Date(Date.now() + (response.authResponse.expiresIn * 1000)).toISOString() : null
           };
           
+          console.log('🆕 Created new account object:', {
+            id: newAccount.id,
+            name: newAccount.name,
+            email: newAccount.email
+          });
+          
           // Check if account already exists
           const existingAccountIndex = connectedAccounts.findIndex(acc => acc.id === userId);
           let updatedAccounts;
           
           if (existingAccountIndex >= 0) {
+            console.log('🔄 Updating existing account');
             // Update existing account
             updatedAccounts = [...connectedAccounts];
             updatedAccounts[existingAccountIndex] = { ...updatedAccounts[existingAccountIndex], ...newAccount };
           } else {
+            console.log('➕ Adding new account');
             // Add new account
             updatedAccounts = [...connectedAccounts, newAccount];
           }
           
-          setConnectedAccounts(updatedAccounts);
-          saveAccountsToStorage(updatedAccounts);
+          console.log('📊 Total accounts after update:', updatedAccounts.length);
           
-          // Set as active account
+          // Update state first
+          setConnectedAccounts(updatedAccounts);
           setActiveAccountId(userId);
           setActiveAccount(newAccount);
+          
+          // Then save to storage
+          saveAccountsToStorage(updatedAccounts);
           setUserData('fb_active_account_id', userId);
           
           // Clear any existing error
           setFbError(null);
 
+          console.log('✅ Account setup complete, requesting long-lived token...');
+          
           // Request long-lived token
-          requestLongLivedToken(accessToken, newAccount);
+          requestLongLivedToken(accessToken, newAccount).then(() => {
+            // After token exchange, save again to ensure persistence
+            const finalAccounts = [...updatedAccounts];
+            saveAccountsToStorage(finalAccounts);
+            console.log('💾 Final save after token exchange complete');
+          });
         });
       } else {
+        console.error('❌ Facebook login failed:', response);
         setFbError({ message: 'Facebook login failed or was cancelled' });
       }
     }, {
@@ -207,50 +258,71 @@ function FacebookIntegration() {
     });
   };
 
-  // Request long-lived token
+  // Enhanced requestLongLivedToken with better state persistence
   const requestLongLivedToken = async (shortLivedToken, account) => {
     try {
-      console.log('🔄 Requesting long-lived token...');
+      console.log('🔄 Requesting long-lived token via backend...');
       
-      const response = await fetch(
-        `https://graph.facebook.com/oauth/access_token?` +
-        `grant_type=fb_exchange_token&` +
-        `client_id=${FACEBOOK_APP_ID}&` +
-        `client_secret=${process.env.REACT_APP_FACEBOOK_APP_SECRET}&` +
-        `fb_exchange_token=${shortLivedToken}`
-      );
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/facebook/exchange-token`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          shortLivedToken: shortLivedToken,
+          userId: account.id
+        })
+      });
       
       const data = await response.json();
       
-      if (data.access_token) {
-        console.log('✅ Received long-lived token');
+      if (data.success && data.longLivedToken) {
+        console.log('✅ Received long-lived token (expires in', data.expiresIn, 'seconds)');
+        
+        // Calculate expiration date (usually 60 days)
+        const expirationDate = data.expiresIn ? 
+          new Date(Date.now() + (data.expiresIn * 1000)).toISOString() : 
+          new Date(Date.now() + (60 * 24 * 60 * 60 * 1000)).toISOString(); // Default 60 days
         
         // Update account with long-lived token
         const updatedAccount = {
           ...account,
-          accessToken: data.access_token,
+          accessToken: data.longLivedToken,
           tokenType: 'long_lived',
-          tokenExpiresAt: data.expires_in ? 
-            new Date(Date.now() + (data.expires_in * 1000)).toISOString() : null
+          tokenExpiresAt: expirationDate
         };
         
-        // Update in state and storage
-        const updatedAccounts = connectedAccounts.map(acc => 
-          acc.id === account.id ? updatedAccount : acc
-        );
+        console.log('🔄 Updating account with long-lived token...');
         
-        setConnectedAccounts(updatedAccounts);
-        saveAccountsToStorage(updatedAccounts);
+        // Update in state and storage
+        setConnectedAccounts(prevAccounts => {
+          const updatedAccounts = prevAccounts.map(acc => 
+            acc.id === account.id ? updatedAccount : acc
+          );
+          
+          // Immediately save to storage
+          saveAccountsToStorage(updatedAccounts);
+          console.log('💾 Saved updated accounts with long-lived token');
+          
+          return updatedAccounts;
+        });
         
         if (activeAccountId === account.id) {
           setActiveAccount(updatedAccount);
         }
+
+        console.log('💾 Stored long-lived token, expires:', new Date(expirationDate).toLocaleDateString());
+        
+        return updatedAccount;
       } else {
-        console.warn('⚠️ Failed to get long-lived token:', data);
+        console.warn('⚠️ Failed to get long-lived token:', data.error || 'Unknown error');
+        // Continue with short-lived token
+        return account;
       }
     } catch (error) {
       console.warn('⚠️ Error requesting long-lived token:', error);
-      // Continue with short-lived token
+      // Continue with short-lived token - this is not critical for basic functionality
+      return account;
     }
   };
 
@@ -947,52 +1019,14 @@ function FacebookIntegration() {
         limit: 10,
         access_token: pageAccessToken
       },
-      async function(response) {
+      function(response) {
         setLoadingPosts(prev => ({ ...prev, [pageId]: false }));
         if (!response || response.error) {
-          console.error('Posts fetch error:', response.error);
-          setFbError(response.error);
+          console.error('Facebook posts fetch error:', response.error);
         } else {
-          const postsWithImages = await Promise.all(
-            response.data.map(async post => {
-              let imageUrl = null;
-              try {
-                const attachRes = await new Promise(resolve =>
-                  window.FB.api(
-                    `/${post.id}?fields=attachments{media_type,media,url}`,
-                    { access_token: pageAccessToken },
-                    resolve
-                  )
-                );
-                if (
-                  attachRes &&
-                  attachRes.attachments &&
-                  attachRes.attachments.data &&
-                  attachRes.attachments.data[0] &&
-                  attachRes.attachments.data[0].media &&
-                  attachRes.attachments.data[0].media.image &&
-                  attachRes.attachments.data[0].media.image.src
-                ) {
-                  imageUrl = attachRes.attachments.data[0].media.image.src;
-                } else if (
-                  attachRes &&
-                  attachRes.attachments &&
-                  attachRes.attachments.data &&
-                  attachRes.attachments.data[0] &&
-                  attachRes.attachments.data[0].media &&
-                  attachRes.attachments.data[0].media.image_url
-                ) {
-                  imageUrl = attachRes.attachments.data[0].media.image_url;
-                }
-              } catch (e) {
-                // ignore
-              }
-              return { ...post, full_picture: imageUrl };
-            })
-          );
           setPagePosts(prev => ({
             ...prev,
-            [pageId]: postsWithImages
+            [pageId]: response.data
           }));
           setShowFacebookPosts(prev => ({ ...prev, [pageId]: true }));
         }
@@ -1000,6 +1034,7 @@ function FacebookIntegration() {
     );
   };
 
+  // Add the missing fetchInstagramPosts function
   const fetchInstagramPosts = (instagramId, pageAccessToken) => {
     if (!isFacebookApiReady()) {
       setFbError({ message: 'Facebook API is not ready' });
@@ -1007,11 +1042,11 @@ function FacebookIntegration() {
     }
 
     setLoadingInstagramPosts(prev => ({ ...prev, [instagramId]: true }));
-    
+
     window.FB.api(
       `/${instagramId}/media`,
       {
-        fields: 'id,caption,media_type,media_url,permalink,timestamp,like_count,comments_count,thumbnail_url,children{media_url,media_type}',
+        fields: 'id,caption,timestamp,like_count,comments_count,media_type,media_url,thumbnail_url,permalink',
         limit: 10,
         access_token: pageAccessToken
       },
@@ -1736,7 +1771,7 @@ function FacebookIntegration() {
     );
   };
 
-  // Add token refresh functionality
+  // Enhanced token refresh with never-expiring page tokens
   const refreshPageTokens = async () => {
     if (!activeAccount || !isFacebookApiReady()) {
       console.warn('Cannot refresh tokens: no active account or FB API not ready');
@@ -1750,9 +1785,44 @@ function FacebookIntegration() {
       const sessionRefreshed = await refreshCurrentSession();
       
       if (sessionRefreshed) {
-        // Then re-fetch pages to get fresh page tokens
-        fetchFbPages();
-        alert('✅ Tokens refreshed successfully!');
+        // Get never-expiring page tokens via backend
+        const response = await fetch(`${process.env.REACT_APP_API_URL}/api/facebook/page-tokens`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            userAccessToken: activeAccount.accessToken,
+            userId: activeAccount.id
+          })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success && data.pages) {
+          console.log(`✅ Got never-expiring tokens for ${data.pages.length} pages`);
+          
+          // Update pages with never-expiring tokens
+          setFbPages(prevPages => {
+            return prevPages.map(page => {
+              const updatedPage = data.pages.find(p => p.id === page.id);
+              if (updatedPage) {
+                return {
+                  ...page,
+                  access_token: updatedPage.access_token,
+                  tokenType: 'never_expiring_page_token'
+                };
+              }
+              return page;
+            });
+          });
+          
+          alert('✅ Tokens refreshed successfully! Page tokens are now never-expiring.');
+        } else {
+          // Fallback to re-fetching pages normally
+          fetchFbPages();
+          alert('✅ Tokens refreshed successfully!');
+        }
       } else {
         alert('❌ Failed to refresh session. Please try reconnecting your Facebook account.');
       }
@@ -1924,11 +1994,198 @@ function FacebookIntegration() {
     );
   };
 
+  // Add this debug function after the existing functions
+  const debugStorage = () => {
+    console.log('🔍 Manual storage check:');
+    console.log('localStorage fb_connected_accounts:', localStorage.getItem('fb_connected_accounts'));
+    console.log('localStorage fb_active_account_id:', localStorage.getItem('fb_active_account_id'));
+    console.log('getUserData fb_connected_accounts:', getUserData('fb_connected_accounts'));
+    console.log('getUserData fb_active_account_id:', getUserData('fb_active_account_id'));
+    console.log('Current state - connectedAccounts:', connectedAccounts);
+    console.log('Current state - activeAccountId:', activeAccountId);
+    console.log('Current state - activeAccount:', activeAccount);
+    
+    // Try to manually load accounts
+    const accounts = getUserData('fb_connected_accounts');
+    if (accounts && accounts.length > 0) {
+      console.log('✅ Found accounts, manually setting:', accounts);
+      setConnectedAccounts(accounts);
+      setActiveAccountId(accounts[0].id);
+      setActiveAccount(accounts[0]);
+    }
+  };
+
+  // Upload Facebook Post
+  const uploadFacebookPost = async (page) => {
+    if (!isFacebookApiReady()) {
+      setUploadResult({ success: false, error: 'Facebook API is not ready' });
+      return;
+    }
+
+    setUploadingPost(true);
+    setUploadResult(null);
+
+    try {
+      console.log('📤 Uploading Facebook post...');
+      
+      const postData = {
+        message: postMessage,
+        access_token: page.access_token
+      };
+
+      // Add image URL if provided
+      if (postImageUrl) {
+        postData.link = postImageUrl;
+      }
+
+      window.FB.api(
+        `/${page.id}/feed`,
+        'POST',
+        postData,
+        function(response) {
+          setUploadingPost(false);
+          
+          if (response && !response.error) {
+            console.log('✅ Facebook post uploaded successfully:', response.id);
+            setUploadResult({
+              success: true,
+              id: response.id,
+              message: 'Facebook post uploaded successfully!'
+            });
+            
+            // Clear form after successful upload
+            setTimeout(() => {
+              setPostMessage('');
+              setPostImageUrl('');
+              setShowPostModal(false);
+              setUploadResult(null);
+            }, 3000);
+          } else {
+            console.error('❌ Facebook post upload failed:', response.error);
+            setUploadResult({
+              success: false,
+              error: response.error?.message || 'Failed to upload Facebook post'
+            });
+          }
+        }
+      );
+    } catch (error) {
+      console.error('❌ Facebook post upload error:', error);
+      setUploadingPost(false);
+      setUploadResult({
+        success: false,
+        error: error.message || 'Failed to upload Facebook post'
+      });
+    }
+  };
+
+  // Upload Instagram Post
+  const uploadInstagramPost = async (page, instagramId) => {
+    if (!isFacebookApiReady()) {
+      setUploadResult({ success: false, error: 'Facebook API is not ready' });
+      return;
+    }
+
+    if (!postImageUrl) {
+      setUploadResult({ 
+        success: false, 
+        error: 'Instagram posts require an image URL. Please provide a publicly accessible image URL.' 
+      });
+      return;
+    }
+
+    setUploadingPost(true);
+    setUploadResult(null);
+
+    try {
+      console.log('📤 Uploading Instagram post...');
+      
+      // Step 1: Create media object
+      const mediaData = {
+        image_url: postImageUrl,
+        caption: postMessage,
+        access_token: page.access_token
+      };
+
+      window.FB.api(
+        `/${instagramId}/media`,
+        'POST',
+        mediaData,
+        function(mediaResponse) {
+          if (mediaResponse && !mediaResponse.error && mediaResponse.id) {
+            console.log('✅ Instagram media created:', mediaResponse.id);
+            
+            // Step 2: Publish the media
+            window.FB.api(
+              `/${instagramId}/media_publish`,
+              'POST',
+              {
+                creation_id: mediaResponse.id,
+                access_token: page.access_token
+              },
+              function(publishResponse) {
+                setUploadingPost(false);
+                
+                if (publishResponse && !publishResponse.error) {
+                  console.log('✅ Instagram post published successfully:', publishResponse.id);
+                  setUploadResult({
+                    success: true,
+                    id: publishResponse.id,
+                    message: 'Instagram post uploaded successfully!'
+                  });
+                  
+                  // Clear form after successful upload
+                  setTimeout(() => {
+                    setPostMessage('');
+                    setPostImageUrl('');
+                    setShowPostModal(false);
+                    setUploadResult(null);
+                  }, 3000);
+                } else {
+                  console.error('❌ Instagram post publish failed:', publishResponse.error);
+                  setUploadResult({
+                    success: false,
+                    error: publishResponse.error?.message || 'Failed to publish Instagram post'
+                  });
+                }
+              }
+            );
+          } else {
+            setUploadingPost(false);
+            console.error('❌ Instagram media creation failed:', mediaResponse.error);
+            setUploadResult({
+              success: false,
+              error: mediaResponse.error?.message || 'Failed to create Instagram media'
+            });
+          }
+        }
+      );
+    } catch (error) {
+      console.error('❌ Instagram post upload error:', error);
+      setUploadingPost(false);
+      setUploadResult({
+        success: false,
+        error: error.message || 'Failed to upload Instagram post'
+      });
+    }
+  };
+
   return (
     <div className="border rounded-lg p-6 mb-6 bg-gradient-to-r from-blue-50 to-indigo-50">
       <div className="flex items-center space-x-3 mb-4">
         <Facebook className="h-6 w-6 text-blue-600" />
         <h3 className="font-medium text-lg">Facebook/Meta Integration</h3>
+        {/* Debug info */}
+        <div className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+          Accounts: {connectedAccounts.length} | SDK: {fbSdkLoaded ? '✅' : '⏳'} | Active: {activeAccount?.name || 'None'}
+        </div>
+        {/* Debug button - remove after fixing */}
+        <button
+          onClick={debugStorage}
+          className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded hover:bg-red-200"
+        >
+          🔧 Debug Storage
+        </button>
       </div>
 
       {!fbSdkLoaded ? (
@@ -1938,6 +2195,20 @@ function FacebookIntegration() {
         </div>
       ) : (
         <>
+          {/* Debug section - remove this after fixing */}
+          <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-xs">
+            <h6 className="font-medium text-yellow-800 mb-1">🔧 Debug Info:</h6>
+            <div className="text-yellow-700 space-y-1">
+              <p>• Connected Accounts: {connectedAccounts.length}</p>
+              <p>• Active Account ID: {activeAccountId || 'None'}</p>
+              <p>• Active Account: {activeAccount?.name || 'None'}</p>
+              <p>• FB SDK Loaded: {fbSdkLoaded ? 'Yes' : 'No'}</p>
+              <p>• FB API Ready: {isFacebookApiReady() ? 'Yes' : 'No'}</p>
+              <p>• Pages Count: {fbPages.length}</p>
+              <p>• Storage Check: {JSON.stringify(getUserData('fb_connected_accounts'))}</p>
+            </div>
+          </div>
+
           {connectedAccounts.length === 0 ? (
             <div className="space-y-4">
               <p className="text-sm text-gray-600">
@@ -1990,6 +2261,14 @@ function FacebookIntegration() {
                         <Facebook className="h-12 w-12 mx-auto mb-3 opacity-50" />
                         <p>No pages found or you don't manage any pages.</p>
                         <p className="text-sm">Make sure you're an admin or editor of at least one Facebook page.</p>
+                        {/* Add retry button */}
+                        <button
+                          onClick={fetchFbPages}
+                          disabled={!isFacebookApiReady()}
+                          className="mt-3 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50 text-sm"
+                        >
+                          🔄 Retry Loading Pages
+                        </button>
                       </div>
                     ) : (
                       <div className="space-y-4">

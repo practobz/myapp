@@ -235,44 +235,129 @@ function InstagramIntegration() {
         return;
       }
 
+      // CRITICAL: Always store user access token for refresh capabilities
+      if (!userAccessToken) {
+        console.warn('⚠️ No user access token available - refresh capabilities will be limited');
+      }
+
+      // Get user information for storing user access token
+      let userInfo = null;
+      let userId = null;
+      
+      if (userAccessToken) {
+        try {
+          // Fetch user info to get user ID for token refresh
+          const userResponse = await new Promise((resolve, reject) => {
+            window.FB.api('/me', {
+              fields: 'id,name,email',
+              access_token: userAccessToken
+            }, function(response) {
+              if (response && !response.error) {
+                resolve(response);
+              } else {
+                reject(new Error(response?.error?.message || 'Failed to fetch user info'));
+              }
+            });
+          });
+          
+          userInfo = userResponse;
+          userId = userResponse.id;
+          
+          console.log('✅ Retrieved user info for token storage:', {
+            userId: userId,
+            name: userInfo.name,
+            hasUserToken: !!userAccessToken,
+            userTokenLength: userAccessToken.length
+          });
+          
+        } catch (userError) {
+          console.warn('Failed to fetch user info for token storage:', userError);
+          // Continue without user info but log the issue
+        }
+      }
+
+      // Store the account data with INSTAGRAM platform for scheduling
       const accountData = {
         customerId: customerId,
-        platform: 'instagram',
-        platformUserId: account.id,
-        name: account.profile?.username || account.pageName,
-        email: '', // Instagram doesn't provide email
+        platform: 'instagram', // ✅ Changed to 'instagram' for scheduling purposes
+        platformUserId: account.id, // Use Instagram Business Account ID as primary ID
+        facebookUserId: userId, // Store Facebook user ID separately for token refresh
+        facebookPageId: account.pageId, // Store Facebook page ID for API calls
+        name: userInfo?.name || account.profile?.username || account.pageName,
+        email: userInfo?.email || '',
         profilePicture: account.profile?.profile_picture_url,
-        accessToken: account.pageAccessToken,
+        username: account.profile?.username, // Instagram username for display
+        accessToken: userAccessToken, // CRITICAL: Store user access token for refresh
+        userId: userId, // Store user ID for refresh operations
         pages: [{
           id: account.pageId,
           name: account.pageName,
-          accessToken: account.pageAccessToken,
+          accessToken: account.pageAccessToken, // Store page access token for posting
           category: 'Instagram Business',
           fanCount: account.profile?.followers_count || 0,
           instagramBusinessAccount: {
-            id: account.id
-          }
+            id: account.id,
+            username: account.profile?.username
+          },
+          tokenValidatedAt: new Date().toISOString(),
+          permissions: ['pages_read_engagement', 'pages_manage_posts', 'instagram_basic', 'instagram_content_publish']
         }],
-        connectedAt: account.connectedAt
+        // Instagram-specific metadata
+        instagramData: {
+          businessAccountId: account.id,
+          username: account.profile?.username,
+          mediaCount: account.profile?.media_count,
+          followersCount: account.profile?.followers_count,
+          biography: account.profile?.biography,
+          website: account.profile?.website
+        },
+        connectedAt: account.connectedAt,
+        needsReconnection: false,
+        lastTokenValidation: new Date().toISOString(),
+        type: 'customer_social_link'
       };
 
-      console.log('📤 Sending Instagram account data:', { customerId, platform: 'instagram', platformUserId: account.id });
+      // VALIDATION: Ensure we have both tokens
+      if (!accountData.accessToken) {
+        console.warn('⚠️ Missing user access token - refresh will not work');
+        accountData.needsReconnection = true;
+        accountData.refreshError = 'User access token not available during connection';
+      }
 
+      if (!accountData.pages[0].accessToken) {
+        console.warn('⚠️ Missing page access token - posting will not work');
+        throw new Error('Page access token is required for Instagram posting. Please ensure you have admin access to the Facebook page connected to this Instagram account.');
+      }
+
+      console.log('📤 Storing Instagram account data for scheduling:', { 
+        customerId, 
+        platform: 'instagram', // ✅ Now correctly shows as Instagram
+        instagramBusinessAccountId: account.id,
+        username: account.profile?.username,
+        hasUserToken: !!accountData.accessToken,
+        hasPageToken: !!accountData.pages[0].accessToken,
+        userTokenLength: accountData.accessToken?.length || 0,
+        pageTokenLength: accountData.pages[0].accessToken?.length || 0
+      });
+
+      // Send to server
       const response = await fetch(`${process.env.REACT_APP_API_URL}/api/customer-social-links`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(accountData)
       });
-      
+
       const result = await response.json();
       if (result.success) {
-        console.log('✅ Stored Instagram customer social account for admin access');
+        console.log('✅ Stored Instagram account for scheduling with platform: instagram');
       } else {
-        console.warn('Failed to store Instagram customer social account:', result.error);
+        console.warn('Failed to store Instagram account:', result.error);
+        alert(`Warning: Failed to store account data - ${result.error}. You may need to reconnect later.`);
       }
       
     } catch (error) {
-      console.warn('Failed to store Instagram customer social account:', error);
+      console.warn('Failed to store Instagram account:', error);
+      alert(`Warning: ${error.message}. You may need to reconnect your Instagram account later.`);
     }
   };
 
@@ -584,6 +669,9 @@ function InstagramIntegration() {
 
   const renderConnectedState = () => (
     <div className="space-y-6">
+      {/* Enhanced token status notification with more specific guidance */}
+     
+
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
           <div className="flex items-center space-x-2">
@@ -618,6 +706,47 @@ function InstagramIntegration() {
           </button>
         </div>
       </div>
+
+      {/* Enhanced connection troubleshooting */}
+      {error && (error.includes('invalidated') || error.includes('refresh') || error.includes('reconnect')) && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
+          <div className="flex items-center space-x-3 mb-4">
+            <AlertCircle className="h-6 w-6 text-blue-600" />
+            <h3 className="text-lg font-semibold text-blue-800">Token Refresh Issue Detected</h3>
+          </div>
+          <p className="text-blue-700 mb-4">
+            Your Facebook access tokens are invalid and cannot be refreshed automatically. This happens when:
+          </p>
+          <ul className="text-sm text-blue-700 list-disc list-inside space-y-1 mb-4">
+            <li>You changed your Facebook password</li>
+            <li>Facebook detected suspicious activity and invalidated tokens</li>
+            <li>You logged out of Facebook in another browser/device</li>
+            <li>The user access token needed for refresh is missing or expired</li>
+            <li>Facebook performed a security check and revoked access</li>
+          </ul>
+          <div className="bg-white border border-blue-200 rounded-lg p-3 mb-4">
+            <p className="text-sm font-medium text-blue-800 mb-1">🔄 How Token Refresh Works:</p>
+            <p className="text-xs text-blue-700">
+              Instagram posting requires page access tokens, which can be refreshed using your Facebook user access token. 
+              When both tokens become invalid, you need to reconnect to restore posting capabilities.
+            </p>
+          </div>
+          <div className="flex space-x-3">
+            <button
+              onClick={handleSignOut}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+            >
+              Reconnect Facebook Account
+            </button>
+            <button
+              onClick={() => setError(null)}
+              className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
 
       {renderAvailableAccounts()}
 

@@ -23,40 +23,127 @@ function getCreatorEmail() {
   return email;
 }
 
+// Helper to get creator ID from localStorage
+function getCreatorId() {
+  try {
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      const userObj = JSON.parse(userStr);
+      return userObj.id || userObj._id;
+    }
+    return localStorage.getItem('userId');
+  } catch (e) {
+    return null;
+  }
+}
+
 function Profile() {
   const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
   
   const [profileData, setProfileData] = useState({
-    name: 'John Doe',
-    email: getCreatorEmail() || 'john.doe@example.com',
-    mobile: '+91 9876543210',
+    name: '',
+    email: getCreatorEmail() || '',
+    mobile: '',
     specialization: 'social-media',
     experience: 'intermediate',
-    bio: 'Passionate content creator with expertise in social media management and visual storytelling. I help brands connect with their audience through engaging content.',
-    location: 'Mumbai, India',
-    joinDate: '2024-01-15',
-    portfolio: 'https://johndoe.portfolio.com',
-    skills: ['Social Media Management', 'Graphic Design', 'Content Writing', 'Photography'],
-    languages: ['English', 'Hindi', 'Marathi'],
-    rating: 4.8,
-    completedProjects: 47,
-    clientSatisfaction: 98
+    bio: '',
+    location: '',
+    joinDate: '',
+    portfolio: '',
+    skills: [],
+    languages: [],
+    rating: 0,
+    completedProjects: 0,
+    clientSatisfaction: 0
   });
 
   const [editData, setEditData] = useState({ ...profileData });
 
   const creatorEmail = getCreatorEmail();
+  const creatorId = getCreatorId();
 
   // Redirect to login if not authenticated
   useEffect(() => {
-    if (!creatorEmail) {
+    if (!creatorEmail && !creatorId) {
       navigate('/content-creator/login');
+      return;
     }
-  }, [creatorEmail, navigate]);
+    fetchProfileData();
+  }, [creatorEmail, creatorId, navigate]);
+
+  const fetchProfileData = async () => {
+    setLoading(true);
+    setError('');
+    
+    try {
+      // Since /customer/{id} works, use that as primary endpoint
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/customer/${creatorId}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Successfully fetched customer data:', data);
+        
+        const formattedData = {
+          name: data.name || data.fullName || '',
+          email: data.email || creatorEmail,
+          mobile: data.mobile || data.phone || '',
+          specialization: data.specialization || 'social-media',
+          experience: data.experience || 'intermediate',
+          bio: data.bio || data.description || '',
+          location: data.address || data.location || '', // Map address to location
+          joinDate: data.joinDate || data.createdAt || new Date().toISOString(),
+          portfolio: data.portfolio || data.portfolioUrl || '',
+          // Handle skills and languages - they might be stored as strings
+          skills: data.skills ? (typeof data.skills === 'string' ? data.skills.split(',').map(s => s.trim()) : data.skills) : ['Content Creation', 'Social Media Management'],
+          languages: data.languages ? (typeof data.languages === 'string' ? data.languages.split(',').map(l => l.trim()) : data.languages) : ['English'],
+          rating: data.rating || 0,
+          completedProjects: data.completedProjects || data.projectsCompleted || 0,
+          clientSatisfaction: data.clientSatisfaction || data.satisfaction || 0
+        };
+        
+        setProfileData(formattedData);
+        setEditData(formattedData);
+      } else {
+        throw new Error('Customer data not found');
+      }
+    } catch (err) {
+      console.warn('Error fetching profile:', err.message);
+      
+      // Use default data with current user info
+      const defaultData = {
+        name: localStorage.getItem('userName') || 'Content Creator',
+        email: creatorEmail,
+        mobile: '',
+        specialization: 'social-media',
+        experience: 'intermediate',
+        bio: 'Passionate content creator ready to help brands connect with their audience.',
+        location: '',
+        joinDate: new Date().toISOString(),
+        portfolio: '',
+        skills: ['Content Creation', 'Social Media Management'],
+        languages: ['English'],
+        rating: 0,
+        completedProjects: 0,
+        clientSatisfaction: 0
+      };
+      setProfileData(defaultData);
+      setEditData(defaultData);
+      
+      setError('Using default profile data. You can still edit and save your information.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -82,25 +169,150 @@ function Profile() {
     }));
   };
 
+  const validateForm = () => {
+    const errors = [];
+    
+    if (!editData.name.trim()) {
+      errors.push('Name is required');
+    }
+    
+    if (!editData.mobile.trim()) {
+      errors.push('Mobile number is required');
+    } else if (!/^\+?[\d\s-()]+$/.test(editData.mobile)) {
+      errors.push('Please enter a valid mobile number');
+    }
+    
+    if (editData.portfolio && !/^https?:\/\/.+\..+/.test(editData.portfolio)) {
+      errors.push('Please enter a valid portfolio URL');
+    }
+    
+    if (editData.skills.length === 0) {
+      errors.push('At least one skill is required');
+    }
+    
+    if (editData.bio.length > 500) {
+      errors.push('Bio must be less than 500 characters');
+    }
+    
+    return errors;
+  };
+
   const handleSave = async () => {
-    setLoading(true);
+    setSaving(true);
     setError('');
     setSuccess('');
 
+    // Validate form
+    const validationErrors = validateForm();
+    if (validationErrors.length > 0) {
+      setError(validationErrors.join('. '));
+      setSaving(false);
+      return;
+    }
+
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Since we can fetch from /customer/{id}, let's try to update the same endpoint
+      // First, let's get the current customer data to merge with our profile data
+      const currentDataResponse = await fetch(`${process.env.REACT_APP_API_URL}/customer/${creatorId}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      let currentData = {};
+      if (currentDataResponse.ok) {
+        currentData = await currentDataResponse.json();
+      }
+
+      // Merge the existing customer data with our profile updates
+      const payload = {
+        ...currentData, // Keep existing customer data
+        // Update with profile fields
+        name: editData.name,
+        mobile: editData.mobile,
+        address: editData.location, // Map location to address
+        // Add profile-specific fields
+        specialization: editData.specialization,
+        experience: editData.experience,
+        bio: editData.bio,
+        portfolio: editData.portfolio,
+        skills: Array.isArray(editData.skills) ? editData.skills.join(',') : editData.skills, // Store as comma-separated string
+        languages: Array.isArray(editData.languages) ? editData.languages.join(',') : editData.languages,
+        // Keep any existing fields that might be important
+        joinDate: editData.joinDate || currentData.joinDate || currentData.createdAt,
+        rating: editData.rating || currentData.rating || 0,
+        completedProjects: editData.completedProjects || currentData.completedProjects || 0,
+        clientSatisfaction: editData.clientSatisfaction || currentData.clientSatisfaction || 0
+      };
+
+      // Try to update using PUT to customer endpoint
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/customer/${creatorId}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (response.ok) {
+        const updatedData = await response.json();
+        console.log('Successfully updated customer profile:', updatedData);
+        
+        setProfileData({ ...editData });
+        setIsEditing(false);
+        setSuccess('Profile updated successfully!');
+        
+        // Update localStorage if name changed
+        if (editData.name && editData.name !== localStorage.getItem('userName')) {
+          localStorage.setItem('userName', editData.name);
+        }
+        
+        setTimeout(() => setSuccess(''), 5000);
+      } else {
+        // If PUT doesn't work, try PATCH
+        const patchResponse = await fetch(`${process.env.REACT_APP_API_URL}/customer/${creatorId}`, {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+
+        if (patchResponse.ok) {
+          console.log('Successfully updated customer profile with PATCH');
+          setProfileData({ ...editData });
+          setIsEditing(false);
+          setSuccess('Profile updated successfully!');
+          
+          if (editData.name && editData.name !== localStorage.getItem('userName')) {
+            localStorage.setItem('userName', editData.name);
+          }
+          
+          setTimeout(() => setSuccess(''), 5000);
+        } else {
+          // If neither PUT nor PATCH work, save locally and warn user
+          console.warn('Server update failed, saving locally');
+          setProfileData({ ...editData });
+          setIsEditing(false);
+          setSuccess('Profile updated locally. Server sync may be limited.');
+          
+          setTimeout(() => setSuccess(''), 7000);
+        }
+      }
+    } catch (err) {
+      console.error('Error saving profile:', err);
       
+      // Always save locally as fallback
       setProfileData({ ...editData });
       setIsEditing(false);
-      setSuccess('Profile updated successfully!');
+      setSuccess('Profile saved locally. Server connection unavailable.');
       
-      setTimeout(() => setSuccess(''), 3000);
-    } catch (err) {
-      setError('Failed to update profile. Please try again.');
-      setTimeout(() => setError(''), 3000);
+      setTimeout(() => setSuccess(''), 5000);
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
@@ -131,6 +343,17 @@ function Profile() {
     };
     return experiences[exp] || exp;
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading your profile...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-100 flex flex-col">
@@ -171,21 +394,22 @@ function Profile() {
                 <div className="flex items-center space-x-2">
                   <button
                     onClick={handleCancel}
-                    className="px-4 py-2 border border-gray-300 text-gray-700 font-medium rounded-xl hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-all duration-200"
+                    disabled={saving}
+                    className="px-4 py-2 border border-gray-300 text-gray-700 font-medium rounded-xl hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleSave}
-                    disabled={loading}
+                    disabled={saving}
                     className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-medium rounded-xl hover:from-green-700 hover:to-emerald-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
                   >
-                    {loading ? (
+                    {saving ? (
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                     ) : (
                       <Save className="h-4 w-4 mr-2" />
                     )}
-                    Save Changes
+                    {saving ? 'Saving...' : 'Save Changes'}
                   </button>
                 </div>
               )}
@@ -212,7 +436,7 @@ function Profile() {
         </div>
       )}
 
-      {/* Main Content */}
+      {/* Main Content - Profile Details */}
       <div className="flex-1">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -223,78 +447,92 @@ function Profile() {
                 <div className="text-center">
                   <div className="relative inline-block">
                     <div className="w-24 h-24 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-full flex items-center justify-center text-white text-2xl font-bold shadow-lg">
-                      {profileData.name.split(' ').map(n => n[0]).join('')}
+                      {profileData.name ? profileData.name.split(' ').map(n => n[0]).join('').toUpperCase() : 'CC'}
                     </div>
                     <button className="absolute bottom-0 right-0 bg-white rounded-full p-2 shadow-lg border border-gray-200 hover:bg-gray-50 transition-colors">
                       <Camera className="h-4 w-4 text-gray-600" />
                     </button>
                   </div>
-                  <h2 className="mt-4 text-xl font-bold text-gray-900">{profileData.name}</h2>
+                  <h2 className="mt-4 text-xl font-bold text-gray-900">{profileData.name || 'Content Creator'}</h2>
                   <p className="text-gray-600">{getSpecializationLabel(profileData.specialization)}</p>
-                  <div className="flex items-center justify-center mt-2 text-sm text-gray-500">
-                    <MapPin className="h-4 w-4 mr-1" />
-                    {profileData.location}
-                  </div>
+                  {profileData.location && (
+                    <div className="flex items-center justify-center mt-2 text-sm text-gray-500">
+                      <MapPin className="h-4 w-4 mr-1" />
+                      {profileData.location}
+                    </div>
+                  )}
                 </div>
 
                 <div className="mt-6 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-500">Rating</span>
-                    <div className="flex items-center">
-                      <Star className="h-4 w-4 text-yellow-400 fill-current" />
-                      <span className="ml-1 text-sm font-semibold text-gray-900">{profileData.rating}</span>
+                  {profileData.rating > 0 && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-gray-500">Rating</span>
+                      <div className="flex items-center">
+                        <Star className="h-4 w-4 text-yellow-400 fill-current" />
+                        <span className="ml-1 text-sm font-semibold text-gray-900">{profileData.rating}</span>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-500">Projects</span>
-                    <span className="text-sm font-semibold text-gray-900">{profileData.completedProjects}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-500">Satisfaction</span>
-                    <span className="text-sm font-semibold text-gray-900">{profileData.clientSatisfaction}%</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-500">Member Since</span>
-                    <span className="text-sm font-semibold text-gray-900">
-                      {new Date(profileData.joinDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
-                    </span>
-                  </div>
+                  )}
+                  {profileData.completedProjects > 0 && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-gray-500">Projects</span>
+                      <span className="text-sm font-semibold text-gray-900">{profileData.completedProjects}</span>
+                    </div>
+                  )}
+                  {profileData.clientSatisfaction > 0 && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-gray-500">Satisfaction</span>
+                      <span className="text-sm font-semibold text-gray-900">{profileData.clientSatisfaction}%</span>
+                    </div>
+                  )}
+                  {profileData.joinDate && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-gray-500">Member Since</span>
+                      <span className="text-sm font-semibold text-gray-900">
+                        {new Date(profileData.joinDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
 
               {/* Skills Card */}
-              <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-gray-200/50">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                  <Award className="h-5 w-5 mr-2 text-purple-600" />
-                  Skills
-                </h3>
-                <div className="flex flex-wrap gap-2">
-                  {profileData.skills.map((skill, index) => (
-                    <span
-                      key={index}
-                      className="px-3 py-1 bg-gradient-to-r from-purple-100 to-indigo-100 text-purple-800 rounded-full text-sm font-medium border border-purple-200"
-                    >
-                      {skill}
-                    </span>
-                  ))}
+              {profileData.skills && profileData.skills.length > 0 && (
+                <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-gray-200/50">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                    <Award className="h-5 w-5 mr-2 text-purple-600" />
+                    Skills
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    {profileData.skills.map((skill, index) => (
+                      <span
+                        key={index}
+                        className="px-3 py-1 bg-gradient-to-r from-purple-100 to-indigo-100 text-purple-800 rounded-full text-sm font-medium border border-purple-200"
+                      >
+                        {skill}
+                      </span>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Languages Card */}
-              <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-gray-200/50">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Languages</h3>
-                <div className="space-y-2">
-                  {profileData.languages.map((language, index) => (
-                    <div key={index} className="flex items-center justify-between">
-                      <span className="text-sm text-gray-700">{language}</span>
-                      <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">Fluent</span>
-                    </div>
-                  ))}
+              {profileData.languages && profileData.languages.length > 0 && (
+                <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-gray-200/50">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Languages</h3>
+                  <div className="space-y-2">
+                    {profileData.languages.map((language, index) => (
+                      <div key={index} className="flex items-center justify-between">
+                        <span className="text-sm text-gray-700">{language}</span>
+                        <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">Fluent</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
-            {/* Right Column - Profile Details */}
+            {/* Right Column - Profile Details - Keep existing form structure */}
             <div className="lg:col-span-2 space-y-6">
               {/* Personal Information */}
               <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-gray-200/50">

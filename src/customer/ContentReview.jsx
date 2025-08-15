@@ -833,17 +833,20 @@ function ContentReview() {
                     {/* Comment Markers - Only show on images or videos when they support it */}
                     {currentMedia && (
                       commentsForCurrentMedia.map((comment, index) => {
-                        // Calculate floating box position
+                        // Calculate floating box position - use a safer approach without querySelector
                         let boxLeft = 40;
                         let boxRight = "auto";
-                        const mediaElement = document.querySelector(`img[alt*="${selectedContent.title}"], video`);
-                        if (mediaElement && mediaElement.width && (comment.x || comment.position?.x) > mediaElement.width / 2) {
+                        
+                        // Use a more reliable method to determine position
+                        // Instead of querySelector with potentially invalid selectors, use a default calculation
+                        const commentX = comment.x || comment.position?.x || 0;
+                        const commentY = comment.y || comment.position?.y || 0;
+                        
+                        // Simple heuristic: if comment is more than halfway across, show box on left
+                        if (commentX > 400) { // Assume typical image width, adjust as needed
                           boxLeft = "auto";
                           boxRight = 40;
                         }
-
-                        const commentX = comment.x || comment.position?.x || 0;
-                        const commentY = comment.y || comment.position?.y || 0;
 
                         return (
                           <div

@@ -119,8 +119,134 @@ function YouTubeIntegration() {
     setUserData('yt_connected_accounts', accounts);
   };
 
+  // Add the missing publishToYouTube function
+  const publishToYouTube = async (postData) => {
+    if (!activeAccount) {
+      throw new Error('No active YouTube account');
+    }
+
+    // Ensure valid token
+    const tokenValid = await ensureValidToken(activeAccount.id);
+    if (!tokenValid) {
+      throw new Error('YouTube token expired. Please reconnect your account.');
+    }
+
+    const { caption, mediaFiles } = postData;
+    
+    if (!mediaFiles || mediaFiles.length === 0) {
+      throw new Error('No media files provided');
+    }
+
+    const file = mediaFiles[0]; // YouTube supports one video per upload
+    
+    // Handle image to video conversion if needed
+    let fileToUpload = file;
+    let mimeType = file.type;
+
+    if (file.type.startsWith('image/')) {
+      fileToUpload = await imageToVideo(file);
+      mimeType = 'video/webm';
+    }
+
+    const metadata = {
+      snippet: {
+        title: caption || 'Untitled Video',
+        description: caption || '',
+      },
+      status: {
+        privacyStatus: 'public'
+      }
+    };
+
+    return new Promise((resolve, reject) => {
+      const boundary = '-------314159265358979323846';
+      const delimiter = "\r\n--" + boundary + "\r\n";
+      const close_delim = "\r\n--" + boundary + "--";
+
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const base64Data = e.target.result.split(',')[1];
+          
+          const multipartRequestBody =
+            delimiter +
+            'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+            JSON.stringify(metadata) +
+            delimiter +
+            'Content-Type: ' + mimeType + '\r\n' +
+            'Content-Transfer-Encoding: base64\r\n' +
+            '\r\n' +
+            base64Data +
+            close_delim;
+
+          const response = await fetch(
+            'https://www.googleapis.com/upload/youtube/v3/videos?part=snippet,status&uploadType=multipart',
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${activeAccount.accessToken}`,
+                'Content-Type': `multipart/related; boundary="${boundary}"`
+              },
+              body: multipartRequestBody
+            }
+          );
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            console.error('YouTube upload error:', errorData);
+            
+            if (response.status === 401) {
+              reject(new Error('YouTube authentication failed. Please reconnect your YouTube account.'));
+              return;
+            }
+            
+            reject(new Error(errorData.error?.message || `YouTube upload failed with status ${response.status}`));
+            return;
+          }
+
+          const data = await response.json();
+          console.log('✅ YouTube upload successful:', data);
+          
+          resolve({
+            success: true,
+            videoId: data.id,
+            url: `https://www.youtube.com/watch?v=${data.id}`
+          });
+          
+        } catch (error) {
+          console.error('YouTube upload processing error:', error);
+          reject(new Error(`YouTube upload failed: ${error.message}`));
+        }
+      };
+      
+      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.readAsDataURL(fileToUpload);
+    });
+  };
+
+  // Export the function for use by other components with better error handling
+  React.useEffect(() => {
+    // Validate the function before exporting
+    if (typeof publishToYouTube === 'function') {
+      window.publishToYouTube = publishToYouTube;
+      console.log('✅ YouTube publish function exported successfully');
+    } else {
+      console.error('❌ Failed to export YouTube publish function - not a function');
+    }
+    
+    return () => {
+      delete window.publishToYouTube;
+    };
+  }, [publishToYouTube, activeAccount]);
+
   // Handle new token from Google OAuth
   const handleNewToken = async (tokenResponse) => {
+    console.log('🔍 Token response:', {
+      hasAccessToken: !!tokenResponse.access_token,
+      hasRefreshToken: !!tokenResponse.refresh_token,
+      expiresIn: tokenResponse.expires_in
+    });
+
     try {
       // Set token temporarily to fetch user info
       window.gapi.client.setToken({ access_token: tokenResponse.access_token });
@@ -141,10 +267,17 @@ function YouTubeIntegration() {
           email: channel.snippet.customUrl || `${channel.snippet.title}@youtube`,
           picture: channel.snippet.thumbnails.default,
           accessToken: tokenResponse.access_token,
-          refreshToken: tokenResponse.refresh_token,
           connectedAt: new Date().toISOString(),
           channelInfo: channel
         };
+
+        // Store refresh token if available
+        if (tokenResponse.refresh_token) {
+          newAccount.refreshToken = tokenResponse.refresh_token;
+          console.log('✅ Refresh token captured and stored');
+        } else {
+          console.warn('⚠️ No refresh token received - auto-refresh will not work');
+        }
         
         // Check if account already exists
         const existingAccountIndex = connectedAccounts.findIndex(acc => acc.id === userId);
@@ -826,14 +959,31 @@ function YouTubeIntegration() {
             <p>⏰ <strong>Expires:</strong> {new Date(parseInt(storedExpiry, 10)).toLocaleString()}</p>
           )}
           <p>🔄 <strong>Refresh Available:</strong> {activeAccount.refreshToken ? '✅ Yes' : '❌ No'}</p>
-          {(tokenExpired || tokenExpiringSoon) && (
-            <div className="mt-2">
+          <div className="mt-2 space-x-2">
+            {(tokenExpired || tokenExpiringSoon) && (
               <button
                 onClick={() => refreshYouTubeToken(activeAccount.id)}
                 className="bg-yellow-600 text-white px-3 py-1 rounded text-sm hover:bg-yellow-700"
               >
                 🔄 Refresh Token
               </button>
+            )}
+            {!activeAccount.refreshToken && (
+              <button
+                onClick={() => {
+                  if (tokenClient) {
+                    tokenClient.requestAccessToken({ prompt: 'consent' });
+                  }
+                }}
+                className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
+              >
+                🔑 Re-authenticate
+              </button>
+            )}
+          </div>
+          {!activeAccount.refreshToken && (
+            <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700">
+              <strong>⚠️ No refresh token:</strong> Click "Re-authenticate" to get a refresh token for auto-renewal.
             </div>
           )}
         </div>
@@ -1480,6 +1630,9 @@ function YouTubeIntegration() {
       const client = window.google.accounts.oauth2.initTokenClient({
         client_id: CLIENT_ID,
         scope: SCOPES,
+        // Add these parameters for offline access and refresh tokens
+        access_type: 'offline',
+        prompt: 'consent', // Force consent to get refresh token
         callback: (tokenResponse) => {
           if (tokenResponse && tokenResponse.access_token) {
             handleNewToken(tokenResponse);

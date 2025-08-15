@@ -18,15 +18,34 @@ function ScheduledPosts() {
   const fetchScheduledPosts = async () => {
     setLoading(true);
     try {
+      console.log('📡 Fetching scheduled posts from:', `${process.env.REACT_APP_API_URL}/api/scheduled-posts`);
+      
       const response = await fetch(`${process.env.REACT_APP_API_URL}/api/scheduled-posts`);
+      
+      console.log('📡 Response status:', response.status);
+      
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
+      
       const data = await response.json();
-      // Ensure data is always an array
-      setScheduledPosts(Array.isArray(data) ? data : []);
+      console.log('📋 Received data:', data);
+      
+      // Handle both array and object responses
+      let posts = [];
+      if (Array.isArray(data)) {
+        posts = data;
+      } else if (data && Array.isArray(data.posts)) {
+        posts = data.posts;
+      } else if (data && data.success && Array.isArray(data.data)) {
+        posts = data.data;
+      }
+      
+      console.log('📋 Processed posts:', posts.length);
+      setScheduledPosts(posts);
+      
     } catch (error) {
-      console.error('Failed to fetch scheduled posts:', error);
+      console.error('❌ Failed to fetch scheduled posts:', error);
       // Set empty array on error
       setScheduledPosts([]);
     } finally {

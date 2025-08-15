@@ -5,7 +5,7 @@ import {
   CheckCircle, AlertCircle, ChevronLeft, ChevronRight, Image, FileText, 
   Play, Video, Filter, Search, Facebook, Instagram, Send, Plus, 
   MoreVertical, Edit, Trash2, Users, Grid, List, XCircle, Loader2, Hash,
-  Youtube, Twitter, Check, X
+  Youtube, Twitter, Check, X, Zap
 } from 'lucide-react';
 
 function AdminContentPortfolio() {
@@ -54,6 +54,7 @@ function AdminContentPortfolio() {
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
   });
   const [submitting, setSubmitting] = useState(false);
+  const [isPostingNow, setIsPostingNow] = useState(false);
   
   const fileInputRef = useRef(null);
 
@@ -309,9 +310,9 @@ function AdminContentPortfolio() {
   const handleScheduleContent = (item) => {
     const latestVersion = item.versions[item.versions.length - 1];
     
-    // Get all images from the latest version (filter out videos for carousel)
-    const availableImages = latestVersion?.media?.filter(media => 
-      media.type === 'image' && media.url
+    // Get all media from the latest version - don't filter by platform here
+    const availableMedia = latestVersion?.media?.filter(media => 
+      media.url && typeof media.url === 'string'
     ) || [];
     
     // Extract caption without hashtags
@@ -323,8 +324,8 @@ function AdminContentPortfolio() {
     setScheduleFormData({
       caption: captionWithoutHashtags,
       hashtags: hashtagsText,
-      selectedImages: availableImages.length > 0 ? [availableImages[0]] : [], // Select first image by default
-      availableImages: availableImages,
+      selectedImages: availableMedia.length > 0 ? [availableMedia[0]] : [], // Select first media item by default
+      availableImages: availableMedia, // Show all media (images and videos)
       platform: 'facebook',
       accountId: '',
       pageId: '',
@@ -337,23 +338,24 @@ function AdminContentPortfolio() {
     setShowScheduleModal(true);
   };
 
-  // Toggle image selection for carousel
-  const toggleImageSelection = (image) => {
+  // Toggle image/video selection for carousel
+  const toggleImageSelection = (media) => {
     setScheduleFormData(prev => {
-      const isSelected = prev.selectedImages.some(img => img.url === image.url);
+      const isSelected = prev.selectedImages.some(item => item.url === media.url);
       
       if (isSelected) {
         // Remove from selection
         return {
           ...prev,
-          selectedImages: prev.selectedImages.filter(img => img.url !== image.url)
+          selectedImages: prev.selectedImages.filter(item => item.url !== media.url)
         };
       } else {
-        // Add to selection (limit to 10 for Instagram/Facebook)
-        if (prev.selectedImages.length < 10) {
+        // Add to selection (limit to 10 for Instagram/Facebook, 1 for YouTube)
+        const maxItems = (prev.platform === 'instagram' || prev.platform === 'facebook') ? 10 : 1;
+        if (prev.selectedImages.length < maxItems) {
           return {
             ...prev,
-            selectedImages: [...prev.selectedImages, image]
+            selectedImages: [...prev.selectedImages, media]
           };
         }
       }
@@ -362,18 +364,18 @@ function AdminContentPortfolio() {
     });
   };
 
-  // Select all images for carousel
+  // Select all media for carousel
   const selectAllImages = () => {
     const maxImages = (scheduleFormData.platform === 'instagram' || scheduleFormData.platform === 'facebook') ? 10 : 1;
-    const imagesToSelect = scheduleFormData.availableImages.slice(0, maxImages);
+    const mediaToSelect = scheduleFormData.availableImages.slice(0, maxImages);
     
     setScheduleFormData(prev => ({
       ...prev,
-      selectedImages: imagesToSelect
+      selectedImages: mediaToSelect
     }));
   };
 
-  // Clear all selected images
+  // Clear all selected media
   const clearAllImages = () => {
     setScheduleFormData(prev => ({
       ...prev,
@@ -381,187 +383,181 @@ function AdminContentPortfolio() {
     }));
   };
 
-  const handleSchedulePost = async () => {
-    if (!scheduleFormData.caption || !scheduleFormData.scheduledDate || !scheduleFormData.scheduledTime) {
-      alert('Please fill in all required fields');
-      return;
+  // Update platform change handler to not filter media
+  const handlePlatformChange = (platform) => {
+    if (!selectedContentForSchedule) return;
+    
+    const latestVersion = selectedContentForSchedule.versions[selectedContentForSchedule.versions.length - 1];
+    
+    // Don't filter media by platform - all platforms can handle both images and videos
+    const availableMedia = latestVersion?.media?.filter(media => 
+      media.url && typeof media.url === 'string'
+    ) || [];
+    
+    setScheduleFormData(prev => ({ 
+      ...prev, 
+      platform: platform,
+      accountId: '',
+      pageId: '',
+      channelId: '',
+      availableImages: availableMedia,
+      selectedImages: availableMedia.length > 0 ? [availableMedia[0]] : []
+    }));
+  };
+
+  // Common validation function for both schedule and post now
+  const validatePostData = (isScheduled = true) => {
+    if (!scheduleFormData.caption) {
+      alert('Please enter a caption');
+      return false;
     }
 
     if (!scheduleFormData.accountId) {
       alert('Please select a social media account');
-      return;
+      return false;
     }
 
     // Platform-specific validation
     if (scheduleFormData.platform === 'facebook' || scheduleFormData.platform === 'instagram') {
       if (!scheduleFormData.pageId) {
         alert('Please select a Facebook page');
-        return;
+        return false;
       }
       if (scheduleFormData.platform === 'instagram' && scheduleFormData.selectedImages.length === 0) {
         alert('Instagram requires at least one image');
-        return;
+        return false;
       }
     } else if (scheduleFormData.platform === 'youtube') {
       if (!scheduleFormData.channelId) {
         alert('Please select a YouTube channel');
-        return;
+        return false;
       }
       if (scheduleFormData.selectedImages.length === 0) {
         alert('Please upload a video for YouTube post');
-        return;
+        return false;
       }
     }
 
+    // Only validate date/time for scheduled posts
+    if (isScheduled && (!scheduleFormData.scheduledDate || !scheduleFormData.scheduledTime)) {
+      alert('Please select a date and time for scheduling');
+      return false;
+    }
+
+    return true;
+  };
+
+  // Create post data object
+  const createPostData = (isScheduled = true) => {
+    const fullCaption = scheduleFormData.hashtags 
+      ? `${scheduleFormData.caption}\n\n${scheduleFormData.hashtags}`
+      : scheduleFormData.caption;
+
+    // Get the selected account details
+    const selectedAccount = getCustomerSocialAccounts(selectedContentForSchedule.customerId)
+      .find(acc => acc._id === scheduleFormData.accountId);
+
+    if (!selectedAccount) {
+      throw new Error('Selected social media account not found');
+    }
+
+    // Get page details if needed
+    let selectedPage = null;
+    if (scheduleFormData.pageId && selectedAccount.pages) {
+      selectedPage = selectedAccount.pages.find(page => page.id === scheduleFormData.pageId);
+      
+      if (!selectedPage) {
+        throw new Error('Selected page not found in account data.');
+      }
+      
+      if (!selectedPage.accessToken || selectedPage.accessToken.length < 50) {
+        throw new Error('Selected page does not have a valid access token. Please reconnect the Facebook account to obtain page access tokens.');
+      }
+    }
+
+    // Get YouTube channel details if needed
+    let selectedChannel = null;
+    if (scheduleFormData.channelId && selectedAccount.channels) {
+      selectedChannel = selectedAccount.channels.find(channel => channel.id === scheduleFormData.channelId);
+      
+      if (!selectedChannel) {
+        throw new Error('Selected YouTube channel not found in account data.');
+      }
+      
+      if (!selectedAccount.accessToken || selectedAccount.accessToken.length < 50) {
+        throw new Error('Selected YouTube account does not have a valid access token. Please reconnect the YouTube account.');
+      }
+    }
+
+    let postData = {
+      caption: fullCaption,
+      status: isScheduled ? 'pending' : 'publishing',
+      contentId: selectedContentForSchedule.id,
+      customerId: selectedContentForSchedule.customerId,
+      platform: scheduleFormData.platform,
+      accountId: selectedAccount._id,
+      platformUserId: selectedAccount.platformUserId,
+      accessToken: selectedAccount.accessToken,
+      imageUrls: scheduleFormData.selectedImages.map(item => item.url),
+      isCarousel: scheduleFormData.selectedImages.length > 1,
+      timezone: scheduleFormData.timezone
+    };
+
+    // Add scheduled time only for scheduled posts
+    if (isScheduled) {
+      const scheduledDateTime = new Date(`${scheduleFormData.scheduledDate}T${scheduleFormData.scheduledTime}`);
+      postData.scheduledAt = scheduledDateTime.toISOString();
+    } else {
+      // For immediate posts, set to publish now
+      postData.scheduledAt = new Date().toISOString();
+      postData.publishImmediately = true;
+    }
+
+    if (scheduleFormData.platform === 'facebook' || scheduleFormData.platform === 'instagram') {
+      Object.assign(postData, {
+        imageUrl: scheduleFormData.selectedImages[0]?.url || '',
+        pageId: scheduleFormData.pageId,
+        pageName: selectedPage?.name,
+        pageAccessToken: selectedPage.accessToken,
+        instagramId: scheduleFormData.platform === 'instagram' 
+          ? selectedPage?.instagramBusinessAccount?.id
+          : null,
+      });
+      
+      if (scheduleFormData.platform === 'instagram') {
+        if (!selectedPage?.instagramBusinessAccount?.id) {
+          throw new Error('Selected page does not have an Instagram Business Account connected.');
+        }
+      }
+    } else if (scheduleFormData.platform === 'youtube') {
+      Object.assign(postData, {
+        videoUrl: scheduleFormData.selectedImages[0]?.url || '',
+        channelId: scheduleFormData.channelId,
+        channelName: selectedChannel.name,
+        youtubeAccessToken: selectedAccount.accessToken
+      });
+    } else if (scheduleFormData.platform === 'twitter') {
+      Object.assign(postData, {
+        twitterAccountId: selectedAccount.platformUserId,
+        sessionId: selectedAccount.sessionId,
+      });
+    }
+
+    return postData;
+  };
+
+  const handleSchedulePost = async () => {
+    if (!validatePostData(true)) return;
+
     setSubmitting(true);
     try {
-      const scheduledDateTime = new Date(`${scheduleFormData.scheduledDate}T${scheduleFormData.scheduledTime}`);
-      const fullCaption = scheduleFormData.hashtags 
-        ? `${scheduleFormData.caption}\n\n${scheduleFormData.hashtags}`
-        : scheduleFormData.caption;
-
-      // Get the selected account details
-      const selectedAccount = getCustomerSocialAccounts(selectedContentForSchedule.customerId)
-        .find(acc => acc._id === scheduleFormData.accountId);
-
-      if (!selectedAccount) {
-        throw new Error('Selected social media account not found');
-      }
-
-      // Get page details if needed
-      let selectedPage = null;
-      if (scheduleFormData.pageId && selectedAccount.pages) {
-        selectedPage = selectedAccount.pages.find(page => page.id === scheduleFormData.pageId);
-        
-        // CRITICAL: Validate page has access token
-        if (!selectedPage) {
-          throw new Error('Selected page not found in account data.');
-        }
-        
-        if (!selectedPage.accessToken || selectedPage.accessToken.length < 50) {
-          throw new Error('Selected page does not have a valid access token. Please reconnect the Facebook account to obtain page access tokens.');
-        }
-        
-        console.log('✅ Using page access token for posting:', {
-          pageName: selectedPage.name,
-          pageId: selectedPage.id,
-          hasToken: !!selectedPage.accessToken,
-          tokenLength: selectedPage.accessToken.length,
-          tokenType: selectedPage.accessToken.length > 200 ? 'likely-page-token' : 'likely-user-token'
-        });
-      }
-
-      // Get YouTube channel details if needed
-      let selectedChannel = null;
-      if (scheduleFormData.channelId && selectedAccount.channels) {
-        selectedChannel = selectedAccount.channels.find(channel => channel.id === scheduleFormData.channelId);
-        
-        if (!selectedChannel) {
-          throw new Error('Selected YouTube channel not found in account data.');
-        }
-        
-        if (!selectedAccount.accessToken || selectedAccount.accessToken.length < 50) {
-          throw new Error('Selected YouTube account does not have a valid access token. Please reconnect the YouTube account.');
-        }
-        
-        console.log('✅ Using YouTube access token for posting:', {
-          channelName: selectedChannel.name,
-          channelId: selectedChannel.id,
-          hasToken: !!selectedAccount.accessToken,
-          tokenLength: selectedAccount.accessToken.length
-        });
-      }
-
+      const postData = createPostData(true);
       const endpoint = `${process.env.REACT_APP_API_URL}/api/scheduled-posts`;
-      let postData = {
-        caption: fullCaption,
-        scheduledAt: scheduledDateTime.toISOString(),
-        timezone: scheduleFormData.timezone,
-        status: 'pending',
-        contentId: selectedContentForSchedule.id,
-        customerId: selectedContentForSchedule.customerId,
-        platform: scheduleFormData.platform,
-        // Account details from database
-        accountId: selectedAccount._id,
-        platformUserId: selectedAccount.platformUserId,
-        accessToken: selectedAccount.accessToken, // User token for reference
-        // Multiple images for carousel
-        imageUrls: scheduleFormData.selectedImages.map(img => img.url),
-        isCarousel: scheduleFormData.selectedImages.length > 1
-      };
 
-      if (scheduleFormData.platform === 'facebook' || scheduleFormData.platform === 'instagram') {
-        // CRITICAL: Ensure page access token is included
-        if (!selectedPage.accessToken) {
-          throw new Error('Page access token is required for Facebook/Instagram posting');
-        }
-        
-        Object.assign(postData, {
-          imageUrl: scheduleFormData.selectedImages[0]?.url || '', // Keep backward compatibility
-          imageUrls: scheduleFormData.selectedImages.map(img => img.url), // Multiple images
-          pageId: scheduleFormData.pageId,
-          pageName: selectedPage?.name,
-          pageAccessToken: selectedPage.accessToken, // This is the critical page token
-          instagramId: scheduleFormData.platform === 'instagram' 
-            ? selectedPage?.instagramBusinessAccount?.id
-            : null,
-          isCarousel: scheduleFormData.selectedImages.length > 1
-        });
-        
-        // Extra validation for Instagram
-        if (scheduleFormData.platform === 'instagram') {
-          if (!selectedPage?.instagramBusinessAccount?.id) {
-            throw new Error('Selected page does not have an Instagram Business Account connected.');
-          }
-        }
-        
-        // Final validation log
-        console.log('📋 Final post data validation:', {
-          hasPageAccessToken: !!postData.pageAccessToken,
-          pageAccessTokenLength: postData.pageAccessToken?.length,
-          pageId: postData.pageId,
-          platform: postData.platform,
-          imageCount: postData.imageUrls?.length || 0,
-          isCarousel: postData.isCarousel
-        });
-        
-      } else if (scheduleFormData.platform === 'youtube') {
-        // CRITICAL: Include all required YouTube fields
-        Object.assign(postData, {
-          videoUrl: scheduleFormData.selectedImages[0]?.url || '', // Keep backward compatibility
-          imageUrls: scheduleFormData.selectedImages.map(img => img.url), // For multiple videos (if supported)
-          channelId: scheduleFormData.channelId,
-          channelName: selectedChannel.name,
-          youtubeAccessToken: selectedAccount.accessToken // Use the user access token
-        });
-        
-        // Final validation log for YouTube
-        console.log('📋 Final YouTube post data validation:', {
-          hasAccessToken: !!postData.youtubeAccessToken,
-          accessTokenLength: postData.youtubeAccessToken?.length,
-          channelId: postData.channelId,
-          channelName: postData.channelName,
-          hasVideoUrl: !!postData.videoUrl,
-          mediaCount: postData.imageUrls?.length || 0
-        });
-        
-      } else if (scheduleFormData.platform === 'twitter') {
-        Object.assign(postData, {
-          twitterAccountId: selectedAccount.platformUserId,
-          sessionId: selectedAccount.sessionId, // If you store this
-          imageUrls: scheduleFormData.selectedImages.map(img => img.url), // Twitter supports up to 4 images
-        });
-      }
-
-      console.log('📤 Scheduling post with validated data:', {
+      console.log('📤 Scheduling post:', {
         platform: postData.platform,
-        pageId: postData.pageId,
-        channelId: postData.channelId,
-        hasPageToken: !!postData.pageAccessToken,
-        hasYouTubeToken: !!postData.youtubeAccessToken,
-        hasUserToken: !!postData.accessToken,
         scheduledAt: postData.scheduledAt,
-        imageCount: postData.imageUrls?.length || 0,
+        mediaCount: postData.imageUrls?.length || 0,
         isCarousel: postData.isCarousel
       });
 
@@ -572,23 +568,9 @@ function AdminContentPortfolio() {
       });
 
       if (response.ok) {
-        alert(`Post with ${scheduleFormData.selectedImages.length} ${scheduleFormData.selectedImages.length === 1 ? 'image' : 'images'} scheduled successfully!`);
-        setShowScheduleModal(false);
-        setSelectedContentForSchedule(null);
-        setScheduleFormData({
-          caption: '',
-          hashtags: '',
-          selectedImages: [],
-          availableImages: [],
-          platform: 'facebook',
-          accountId: '',
-          pageId: '',
-          channelId: '',
-          twitterAccountId: '',
-          scheduledDate: '',
-          scheduledTime: '',
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
-        });
+        const mediaType = scheduleFormData.platform === 'youtube' ? 'video' : 'image';
+        alert(`Post with ${scheduleFormData.selectedImages.length} ${mediaType}${scheduleFormData.selectedImages.length === 1 ? '' : 's'} scheduled successfully!`);
+        closeModal();
       } else {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Failed to schedule post');
@@ -601,10 +583,122 @@ function AdminContentPortfolio() {
     }
   };
 
+  const handlePostNow = async () => {
+    if (!validatePostData(false)) return;
+
+    setIsPostingNow(true);
+    try {
+      const postData = createPostData(false);
+      const endpoint = `${process.env.REACT_APP_API_URL}/api/immediate-posts`;
+
+      console.log('⚡ Posting immediately:', {
+        platform: postData.platform,
+        mediaCount: postData.imageUrls?.length || 0,
+        isCarousel: postData.isCarousel
+      });
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(postData)
+      });
+
+      const result = await response.json();
+      
+      if (response.ok) {
+        const mediaType = scheduleFormData.platform === 'youtube' ? 'video' : 'image';
+        
+        // Show success message with detailed results
+        let successMessage = `Post with ${scheduleFormData.selectedImages.length} ${mediaType}${scheduleFormData.selectedImages.length === 1 ? '' : 's'} published successfully!`;
+        
+        // Add platform-specific success details
+        if (result.facebookPostId) {
+          successMessage += `\n✅ Facebook: Posted successfully (ID: ${result.facebookPostId})`;
+        }
+        if (result.instagramPostId) {
+          successMessage += `\n✅ Instagram: Posted successfully (ID: ${result.instagramPostId})`;
+        }
+        if (result.youtubePostId) {
+          successMessage += `\n✅ YouTube: Posted successfully (ID: ${result.youtubePostId})`;
+        }
+        if (result.twitterPostId) {
+          successMessage += `\n✅ Twitter: Posted successfully (ID: ${result.twitterPostId})`;
+        }
+        
+        // Show partial success if some platforms failed
+        if (result.error && (result.facebookPostId || result.instagramPostId || result.youtubePostId || result.twitterPostId)) {
+          successMessage += `\n\n⚠️ Some issues occurred: ${result.error}`;
+        }
+        
+        alert(successMessage);
+        closeModal();
+      } else {
+        const errorData = result;
+        
+        // Enhanced error handling with specific guidance
+        let errorMessage = `Failed to publish post: ${errorData.error || 'Unknown error'}`;
+        
+        // Add platform-specific error guidance
+        if (errorData.error?.includes('token') || errorData.error?.includes('access')) {
+          errorMessage += '\n\n💡 This appears to be an authentication issue. The customer may need to reconnect their social media accounts.';
+        }
+        
+        if (errorData.error?.includes('Instagram') && errorData.error?.includes('reconnect')) {
+          errorMessage += '\n\n📸 Instagram Error: Customer needs to disconnect and reconnect their Facebook account through the Instagram integration page to restore posting capabilities.';
+        }
+        
+        if (errorData.error?.includes('YouTube') && errorData.error?.includes('token')) {
+          errorMessage += '\n\n📺 YouTube Error: Customer needs to reconnect their YouTube account through the YouTube integration page.';
+        }
+        
+        if (errorData.error?.includes('permissions')) {
+          errorMessage += '\n\n🔑 Permissions Error: Customer needs to grant proper permissions when reconnecting their social media accounts.';
+        }
+        
+        throw new Error(errorMessage);
+      }
+    } catch (error) {
+      console.error('Post now error:', error);
+      
+      // Enhanced error display
+      let displayError = error.message;
+      
+      // Add troubleshooting tips for common errors
+      if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+        displayError += '\n\n🌐 Network Error: Please check your internet connection and try again.';
+      } else if (error.message.includes('500') || error.message.includes('Internal Server Error')) {
+        displayError += '\n\n🔧 Server Error: There was a problem on our end. Please try again in a moment.';
+      }
+      
+      alert(displayError);
+    } finally {
+      setIsPostingNow(false);
+    }
+  };
+
+  const closeModal = () => {
+    setShowScheduleModal(false);
+    setSelectedContentForSchedule(null);
+    setScheduleFormData({
+      caption: '',
+      hashtags: '',
+      selectedImages: [],
+      availableImages: [],
+      platform: 'facebook',
+      accountId: '',
+      pageId: '',
+      channelId: '',
+      twitterAccountId: '',
+      scheduledDate: '',
+      scheduledTime: '',
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+    });
+  };
+
   const handleImageUpload = async (file) => {
     try {
       if (file.size > 5 * 1024 * 1024) {
-        alert('File too large. Please choose an image smaller than 5MB.');
+        alert('File too large. Please choose a file smaller than 5MB.');
         return;
       }
 
@@ -630,26 +724,29 @@ function AdminContentPortfolio() {
           }
 
           const result = await response.json();
-          const newImage = { url: result.publicUrl, type: 'image' };
+          const newMedia = { 
+            url: result.publicUrl, 
+            type: file.type.startsWith('video/') ? 'video' : 'image'
+          };
           
           // Add to available images and select it
           setScheduleFormData(prev => ({
             ...prev,
-            availableImages: [...prev.availableImages, newImage],
-            selectedImages: [...prev.selectedImages, newImage]
+            availableImages: [...prev.availableImages, newMedia],
+            selectedImages: [...prev.selectedImages, newMedia]
           }));
           
         } catch (error) {
           console.error('Base64 upload failed:', error);
-          alert('Image upload failed. Please try again.');
+          alert('File upload failed. Please try again.');
         }
       };
       
       reader.readAsDataURL(file);
       
     } catch (error) {
-      console.error('Image upload failed:', error);
-      alert('Image upload failed. Please try again.');
+      console.error('File upload failed:', error);
+      alert('File upload failed. Please try again.');
     }
   };
 
@@ -1012,7 +1109,7 @@ function AdminContentPortfolio() {
                             className="flex-1 bg-gradient-to-r from-blue-600 to-cyan-600 text-white py-2 px-4 rounded-xl hover:from-blue-700 hover:to-cyan-700 text-sm font-medium flex items-center justify-center transition-all duration-200"
                           >
                             <Send className="h-4 w-4 mr-2" />
-                            Schedule
+                            Post
                           </button>
                         </div>
                       </div>
@@ -1067,7 +1164,7 @@ function AdminContentPortfolio() {
                     className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-cyan-700 transition-all duration-200"
                   >
                     <Send className="h-5 w-5 mr-2" />
-                    Schedule Post
+                    Post Content
                   </button>
                 </div>
               </div>
@@ -1448,208 +1545,219 @@ function AdminContentPortfolio() {
         )}
       </div>
 
-      {/* Schedule Post Modal */}
+      {/* Enhanced Schedule Post Modal */}
       {showScheduleModal && (
         <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-gray-900">Schedule Post</h2>
+              {/* Modal Header */}
+              <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-200">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-xl">
+                    <Send className="h-6 w-6 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-900">Post Content</h2>
+                    <p className="text-sm text-gray-500">Schedule for later or publish immediately</p>
+                  </div>
+                </div>
                 <button
-                  onClick={() => setShowScheduleModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
+                  onClick={closeModal}
+                  className="text-gray-400 hover:text-gray-600 p-2 rounded-lg hover:bg-gray-100 transition-all duration-200"
                 >
                   <XCircle className="h-6 w-6" />
                 </button>
               </div>
 
-              <div className="space-y-6">
+              <div className="space-y-8">
                 {/* Platform Selection */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Platform</label>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
+                <div className="bg-gradient-to-r from-gray-50 to-blue-50 p-6 rounded-xl border border-gray-200">
+                  <label className="block text-lg font-semibold text-gray-900 mb-4">Select Platform</label>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <label className={`flex items-center p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
+                      scheduleFormData.platform === 'facebook' 
+                        ? 'border-blue-500 bg-blue-50 shadow-md' 
+                        : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50'
+                    }`}>
                       <input
                         type="radio"
                         name="platform"
                         value="facebook"
                         checked={scheduleFormData.platform === 'facebook'}
-                        onChange={(e) => setScheduleFormData(prev => ({ 
-                          ...prev, 
-                          platform: e.target.value,
-                          accountId: '',
-                          pageId: ''
-                        }))}
-                        className="mr-2"
+                        onChange={(e) => handlePlatformChange(e.target.value)}
+                        className="sr-only"
                       />
-                      <Facebook className="h-4 w-4 text-blue-600 mr-2" />
-                      <span className="text-sm">Facebook</span>
+                      <Facebook className="h-6 w-6 text-blue-600 mr-3" />
+                      <span className="font-medium text-gray-900">Facebook</span>
                     </label>
-                    <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
+                    <label className={`flex items-center p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
+                      scheduleFormData.platform === 'instagram' 
+                        ? 'border-pink-500 bg-pink-50 shadow-md' 
+                        : 'border-gray-300 hover:border-pink-400 hover:bg-pink-50'
+                    }`}>
                       <input
                         type="radio"
                         name="platform"
                         value="instagram"
                         checked={scheduleFormData.platform === 'instagram'}
-                        onChange={(e) => setScheduleFormData(prev => ({ 
-                          ...prev, 
-                          platform: e.target.value,
-                          accountId: '',
-                          pageId: ''
-                        }))}
-                        className="mr-2"
+                        onChange={(e) => handlePlatformChange(e.target.value)}
+                        className="sr-only"
                       />
-                      <Instagram className="h-4 w-4 text-pink-600 mr-2" />
-                      <span className="text-sm">Instagram</span>
+                      <Instagram className="h-6 w-6 text-pink-600 mr-3" />
+                      <span className="font-medium text-gray-900">Instagram</span>
                     </label>
-                    <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
+                    <label className={`flex items-center p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
+                      scheduleFormData.platform === 'youtube' 
+                        ? 'border-red-500 bg-red-50 shadow-md' 
+                        : 'border-gray-300 hover:border-red-400 hover:bg-red-50'
+                    }`}>
                       <input
                         type="radio"
                         name="platform"
                         value="youtube"
                         checked={scheduleFormData.platform === 'youtube'}
-                        onChange={(e) => setScheduleFormData(prev => ({ 
-                          ...prev, 
-                          platform: e.target.value,
-                          accountId: '',
-                          channelId: ''
-                        }))}
-                        className="mr-2"
+                        onChange={(e) => handlePlatformChange(e.target.value)}
+                        className="sr-only"
                       />
-                      <Youtube className="h-4 w-4 text-red-600 mr-2" />
-                      <span className="text-sm">YouTube</span>
+                      <Youtube className="h-6 w-6 text-red-600 mr-3" />
+                      <span className="font-medium text-gray-900">YouTube</span>
                     </label>
-                    <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
+                    <label className={`flex items-center p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
+                      scheduleFormData.platform === 'twitter' 
+                        ? 'border-blue-400 bg-blue-50 shadow-md' 
+                        : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50'
+                    }`}>
                       <input
                         type="radio"
                         name="platform"
                         value="twitter"
                         checked={scheduleFormData.platform === 'twitter'}
-                        onChange={(e) => setScheduleFormData(prev => ({ 
-                          ...prev, 
-                          platform: e.target.value,
-                          accountId: ''
-                        }))}
-                        className="mr-2"
+                        onChange={(e) => handlePlatformChange(e.target.value)}
+                        className="sr-only"
                       />
-                      <Twitter className="h-4 w-4 text-blue-400 mr-2" />
-                      <span className="text-sm">Twitter</span>
+                      <Twitter className="h-6 w-6 text-blue-400 mr-3" />
+                      <span className="font-medium text-gray-900">Twitter</span>
                     </label>
                   </div>
                 </div>
 
                 {/* Account Selection */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Select {scheduleFormData.platform} Account
-                  </label>
-                  <select
-                    value={scheduleFormData.accountId}
-                    onChange={(e) => setScheduleFormData(prev => ({ 
-                      ...prev, 
-                      accountId: e.target.value,
-                      pageId: '' // Reset page selection when account changes
-                    }))}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2"
-                    required
-                  >
-                    <option value="">Select an account</option>
-                    {getAvailableAccountsForPlatform(selectedContentForSchedule?.customerId, scheduleFormData.platform).map(account => (
-                      <option key={account._id} value={account._id}>
-                        {account.name} ({account.platform})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Page Selection for Facebook/Instagram */}
-                {(scheduleFormData.platform === 'facebook' || scheduleFormData.platform === 'instagram') && scheduleFormData.accountId && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Select Page
+                    <label className="block text-lg font-semibold text-gray-900 mb-3">
+                      Select {scheduleFormData.platform} Account
                     </label>
                     <select
-                      value={scheduleFormData.pageId}
-                      onChange={(e) => setScheduleFormData(prev => ({ ...prev, pageId: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2"
+                      value={scheduleFormData.accountId}
+                      onChange={(e) => setScheduleFormData(prev => ({ 
+                        ...prev, 
+                        accountId: e.target.value,
+                        pageId: '' // Reset page selection when account changes
+                      }))}
+                      className="w-full border-2 border-gray-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                       required
                     >
-                      <option value="">Select a page</option>
-                      {(() => {
-                        const selectedAccount = getCustomerSocialAccounts(selectedContentForSchedule?.customerId)
-                          .find(acc => acc._id === scheduleFormData.accountId);
-                        return selectedAccount?.pages?.map(page => (
-                          <option key={page.id} value={page.id}>
-                            {page.name}
-                            {!page.accessToken && ' (⚠️ No token)'}
-                            {scheduleFormData.platform === 'instagram' && !page.instagramBusinessAccount && ' (No Instagram)'}
-                          </option>
-                        )) || [];
-                      })()}
+                      <option value="">Choose an account</option>
+                      {getAvailableAccountsForPlatform(selectedContentForSchedule?.customerId, scheduleFormData.platform).map(account => (
+                        <option key={account._id} value={account._id}>
+                          {account.name} ({account.platform})
+                        </option>
+                      ))}
                     </select>
                   </div>
-                )}
 
-                {/* Channel Selection for YouTube */}
-                {scheduleFormData.platform === 'youtube' && scheduleFormData.accountId && (
+                  {/* Page Selection for Facebook/Instagram */}
+                  {(scheduleFormData.platform === 'facebook' || scheduleFormData.platform === 'instagram') && scheduleFormData.accountId && (
+                    <div>
+                      <label className="block text-lg font-semibold text-gray-900 mb-3">
+                        Select Page
+                      </label>
+                      <select
+                        value={scheduleFormData.pageId}
+                        onChange={(e) => setScheduleFormData(prev => ({ ...prev, pageId: e.target.value }))}
+                        className="w-full border-2 border-gray-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                        required
+                      >
+                        <option value="">Choose a page</option>
+                        {(() => {
+                          const selectedAccount = getCustomerSocialAccounts(selectedContentForSchedule?.customerId)
+                            .find(acc => acc._id === scheduleFormData.accountId);
+                          return selectedAccount?.pages?.map(page => (
+                            <option key={page.id} value={page.id}>
+                              {page.name}
+                              {!page.accessToken && ' (⚠️ No token)'}
+                              {scheduleFormData.platform === 'instagram' && !page.instagramBusinessAccount && ' (No Instagram)'}
+                            </option>
+                          )) || [];
+                        })()}
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Channel Selection for YouTube */}
+                  {scheduleFormData.platform === 'youtube' && scheduleFormData.accountId && (
+                    <div>
+                      <label className="block text-lg font-semibold text-gray-900 mb-3">
+                        Select Channel
+                      </label>
+                      <select
+                        value={scheduleFormData.channelId}
+                        onChange={(e) => setScheduleFormData(prev => ({ ...prev, channelId: e.target.value }))}
+                        className="w-full border-2 border-gray-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                        required
+                      >
+                        <option value="">Choose a channel</option>
+                        {(() => {
+                          const selectedAccount = getCustomerSocialAccounts(selectedContentForSchedule?.customerId)
+                            .find(acc => acc._id === scheduleFormData.accountId);
+                          return selectedAccount?.channels?.map(channel => (
+                            <option key={channel.id} value={channel.id}>
+                              {channel.name}
+                              {!selectedAccount.accessToken && ' (⚠️ No token)'}
+                            </option>
+                          )) || [];
+                        })()}
+                      </select>
+                    </div>
+                  )}
+                </div>
+
+                {/* Content Section */}
+                <div className="space-y-6">
+                  {/* Caption */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Select Channel
-                    </label>
-                    <select
-                      value={scheduleFormData.channelId}
-                      onChange={(e) => setScheduleFormData(prev => ({ ...prev, channelId: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2"
-                      required
-                    >
-                      <option value="">Select a channel</option>
-                      {(() => {
-                        const selectedAccount = getCustomerSocialAccounts(selectedContentForSchedule?.customerId)
-                          .find(acc => acc._id === scheduleFormData.accountId);
-                        return selectedAccount?.channels?.map(channel => (
-                          <option key={channel.id} value={channel.id}>
-                            {channel.name}
-                            {!selectedAccount.accessToken && ' (⚠️ No token)'}
-                          </option>
-                        )) || [];
-                      })()}
-                    </select>
+                    <label className="block text-lg font-semibold text-gray-900 mb-3">Caption</label>
+                    <textarea
+                      value={scheduleFormData.caption}
+                      onChange={(e) => setScheduleFormData(prev => ({ ...prev, caption: e.target.value }))}
+                      rows={4}
+                      className="w-full border-2 border-gray-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 resize-none"
+                      placeholder="Write your post caption..."
+                    />
                   </div>
-                )}
 
-                {/* Caption */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Caption</label>
-                  <textarea
-                    value={scheduleFormData.caption}
-                    onChange={(e) => setScheduleFormData(prev => ({ ...prev, caption: e.target.value }))}
-                    rows={4}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2"
-                    placeholder="Write your post caption..."
-                  />
+                  {/* Hashtags */}
+                  <div>
+                    <label className="block text-lg font-semibold text-gray-900 mb-3 flex items-center">
+                      <Hash className="h-5 w-5 mr-2" />
+                      Hashtags
+                    </label>
+                    <textarea
+                      value={scheduleFormData.hashtags}
+                      onChange={(e) => setScheduleFormData(prev => ({ ...prev, hashtags: e.target.value }))}
+                      rows={3}
+                      className="w-full border-2 border-gray-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 resize-none"
+                      placeholder="#example #hashtags #social"
+                    />
+                  </div>
                 </div>
 
-                {/* Hashtags */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
-                    <Hash className="h-4 w-4 mr-1" />
-                    Hashtags
-                  </label>
-                  <textarea
-                    value={scheduleFormData.hashtags}
-                    onChange={(e) => setScheduleFormData(prev => ({ ...prev, hashtags: e.target.value }))}
-                    rows={3}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2"
-                    placeholder="#example #hashtags #social"
-                  />
-                </div>
-
-                {/* Media Selection for Carousel (for platforms that support it) */}
+                {/* Media Selection */}
                 {(scheduleFormData.platform === 'facebook' || 
                   scheduleFormData.platform === 'instagram' || 
                   scheduleFormData.platform === 'youtube') && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <div className="bg-gray-50 p-6 rounded-xl border border-gray-200">
+                    <label className="block text-lg font-semibold text-gray-900 mb-4">
                       {scheduleFormData.platform === 'youtube' ? 'Video' : 'Images'}
                       {(scheduleFormData.platform === 'youtube' || scheduleFormData.platform === 'instagram') && <span className="text-red-500">*</span>}
                       {(scheduleFormData.platform === 'facebook' || scheduleFormData.platform === 'instagram') && 
@@ -1660,19 +1768,19 @@ function AdminContentPortfolio() {
                       )}
                     </label>
                     
-                    {/* Available Images from Version */}
+                    {/* Available Media from Version */}
                     {scheduleFormData.availableImages.length > 0 && (
-                      <div className="mb-4">
-                        <div className="flex items-center justify-between mb-3">
+                      <div className="mb-6">
+                        <div className="flex items-center justify-between mb-4">
                           <span className="text-sm font-medium text-gray-700">
-                            Available Images from Content ({scheduleFormData.availableImages.length})
+                            Available {scheduleFormData.platform === 'youtube' ? 'Videos' : 'Images'} from Content ({scheduleFormData.availableImages.length})
                           </span>
                           <div className="flex gap-2">
-                            {scheduleFormData.availableImages.length > 1 && (
+                            {scheduleFormData.availableImages.length > 1 && scheduleFormData.platform !== 'youtube' && (
                               <button
                                 type="button"
                                 onClick={selectAllImages}
-                                className="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                                className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all duration-200"
                               >
                                 Select All
                               </button>
@@ -1680,50 +1788,57 @@ function AdminContentPortfolio() {
                             <button
                               type="button"
                               onClick={clearAllImages}
-                              className="text-xs px-2 py-1 bg-gray-600 text-white rounded hover:bg-gray-700"
+                              className="text-xs px-3 py-1.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-all duration-200"
                             >
                               Clear All
                             </button>
                           </div>
                         </div>
                         
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                          {scheduleFormData.availableImages.map((image, index) => {
-                            const isSelected = scheduleFormData.selectedImages.some(img => img.url === image.url);
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                          {scheduleFormData.availableImages.map((media, index) => {
+                            const isSelected = scheduleFormData.selectedImages.some(item => item.url === media.url);
                             
                             return (
                               <div 
-                                key={`${image.url}-${index}`}
+                                key={`${media.url}-${index}`}
                                 className={`relative border-2 rounded-lg overflow-hidden cursor-pointer transition-all duration-200 ${
                                   isSelected 
-                                    ? 'border-blue-500 shadow-lg ring-2 ring-blue-200' 
-                                    : 'border-gray-200 hover:border-gray-300'
+                                    ? 'border-blue-500 shadow-lg ring-2 ring-blue-200 transform scale-105' 
+                                    : 'border-gray-300 hover:border-blue-400 hover:shadow-md'
                                 }`}
-                                onClick={() => toggleImageSelection(image)}
+                                onClick={() => toggleImageSelection(media)}
                               >
-                                <img 
-                                  src={image.url} 
-                                  alt={`Available image ${index + 1}`}
-                                  className="w-full h-24 object-cover"
-                                />
+                                {media.type === 'video' ? (
+                                  <div className="w-full h-24 bg-gray-200 flex items-center justify-center">
+                                    <Video className="h-8 w-8 text-gray-500" />
+                                    <span className="ml-2 text-xs text-gray-600">Video</span>
+                                  </div>
+                                ) : (
+                                  <img 
+                                    src={media.url} 
+                                    alt={`Available ${media.type} ${index + 1}`}
+                                    className="w-full h-24 object-cover"
+                                  />
+                                )}
                                 
                                 {/* Selection Indicator */}
-                                <div className={`absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center ${
+                                <div className={`absolute top-2 right-2 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-200 ${
                                   isSelected 
-                                    ? 'bg-blue-500 text-white' 
-                                    : 'bg-white border-2 border-gray-300'
+                                    ? 'bg-blue-500 text-white shadow-lg' 
+                                    : 'bg-white/80 text-gray-600 border-2 border-gray-300'
                                 }`}>
                                   {isSelected ? (
                                     <Check className="h-4 w-4" />
                                   ) : (
-                                    <span className="text-xs">{index + 1}</span>
+                                    <span>{index + 1}</span>
                                   )}
                                 </div>
                                 
                                 {/* Selection Order */}
                                 {isSelected && (
-                                  <div className="absolute top-2 left-2 bg-blue-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">
-                                    {scheduleFormData.selectedImages.findIndex(img => img.url === image.url) + 1}
+                                  <div className="absolute top-2 left-2 bg-blue-500 text-white w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shadow-lg">
+                                    {scheduleFormData.selectedImages.findIndex(item => item.url === media.url) + 1}
                                   </div>
                                 )}
                               </div>
@@ -1732,14 +1847,14 @@ function AdminContentPortfolio() {
                         </div>
                         
                         {scheduleFormData.selectedImages.length > 0 && (
-                          <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                          <div className="mt-4 p-4 bg-blue-50 border-2 border-blue-200 rounded-xl">
                             <div className="flex items-center justify-between">
-                              <span className="text-sm font-medium text-blue-800">
-                                {scheduleFormData.selectedImages.length} image{scheduleFormData.selectedImages.length !== 1 ? 's' : ''} selected
-                                {scheduleFormData.selectedImages.length > 1 && ' (Carousel post)'}
+                              <span className="text-sm font-semibold text-blue-800">
+                                {scheduleFormData.selectedImages.length} {scheduleFormData.platform === 'youtube' ? 'video' : 'image'}{scheduleFormData.selectedImages.length !== 1 ? 's' : ''} selected
+                                {scheduleFormData.selectedImages.length > 1 && scheduleFormData.platform !== 'youtube' && ' (Carousel post)'}
                               </span>
                               {scheduleFormData.platform === 'instagram' && scheduleFormData.selectedImages.length > 10 && (
-                                <span className="text-xs text-red-600">
+                                <span className="text-xs text-red-600 font-semibold">
                                   Instagram allows max 10 images
                                 </span>
                               )}
@@ -1749,8 +1864,19 @@ function AdminContentPortfolio() {
                       </div>
                     )}
 
-                    {/* Additional Image Upload */}
-                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
+                    {scheduleFormData.availableImages.length === 0 && (
+                      <div className="mb-6 p-4 bg-yellow-50 border-2 border-yellow-200 rounded-xl">
+                        <div className="flex items-center">
+                          <AlertCircle className="h-5 w-5 text-yellow-600 mr-2" />
+                          <span className="text-sm text-yellow-800">
+                            No {scheduleFormData.platform === 'youtube' ? 'videos' : 'images'} available from the selected content for this platform.
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Additional Media Upload */}
+                    <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:border-blue-400 transition-all duration-200">
                       <input
                         ref={fileInputRef}
                         type="file"
@@ -1762,61 +1888,81 @@ function AdminContentPortfolio() {
                         className="hidden"
                       />
                       {scheduleFormData.platform === 'youtube' ? (
-                        <Video className="h-6 w-6 mx-auto mb-2 text-gray-400" />
+                        <Video className="h-8 w-8 mx-auto mb-3 text-gray-400" />
                       ) : (
-                        <Image className="h-6 w-6 mx-auto mb-2 text-gray-400" />
+                        <Image className="h-8 w-8 mx-auto mb-3 text-gray-400" />
                       )}
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
-                        className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                        className="text-blue-600 hover:text-blue-800 font-semibold text-sm transition-colors duration-200"
                       >
                         Upload Additional {scheduleFormData.platform === 'youtube' ? 'Video' : 'Image'}
                       </button>
-                      <p className="text-xs text-gray-500 mt-1">Max 5MB</p>
+                      <p className="text-xs text-gray-500 mt-2">Max 5MB</p>
                     </div>
                   </div>
                 )}
 
-                {/* Date and Time */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
-                    <input
-                      type="date"
-                      value={scheduleFormData.scheduledDate}
-                      onChange={(e) => setScheduleFormData(prev => ({ ...prev, scheduledDate: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Time</label>
-                    <input
-                      type="time"
-                      value={scheduleFormData.scheduledTime}
-                      onChange={(e) => setScheduleFormData(prev => ({ ...prev, scheduledTime: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2"
-                    />
+                {/* Date and Time for Scheduling */}
+                <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-6 rounded-xl border border-purple-200">
+                  <label className="block text-lg font-semibold text-gray-900 mb-4">Schedule Time (Optional for Post Now)</label>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
+                      <input
+                        type="date"
+                        value={scheduleFormData.scheduledDate}
+                        onChange={(e) => setScheduleFormData(prev => ({ ...prev, scheduledDate: e.target.value }))}
+                        className="w-full border-2 border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all duration-200"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Time</label>
+                      <input
+                        type="time"
+                        value={scheduleFormData.scheduledTime}
+                        onChange={(e) => setScheduleFormData(prev => ({ ...prev, scheduledTime: e.target.value }))}
+                        className="w-full border-2 border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all duration-200"
+                      />
+                    </div>
                   </div>
                 </div>
 
-                {/* Submit Button */}
-                <div className="flex space-x-4">
+                {/* Action Buttons */}
+                <div className="flex flex-col sm:flex-row gap-4 pt-6 border-t border-gray-200">
                   <button
-                    onClick={() => setShowScheduleModal(false)}
-                    className="flex-1 bg-gray-300 text-gray-700 py-2 px-4 rounded-md hover:bg-gray-400"
+                    onClick={closeModal}
+                    className="flex-1 bg-gray-200 text-gray-700 py-3 px-6 rounded-xl font-semibold hover:bg-gray-300 transition-all duration-200"
                   >
                     Cancel
                   </button>
                   <button
+                    onClick={handlePostNow}
+                    disabled={isPostingNow || submitting}
+                    className="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 text-white py-3 px-6 rounded-xl font-semibold hover:from-green-600 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center space-x-2"
+                  >
+                    {isPostingNow ? (
+                      <>
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                        <span>Publishing...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Zap className="h-5 w-5" />
+                        <span>Post Now</span>
+                      </>
+                    )}
+                  </button>
+                  <button
                     onClick={handleSchedulePost}
-                    disabled={submitting}
-                    className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center space-x-2"
+                    disabled={submitting || isPostingNow}
+                    className="flex-1 bg-gradient-to-r from-blue-600 to-cyan-600 text-white py-3 px-6 rounded-xl font-semibold hover:from-blue-700 hover:to-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center space-x-2"
                   >
                     {submitting ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <Loader2 className="h-5 w-5 animate-spin" />
                     ) : (
-                      <Send className="h-4 w-4" />
+                      <Send className="h-5 w-5" />
                     )}
                     <span>{submitting ? 'Scheduling...' : 'Schedule Post'}</span>
                   </button>

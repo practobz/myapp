@@ -165,20 +165,19 @@ function CustomerSocialMediaLinks({ customerId: propCustomerId }) {
       const data = await response.json();
       
       if (data.success) {
-        // Group accounts by actual customer business name, not social media account name
+        // Group accounts by customer ID to ensure unique grouping
         const grouped = {};
         data.accounts.forEach(account => {
-          // Use the customer's actual business name as the key
-          const customerKey = account.customer?.businessName || 
-                             account.customer?.name || 
-                             account.customerName || 
-                             `Customer ${account.customerId}` || 
-                             'Unknown Customer';
+          // Use customer ID as the primary key for grouping
+          const customerKey = account.customerId;
           
           if (!grouped[customerKey]) {
             grouped[customerKey] = {
               customerId: account.customerId,
-              customerName: customerKey,
+              customerName: account.customer?.businessName || 
+                          account.customer?.name || 
+                          account.customerName || 
+                          `Customer ${account.customerId}`,
               customerEmail: account.customer?.email,
               customerBusinessName: account.customer?.businessName,
               accounts: []
@@ -537,7 +536,11 @@ function CustomerSocialMediaLinks({ customerId: propCustomerId }) {
   const filteredCustomers = Object.entries(customerAccounts)
     .filter(([customerKey, customerData]) => {
       if (selectedCustomer !== 'all' && customerKey !== selectedCustomer) return false;
-      if (searchTerm && !customerKey.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+      if (searchTerm && (
+        !customerData.customerName.toLowerCase().includes(searchTerm.toLowerCase()) &&
+        !customerKey.toLowerCase().includes(searchTerm.toLowerCase()) &&
+        !customerData.customerEmail?.toLowerCase().includes(searchTerm.toLowerCase())
+      )) return false;
       return true;
     })
     .sort(([, customerDataA], [, customerDataB]) => {
@@ -611,9 +614,9 @@ function CustomerSocialMediaLinks({ customerId: propCustomerId }) {
               className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
               <option value="all">All Customers</option>
-              {Object.keys(customerAccounts).map(customerKey => (
+              {Object.entries(customerAccounts).map(([customerKey, customerData]) => (
                 <option key={customerKey} value={customerKey}>
-                  {customerKey} ({customerAccounts[customerKey].accounts.length})
+                  ID: {customerKey} - {customerData.customerName} ({customerData.accounts.length})
                 </option>
               ))}
             </select>
@@ -767,7 +770,7 @@ function CustomerSocialMediaLinks({ customerId: propCustomerId }) {
           // Multi-customer view
           filteredCustomers.map(([customerKey, customerData]) => (
             <div key={customerKey} className="border border-gray-200 rounded-lg overflow-hidden">
-              {/* Customer Header - showing business name */}
+              {/* Customer Header - showing customer ID prominently */}
               <div 
                 className="bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-4 border-b border-gray-200 cursor-pointer hover:from-blue-100 hover:to-indigo-100 transition-all"
                 onClick={() => toggleCustomerExpansion(customerKey)}
@@ -778,15 +781,24 @@ function CustomerSocialMediaLinks({ customerId: propCustomerId }) {
                       <User className="h-6 w-6 text-blue-600" />
                     </div>
                     <div>
-                      <h3 className="text-lg font-bold text-gray-900">{customerData.customerName}</h3>
+                      {/* Primary heading with Customer ID and Name */
+                      }
+                      <h3 className="text-lg font-bold text-gray-900">
+                        <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-md text-sm font-mono mr-3">
+                          ID: {customerData.customerId}
+                        </span>
+                        {customerData.customerName}
+                      </h3>
                       <div className="space-y-1">
-                        <p className="text-sm text-gray-600">Customer ID: {customerData.customerId}</p>
                         {customerData.customerEmail && (
-                          <p className="text-sm text-gray-500">📧 {customerData.customerEmail}</p>
+                          <p className="text-sm text-gray-600">📧 {customerData.customerEmail}</p>
                         )}
                         {customerData.customerBusinessName && customerData.customerBusinessName !== customerData.customerName && (
-                          <p className="text-sm text-gray-500">🏢 {customerData.customerBusinessName}</p>
+                          <p className="text-sm text-gray-500">🏢 Business: {customerData.customerBusinessName}</p>
                         )}
+                        <p className="text-xs text-gray-500">
+                          Connected: {new Date(customerData.accounts[0]?.connectedAt || Date.now()).toLocaleDateString()}
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -816,7 +828,12 @@ function CustomerSocialMediaLinks({ customerId: propCustomerId }) {
               {expandedCustomers[customerKey] && (
                 <div className="p-6 bg-gray-50">
                   <div className="mb-4">
-                    <h4 className="text-md font-semibold text-gray-800 mb-2">Connected Social Media Accounts</h4>
+                    <h4 className="text-md font-semibold text-gray-800 mb-2 flex items-center">
+                      <span className="bg-gray-200 text-gray-700 px-2 py-1 rounded text-xs font-mono mr-2">
+                        Customer ID: {customerData.customerId}
+                      </span>
+                      Connected Social Media Accounts
+                    </h4>
                     <div className="w-full h-0.5 bg-gradient-to-r from-blue-300 to-indigo-300"></div>
                   </div>
                   

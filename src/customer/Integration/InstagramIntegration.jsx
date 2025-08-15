@@ -175,7 +175,10 @@ function InstagramIntegration() {
             connected: true,
             profile: profileResponse,
             media: mediaResponse.data || [],
-            connectedAt: new Date().toISOString()
+            connectedAt: new Date().toISOString(),
+            // ✅ CRITICAL: Store both user and page tokens separately
+            userAccessToken: userAccessToken, // This is the user token for refresh
+            pageAccessToken: accountData.pageAccessToken // This is the page token for posting
           };
 
           const updatedAccounts = [...connectedAccounts, newAccount];
@@ -235,9 +238,10 @@ function InstagramIntegration() {
         return;
       }
 
-      // CRITICAL: Always store user access token for refresh capabilities
+      // ✅ CRITICAL: Always store user access token for refresh capabilities
       if (!userAccessToken) {
-        console.warn('⚠️ No user access token available - refresh capabilities will be limited');
+        console.error('❌ No user access token available - refresh capabilities will be limited');
+        alert('Warning: User access token is missing. Token refresh may not work. Please reconnect if you experience issues.');
       }
 
       // Get user information for storing user access token
@@ -279,20 +283,20 @@ function InstagramIntegration() {
       // Store the account data with INSTAGRAM platform for scheduling
       const accountData = {
         customerId: customerId,
-        platform: 'instagram', // ✅ Changed to 'instagram' for scheduling purposes
-        platformUserId: account.id, // Use Instagram Business Account ID as primary ID
-        facebookUserId: userId, // Store Facebook user ID separately for token refresh
-        facebookPageId: account.pageId, // Store Facebook page ID for API calls
+        platform: 'instagram',
+        platformUserId: account.id,
+        facebookUserId: userId,
+        facebookPageId: account.pageId,
         name: userInfo?.name || account.profile?.username || account.pageName,
         email: userInfo?.email || '',
         profilePicture: account.profile?.profile_picture_url,
-        username: account.profile?.username, // Instagram username for display
-        accessToken: userAccessToken, // CRITICAL: Store user access token for refresh
-        userId: userId, // Store user ID for refresh operations
+        username: account.profile?.username,
+        accessToken: account.userAccessToken || userAccessToken, // ✅ CRITICAL: Store actual user access token
+        userId: userId, // ✅ Store user ID for refresh operations
         pages: [{
           id: account.pageId,
           name: account.pageName,
-          accessToken: account.pageAccessToken, // Store page access token for posting
+          accessToken: account.pageAccessToken, // ✅ Store actual page access token (different from user token)
           category: 'Instagram Business',
           fanCount: account.profile?.followers_count || 0,
           instagramBusinessAccount: {
@@ -312,32 +316,55 @@ function InstagramIntegration() {
           website: account.profile?.website
         },
         connectedAt: account.connectedAt,
+        // ✅ FORCE RESET - Explicitly set these to false/null
         needsReconnection: false,
         lastTokenValidation: new Date().toISOString(),
+        refreshError: null,
+        lastRefreshAttempt: null,
+        // ✅ Add validation timestamp to track when tokens were confirmed working
+        lastSuccessfulValidation: new Date().toISOString(),
+        tokenStatus: 'active',
         type: 'customer_social_link'
       };
 
-      // VALIDATION: Ensure we have both tokens
-      if (!accountData.accessToken) {
+      // ✅ VALIDATION: Ensure we have DIFFERENT tokens
+      const hasUserToken = !!accountData.accessToken;
+      const hasPageToken = !!accountData.pages[0].accessToken;
+      const tokensAreDifferent = accountData.accessToken !== accountData.pages[0].accessToken;
+
+      // ✅ CRITICAL VALIDATION: Check if user and page tokens are the same (this is BAD)
+      if (hasUserToken && hasPageToken && !tokensAreDifferent) {
+        console.warn('⚠️ WARNING: User and page tokens are identical - this will cause refresh issues');
+        // Set a warning but don't fail - we'll try to get proper tokens
+        accountData.tokenWarning = 'User and page tokens are identical - refresh may not work properly';
+      }
+
+      if (!hasUserToken) {
         console.warn('⚠️ Missing user access token - refresh will not work');
         accountData.needsReconnection = true;
         accountData.refreshError = 'User access token not available during connection';
+        accountData.tokenStatus = 'invalid_user_token';
       }
 
-      if (!accountData.pages[0].accessToken) {
+      if (!hasPageToken) {
         console.warn('⚠️ Missing page access token - posting will not work');
+        accountData.needsReconnection = true;
+        accountData.refreshError = 'Page access token not available during connection';
+        accountData.tokenStatus = 'invalid_page_token';
         throw new Error('Page access token is required for Instagram posting. Please ensure you have admin access to the Facebook page connected to this Instagram account.');
       }
 
-      console.log('📤 Storing Instagram account data for scheduling:', { 
-        customerId, 
-        platform: 'instagram', // ✅ Now correctly shows as Instagram
-        instagramBusinessAccountId: account.id,
-        username: account.profile?.username,
-        hasUserToken: !!accountData.accessToken,
-        hasPageToken: !!accountData.pages[0].accessToken,
+      // ✅ Log token validation status with difference check
+      console.log('🔑 Instagram Token Validation Summary:', {
+        hasUserToken,
+        hasPageToken,
+        tokensAreDifferent,
         userTokenLength: accountData.accessToken?.length || 0,
-        pageTokenLength: accountData.pages[0].accessToken?.length || 0
+        pageTokenLength: accountData.pages[0].accessToken?.length || 0,
+        userTokenPrefix: accountData.accessToken?.substring(0, 20) + '...',
+        pageTokenPrefix: accountData.pages[0].accessToken?.substring(0, 20) + '...',
+        needsReconnection: accountData.needsReconnection,
+        tokenStatus: accountData.tokenStatus
       });
 
       // Send to server

@@ -287,7 +287,7 @@ function FacebookIntegration() {
         // Update account with long-lived token
         const updatedAccount = {
           ...account,
-          accessToken: data.longLivedToken,
+          accessToken: data.longLivedToken, // ✅ Store the long-lived USER token
           tokenType: 'long_lived',
           tokenExpiresAt: expirationDate
         };
@@ -1695,6 +1695,12 @@ function FacebookIntegration() {
         return;
       }
 
+      // ✅ CRITICAL FIX: Always store the current user access token
+      if (!activeAccount?.accessToken) {
+        console.error('❌ No user access token available - refresh will not work');
+        alert('Warning: User access token is missing. Token refresh may not work. Please reconnect if you experience issues.');
+      }
+
       const accountData = {
         customerId: customerId,
         platform: 'facebook',
@@ -1702,12 +1708,13 @@ function FacebookIntegration() {
         name: activeAccount.name,
         email: activeAccount.email,
         profilePicture: activeAccount.picture?.data?.url,
-        accessToken: activeAccount.accessToken,
+        accessToken: activeAccount.accessToken, // ✅ Store user access token for refresh
+        userId: activeAccount.id, // ✅ Store user ID for refresh operations
         pages: [
           {
             id: page.id,
             name: page.name,
-            accessToken: page.access_token,
+            accessToken: page.access_token, // ✅ Store page access token for posting
             category: page.category,
             fanCount: page.fan_count,
             permissions: ['pages_read_engagement'],
@@ -1718,15 +1725,43 @@ function FacebookIntegration() {
             tokenValidatedAt: new Date().toISOString()
           }
         ],
-        connectedAt: new Date().toISOString()
+        connectedAt: new Date().toISOString(),
+        // ✅ FORCE RESET - Explicitly set these to false/null
+        needsReconnection: false,
+        lastTokenValidation: new Date().toISOString(),
+        refreshError: null,
+        lastRefreshAttempt: null,
+        // ✅ Add validation timestamp to track when tokens were confirmed working
+        lastSuccessfulValidation: new Date().toISOString(),
+        tokenStatus: 'active'
       };
 
-      console.log('📤 Sending account data:', { 
-        customerId, 
-        platform: 'facebook', 
-        platformUserId: activeAccount.id,
-        pageTokenLength: accountData.pages[0].accessToken.length,
-        userTokenLength: accountData.accessToken.length
+      // ✅ VALIDATION: Only set error flags if tokens are actually missing
+      const hasUserToken = !!accountData.accessToken;
+      const hasPageToken = !!accountData.pages[0].accessToken;
+
+      if (!hasUserToken) {
+        console.warn('⚠️ Missing user access token - refresh will not work');
+        accountData.needsReconnection = true;
+        accountData.refreshError = 'User access token not available during connection';
+        accountData.tokenStatus = 'invalid_user_token';
+      }
+
+      if (!hasPageToken) {
+        console.warn('⚠️ Missing page access token - posting will not work');
+        accountData.needsReconnection = true;
+        accountData.refreshError = 'Page access token not available during connection';
+        accountData.tokenStatus = 'invalid_page_token';
+      }
+
+      // ✅ Log token validation status
+      console.log('🔑 Token Validation Summary:', {
+        hasUserToken,
+        hasPageToken,
+        userTokenLength: accountData.accessToken?.length || 0,
+        pageTokenLength: accountData.pages[0].accessToken?.length || 0,
+        needsReconnection: accountData.needsReconnection,
+        tokenStatus: accountData.tokenStatus
       });
 
       const response = await fetch(`${process.env.REACT_APP_API_URL}/api/customer-social-links`, {

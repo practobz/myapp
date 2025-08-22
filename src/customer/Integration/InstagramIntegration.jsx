@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Instagram, TrendingUp, ExternalLink, CheckCircle, AlertCircle, Loader2, Users, Heart, MessageCircle, Eye, Plus, Settings, ChevronDown, ChevronRight } from 'lucide-react';
+import { Instagram, TrendingUp, ExternalLink, CheckCircle, AlertCircle, Loader2, Users, Heart, MessageCircle, Eye, Plus, Settings, ChevronDown, ChevronRight, UserCheck, Trash2 } from 'lucide-react';
 import TrendChart from '../../components/TrendChart';
 import { subDays, format } from 'date-fns';
 import { getUserData, setUserData, removeUserData, migrateToUserSpecificStorage } from '../../utils/sessionUtils';
@@ -8,10 +8,11 @@ import { getUserData, setUserData, removeUserData, migrateToUserSpecificStorage 
 const FACEBOOK_APP_ID = '4416243821942660'; // Updated to your new AirSpark app
 
 function InstagramIntegration() {
+  // Multi-account state management (similar to Facebook integration)
   const [fbSdkLoaded, setFbSdkLoaded] = useState(false);
-  const [isSignedIn, setIsSignedIn] = useState(false);
-  const [connectedAccounts, setConnectedAccounts] = useState([]); // Array of connected accounts
-  const [selectedAccountId, setSelectedAccountId] = useState(null); // Currently selected account
+  const [connectedAccounts, setConnectedAccounts] = useState([]); // Array of connected Instagram accounts
+  const [activeAccountId, setActiveAccountId] = useState(null); // Currently active account
+  const [activeAccount, setActiveAccount] = useState(null); // Active account object
   const [availableAccounts, setAvailableAccounts] = useState([]); // Available accounts to connect
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -20,15 +21,73 @@ function InstagramIntegration() {
   const [loadingAnalytics, setLoadingAnalytics] = useState(false);
   const [userAccessToken, setUserAccessToken] = useState(null);
   const [showAccountSelector, setShowAccountSelector] = useState(false);
+  
+  // Legacy state for backward compatibility
+  const [isSignedIn, setIsSignedIn] = useState(false);
+  const [selectedAccountId, setSelectedAccountId] = useState(null);
+
+  // Helper function to check if Facebook API is ready
+  const isFacebookApiReady = () => {
+    return window.FB && window.FB.api && typeof window.FB.api === 'function';
+  };
+
+  // Load connected accounts from localStorage on component mount
+  useEffect(() => {
+    console.log('🔍 Instagram component mounted, loading accounts from storage...');
+    
+    // First, migrate any existing data to user-specific storage
+    migrateToUserSpecificStorage([
+      'connected_instagram_accounts',
+      'selected_instagram_account',
+      'instagram_connected_accounts',
+      'instagram_active_account_id'
+    ]);
+
+    const savedAccounts = getUserData('instagram_connected_accounts') || getUserData('connected_instagram_accounts');
+    const savedActiveId = getUserData('instagram_active_account_id') || getUserData('selected_instagram_account');
+    
+    console.log('📦 Instagram storage check on mount:', {
+      savedAccounts: savedAccounts ? savedAccounts.length : 0,
+      savedActiveId,
+      accountsData: savedAccounts
+    });
+    
+    if (savedAccounts && Array.isArray(savedAccounts) && savedAccounts.length > 0) {
+      console.log('✅ Setting Instagram accounts from storage:', savedAccounts);
+      setConnectedAccounts(savedAccounts);
+      setIsSignedIn(true); // Set signed in state
+      
+      if (savedActiveId && savedAccounts.some(acc => acc.id === savedActiveId)) {
+        setActiveAccountId(savedActiveId);
+        setSelectedAccountId(savedActiveId); // Backward compatibility
+        const activeAcc = savedAccounts.find(acc => acc.id === savedActiveId);
+        setActiveAccount(activeAcc);
+        setUserAccessToken(activeAcc.userAccessToken || activeAcc.accessToken);
+        console.log('✅ Set active Instagram account:', activeAcc?.profile?.username);
+      } else if (savedAccounts.length > 0) {
+        // Set first account as active if no valid active account
+        setActiveAccountId(savedAccounts[0].id);
+        setSelectedAccountId(savedAccounts[0].id); // Backward compatibility
+        setActiveAccount(savedAccounts[0]);
+        setUserAccessToken(savedAccounts[0].userAccessToken || savedAccounts[0].accessToken);
+        setUserData('instagram_active_account_id', savedAccounts[0].id);
+        console.log('✅ Set first Instagram account as active:', savedAccounts[0].profile?.username);
+      }
+    } else {
+      console.log('ℹ️ No connected Instagram accounts found in storage');
+    }
+  }, []);
 
   useEffect(() => {
     if (window.FB) {
       setFbSdkLoaded(true);
+      // Check existing login status
       window.FB.getLoginStatus(response => {
         if (response.status === 'connected') {
-          setIsSignedIn(true);
           setUserAccessToken(response.authResponse.accessToken);
-          loadAvailableAccounts(response.authResponse.accessToken);
+          if (connectedAccounts.length === 0) {
+            loadAvailableAccounts(response.authResponse.accessToken);
+          }
         }
       });
     } else {
@@ -36,27 +95,22 @@ function InstagramIntegration() {
     }
   }, []);
 
-  useEffect(() => {
-    // First, migrate any existing data to user-specific storage
-    migrateToUserSpecificStorage([
-      'connected_instagram_accounts',
-      'selected_instagram_account'
-    ]);
-
-    // Load saved accounts from localStorage on mount
-    const savedAccounts = getUserData('connected_instagram_accounts');
-    const savedSelectedId = getUserData('selected_instagram_account');
-    
-    if (savedAccounts) {
-      setConnectedAccounts(savedAccounts);
+  // Save accounts to localStorage with better error handling
+  const saveAccountsToStorage = (accounts) => {
+    console.log('💾 Saving Instagram accounts to storage:', accounts.length, 'accounts');
+    try {
+      setUserData('instagram_connected_accounts', accounts);
+      // Also save to legacy key for backward compatibility
+      setUserData('connected_instagram_accounts', accounts);
+      console.log('✅ Instagram accounts saved successfully');
       
-      if (savedSelectedId && savedAccounts.find(acc => acc.id === savedSelectedId)) {
-        setSelectedAccountId(savedSelectedId);
-      } else if (savedAccounts.length > 0) {
-        setSelectedAccountId(savedAccounts[0].id);
-      }
+      // Verify the save worked
+      const verification = getUserData('instagram_connected_accounts');
+      console.log('🔍 Instagram storage verification:', verification ? verification.length : 0, 'accounts');
+    } catch (error) {
+      console.error('❌ Failed to save Instagram accounts:', error);
     }
-  }, []);
+  };
 
   const loadFacebookSDK = () => {
     if (document.getElementById('facebook-jssdk')) {
@@ -71,15 +125,25 @@ function InstagramIntegration() {
         xfbml: false,
         version: 'v19.0'
       });
-      setFbSdkLoaded(true);
-
-      window.FB.getLoginStatus(response => {
-        if (response.status === 'connected') {
-          setIsSignedIn(true);
-          setUserAccessToken(response.authResponse.accessToken);
-          loadAvailableAccounts(response.authResponse.accessToken);
+      
+      // Wait for FB to be fully ready
+      const checkReady = () => {
+        if (isFacebookApiReady()) {
+          setFbSdkLoaded(true);
+          
+          window.FB.getLoginStatus(response => {
+            if (response.status === 'connected') {
+              setUserAccessToken(response.authResponse.accessToken);
+              if (connectedAccounts.length === 0) {
+                loadAvailableAccounts(response.authResponse.accessToken);
+              }
+            }
+          });
+        } else {
+          setTimeout(checkReady, 100);
         }
-      });
+      };
+      checkReady();
     };
 
     (function(d, s, id){
@@ -91,6 +155,90 @@ function InstagramIntegration() {
     }(document, 'script', 'facebook-jssdk'));
   };
 
+  // Check if token is expired or about to expire
+  const isTokenExpired = (account) => {
+    if (!account.tokenExpiresAt) return false;
+    
+    const expiryTime = new Date(account.tokenExpiresAt);
+    const now = new Date();
+    const bufferTime = 5 * 60 * 1000; // 5 minutes buffer
+    
+    return (expiryTime.getTime() - now.getTime()) < bufferTime;
+  };
+
+  // Handle API errors and token refresh
+  const handleApiError = async (error, accountId = null) => {
+    console.error('Instagram/Facebook API Error:', error);
+    
+    if (error.code === 190 || error.message?.includes('expired') || error.message?.includes('Session has expired')) {
+      console.log('🔄 Token expired, attempting refresh...');
+      
+      // Try to refresh the current session
+      const refreshSuccess = await refreshCurrentSession();
+      
+      if (refreshSuccess) {
+        console.log('✅ Session refreshed successfully');
+        setError(null);
+        
+        // Retry loading available accounts if we have a token
+        if (userAccessToken && connectedAccounts.length === 0) {
+          setTimeout(() => {
+            loadAvailableAccounts(userAccessToken);
+          }, 1000);
+        }
+      } else {
+        console.log('❌ Session refresh failed');
+        setError('Your Facebook session has expired. Please reconnect your account to continue using Instagram features.');
+      }
+    } else {
+      setError(error.message || 'An error occurred while accessing Instagram data.');
+    }
+  };
+
+  // Refresh current session
+  const refreshCurrentSession = async () => {
+    return new Promise((resolve) => {
+      if (!isFacebookApiReady()) {
+        resolve(false);
+        return;
+      }
+
+      window.FB.getLoginStatus((response) => {
+        if (response.status === 'connected') {
+          // Update token in our storage
+          const newToken = response.authResponse.accessToken;
+          const userId = response.authResponse.userID;
+          
+          setUserAccessToken(newToken);
+          
+          // Update all connected accounts with new token
+          if (connectedAccounts.length > 0) {
+            const updatedAccounts = connectedAccounts.map(acc => ({
+              ...acc,
+              userAccessToken: newToken,
+              tokenExpiresAt: response.authResponse.expiresIn ? 
+                new Date(Date.now() + (response.authResponse.expiresIn * 1000)).toISOString() : null
+            }));
+            
+            setConnectedAccounts(updatedAccounts);
+            saveAccountsToStorage(updatedAccounts);
+            
+            // Update active account
+            if (activeAccount) {
+              const updatedActiveAccount = { ...activeAccount, userAccessToken: newToken };
+              setActiveAccount(updatedActiveAccount);
+            }
+          }
+          
+          resolve(true);
+        } else {
+          resolve(false);
+        }
+      }, true); // Force fresh status check
+    });
+  };
+
+  // Enhanced handleSignIn with better persistence
   const handleSignIn = () => {
     if (!fbSdkLoaded) {
       setError('Facebook SDK not loaded yet. Please try again.');
@@ -98,32 +246,73 @@ function InstagramIntegration() {
     }
 
     setLoading(true);
+    console.log('🔐 Starting Facebook login for Instagram...');
+
     window.FB.login(response => {
       setLoading(false);
+      console.log('📨 Facebook login response:', response.status);
+      
       if (response.status === 'connected') {
         setIsSignedIn(true);
         setError(null);
-        setUserAccessToken(response.authResponse.accessToken);
-        loadAvailableAccounts(response.authResponse.accessToken);
+        const accessToken = response.authResponse.accessToken;
+        setUserAccessToken(accessToken);
+        
+        // Request long-lived token
+        requestLongLivedToken(accessToken).then((longLivedToken) => {
+          const finalToken = longLivedToken || accessToken;
+          setUserAccessToken(finalToken);
+          loadAvailableAccounts(finalToken);
+        });
       } else {
         setError('Please log in to Facebook to access Instagram features. Regular Facebook accounts can connect Instagram Business accounts.');
       }
     }, {
-      scope: 'email,public_profile,pages_show_list,pages_read_engagement'
+      scope: 'email,public_profile,pages_show_list,pages_read_engagement,instagram_basic,instagram_content_publish'
     });
+  };
+
+  // Enhanced requestLongLivedToken
+  const requestLongLivedToken = async (shortLivedToken) => {
+    try {
+      console.log('🔄 Requesting long-lived token for Instagram...');
+      
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/facebook/exchange-token`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          shortLivedToken: shortLivedToken
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success && data.longLivedToken) {
+        console.log('✅ Received long-lived token for Instagram');
+        return data.longLivedToken;
+      } else {
+        console.warn('⚠️ Failed to get long-lived token for Instagram:', data.error);
+        return null;
+      }
+    } catch (error) {
+      console.warn('⚠️ Error requesting long-lived token for Instagram:', error);
+      return null;
+    }
   };
 
   const loadAvailableAccounts = (accessToken) => {
     setLoadingAccounts(true);
     
     window.FB.api('/me/accounts', {
-      fields: 'id,name,instagram_business_account,access_token', // ✅ Explicitly request access_token
+      fields: 'id,name,instagram_business_account,access_token',
       access_token: accessToken
     }, function(response) {
       setLoadingAccounts(false);
       
       if (!response || response.error) {
-        setError('Unable to fetch Facebook pages. Make sure you have an Instagram Business account connected to a Facebook page you manage.');
+        handleApiError(response.error);
         return;
       }
 
@@ -134,65 +323,39 @@ function InstagramIntegration() {
         return;
       }
 
-      // ✅ CRITICAL FIX: Ensure we always have proper page access tokens
       const accounts = pagesWithInstagram.map(page => {
-        // ✅ Validate that we have a proper page access token
-        if (!page.access_token || page.access_token === accessToken) {
-          console.warn(`⚠️ Page ${page.name} (${page.id}) has no separate page access token`);
-          console.log(`📋 Page token info:`, {
-            hasPageToken: !!page.access_token,
-            pageTokenLength: page.access_token?.length || 0,
-            userTokenLength: accessToken?.length || 0,
-            tokensAreSame: page.access_token === accessToken
-          });
-        }
+        const hasValidPageToken = !!(page.access_token && page.access_token !== accessToken);
         
         return {
           id: page.instagram_business_account.id,
           pageId: page.id,
           pageName: page.name,
-          // ✅ CRITICAL: Only use page access token if it's different from user token
-          pageAccessToken: (page.access_token && page.access_token !== accessToken) 
-            ? page.access_token 
-            : null, // Don't fallback to user token - this causes the problem
+          pageAccessToken: hasValidPageToken ? page.access_token : null,
+          userAccessToken: accessToken,
           connected: false,
           profile: null,
           media: [],
-          // ✅ Store token validation info
-          hasValidPageToken: !!(page.access_token && page.access_token !== accessToken),
-          tokenWarning: (page.access_token === accessToken) 
-            ? 'Page token is same as user token - refresh may not work' 
-            : null
+          hasValidPageToken,
+          tokenWarning: !hasValidPageToken ? 'Page token is same as user token - refresh may not work' : null
         };
       });
 
-      // ✅ Log token analysis for debugging
-      console.log('🔍 Token Analysis:', {
-        totalAccounts: accounts.length,
-        accountsWithValidPageTokens: accounts.filter(acc => acc.hasValidPageToken).length,
-        accountsWithWarnings: accounts.filter(acc => acc.tokenWarning).length
-      });
+      // Filter out accounts that are already connected
+      const availableAccountsFiltered = accounts.filter(acc => 
+        !connectedAccounts.some(connected => connected.id === acc.id)
+      );
 
-      setAvailableAccounts(accounts);
+      setAvailableAccounts(availableAccountsFiltered);
     });
   };
 
+  // Enhanced connectInstagramAccount with better persistence
   const connectInstagramAccount = async (accountData) => {
     setLoading(true);
     
     try {
-      // ✅ ENHANCED VALIDATION: Check if we have a proper page token before proceeding
       if (!accountData.pageAccessToken) {
-        console.error('❌ No valid page access token available for Instagram connection');
-        setError('This Instagram account cannot be connected because the Facebook page does not have a proper page access token. This usually happens when:\n\n1. You are not an admin of the Facebook page\n2. The page was recently created and tokens haven\'t been generated\n3. Facebook permissions are incomplete\n\nPlease ensure you have admin access to the Facebook page and try reconnecting your Facebook account.');
-        setLoading(false);
-        return;
-      }
-
-      // ✅ Additional validation: ensure page token is different from user token
-      if (accountData.pageAccessToken === userAccessToken) {
-        console.error('❌ Page access token is identical to user access token');
-        setError('The page access token is identical to your user access token, which will cause refresh issues. Please disconnect and reconnect your Facebook account to generate proper page access tokens with admin permissions.');
+        setError('This Instagram account cannot be connected because the Facebook page does not have a proper page access token. Please ensure you have admin access to the Facebook page and try reconnecting your Facebook account.');
         setLoading(false);
         return;
       }
@@ -205,14 +368,7 @@ function InstagramIntegration() {
         access_token: accountData.pageAccessToken
       }, function(profileResponse) {
         if (!profileResponse || profileResponse.error) {
-          console.error('❌ Instagram profile fetch failed:', profileResponse.error);
-          
-          // ✅ Enhanced error handling for token issues
-          if (profileResponse.error?.code === 190) {
-            setError(`Unable to access Instagram profile: ${profileResponse.error.message}. This indicates a token permission issue. Please disconnect and reconnect your Facebook account with proper Instagram Business permissions.`);
-          } else {
-            setError(`Unable to fetch Instagram profile for ${accountData.pageName}. Please ensure it's properly connected.`);
-          }
+          handleApiError(profileResponse.error);
           setLoading(false);
           return;
         }
@@ -229,24 +385,25 @@ function InstagramIntegration() {
             profile: profileResponse,
             media: mediaResponse.data || [],
             connectedAt: new Date().toISOString(),
-            // ✅ CRITICAL: Store both user and page tokens separately
-            userAccessToken: userAccessToken, // This is the user token for refresh
-            pageAccessToken: accountData.pageAccessToken // This is the page token for posting
+            userAccessToken: userAccessToken,
+            pageAccessToken: accountData.pageAccessToken,
+            tokenExpiresAt: null // Long-lived tokens don't typically expire
           };
 
           const updatedAccounts = [...connectedAccounts, newAccount];
           setConnectedAccounts(updatedAccounts);
           
-          // Set as selected if it's the first account
-          if (!selectedAccountId) {
-            setSelectedAccountId(newAccount.id);
+          // Set as active if it's the first account
+          if (!activeAccountId) {
+            setActiveAccountId(newAccount.id);
+            setSelectedAccountId(newAccount.id); // Backward compatibility
+            setActiveAccount(newAccount);
+            setUserData('instagram_active_account_id', newAccount.id);
+            setUserData('selected_instagram_account', newAccount.id); // Backward compatibility
           }
 
           // Save to localStorage with user-specific keys
-          setUserData('connected_instagram_accounts', updatedAccounts);
-          if (!selectedAccountId) {
-            setUserData('selected_instagram_account', newAccount.id);
-          }
+          saveAccountsToStorage(updatedAccounts);
 
           // Store customer social account for admin access
           storeCustomerSocialAccount(newAccount);
@@ -263,7 +420,101 @@ function InstagramIntegration() {
     }
   };
 
-  // Store customer social account for admin access
+  // Switch active account
+  const switchAccount = (accountId) => {
+    const account = connectedAccounts.find(acc => acc.id === accountId);
+    if (account) {
+      setActiveAccountId(accountId);
+      setSelectedAccountId(accountId); // Backward compatibility
+      setActiveAccount(account);
+      setUserData('instagram_active_account_id', accountId);
+      setUserData('selected_instagram_account', accountId); // Backward compatibility
+      setShowAccountSelector(false);
+      setAnalyticsData(null); // Clear analytics when switching accounts
+    }
+  };
+
+  // Remove account
+  const removeAccount = (accountId) => {
+    const updatedAccounts = connectedAccounts.filter(acc => acc.id !== accountId);
+    setConnectedAccounts(updatedAccounts);
+    saveAccountsToStorage(updatedAccounts);
+    
+    if (activeAccountId === accountId) {
+      if (updatedAccounts.length > 0) {
+        // Switch to first remaining account
+        switchAccount(updatedAccounts[0].id);
+      } else {
+        // No accounts left
+        setActiveAccountId(null);
+        setSelectedAccountId(null); // Backward compatibility
+        setActiveAccount(null);
+        setAnalyticsData(null);
+        removeUserData('instagram_active_account_id');
+        removeUserData('selected_instagram_account'); // Backward compatibility
+        setIsSignedIn(false);
+      }
+    }
+  };
+
+  // Enhanced handleSignOut
+  const handleSignOut = () => {
+    console.log('🔄 Signing out from Instagram integration...');
+    
+    // Clear all state
+    setIsSignedIn(false);
+    setConnectedAccounts([]);
+    setAvailableAccounts([]);
+    setActiveAccountId(null);
+    setSelectedAccountId(null); // Backward compatibility
+    setActiveAccount(null);
+    setError(null);
+    setAnalyticsData(null);
+    setUserAccessToken(null);
+    
+    // Clear localStorage with user-specific keys
+    removeUserData('instagram_connected_accounts');
+    removeUserData('instagram_active_account_id');
+    removeUserData('connected_instagram_accounts'); // Backward compatibility
+    removeUserData('selected_instagram_account'); // Backward compatibility
+    
+    if (window.FB && isFacebookApiReady()) {
+      window.FB.logout();
+    }
+  };
+
+  // Enhanced token refresh
+  const refreshAccountTokens = async () => {
+    if (!activeAccount || !isFacebookApiReady()) {
+      console.warn('Cannot refresh tokens: no active account or FB API not ready');
+      return;
+    }
+
+    console.log('🔄 Refreshing Instagram account tokens...');
+    setLoading(true);
+    
+    try {
+      // First refresh the user session
+      const sessionRefreshed = await refreshCurrentSession();
+      
+      if (sessionRefreshed) {
+        // Reload available accounts to get fresh page tokens
+        if (userAccessToken) {
+          loadAvailableAccounts(userAccessToken);
+        }
+        setError(null);
+        alert('✅ Tokens refreshed successfully!');
+      } else {
+        setError('Failed to refresh session. Please try reconnecting your Facebook account.');
+      }
+    } catch (error) {
+      console.error('❌ Failed to refresh tokens:', error);
+      setError('Failed to refresh tokens. Please try reconnecting your Facebook account.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const storeCustomerSocialAccount = async (account) => {
     try {
       // Get current user/customer ID from auth context or localStorage
@@ -455,9 +706,9 @@ function InstagramIntegration() {
     setConnectedAccounts(updatedAccounts);
     
     // If disconnecting the selected account, select another one
-    if (selectedAccountId === accountId) {
+    if (activeAccountId === accountId) {
       const newSelectedId = updatedAccounts.length > 0 ? updatedAccounts[0].id : null;
-      setSelectedAccountId(newSelectedId);
+      setActiveAccountId(newSelectedId);
       setUserData('selected_instagram_account', newSelectedId || '');
     }
 
@@ -476,10 +727,7 @@ function InstagramIntegration() {
   };
 
   const selectAccount = (accountId) => {
-    setSelectedAccountId(accountId);
-    setUserData('selected_instagram_account', accountId);
-    setShowAccountSelector(false);
-    setAnalyticsData(null); // Clear analytics when switching accounts
+    switchAccount(accountId);
   };
 
   const refreshAccountData = (accountId) => {
@@ -511,39 +759,29 @@ function InstagramIntegration() {
           );
           
           setConnectedAccounts(updatedAccounts);
-          setUserData('connected_instagram_accounts', updatedAccounts);
+          saveAccountsToStorage(updatedAccounts);
+          
+          // Update active account if it's the one being refreshed
+          if (activeAccountId === accountId) {
+            const updatedActiveAccount = updatedAccounts.find(acc => acc.id === accountId);
+            setActiveAccount(updatedActiveAccount);
+          }
+          
           setLoading(false);
         });
       } else {
+        handleApiError(profileResponse.error);
         setLoading(false);
       }
     });
   };
 
-  const handleSignOut = () => {
-    setIsSignedIn(false);
-    setConnectedAccounts([]);
-    setAvailableAccounts([]);
-    setSelectedAccountId(null);
-    setError(null);
-    setAnalyticsData(null);
-    setUserAccessToken(null);
-    
-    // Clear localStorage with user-specific keys
-    removeUserData('connected_instagram_accounts');
-    removeUserData('selected_instagram_account');
-    
-    if (window.FB) {
-      window.FB.logout();
-    }
-  };
-
   const fetchAnalytics = () => {
-    const selectedAccount = connectedAccounts.find(acc => acc.id === selectedAccountId);
-    if (!selectedAccount) return;
+    const account = activeAccount;
+    if (!account) return;
     
     setLoadingAnalytics(true);
-    generateMediaBasedAnalytics(selectedAccount);
+    generateMediaBasedAnalytics(account);
   };
 
   const generateMediaBasedAnalytics = (account) => {
@@ -643,74 +881,103 @@ function InstagramIntegration() {
     );
   };
 
-  const selectedAccount = connectedAccounts.find(acc => acc.id === selectedAccountId);
-
+  // Enhanced renderAccountSelector with multi-account support
   const renderAccountSelector = () => {
     if (connectedAccounts.length <= 1) return null;
 
     return (
-      <div className="relative">
-        <button
-          onClick={() => setShowAccountSelector(!showAccountSelector)}
-          className="flex items-center space-x-2 bg-white border border-gray-200 rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-        >
+      <div className="mb-4">
+        <div className="flex items-center justify-between mb-2">
+          <h4 className="font-medium text-gray-700 flex items-center">
+            <Users className="h-5 w-5 mr-2" />
+            Connected Instagram Accounts ({connectedAccounts.length})
+          </h4>
           <div className="flex items-center space-x-2">
-            {selectedAccount?.profile?.profile_picture_url ? (
-              <img
-                src={selectedAccount.profile.profile_picture_url}
-                alt="Profile"
-                className="w-6 h-6 rounded-full"
-              />
-            ) : (
-              <Instagram className="h-4 w-4 text-pink-600" />
-            )}
-            <span>@{selectedAccount?.profile?.username || 'Select Account'}</span>
+            <button
+              onClick={refreshAccountTokens}
+              disabled={loading || !activeAccount}
+              className="bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center space-x-2 text-sm"
+            >
+              <span>🔄</span>
+              <span>Refresh Tokens</span>
+            </button>
           </div>
-          {showAccountSelector ? (
-            <ChevronDown className="h-4 w-4" />
-          ) : (
-            <ChevronRight className="h-4 w-4" />
-          )}
-        </button>
+        </div>
 
-        {showAccountSelector && (
-          <div className="absolute top-full left-0 mt-2 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
-            <div className="p-2">
-              <div className="text-xs font-medium text-gray-500 px-2 py-1 mb-1">
-                Connected Accounts ({connectedAccounts.length})
-              </div>
-              {connectedAccounts.map(account => (
-                <button
-                  key={account.id}
-                  onClick={() => selectAccount(account.id)}
-                  className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-left hover:bg-gray-50 transition-colors ${
-                    selectedAccountId === account.id ? 'bg-pink-50 border border-pink-200' : ''
-                  }`}
-                >
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {connectedAccounts.map((account) => {
+            const expired = isTokenExpired(account);
+            
+            return (
+              <div
+                key={account.id}
+                className={`border rounded-lg p-4 transition-all cursor-pointer ${
+                  activeAccountId === account.id
+                    ? 'border-pink-500 bg-pink-50 shadow-md'
+                    : 'border-gray-200 bg-white hover:border-gray-300'
+                } ${expired ? 'border-orange-300 bg-orange-50' : ''}`}
+                onClick={() => switchAccount(account.id)}
+              >
+                <div className="flex items-center space-x-3">
                   {account.profile?.profile_picture_url ? (
                     <img
                       src={account.profile.profile_picture_url}
                       alt="Profile"
-                      className="w-8 h-8 rounded-full"
+                      className="w-12 h-12 rounded-full"
                     />
                   ) : (
-                    <div className="w-8 h-8 bg-pink-100 rounded-full flex items-center justify-center">
-                      <Instagram className="h-4 w-4 text-pink-600" />
+                    <div className="w-12 h-12 bg-pink-100 rounded-full flex items-center justify-center">
+                      <Instagram className="h-6 w-6 text-pink-600" />
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-gray-900 truncate">
-                      @{account.profile?.username}
+                    <div className="flex items-center space-x-2">
+                      <h5 className="font-medium text-gray-900 truncate">
+                        @{account.profile?.username || 'Loading...'}
+                      </h5>
+                      {activeAccountId === account.id && (
+                        <UserCheck className="h-4 w-4 text-pink-600" />
+                      )}
+                      {expired && (
+                        <span className="text-xs bg-orange-200 text-orange-800 px-2 py-1 rounded">
+                          Expired
+                        </span>
+                      )}
                     </div>
-                    <div className="text-xs text-gray-500 truncate">
-                      {account.pageName}
-                    </div>
+                    <p className="text-sm text-gray-600 truncate">{account.pageName}</p>
+                    <p className="text-xs text-gray-500">
+                      Connected {new Date(account.connectedAt).toLocaleDateString()}
+                    </p>
                   </div>
-                  {selectedAccountId === account.id && (
-                    <CheckCircle className="h-4 w-4 text-pink-600" />
-                  )}
-                </button>
-              ))}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeAccount(account.id);
+                    }}
+                    className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                    title="Remove account"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Token Status Information */}
+        {activeAccount && (
+          <div className="mt-4 p-3 bg-pink-50 border border-pink-200 rounded-lg">
+            <h6 className="font-medium text-pink-800 mb-2">🔑 Token Management</h6>
+            <div className="text-sm text-pink-700 space-y-1">
+              <p>📝 <strong>Active Account:</strong> @{activeAccount.profile?.username}</p>
+              <p>🔄 <strong>Auto-Refresh:</strong> Tokens are automatically refreshed when needed</p>
+              <p>⏰ <strong>Session Management:</strong> Persistent connection across browser sessions</p>
+              <p>🔗 <strong>Manual Actions:</strong> Use "Refresh Tokens" if you encounter issues</p>
+              <p>✅ <strong>Permissions:</strong> instagram_basic, instagram_content_publish</p>
+              {activeAccount.tokenExpiresAt && (
+                <p>⏳ <strong>Token Expires:</strong> {new Date(activeAccount.tokenExpiresAt).toLocaleString()}</p>
+              )}
             </div>
           </div>
         )}
@@ -718,84 +985,117 @@ function InstagramIntegration() {
     );
   };
 
-  const renderAvailableAccounts = () => {
-    if (availableAccounts.length === 0) return null;
+  // Enhanced error rendering
+  const renderError = () => {
+    if (!error) return null;
+
+    const isTokenError = error.includes('expired') || error.includes('refresh') || error.includes('reconnect');
 
     return (
-      <div className="bg-blue-50 border border-blue-200 rounded-2xl p-6">
+      <div className="bg-red-50 border border-red-200 rounded-2xl p-6 mb-6">
         <div className="flex items-center space-x-3 mb-4">
-          <Plus className="h-5 w-5 text-blue-600" />
-          <h3 className="text-lg font-semibold text-blue-900">Available Instagram Accounts</h3>
+          <AlertCircle className="h-6 w-6 text-red-600" />
+          <h3 className="text-lg font-semibold text-red-800">
+            {isTokenError ? 'Session Expired' : 'Connection Error'}
+          </h3>
         </div>
-        <p className="text-blue-700 text-sm mb-4">
-          Found {availableAccounts.length} additional Instagram Business account(s) you can connect:
-        </p>
-        <div className="space-y-3">
-          {availableAccounts.map(account => (
-            <div key={account.id} className="flex items-center justify-between bg-white rounded-lg p-4 border border-blue-200">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-pink-100 rounded-full flex items-center justify-center">
-                  <Instagram className="h-5 w-5 text-pink-600" />
-                </div>
-                <div className="flex-1">
-                  <div className="font-medium text-gray-900">{account.pageName}</div>
-                  <div className="text-sm text-gray-500">Instagram Business Account</div>
-                  {/* ✅ Show token status */}
-                  {account.tokenWarning && (
-                    <div className="text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded mt-1">
-                      ⚠️ {account.tokenWarning}
-                    </div>
-                  )}
-                  {account.hasValidPageToken && (
-                    <div className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded mt-1">
-                      ✅ Valid page access token
-                    </div>
-                  )}
-                  {!account.hasValidPageToken && !account.tokenWarning && (
-                    <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded mt-1">
-                      ❌ No valid page access token
-                    </div>
-                  )}
-                </div>
-              </div>
-              <button
-                onClick={() => connectInstagramAccount(account)}
-                disabled={loading || !account.hasValidPageToken}
-                className="bg-pink-600 text-white px-4 py-2 rounded-lg hover:bg-pink-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
-                title={!account.hasValidPageToken ? 'Cannot connect - no valid page access token available' : ''}
-              >
-                {loading ? 'Connecting...' : 
-                 !account.hasValidPageToken ? 'Cannot Connect' : 'Connect'}
-              </button>
-            </div>
-          ))}
-        </div>
+        <p className="text-red-700 mb-4">{error}</p>
         
-        {/* ✅ Add helpful information about token issues */}
-        {availableAccounts.some(acc => !acc.hasValidPageToken) && (
-          <div className="mt-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
-            <h6 className="font-medium text-orange-800 mb-1">⚠️ Token Issues Detected</h6>
-            <div className="text-sm text-orange-700 space-y-1">
-              <p>Some accounts cannot be connected due to missing or invalid page access tokens.</p>
-              <p><strong>Common causes:</strong></p>
-              <ul className="list-disc list-inside ml-4 space-y-1">
-                <li>You are not an admin of the Facebook page</li>
-                <li>Facebook permissions are incomplete</li>
-                <li>Page was recently created</li>
-                <li>Account needs to be reconnected</li>
-              </ul>
-              <p><strong>Solution:</strong> Disconnect and reconnect your Facebook account through the Facebook Integration page, ensuring you grant all permissions and have admin access to the pages.</p>
+        {isTokenError && (
+          <div className="space-y-2">
+            <p className="text-sm text-red-700">
+              Your Facebook session has expired. You can try refreshing the tokens or reconnect your account.
+            </p>
+            <div className="flex space-x-2">
+              <button
+                onClick={refreshAccountTokens}
+                disabled={loading}
+                className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 disabled:opacity-50"
+              >
+                🔄 Refresh Tokens
+              </button>
+              <button
+                onClick={handleSignIn}
+                disabled={loading}
+                className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 disabled:opacity-50"
+              >
+                🔗 Reconnect Account
+              </button>
             </div>
           </div>
         )}
+        
+        <div className="flex space-x-3 mt-4">
+          <button
+            onClick={() => setError(null)}
+            className="text-red-600 hover:text-red-700 text-sm font-medium"
+          >
+            Dismiss
+          </button>
+          {!isTokenError && (
+            <button
+              onClick={handleSignIn}
+              disabled={loading}
+              className="bg-pink-600 text-white px-4 py-2 rounded-lg hover:bg-pink-700 transition-colors text-sm font-medium disabled:opacity-50"
+            >
+              Try Again
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // Render available accounts for connection
+  const renderAvailableAccounts = () => {
+    if (!availableAccounts || availableAccounts.length === 0) return null;
+
+    return (
+      <div className="mb-8">
+        <h4 className="font-medium text-gray-700 flex items-center mb-2">
+          <Plus className="h-5 w-5 mr-2" />
+          Available Instagram Accounts ({availableAccounts.length})
+        </h4>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {availableAccounts.map((account) => (
+            <div
+              key={account.id}
+              className="border rounded-lg p-4 bg-white hover:border-pink-400 transition-all cursor-pointer"
+            >
+              <div className="flex items-center space-x-3">
+                <div className="w-12 h-12 bg-pink-100 rounded-full flex items-center justify-center">
+                  <Instagram className="h-6 w-6 text-pink-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h5 className="font-medium text-gray-900 truncate">
+                    {account.pageName}
+                  </h5>
+                  <p className="text-xs text-gray-500">
+                    Page ID: {account.pageId}
+                  </p>
+                  {account.tokenWarning && (
+                    <p className="text-xs text-orange-600 mt-1">{account.tokenWarning}</p>
+                  )}
+                </div>
+                <button
+                  onClick={() => connectInstagramAccount(account)}
+                  className="bg-pink-600 text-white px-3 py-1 rounded-lg hover:bg-pink-700 text-sm font-medium"
+                  disabled={loading}
+                >
+                  Connect
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     );
   };
 
   const renderConnectedState = () => (
     <div className="space-y-6">
-      {/* Enhanced token status notification with more specific guidance */}
-     
+      {/* Show account selector if multiple accounts */}
+      {connectedAccounts.length > 1 && renderAccountSelector()}
 
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
@@ -807,7 +1107,23 @@ function InstagramIntegration() {
               </span>
             </div>
           </div>
-          {renderAccountSelector()}
+          {/* Show active account info */}
+          {activeAccount && (
+            <div className="flex items-center space-x-2">
+              {activeAccount.profile?.profile_picture_url ? (
+                <img
+                  src={activeAccount.profile.profile_picture_url}
+                  alt="Profile"
+                  className="w-6 h-6 rounded-full"
+                />
+              ) : (
+                <Instagram className="h-4 w-4 text-pink-600" />
+              )}
+              <span className="text-sm font-medium text-gray-700">
+                @{activeAccount.profile?.username || 'Loading...'}
+              </span>
+            </div>
+          )}
         </div>
         <div className="flex items-center space-x-2">
           <button
@@ -816,7 +1132,7 @@ function InstagramIntegration() {
                 loadAvailableAccounts(userAccessToken);
               }
             }}
-            disabled={loadingAccounts}
+            disabled={loadingAccounts || !userAccessToken}
             className="flex items-center space-x-2 px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors disabled:opacity-50"
           >
             <Plus className="h-4 w-4" />
@@ -832,56 +1148,20 @@ function InstagramIntegration() {
         </div>
       </div>
 
-      {/* Enhanced connection troubleshooting */}
-      {error && (error.includes('invalidated') || error.includes('refresh') || error.includes('reconnect')) && (
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
-          <div className="flex items-center space-x-3 mb-4">
-            <AlertCircle className="h-6 w-6 text-blue-600" />
-            <h3 className="text-lg font-semibold text-blue-800">Token Refresh Issue Detected</h3>
-          </div>
-          <p className="text-blue-700 mb-4">
-            Your Facebook access tokens are invalid and cannot be refreshed automatically. This happens when:
-          </p>
-          <ul className="text-sm text-blue-700 list-disc list-inside space-y-1 mb-4">
-            <li>You changed your Facebook password</li>
-            <li>Facebook detected suspicious activity and invalidated tokens</li>
-            <li>You logged out of Facebook in another browser/device</li>
-            <li>The user access token needed for refresh is missing or expired</li>
-            <li>Facebook performed a security check and revoked access</li>
-          </ul>
-          <div className="bg-white border border-blue-200 rounded-lg p-3 mb-4">
-            <p className="text-sm font-medium text-blue-800 mb-1">🔄 How Token Refresh Works:</p>
-            <p className="text-xs text-blue-700">
-              Instagram posting requires page access tokens, which can be refreshed using your Facebook user access token. 
-              When both tokens become invalid, you need to reconnect to restore posting capabilities.
-            </p>
-          </div>
-          <div className="flex space-x-3">
-            <button
-              onClick={handleSignOut}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-            >
-              Reconnect Facebook Account
-            </button>
-            <button
-              onClick={() => setError(null)}
-              className="text-blue-600 hover:text-blue-700 text-sm font-medium"
-            >
-              Dismiss
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Show error if any */}
+      {renderError()}
 
+      {/* Show available accounts */}
       {renderAvailableAccounts()}
 
-      {selectedAccount && (
+      {/* Show active account details */}
+      {activeAccount && (
         <div className="bg-gradient-to-br from-pink-50 to-purple-50 border border-pink-200 rounded-2xl p-6">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center space-x-4">
-              {selectedAccount.profile?.profile_picture_url ? (
+              {activeAccount.profile?.profile_picture_url ? (
                 <img
-                  src={selectedAccount.profile.profile_picture_url}
+                  src={activeAccount.profile.profile_picture_url}
                   alt="Instagram profile"
                   className="w-20 h-20 rounded-full border-4 border-pink-200"
                 />
@@ -891,16 +1171,16 @@ function InstagramIntegration() {
                 </div>
               )}
               <div>
-                <h2 className="text-2xl font-bold text-gray-900">@{selectedAccount.profile?.username}</h2>
-                <p className="text-sm text-gray-600">{selectedAccount.pageName}</p>
-                {selectedAccount.profile?.biography && (
-                  <p className="text-gray-700 text-sm mt-1">{selectedAccount.profile.biography}</p>
+                <h2 className="text-2xl font-bold text-gray-900">@{activeAccount.profile?.username}</h2>
+                <p className="text-sm text-gray-600">{activeAccount.pageName}</p>
+                {activeAccount.profile?.biography && (
+                  <p className="text-gray-700 text-sm mt-1">{activeAccount.profile.biography}</p>
                 )}
               </div>
             </div>
             <div className="flex space-x-2">
               <button
-                onClick={() => refreshAccountData(selectedAccount.id)}
+                onClick={() => refreshAccountData(activeAccount.id)}
                 disabled={loading}
                 className="flex items-center space-x-2 px-3 py-2 bg-white border border-pink-200 text-pink-700 rounded-lg hover:bg-pink-50 transition-colors disabled:opacity-50 text-sm"
               >
@@ -908,7 +1188,7 @@ function InstagramIntegration() {
                 <span>Refresh</span>
               </button>
               <button
-                onClick={() => disconnectAccount(selectedAccount.id)}
+                onClick={() => removeAccount(activeAccount.id)}
                 className="flex items-center space-x-2 px-3 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors text-sm"
               >
                 <ExternalLink className="h-4 w-4" />
@@ -920,19 +1200,19 @@ function InstagramIntegration() {
           <div className="grid grid-cols-3 gap-6 text-center">
             <div className="bg-white rounded-xl p-4 shadow-sm">
               <div className="text-2xl font-bold text-pink-600">
-                {selectedAccount.profile?.media_count?.toLocaleString() || selectedAccount.media?.length || 0}
+                {activeAccount.profile?.media_count?.toLocaleString() || activeAccount.media?.length || 0}
               </div>
               <div className="text-sm text-gray-600 font-medium">Posts</div>
             </div>
             <div className="bg-white rounded-xl p-4 shadow-sm">
               <div className="text-2xl font-bold text-pink-600">
-                {selectedAccount.profile?.followers_count?.toLocaleString() || 'N/A'}
+                {activeAccount.profile?.followers_count?.toLocaleString() || 'N/A'}
               </div>
               <div className="text-sm text-gray-600 font-medium">Followers</div>
             </div>
             <div className="bg-white rounded-xl p-4 shadow-sm">
               <div className="text-2xl font-bold text-pink-600">
-                {selectedAccount.media?.reduce((sum, media) => sum + (media.like_count || 0), 0).toLocaleString()}
+                {activeAccount.media?.reduce((sum, media) => sum + (media.like_count || 0), 0).toLocaleString()}
               </div>
               <div className="text-sm text-gray-600 font-medium">Total Likes</div>
             </div>
@@ -943,7 +1223,7 @@ function InstagramIntegration() {
       <div className="flex space-x-3">
         <button
           onClick={fetchAnalytics}
-          disabled={loadingAnalytics || !selectedAccount}
+          disabled={loadingAnalytics || !activeAccount}
           className="flex items-center space-x-2 bg-gradient-to-r from-pink-600 to-purple-600 text-white px-6 py-3 rounded-xl hover:from-pink-700 hover:to-purple-700 disabled:opacity-50 transition-all duration-200 font-medium"
         >
           {loadingAnalytics ? (
@@ -957,13 +1237,14 @@ function InstagramIntegration() {
 
       {renderAnalytics()}
 
-      {selectedAccount && (
+      {/* Show recent posts for active account */}
+      {activeAccount && (
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">
-            Recent Posts ({selectedAccount.media?.length || 0})
+            Recent Posts ({activeAccount.media?.length || 0})
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {selectedAccount.media && selectedAccount.media.length > 0 ? selectedAccount.media.map(media => (
+            {activeAccount.media && activeAccount.media.length > 0 ? activeAccount.media.map(media => (
               <div key={media.id} className="bg-gray-50 rounded-xl overflow-hidden hover:shadow-md transition-shadow">
                 <div className="aspect-square relative">
                   <img

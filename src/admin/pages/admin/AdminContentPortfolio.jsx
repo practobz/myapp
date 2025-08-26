@@ -5,8 +5,10 @@ import {
   CheckCircle, AlertCircle, ChevronLeft, ChevronRight, Image, FileText, 
   Play, Video, Filter, Search, Facebook, Instagram, Send, Plus, 
   MoreVertical, Edit, Trash2, Users, Grid, List, XCircle, Loader2, Hash,
-  Youtube, Twitter, Check, X, Zap
+  Youtube, Twitter, Check, X, Zap, Settings, RefreshCw
 } from 'lucide-react';
+
+import SocialIntegrations from '../../../customer/Integration/SocialIntegrations';
 
 function AdminContentPortfolio() {
   const navigate = useNavigate();
@@ -42,13 +44,10 @@ function AdminContentPortfolio() {
   const [scheduleFormData, setScheduleFormData] = useState({
     caption: '',
     hashtags: '',
-    selectedImages: [], // Changed from imageUrl to selectedImages array
-    availableImages: [], // All available images from the version
-    platform: 'facebook',
-    accountId: '',
-    pageId: '',
-    channelId: '',
-    twitterAccountId: '',
+    selectedImages: [],
+    availableImages: [],
+    platforms: [], // Changed from platform to platforms (array)
+    platformSettings: {}, // Store platform-specific settings
     scheduledDate: '',
     scheduledTime: '',
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
@@ -56,12 +55,21 @@ function AdminContentPortfolio() {
   const [submitting, setSubmitting] = useState(false);
   const [isPostingNow, setIsPostingNow] = useState(false);
   
+  // Integration modal state
+  const [showIntegrationModal, setShowIntegrationModal] = useState(false);
+  const [integrationPlatform, setIntegrationPlatform] = useState(null);
+  const [integrationCustomer, setIntegrationCustomer] = useState(null);
+  
   const fileInputRef = useRef(null);
+
+  // New state for scheduled posts
+  const [scheduledPosts, setScheduledPosts] = useState([]);
 
   useEffect(() => {
     fetchCustomers();
     fetchAllPortfolioItems();
     fetchAllCustomerSocialAccounts();
+    fetchScheduledPosts(); // fetch scheduled posts on mount
   }, []);
 
   useEffect(() => {
@@ -102,6 +110,18 @@ function AdminContentPortfolio() {
     }
   };
 
+  // Fetch scheduled posts from backend
+  const fetchScheduledPosts = async () => {
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/scheduled-posts`);
+      if (!response.ok) return setScheduledPosts([]);
+      const data = await response.json();
+      setScheduledPosts(Array.isArray(data) ? data : []);
+    } catch {
+      setScheduledPosts([]);
+    }
+  };
+
   // Get available social accounts for a customer
   const getCustomerSocialAccounts = (customerId) => {
     const customerData = customerSocialAccounts.find(c => c.customerId === customerId);
@@ -112,6 +132,32 @@ function AdminContentPortfolio() {
   const getAvailableAccountsForPlatform = (customerId, platform) => {
     const accounts = getCustomerSocialAccounts(customerId);
     return accounts.filter(account => account.platform === platform);
+  };
+
+  // Check if customer has any accounts for a platform
+  const hasAccountsForPlatform = (customerId, platform) => {
+    const accounts = getAvailableAccountsForPlatform(customerId, platform);
+    return accounts.length > 0;
+  };
+
+  // Handle integration success
+  const handleIntegrationSuccess = () => {
+    console.log('🎉 Integration successful, refreshing social accounts...');
+    // Refresh social accounts data
+    fetchAllCustomerSocialAccounts();
+    // Close integration modal after a short delay
+    setTimeout(() => {
+      setShowIntegrationModal(false);
+      setIntegrationPlatform(null);
+      setIntegrationCustomer(null);
+    }, 3000);
+  };
+
+  // Show integration modal for a specific platform and customer
+  const showIntegration = (platform, customerId, customerName) => {
+    setIntegrationPlatform(platform);
+    setIntegrationCustomer({ id: customerId, name: customerName });
+    setShowIntegrationModal(true);
   };
 
   const fetchCustomers = async () => {
@@ -310,7 +356,7 @@ function AdminContentPortfolio() {
   const handleScheduleContent = (item) => {
     const latestVersion = item.versions[item.versions.length - 1];
     
-    // Get all media from the latest version - don't filter by platform here
+    // Get all media from the latest version
     const availableMedia = latestVersion?.media?.filter(media => 
       media.url && typeof media.url === 'string'
     ) || [];
@@ -324,18 +370,70 @@ function AdminContentPortfolio() {
     setScheduleFormData({
       caption: captionWithoutHashtags,
       hashtags: hashtagsText,
-      selectedImages: availableMedia.length > 0 ? [availableMedia[0]] : [], // Select first media item by default
-      availableImages: availableMedia, // Show all media (images and videos)
-      platform: 'facebook',
-      accountId: '',
-      pageId: '',
-      channelId: '',
-      twitterAccountId: '',
+      selectedImages: availableMedia.length > 0 ? [availableMedia[0]] : [],
+      availableImages: availableMedia,
+      platforms: [], // Initialize as empty array
+      platformSettings: {}, // Initialize platform-specific settings
       scheduledDate: '',
       scheduledTime: '',
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
     });
     setShowScheduleModal(true);
+  };
+
+  // Handle platform selection (checkbox)
+  const handlePlatformToggle = (platform) => {
+    if (!selectedContentForSchedule) return;
+    
+    setScheduleFormData(prev => {
+      const currentPlatforms = [...prev.platforms];
+      const platformIndex = currentPlatforms.indexOf(platform);
+      
+      if (platformIndex > -1) {
+        // Remove platform
+        currentPlatforms.splice(platformIndex, 1);
+        const newPlatformSettings = { ...prev.platformSettings };
+        delete newPlatformSettings[platform];
+        
+        return {
+          ...prev,
+          platforms: currentPlatforms,
+          platformSettings: newPlatformSettings
+        };
+      } else {
+        // Add platform
+        currentPlatforms.push(platform);
+        const newPlatformSettings = {
+          ...prev.platformSettings,
+          [platform]: {
+            accountId: '',
+            pageId: '',
+            channelId: '',
+            twitterAccountId: ''
+          }
+        };
+        
+        return {
+          ...prev,
+          platforms: currentPlatforms,
+          platformSettings: newPlatformSettings
+        };
+      }
+    });
+  };
+
+  // Update platform-specific settings
+  const updatePlatformSetting = (platform, key, value) => {
+    setScheduleFormData(prev => ({
+      ...prev,
+      platformSettings: {
+        ...prev.platformSettings,
+        [platform]: {
+          ...prev.platformSettings[platform],
+          [key]: value
+        }
+      }
+    }));
   };
 
   // Toggle image/video selection for carousel
@@ -351,7 +449,8 @@ function AdminContentPortfolio() {
         };
       } else {
         // Add to selection (limit to 10 for Instagram/Facebook, 1 for YouTube)
-        const maxItems = (prev.platform === 'instagram' || prev.platform === 'facebook') ? 10 : 1;
+        const hasYoutube = prev.platforms.includes('youtube');
+        const maxItems = hasYoutube ? 1 : 10;
         if (prev.selectedImages.length < maxItems) {
           return {
             ...prev,
@@ -366,7 +465,8 @@ function AdminContentPortfolio() {
 
   // Select all media for carousel
   const selectAllImages = () => {
-    const maxImages = (scheduleFormData.platform === 'instagram' || scheduleFormData.platform === 'facebook') ? 10 : 1;
+    const hasYoutube = scheduleFormData.platforms.includes('youtube');
+    const maxImages = hasYoutube ? 1 : 10;
     const mediaToSelect = scheduleFormData.availableImages.slice(0, maxImages);
     
     setScheduleFormData(prev => ({
@@ -383,28 +483,6 @@ function AdminContentPortfolio() {
     }));
   };
 
-  // Update platform change handler to not filter media
-  const handlePlatformChange = (platform) => {
-    if (!selectedContentForSchedule) return;
-    
-    const latestVersion = selectedContentForSchedule.versions[selectedContentForSchedule.versions.length - 1];
-    
-    // Don't filter media by platform - all platforms can handle both images and videos
-    const availableMedia = latestVersion?.media?.filter(media => 
-      media.url && typeof media.url === 'string'
-    ) || [];
-    
-    setScheduleFormData(prev => ({ 
-      ...prev, 
-      platform: platform,
-      accountId: '',
-      pageId: '',
-      channelId: '',
-      availableImages: availableMedia,
-      selectedImages: availableMedia.length > 0 ? [availableMedia[0]] : []
-    }));
-  };
-
   // Common validation function for both schedule and post now
   const validatePostData = (isScheduled = true) => {
     if (!scheduleFormData.caption) {
@@ -412,30 +490,46 @@ function AdminContentPortfolio() {
       return false;
     }
 
-    if (!scheduleFormData.accountId) {
-      alert('Please select a social media account');
+    if (scheduleFormData.platforms.length === 0) {
+      alert('Please select at least one platform');
       return false;
     }
 
-    // Platform-specific validation
-    if (scheduleFormData.platform === 'facebook' || scheduleFormData.platform === 'instagram') {
-      if (!scheduleFormData.pageId) {
-        alert('Please select a Facebook page');
+    // Validate each selected platform
+    for (const platform of scheduleFormData.platforms) {
+      const settings = scheduleFormData.platformSettings[platform];
+      
+      if (!settings?.accountId) {
+        alert(`Please select a ${platform} account`);
         return false;
       }
-      if (scheduleFormData.platform === 'instagram' && scheduleFormData.selectedImages.length === 0) {
-        alert('Instagram requires at least one image');
-        return false;
+
+      // Platform-specific validation
+      if (platform === 'facebook' || platform === 'instagram') {
+        if (!settings.pageId) {
+          alert(`Please select a ${platform} page`);
+          return false;
+        }
+        if (platform === 'instagram' && scheduleFormData.selectedImages.length === 0) {
+          alert('Instagram requires at least one image');
+          return false;
+        }
+      } else if (platform === 'youtube') {
+        if (!settings.channelId) {
+          alert('Please select a YouTube channel');
+          return false;
+        }
+        if (scheduleFormData.selectedImages.length === 0) {
+          alert('Please upload a video for YouTube post');
+          return false;
+        }
       }
-    } else if (scheduleFormData.platform === 'youtube') {
-      if (!scheduleFormData.channelId) {
-        alert('Please select a YouTube channel');
-        return false;
-      }
-      if (scheduleFormData.selectedImages.length === 0) {
-        alert('Please upload a video for YouTube post');
-        return false;
-      }
+    }
+
+    // YouTube restriction for multiple images
+    if (scheduleFormData.platforms.includes('youtube') && scheduleFormData.selectedImages.length > 1) {
+      alert('YouTube only supports single video posts');
+      return false;
     }
 
     // Only validate date/time for scheduled posts
@@ -447,103 +541,99 @@ function AdminContentPortfolio() {
     return true;
   };
 
-  // Create post data object
-  const createPostData = (isScheduled = true) => {
+  // Create post data object for multiple platforms
+  const createPostsData = (isScheduled = true) => {
     const fullCaption = scheduleFormData.hashtags 
       ? `${scheduleFormData.caption}\n\n${scheduleFormData.hashtags}`
       : scheduleFormData.caption;
 
-    // Get the selected account details
-    const selectedAccount = getCustomerSocialAccounts(selectedContentForSchedule.customerId)
-      .find(acc => acc._id === scheduleFormData.accountId);
+    const postsData = [];
 
-    if (!selectedAccount) {
-      throw new Error('Selected social media account not found');
-    }
-
-    // Get page details if needed
-    let selectedPage = null;
-    if (scheduleFormData.pageId && selectedAccount.pages) {
-      selectedPage = selectedAccount.pages.find(page => page.id === scheduleFormData.pageId);
+    for (const platform of scheduleFormData.platforms) {
+      const settings = scheduleFormData.platformSettings[platform];
       
-      if (!selectedPage) {
-        throw new Error('Selected page not found in account data.');
+      // Get the selected account details
+      const selectedAccount = getCustomerSocialAccounts(selectedContentForSchedule.customerId)
+        .find(acc => acc._id === settings.accountId);
+
+      if (!selectedAccount) {
+        throw new Error(`Selected ${platform} account not found`);
       }
-      
-      if (!selectedPage.accessToken || selectedPage.accessToken.length < 50) {
-        throw new Error('Selected page does not have a valid access token. Please reconnect the Facebook account to obtain page access tokens.');
+
+      let postData = {
+        caption: fullCaption,
+        status: isScheduled ? 'pending' : 'publishing',
+        contentId: selectedContentForSchedule.id,
+        customerId: selectedContentForSchedule.customerId,
+        platform: platform,
+        accountId: selectedAccount._id,
+        platformUserId: selectedAccount.platformUserId,
+        accessToken: selectedAccount.accessToken,
+        imageUrls: scheduleFormData.selectedImages.map(item => item.url),
+        isCarousel: scheduleFormData.selectedImages.length > 1 && platform !== 'youtube',
+        timezone: scheduleFormData.timezone
+      };
+
+      // Add scheduled time
+      if (isScheduled) {
+        const scheduledDateTime = new Date(`${scheduleFormData.scheduledDate}T${scheduleFormData.scheduledTime}`);
+        postData.scheduledAt = scheduledDateTime.toISOString();
+      } else {
+        postData.scheduledAt = new Date().toISOString();
+        postData.publishImmediately = true;
       }
-    }
 
-    // Get YouTube channel details if needed
-    let selectedChannel = null;
-    if (scheduleFormData.channelId && selectedAccount.channels) {
-      selectedChannel = selectedAccount.channels.find(channel => channel.id === scheduleFormData.channelId);
-      
-      if (!selectedChannel) {
-        throw new Error('Selected YouTube channel not found in account data.');
-      }
-      
-      if (!selectedAccount.accessToken || selectedAccount.accessToken.length < 50) {
-        throw new Error('Selected YouTube account does not have a valid access token. Please reconnect the YouTube account.');
-      }
-    }
-
-    let postData = {
-      caption: fullCaption,
-      status: isScheduled ? 'pending' : 'publishing',
-      contentId: selectedContentForSchedule.id,
-      customerId: selectedContentForSchedule.customerId,
-      platform: scheduleFormData.platform,
-      accountId: selectedAccount._id,
-      platformUserId: selectedAccount.platformUserId,
-      accessToken: selectedAccount.accessToken,
-      imageUrls: scheduleFormData.selectedImages.map(item => item.url),
-      isCarousel: scheduleFormData.selectedImages.length > 1,
-      timezone: scheduleFormData.timezone
-    };
-
-    // Add scheduled time only for scheduled posts
-    if (isScheduled) {
-      const scheduledDateTime = new Date(`${scheduleFormData.scheduledDate}T${scheduleFormData.scheduledTime}`);
-      postData.scheduledAt = scheduledDateTime.toISOString();
-    } else {
-      // For immediate posts, set to publish now
-      postData.scheduledAt = new Date().toISOString();
-      postData.publishImmediately = true;
-    }
-
-    if (scheduleFormData.platform === 'facebook' || scheduleFormData.platform === 'instagram') {
-      Object.assign(postData, {
-        imageUrl: scheduleFormData.selectedImages[0]?.url || '',
-        pageId: scheduleFormData.pageId,
-        pageName: selectedPage?.name,
-        pageAccessToken: selectedPage.accessToken,
-        instagramId: scheduleFormData.platform === 'instagram' 
-          ? selectedPage?.instagramBusinessAccount?.id
-          : null,
-      });
-      
-      if (scheduleFormData.platform === 'instagram') {
-        if (!selectedPage?.instagramBusinessAccount?.id) {
-          throw new Error('Selected page does not have an Instagram Business Account connected.');
+      // Platform-specific settings
+      if (platform === 'facebook' || platform === 'instagram') {
+        const selectedPage = selectedAccount.pages?.find(page => page.id === settings.pageId);
+        
+        if (!selectedPage) {
+          throw new Error(`Selected ${platform} page not found`);
         }
+        
+        if (!selectedPage.accessToken || selectedPage.accessToken.length < 50) {
+          throw new Error(`Selected ${platform} page does not have a valid access token`);
+        }
+
+        Object.assign(postData, {
+          imageUrl: scheduleFormData.selectedImages[0]?.url || '',
+          pageId: settings.pageId,
+          pageName: selectedPage.name,
+          pageAccessToken: selectedPage.accessToken,
+          instagramId: platform === 'instagram' 
+            ? selectedPage.instagramBusinessAccount?.id
+            : null,
+        });
+        
+        if (platform === 'instagram') {
+          if (!selectedPage.instagramBusinessAccount?.id) {
+            throw new Error('Selected page does not have an Instagram Business Account connected');
+          }
+        }
+      } else if (platform === 'youtube') {
+        const selectedChannel = selectedAccount.channels?.find(channel => channel.id === settings.channelId);
+        
+        if (!selectedChannel) {
+          throw new Error('Selected YouTube channel not found');
+        }
+
+        Object.assign(postData, {
+          videoUrl: scheduleFormData.selectedImages[0]?.url || '',
+          channelId: settings.channelId,
+          channelName: selectedChannel.name,
+          youtubeAccessToken: selectedAccount.accessToken
+        });
+      } else if (platform === 'twitter') {
+        Object.assign(postData, {
+          twitterAccountId: selectedAccount.platformUserId,
+          sessionId: selectedAccount.sessionId,
+        });
       }
-    } else if (scheduleFormData.platform === 'youtube') {
-      Object.assign(postData, {
-        videoUrl: scheduleFormData.selectedImages[0]?.url || '',
-        channelId: scheduleFormData.channelId,
-        channelName: selectedChannel.name,
-        youtubeAccessToken: selectedAccount.accessToken
-      });
-    } else if (scheduleFormData.platform === 'twitter') {
-      Object.assign(postData, {
-        twitterAccountId: selectedAccount.platformUserId,
-        sessionId: selectedAccount.sessionId,
-      });
+
+      postsData.push(postData);
     }
 
-    return postData;
+    return postsData;
   };
 
   const handleSchedulePost = async () => {
@@ -551,33 +641,56 @@ function AdminContentPortfolio() {
 
     setSubmitting(true);
     try {
-      const postData = createPostData(true);
-      const endpoint = `${process.env.REACT_APP_API_URL}/api/scheduled-posts`;
+      const postsData = createPostsData(true);
+      const results = [];
+      const errors = [];
 
-      console.log('📤 Scheduling post:', {
-        platform: postData.platform,
-        scheduledAt: postData.scheduledAt,
-        mediaCount: postData.imageUrls?.length || 0,
-        isCarousel: postData.isCarousel
-      });
+      // Schedule posts for each platform
+      for (const postData of postsData) {
+        try {
+          const endpoint = `${process.env.REACT_APP_API_URL}/api/scheduled-posts`;
 
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(postData)
-      });
+          console.log(`📤 Scheduling ${postData.platform} post:`, {
+            platform: postData.platform,
+            scheduledAt: postData.scheduledAt,
+            mediaCount: postData.imageUrls?.length || 0,
+            isCarousel: postData.isCarousel
+          });
 
-      if (response.ok) {
-        const mediaType = scheduleFormData.platform === 'youtube' ? 'video' : 'image';
-        alert(`Post with ${scheduleFormData.selectedImages.length} ${mediaType}${scheduleFormData.selectedImages.length === 1 ? '' : 's'} scheduled successfully!`);
+          const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(postData)
+          });
+
+          if (response.ok) {
+            results.push(`✅ ${postData.platform}: Scheduled successfully`);
+          } else {
+            const errorData = await response.json();
+            errors.push(`❌ ${postData.platform}: ${errorData.error || 'Failed to schedule'}`);
+          }
+        } catch (error) {
+          errors.push(`❌ ${postData.platform}: ${error.message}`);
+        }
+      }
+
+      // Show combined results
+      let message = '';
+      if (results.length > 0) {
+        message += results.join('\n') + '\n';
+      }
+      if (errors.length > 0) {
+        message += '\nErrors:\n' + errors.join('\n');
+      }
+
+      alert(message || 'All posts scheduled successfully!');
+      
+      if (results.length > 0) {
         closeModal();
-      } else {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to schedule post');
       }
     } catch (error) {
-      console.error('Schedule post error:', error);
-      alert(`Failed to schedule post: ${error.message}`);
+      console.error('Schedule posts error:', error);
+      alert(`Failed to schedule posts: ${error.message}`);
     } finally {
       setSubmitting(false);
     }
@@ -588,89 +701,120 @@ function AdminContentPortfolio() {
 
     setIsPostingNow(true);
     try {
-      const postData = createPostData(false);
-      const endpoint = `${process.env.REACT_APP_API_URL}/api/immediate-posts`;
+      const postsData = createPostsData(false);
+      const results = [];
+      const errors = [];
 
-      console.log('⚡ Posting immediately:', {
-        platform: postData.platform,
-        mediaCount: postData.imageUrls?.length || 0,
-        isCarousel: postData.isCarousel
-      });
+      // Post to each platform immediately
+      for (const postData of postsData) {
+        try {
+          const endpoint = `${process.env.REACT_APP_API_URL}/api/immediate-posts`;
 
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(postData)
-      });
+          console.log(`⚡ Posting to ${postData.platform} immediately:`, {
+            platform: postData.platform,
+            mediaCount: postData.imageUrls?.length || 0,
+            isCarousel: postData.isCarousel
+          });
 
-      const result = await response.json();
+          const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(postData)
+          });
+
+          const result = await response.json();
+          
+          if (response.ok) {
+            let successMsg = `✅ ${postData.platform}: Posted successfully`;
+            if (result.facebookPostId) successMsg += ` (ID: ${result.facebookPostId})`;
+            if (result.instagramPostId) successMsg += ` (ID: ${result.instagramPostId})`;
+            if (result.youtubePostId) successMsg += ` (ID: ${result.youtubePostId})`;
+            if (result.twitterPostId) successMsg += ` (ID: ${result.twitterPostId})`;
+            
+            results.push(successMsg);
+
+            // --- Update status to 'published' in local state ---
+            setAllPortfolioItems(prevItems => {
+              return prevItems.map(customerData => {
+                if (customerData.customerId !== selectedContentForSchedule.customerId) return customerData;
+                return {
+                  ...customerData,
+                  portfolios: customerData.portfolios.map(portfolio => {
+                    if (portfolio.id !== selectedContentForSchedule.id) return portfolio;
+                    // Update status for portfolio and latest version
+                    const updatedVersions = portfolio.versions.map((v, idx) =>
+                      idx === portfolio.versions.length - 1
+                        ? { ...v, status: 'published' }
+                        : v
+                    );
+                    return {
+                      ...portfolio,
+                      status: 'published',
+                      versions: updatedVersions
+                    };
+                  })
+                };
+              });
+            });
+
+            // If viewing a specific content, update its status too
+            if (selectedContent && selectedContent.id === selectedContentForSchedule.id) {
+              setSelectedContent(prev => {
+                if (!prev) return prev;
+                const updatedVersions = prev.versions.map((v, idx) =>
+                  idx === prev.versions.length - 1
+                    ? { ...v, status: 'published' }
+                    : v
+                );
+                return {
+                  ...prev,
+                  status: 'published',
+                  versions: updatedVersions
+                };
+              });
+            }
+
+            // If viewing a customer, update their portfolio status
+            if (selectedCustomer && selectedCustomer.customerId === selectedContentForSchedule.customerId) {
+              setSelectedCustomer(prev => ({
+                ...prev,
+                portfolios: prev.portfolios.map(portfolio =>
+                  portfolio.id === selectedContentForSchedule.id
+                    ? { ...portfolio, status: 'published', versions: portfolio.versions.map((v, idx) =>
+                        idx === portfolio.versions.length - 1
+                          ? { ...v, status: 'published' }
+                          : v
+                      ) }
+                    : portfolio
+                )
+              }));
+            }
+            // --- end status update ---
+          } else {
+            errors.push(`❌ ${postData.platform}: ${result.error || 'Failed to post'}`);
+          }
+        } catch (error) {
+          errors.push(`❌ ${postData.platform}: ${error.message}`);
+        }
+      }
+
+      // Show combined results
+      let message = '';
+      if (results.length > 0) {
+        message += 'Successfully posted:\n' + results.join('\n') + '\n';
+      }
+      if (errors.length > 0) {
+        message += '\nErrors:\n' + errors.join('\n');
+      }
+
+      alert(message || 'All posts published successfully!');
       
-      if (response.ok) {
-        const mediaType = scheduleFormData.platform === 'youtube' ? 'video' : 'image';
-        
-        // Show success message with detailed results
-        let successMessage = `Post with ${scheduleFormData.selectedImages.length} ${mediaType}${scheduleFormData.selectedImages.length === 1 ? '' : 's'} published successfully!`;
-        
-        // Add platform-specific success details
-        if (result.facebookPostId) {
-          successMessage += `\n✅ Facebook: Posted successfully (ID: ${result.facebookPostId})`;
-        }
-        if (result.instagramPostId) {
-          successMessage += `\n✅ Instagram: Posted successfully (ID: ${result.instagramPostId})`;
-        }
-        if (result.youtubePostId) {
-          successMessage += `\n✅ YouTube: Posted successfully (ID: ${result.youtubePostId})`;
-        }
-        if (result.twitterPostId) {
-          successMessage += `\n✅ Twitter: Posted successfully (ID: ${result.twitterPostId})`;
-        }
-        
-        // Show partial success if some platforms failed
-        if (result.error && (result.facebookPostId || result.instagramPostId || result.youtubePostId || result.twitterPostId)) {
-          successMessage += `\n\n⚠️ Some issues occurred: ${result.error}`;
-        }
-        
-        alert(successMessage);
+      if (results.length > 0) {
         closeModal();
-      } else {
-        const errorData = result;
-        
-        // Enhanced error handling with specific guidance
-        let errorMessage = `Failed to publish post: ${errorData.error || 'Unknown error'}`;
-        
-        // Add platform-specific error guidance
-        if (errorData.error?.includes('token') || errorData.error?.includes('access')) {
-          errorMessage += '\n\n💡 This appears to be an authentication issue. The customer may need to reconnect their social media accounts.';
-        }
-        
-        if (errorData.error?.includes('Instagram') && errorData.error?.includes('reconnect')) {
-          errorMessage += '\n\n📸 Instagram Error: Customer needs to disconnect and reconnect their Facebook account through the Instagram integration page to restore posting capabilities.';
-        }
-        
-        if (errorData.error?.includes('YouTube') && errorData.error?.includes('token')) {
-          errorMessage += '\n\n📺 YouTube Error: Customer needs to reconnect their YouTube account through the YouTube integration page.';
-        }
-        
-        if (errorData.error?.includes('permissions')) {
-          errorMessage += '\n\n🔑 Permissions Error: Customer needs to grant proper permissions when reconnecting their social media accounts.';
-        }
-        
-        throw new Error(errorMessage);
       }
     } catch (error) {
       console.error('Post now error:', error);
-      
-      // Enhanced error display
-      let displayError = error.message;
-      
-      // Add troubleshooting tips for common errors
-      if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-        displayError += '\n\n🌐 Network Error: Please check your internet connection and try again.';
-      } else if (error.message.includes('500') || error.message.includes('Internal Server Error')) {
-        displayError += '\n\n🔧 Server Error: There was a problem on our end. Please try again in a moment.';
-      }
-      
-      alert(displayError);
+      alert(`Failed to publish posts: ${error.message}`);
     } finally {
       setIsPostingNow(false);
     }
@@ -684,11 +828,8 @@ function AdminContentPortfolio() {
       hashtags: '',
       selectedImages: [],
       availableImages: [],
-      platform: 'facebook',
-      accountId: '',
-      pageId: '',
-      channelId: '',
-      twitterAccountId: '',
+      platforms: [],
+      platformSettings: {},
       scheduledDate: '',
       scheduledTime: '',
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
@@ -786,6 +927,28 @@ function AdminContentPortfolio() {
     return ['mp4', 'webm', 'ogg', 'mov', 'avi'].includes(ext);
   };
 
+  // Helper: get published platforms for a contentId
+  const getPublishedPlatformsForContent = (contentId) => {
+    return scheduledPosts
+      .filter(post => post.contentId === contentId && post.status === 'published')
+      .map(post => post.platform);
+  };
+
+  // Helper: check if content is published on any platform
+  const isContentPublished = (contentId) => {
+    return scheduledPosts.some(post => post.contentId === contentId && post.status === 'published');
+  };
+
+  // When displaying portfolios, override status if published
+  const publishedStatus = (item) => {
+    if (isContentPublished(item.id)) {
+      return 'published';
+    }
+    return item.status;
+  };
+
+
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
@@ -825,30 +988,6 @@ function AdminContentPortfolio() {
           </div>
         </div>
       </header>
-
-      {/* Platform Connection Status */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <div className="flex items-center space-x-1">
-                <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                <span className="text-sm font-medium">Social Media Accounts</span>
-              </div>
-              <span className="text-sm text-gray-600">
-                Connected via database ({customerSocialAccounts.reduce((total, customer) => total + customer.socialAccounts.length, 0)} total accounts)
-              </span>
-            </div>
-            <button
-              onClick={fetchAllCustomerSocialAccounts}
-              disabled={loadingSocialAccounts}
-              className="bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-700 disabled:opacity-50"
-            >
-              {loadingSocialAccounts ? 'Loading...' : 'Refresh'}
-            </button>
-          </div>
-        </div>
-      </div>
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -915,8 +1054,9 @@ function AdminContentPortfolio() {
                   const customer = customers.find(c => c._id === customerData.customerId);
                   const customerName = customer ? customer.name : `Customer ${customerData.customerId}`;
                   const totalPortfolios = customerData.portfolios.length;
-                  const approvedCount = customerData.portfolios.filter(p => p.status === 'approved').length;
-                  const pendingCount = customerData.portfolios.filter(p => p.status === 'under_review').length;
+                  const publishedCount = customerData.portfolios.filter(p => isContentPublished(p.id)).length;
+                  const approvedCount = customerData.portfolios.filter(p => p.status === 'approved' && !isContentPublished(p.id)).length;
+                  const pendingCount = customerData.portfolios.filter(p => p.status === 'under_review' && !isContentPublished(p.id)).length;
                   
                   return (
                     <div key={customerData.customerId} className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden hover:shadow-xl transition-all duration-300 group h-[420px] flex flex-col">
@@ -957,8 +1097,13 @@ function AdminContentPortfolio() {
                                 <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></div>
                                 <span className="text-sm font-medium truncate">{portfolio.title}</span>
                               </div>
-                              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(portfolio.status)} flex-shrink-0`}>
-                                {portfolio.status.replace('_', ' ')}
+                              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(isContentPublished(portfolio.id) ? 'published' : portfolio.status)} flex-shrink-0`}>
+                                {isContentPublished(portfolio.id) ? 'published' : portfolio.status.replace('_', ' ')}
+                                {isContentPublished(portfolio.id) && (
+                                  <span className="ml-2 text-xs text-blue-600">
+                                    Published on: {getPublishedPlatformsForContent(portfolio.id).map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(', ')}
+                                  </span>
+                                )}
                               </span>
                             </div>
                           ))}
@@ -1054,9 +1199,14 @@ function AdminContentPortfolio() {
                         </div>
                         
                         <div className="absolute top-4 right-4 flex gap-2">
-                          <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(item.status)}`}>
-                            {getStatusIcon(item.status)}
-                            <span className="ml-1">{item.status.replace('_', ' ').toUpperCase()}</span>
+                          <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(isContentPublished(item.id) ? 'published' : item.status)}`}>
+                            {getStatusIcon(isContentPublished(item.id) ? 'published' : item.status)}
+                            <span className="ml-1">{isContentPublished(item.id) ? 'PUBLISHED' : item.status.replace('_', ' ').toUpperCase()}</span>
+                            {isContentPublished(item.id) && (
+                              <span className="ml-2 text-xs text-blue-600">
+                                {getPublishedPlatformsForContent(item.id).map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(', ')}
+                              </span>
+                            )}
                           </span>
                         </div>
                         
@@ -1154,9 +1304,14 @@ function AdminContentPortfolio() {
                 </div>
 
                 <div className="flex flex-col gap-3">
-                  <span className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-medium border ${getStatusColor(selectedContent.status)}`}>
-                    {getStatusIcon(selectedContent.status)}
-                    <span className="ml-2">{selectedContent.status.replace('_', ' ').toUpperCase()}</span>
+                  <span className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-medium border ${getStatusColor(isContentPublished(selectedContent.id) ? 'published' : selectedContent.status)}`}>
+                    {getStatusIcon(isContentPublished(selectedContent.id) ? 'published' : selectedContent.status)}
+                    <span className="ml-2">{isContentPublished(selectedContent.id) ? 'PUBLISHED' : selectedContent.status.replace('_', ' ').toUpperCase()}</span>
+                    {isContentPublished(selectedContent.id) && (
+                      <span className="ml-2 text-xs text-blue-600">
+                        {getPublishedPlatformsForContent(selectedContent.id).map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(', ')}
+                      </span>
+                    )}
                   </span>
                   
                   <button
@@ -1182,7 +1337,8 @@ function AdminContentPortfolio() {
                         <span className="ml-2 text-sm font-normal text-gray-500">
                           of {selectedContent.totalVersions}
                         </span>
-                      </h3>
+                      </h3
+                      >
                       
                       <div className="flex items-center space-x-2">
                         <button
@@ -1545,10 +1701,10 @@ function AdminContentPortfolio() {
         )}
       </div>
 
-      {/* Enhanced Schedule Post Modal */}
+      {/* Enhanced Multi-Platform Schedule Post Modal */}
       {showScheduleModal && (
         <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               {/* Modal Header */}
               <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-200">
@@ -1557,8 +1713,8 @@ function AdminContentPortfolio() {
                     <Send className="h-6 w-6 text-white" />
                   </div>
                   <div>
-                    <h2 className="text-2xl font-bold text-gray-900">Post Content</h2>
-                    <p className="text-sm text-gray-500">Schedule for later or publish immediately</p>
+                    <h2 className="text-2xl font-bold text-gray-900">Post to Multiple Platforms</h2>
+                    <p className="text-sm text-gray-500">Select platforms, schedule for later or publish immediately</p>
                   </div>
                 </div>
                 <button
@@ -1570,157 +1726,244 @@ function AdminContentPortfolio() {
               </div>
 
               <div className="space-y-8">
-                {/* Platform Selection */}
+                {/* Platform Selection - Changed to Checkboxes with Connection Status */}
                 <div className="bg-gradient-to-r from-gray-50 to-blue-50 p-6 rounded-xl border border-gray-200">
-                  <label className="block text-lg font-semibold text-gray-900 mb-4">Select Platform</label>
+                  <label className="block text-lg font-semibold text-gray-900 mb-4">Select Platforms (Multi-Select)</label>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <label className={`flex items-center p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
-                      scheduleFormData.platform === 'facebook' 
+                      scheduleFormData.platforms.includes('facebook') 
                         ? 'border-blue-500 bg-blue-50 shadow-md' 
-                        : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50'
+                        : hasAccountsForPlatform(selectedContentForSchedule?.customerId, 'facebook')
+                        ? 'border-gray-300 hover:border-blue-400 hover:bg-blue-50'
+                        : 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-60'
                     }`}>
                       <input
-                        type="radio"
-                        name="platform"
+                        type="checkbox"
+                        name="platforms"
                         value="facebook"
-                        checked={scheduleFormData.platform === 'facebook'}
-                        onChange={(e) => handlePlatformChange(e.target.value)}
+                        checked={scheduleFormData.platforms.includes('facebook')}
+                        onChange={() => hasAccountsForPlatform(selectedContentForSchedule?.customerId, 'facebook') && handlePlatformToggle('facebook')}
+                        disabled={!hasAccountsForPlatform(selectedContentForSchedule?.customerId, 'facebook')}
                         className="sr-only"
                       />
                       <Facebook className="h-6 w-6 text-blue-600 mr-3" />
-                      <span className="font-medium text-gray-900">Facebook</span>
+                      <div className="flex-1">
+                        <span className="font-medium text-gray-900">Facebook</span>
+                        {!hasAccountsForPlatform(selectedContentForSchedule?.customerId, 'facebook') && (
+                          <div className="text-xs text-orange-600 mt-1">No account connected</div>
+                        )}
+                      </div>
+                      {scheduleFormData.platforms.includes('facebook') && (
+                        <Check className="h-5 w-5 text-blue-600 ml-auto" />
+                      )}
+                      {!hasAccountsForPlatform(selectedContentForSchedule?.customerId, 'facebook') && (
+                        <button
+                          type="button"
+                          onClick={() => showIntegration('facebook', selectedContentForSchedule?.customerId, getCustomerName(selectedContentForSchedule?.customerId))}
+                          className="ml-2 bg-blue-600 text-white px-2 py-1 rounded text-xs hover:bg-blue-700"
+                        >
+                          Connect
+                        </button>
+                      )}
                     </label>
                     <label className={`flex items-center p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
-                      scheduleFormData.platform === 'instagram' 
+                      scheduleFormData.platforms.includes('instagram') 
                         ? 'border-pink-500 bg-pink-50 shadow-md' 
-                        : 'border-gray-300 hover:border-pink-400 hover:bg-pink-50'
+                        : hasAccountsForPlatform(selectedContentForSchedule?.customerId, 'instagram')
+                        ? 'border-gray-300 hover:border-pink-400 hover:bg-pink-50'
+                        : 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-60'
                     }`}>
                       <input
-                        type="radio"
-                        name="platform"
+                        type="checkbox"
+                        name="platforms"
                         value="instagram"
-                        checked={scheduleFormData.platform === 'instagram'}
-                        onChange={(e) => handlePlatformChange(e.target.value)}
+                        checked={scheduleFormData.platforms.includes('instagram')}
+                        onChange={() => hasAccountsForPlatform(selectedContentForSchedule?.customerId, 'instagram') && handlePlatformToggle('instagram')}
+                        disabled={!hasAccountsForPlatform(selectedContentForSchedule?.customerId, 'instagram')}
                         className="sr-only"
                       />
                       <Instagram className="h-6 w-6 text-pink-600 mr-3" />
-                      <span className="font-medium text-gray-900">Instagram</span>
+                      <div className="flex-1">
+                        <span className="font-medium text-gray-900">Instagram</span>
+                        {!hasAccountsForPlatform(selectedContentForSchedule?.customerId, 'instagram') && (
+                          <div className="text-xs text-orange-600 mt-1">No account connected</div>
+                        )}
+                      </div>
+                      {scheduleFormData.platforms.includes('instagram') && (
+                        <Check className="h-5 w-5 text-pink-600 ml-auto" />
+                      )}
+                      {!hasAccountsForPlatform(selectedContentForSchedule?.customerId, 'instagram') && (
+                        <button
+                          type="button"
+                          onClick={() => showIntegration('instagram', selectedContentForSchedule?.customerId, getCustomerName(selectedContentForSchedule?.customerId))}
+                          className="ml-2 bg-pink-600 text-white px-2 py-1 rounded text-xs hover:bg-pink-700"
+                        >
+                          Connect
+                        </button>
+                      )}
                     </label>
                     <label className={`flex items-center p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
-                      scheduleFormData.platform === 'youtube' 
+                      scheduleFormData.platforms.includes('youtube') 
                         ? 'border-red-500 bg-red-50 shadow-md' 
-                        : 'border-gray-300 hover:border-red-400 hover:bg-red-50'
+                        : hasAccountsForPlatform(selectedContentForSchedule?.customerId, 'youtube')
+                        ? 'border-gray-300 hover:border-red-400 hover:bg-red-50'
+                        : 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-60'
                     }`}>
                       <input
-                        type="radio"
-                        name="platform"
+                        type="checkbox"
+                        name="platforms"
                         value="youtube"
-                        checked={scheduleFormData.platform === 'youtube'}
-                        onChange={(e) => handlePlatformChange(e.target.value)}
+                        checked={scheduleFormData.platforms.includes('youtube')}
+                        onChange={() => hasAccountsForPlatform(selectedContentForSchedule?.customerId, 'youtube') && handlePlatformToggle('youtube')}
+                        disabled={!hasAccountsForPlatform(selectedContentForSchedule?.customerId, 'youtube')}
                         className="sr-only"
                       />
                       <Youtube className="h-6 w-6 text-red-600 mr-3" />
-                      <span className="font-medium text-gray-900">YouTube</span>
+                      <div className="flex-1">
+                        <span className="font-medium text-gray-900">YouTube</span>
+                        {!hasAccountsForPlatform(selectedContentForSchedule?.customerId, 'youtube') && (
+                          <div className="text-xs text-orange-600 mt-1">Not available</div>
+                        )}
+                      </div>
+                      {scheduleFormData.platforms.includes('youtube') && (
+                        <Check className="h-5 w-5 text-red-600 ml-auto" />
+                      )}
                     </label>
                     <label className={`flex items-center p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
-                      scheduleFormData.platform === 'twitter' 
+                      scheduleFormData.platforms.includes('twitter') 
                         ? 'border-blue-400 bg-blue-50 shadow-md' 
-                        : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50'
+                        : hasAccountsForPlatform(selectedContentForSchedule?.customerId, 'twitter')
+                        ? 'border-gray-300 hover:border-blue-400 hover:bg-blue-50'
+                        : 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-60'
                     }`}>
                       <input
-                        type="radio"
-                        name="platform"
+                        type="checkbox"
+                                               name="platforms"
                         value="twitter"
-                        checked={scheduleFormData.platform === 'twitter'}
-                        onChange={(e) => handlePlatformChange(e.target.value)}
+                        checked={scheduleFormData.platforms.includes('twitter')}
+                        onChange={() => hasAccountsForPlatform(selectedContentForSchedule?.customerId, 'twitter') && handlePlatformToggle('twitter')}
+                        disabled={!hasAccountsForPlatform(selectedContentForSchedule?.customerId, 'twitter')}
                         className="sr-only"
                       />
                       <Twitter className="h-6 w-6 text-blue-400 mr-3" />
-                      <span className="font-medium text-gray-900">Twitter</span>
+                      <div className="flex-1">
+                        <span className="font-medium text-gray-900">Twitter</span>
+                        {!hasAccountsForPlatform(selectedContentForSchedule?.customerId, 'twitter') && (
+                          <div className="text-xs text-orange-600 mt-1">Not available</div>
+                        )}
+                      </div>
+                      {scheduleFormData.platforms.includes('twitter') && (
+                        <Check className="h-5 w-5 text-blue-400 ml-auto" />
+                      )}
                     </label>
                   </div>
-                </div>
-
-                {/* Account Selection */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-lg font-semibold text-gray-900 mb-3">
-                      Select {scheduleFormData.platform} Account
-                    </label>
-                    <select
-                      value={scheduleFormData.accountId}
-                      onChange={(e) => setScheduleFormData(prev => ({ 
-                        ...prev, 
-                        accountId: e.target.value,
-                        pageId: '' // Reset page selection when account changes
-                      }))}
-                      className="w-full border-2 border-gray-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                      required
-                    >
-                      <option value="">Choose an account</option>
-                      {getAvailableAccountsForPlatform(selectedContentForSchedule?.customerId, scheduleFormData.platform).map(account => (
-                        <option key={account._id} value={account._id}>
-                          {account.name} ({account.platform})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Page Selection for Facebook/Instagram */}
-                  {(scheduleFormData.platform === 'facebook' || scheduleFormData.platform === 'instagram') && scheduleFormData.accountId && (
-                    <div>
-                      <label className="block text-lg font-semibold text-gray-900 mb-3">
-                        Select Page
-                      </label>
-                      <select
-                        value={scheduleFormData.pageId}
-                        onChange={(e) => setScheduleFormData(prev => ({ ...prev, pageId: e.target.value }))}
-                        className="w-full border-2 border-gray-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                        required
-                      >
-                        <option value="">Choose a page</option>
-                        {(() => {
-                          const selectedAccount = getCustomerSocialAccounts(selectedContentForSchedule?.customerId)
-                            .find(acc => acc._id === scheduleFormData.accountId);
-                          return selectedAccount?.pages?.map(page => (
-                            <option key={page.id} value={page.id}>
-                              {page.name}
-                              {!page.accessToken && ' (⚠️ No token)'}
-                              {scheduleFormData.platform === 'instagram' && !page.instagramBusinessAccount && ' (No Instagram)'}
-                            </option>
-                          )) || [];
-                        })()}
-                      </select>
-                    </div>
-                  )}
-
-                  {/* Channel Selection for YouTube */}
-                  {scheduleFormData.platform === 'youtube' && scheduleFormData.accountId && (
-                    <div>
-                      <label className="block text-lg font-semibold text-gray-900 mb-3">
-                        Select Channel
-                      </label>
-                      <select
-                        value={scheduleFormData.channelId}
-                        onChange={(e) => setScheduleFormData(prev => ({ ...prev, channelId: e.target.value }))}
-                        className="w-full border-2 border-gray-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-                        required
-                      >
-                        <option value="">Choose a channel</option>
-                        {(() => {
-                          const selectedAccount = getCustomerSocialAccounts(selectedContentForSchedule?.customerId)
-                            .find(acc => acc._id === scheduleFormData.accountId);
-                          return selectedAccount?.channels?.map(channel => (
-                            <option key={channel.id} value={channel.id}>
-                              {channel.name}
-                              {!selectedAccount.accessToken && ' (⚠️ No token)'}
-                            </option>
-                          )) || [];
-                        })()}
-                      </select>
+                  
+                  {scheduleFormData.platforms.length > 0 && (
+                    <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                      <p className="text-sm text-green-800 font-medium">
+                        Selected platforms: {scheduleFormData.platforms.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(', ')}
+                      </p>
+                      {scheduleFormData.platforms.includes('youtube') && scheduleFormData.platforms.length > 1 && (
+                        <p className="text-xs text-orange-600 mt-1">
+                          ⚠️ Note: YouTube only supports single video posts, while other platforms support multiple images/carousel posts.
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
+
+                {/* Platform-specific Account Selection */}
+                {scheduleFormData.platforms.length > 0 && (
+                  <div className="space-y-6">
+                    {scheduleFormData.platforms.map(platform => (
+                      <div key={platform} className="bg-gray-50 p-6 rounded-xl border border-gray-200">
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4 capitalize flex items-center">
+                          {platform === 'facebook' && <Facebook className="h-5 w-5 text-blue-600 mr-2" />}
+                          {platform === 'instagram' && <Instagram className="h-5 w-5 text-pink-600 mr-2" />}
+                          {platform === 'youtube' && <Youtube className="h-5 w-5 text-red-600 mr-2" />}
+                          {platform === 'twitter' && <Twitter className="h-5 w-5 text-blue-400 mr-2" />}
+                          {platform} Settings
+                        </h3>
+                        
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Select {platform} Account
+                            </label>
+                            <select
+                              value={scheduleFormData.platformSettings[platform]?.accountId || ''}
+                              onChange={(e) => updatePlatformSetting(platform, 'accountId', e.target.value)}
+                              className="w-full border-2 border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                              required
+                            >
+                              <option value="">Choose an account</option>
+                              {getAvailableAccountsForPlatform(selectedContentForSchedule?.customerId, platform).map(account => (
+                                <option key={account._id} value={account._id}>
+                                  {account.name} ({account.platform})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          {/* Page Selection for Facebook/Instagram */}
+                          {(platform === 'facebook' || platform === 'instagram') && scheduleFormData.platformSettings[platform]?.accountId && (
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Select Page
+                              </label>
+                              <select
+                                value={scheduleFormData.platformSettings[platform]?.pageId || ''}
+                                onChange={(e) => updatePlatformSetting(platform, 'pageId', e.target.value)}
+                                className="w-full border-2 border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                                required
+                              >
+                                <option value="">Choose a page</option>
+                                {(() => {
+                                  const selectedAccount = getCustomerSocialAccounts(selectedContentForSchedule?.customerId)
+                                    .find(acc => acc._id === scheduleFormData.platformSettings[platform]?.accountId);
+                                  return selectedAccount?.pages?.map(page => (
+                                    <option key={page.id} value={page.id}>
+                                      {page.name}
+                                      {!page.accessToken && ' (⚠️ No token)'}
+                                      {platform === 'instagram' && !page.instagramBusinessAccount && ' (No Instagram)'}
+                                    </option>
+                                  )) || [];
+                                })()}
+                              </select>
+                            </div>
+                          )}
+
+                          {/* Channel Selection for YouTube */}
+                          {platform === 'youtube' && scheduleFormData.platformSettings[platform]?.accountId && (
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Select Channel
+                              </label>
+                              <select
+                                value={scheduleFormData.platformSettings[platform]?.channelId || ''}
+                                onChange={(e) => updatePlatformSetting(platform, 'channelId', e.target.value)}
+                                className="w-full border-2 border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                                required
+                              >
+                                <option value="">Choose a channel</option>
+                                {(() => {
+                                  const selectedAccount = getCustomerSocialAccounts(selectedContentForSchedule?.customerId)
+                                    .find(acc => acc._id === scheduleFormData.platformSettings[platform]?.accountId);
+                                  return selectedAccount?.channels?.map(channel => (
+                                    <option key={channel.id} value={channel.id}>
+                                      {channel.name}
+                                      {!selectedAccount.accessToken && ' (⚠️ No token)'}
+                                    </option>
+                                  )) || [];
+                                })()}
+                              </select>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 {/* Content Section */}
                 <div className="space-y-6">
@@ -1753,17 +1996,21 @@ function AdminContentPortfolio() {
                 </div>
 
                 {/* Media Selection */}
-                {(scheduleFormData.platform === 'facebook' || 
-                  scheduleFormData.platform === 'instagram' || 
-                  scheduleFormData.platform === 'youtube') && (
+                {scheduleFormData.platforms.some(p => ['facebook', 'instagram', 'youtube'].includes(p)) && (
                   <div className="bg-gray-50 p-6 rounded-xl border border-gray-200">
                     <label className="block text-lg font-semibold text-gray-900 mb-4">
-                      {scheduleFormData.platform === 'youtube' ? 'Video' : 'Images'}
-                      {(scheduleFormData.platform === 'youtube' || scheduleFormData.platform === 'instagram') && <span className="text-red-500">*</span>}
-                      {(scheduleFormData.platform === 'facebook' || scheduleFormData.platform === 'instagram') && 
+                      Media Selection
+                      {(scheduleFormData.platforms.includes('youtube') || scheduleFormData.platforms.includes('instagram')) && 
+                        <span className="text-red-500">*</span>}
+                      {scheduleFormData.platforms.includes('youtube') && (
+                        <span className="text-sm text-orange-600 ml-2">
+                          (YouTube: Single video only)
+                        </span>
+                      )}
+                      {scheduleFormData.platforms.some(p => ['facebook', 'instagram'].includes(p)) && 
                         scheduleFormData.availableImages.length > 1 && (
                         <span className="text-sm text-gray-500 ml-2">
-                          (Carousel supported - up to 10 images)
+                          (Carousel supported - up to 10 media)
                         </span>
                       )}
                     </label>
@@ -1773,10 +2020,10 @@ function AdminContentPortfolio() {
                       <div className="mb-6">
                         <div className="flex items-center justify-between mb-4">
                           <span className="text-sm font-medium text-gray-700">
-                            Available {scheduleFormData.platform === 'youtube' ? 'Videos' : 'Images'} from Content ({scheduleFormData.availableImages.length})
+                            Available Media from Content ({scheduleFormData.availableImages.length})
                           </span>
                           <div className="flex gap-2">
-                            {scheduleFormData.availableImages.length > 1 && scheduleFormData.platform !== 'youtube' && (
+                            {scheduleFormData.availableImages.length > 1 && !scheduleFormData.platforms.includes('youtube') && (
                               <button
                                 type="button"
                                 onClick={selectAllImages}
@@ -1850,12 +2097,12 @@ function AdminContentPortfolio() {
                           <div className="mt-4 p-4 bg-blue-50 border-2 border-blue-200 rounded-xl">
                             <div className="flex items-center justify-between">
                               <span className="text-sm font-semibold text-blue-800">
-                                {scheduleFormData.selectedImages.length} {scheduleFormData.platform === 'youtube' ? 'video' : 'image'}{scheduleFormData.selectedImages.length !== 1 ? 's' : ''} selected
-                                {scheduleFormData.selectedImages.length > 1 && scheduleFormData.platform !== 'youtube' && ' (Carousel post)'}
+                                {scheduleFormData.selectedImages.length} media selected
+                                {scheduleFormData.selectedImages.length > 1 && !scheduleFormData.platforms.includes('youtube') && ' (Multi-platform carousel post)'}
                               </span>
-                              {scheduleFormData.platform === 'instagram' && scheduleFormData.selectedImages.length > 10 && (
+                              {scheduleFormData.platforms.includes('instagram') && scheduleFormData.selectedImages.length > 10 && (
                                 <span className="text-xs text-red-600 font-semibold">
-                                  Instagram allows max 10 images
+                                  Instagram allows max 10 media
                                 </span>
                               )}
                             </div>
@@ -1869,7 +2116,7 @@ function AdminContentPortfolio() {
                         <div className="flex items-center">
                           <AlertCircle className="h-5 w-5 text-yellow-600 mr-2" />
                           <span className="text-sm text-yellow-800">
-                            No {scheduleFormData.platform === 'youtube' ? 'videos' : 'images'} available from the selected content for this platform.
+                            No media available from the selected content for the selected platforms.
                           </span>
                         </div>
                       </div>
@@ -1880,24 +2127,20 @@ function AdminContentPortfolio() {
                       <input
                         ref={fileInputRef}
                         type="file"
-                        accept={scheduleFormData.platform === 'youtube' ? "video/*" : "image/*"}
+                        accept={scheduleFormData.platforms.includes('youtube') ? "video/*" : "image/*,video/*"}
                         onChange={(e) => {
                           const file = e.target.files[0];
                           if (file) handleImageUpload(file);
                         }}
                         className="hidden"
                       />
-                      {scheduleFormData.platform === 'youtube' ? (
-                        <Video className="h-8 w-8 mx-auto mb-3 text-gray-400" />
-                      ) : (
-                        <Image className="h-8 w-8 mx-auto mb-3 text-gray-400" />
-                      )}
+                      <Image className="h-8 w-8 mx-auto mb-3 text-gray-400" />
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
                         className="text-blue-600 hover:text-blue-800 font-semibold text-sm transition-colors duration-200"
                       >
-                        Upload Additional {scheduleFormData.platform === 'youtube' ? 'Video' : 'Image'}
+                        Upload Additional Media
                       </button>
                       <p className="text-xs text-gray-500 mt-2">Max 5MB</p>
                     </div>
@@ -1939,35 +2182,76 @@ function AdminContentPortfolio() {
                   </button>
                   <button
                     onClick={handlePostNow}
-                    disabled={isPostingNow || submitting}
+                    disabled={isPostingNow || submitting || scheduleFormData.platforms.length === 0}
                     className="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 text-white py-3 px-6 rounded-xl font-semibold hover:from-green-600 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center space-x-2"
                   >
                     {isPostingNow ? (
                       <>
                         <Loader2 className="h-5 w-5 animate-spin" />
-                        <span>Publishing...</span>
+                        <span>Publishing to {scheduleFormData.platforms.length} platform{scheduleFormData.platforms.length !== 1 ? 's' : ''}...</span>
                       </>
                     ) : (
                       <>
                         <Zap className="h-5 w-5" />
-                        <span>Post Now</span>
+                        <span>Post Now to {scheduleFormData.platforms.length} Platform{scheduleFormData.platforms.length !== 1 ? 's' : ''}</span>
                       </>
                     )}
                   </button>
                   <button
                     onClick={handleSchedulePost}
-                    disabled={submitting || isPostingNow}
+                    disabled={submitting || isPostingNow || scheduleFormData.platforms.length === 0}
                     className="flex-1 bg-gradient-to-r from-blue-600 to-cyan-600 text-white py-3 px-6 rounded-xl font-semibold hover:from-blue-700 hover:to-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center space-x-2"
                   >
                     {submitting ? (
-                      <Loader2 className="h-5 w-5 animate-spin" />
+                      <>
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                        <span>Scheduling...</span>
+                      </>
                     ) : (
-                      <Send className="h-5 w-5" />
+                      <>
+                        <Send className="h-5 w-5" />
+                        <span>Schedule for {scheduleFormData.platforms.length} Platform{scheduleFormData.platforms.length !== 1 ? 's' : ''}</span>
+                      </>
                     )}
-                    <span>{submitting ? 'Scheduling...' : 'Schedule Post'}</span>
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Integration Modal */}
+      {showIntegrationModal && (
+        <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-200">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-xl">
+                    <Settings className="h-6 w-6 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-900">Connect Social Media Account</h2>
+                    <p className="text-sm text-gray-500">Connect {integrationPlatform} for {integrationCustomer?.name}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowIntegrationModal(false)}
+                  className="text-gray-400 hover:text-gray-600 p-2 rounded-lg hover:bg-gray-100 transition-all duration-200"
+                >
+                  <XCircle className="h-6 w-6" />
+                </button>
+              </div>
+
+              {/* Show the appropriate integration component */}
+              <SocialIntegrations
+                platform={integrationPlatform}
+                customer={integrationCustomer}
+                onConnectionSuccess={handleIntegrationSuccess}
+                onClose={() => setShowIntegrationModal(false)}
+                compact={true}
+              />
             </div>
           </div>
         </div>

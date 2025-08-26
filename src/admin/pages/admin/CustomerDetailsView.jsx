@@ -25,7 +25,8 @@ import {
   UserCheck,
   Edit,
   Trash2,
-  MoreVertical
+  MoreVertical,
+  Upload
 } from 'lucide-react';
 
 function CustomerDetailsView() {
@@ -724,6 +725,16 @@ function CustomerDetailsView() {
                                             title="Delete item"
                                           >
                                             <Trash2 className="h-4 w-4" />
+                                          </button>
+                                          <button
+                                            className="p-2 text-gray-400 hover:text-indigo-600 transition-colors rounded-lg hover:bg-indigo-50"
+                                            onClick={e => {
+                                              e.stopPropagation();
+                                              navigate(`/admin/content-upload/${calendar._id}/${index}`);
+                                            }}
+                                            title="Upload Content"
+                                          >
+                                            <Upload className="h-4 w-4" />
                                           </button>
                                         </div>
                                       </div>

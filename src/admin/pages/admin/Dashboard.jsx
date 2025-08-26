@@ -231,10 +231,10 @@ function Dashboard() {
         {/* Quick Actions */}
         <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 p-8">
           <h2 className="text-2xl font-bold text-gray-900 mb-6">Quick Actions</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 justify-items-center">
             <button 
               onClick={() => navigate('/admin/customers-list')}
-              className="flex items-center justify-center p-6 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
+              className="w-full flex items-center justify-center p-6 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
             >
               <Users className="h-6 w-6 mr-3" />
               <span className="font-semibold">View Customers</span>
@@ -242,7 +242,7 @@ function Dashboard() {
             
             <button 
               onClick={() => navigate('/admin/content-creators')}
-              className="flex items-center justify-center p-6 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl hover:from-purple-700 hover:to-pink-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
+              className="w-full flex items-center justify-center p-6 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl hover:from-purple-700 hover:to-pink-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
             >
               <UserCheck className="h-6 w-6 mr-3" />
               <span className="font-semibold">Content Creators</span>
@@ -250,7 +250,7 @@ function Dashboard() {
             
             <button 
               onClick={() => navigate('/admin/customers')}
-              className="flex items-center justify-center p-6 bg-gradient-to-r from-emerald-600 to-green-600 text-white rounded-xl hover:from-emerald-700 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
+              className="w-full flex items-center justify-center p-6 bg-gradient-to-r from-emerald-600 to-green-600 text-white rounded-xl hover:from-emerald-700 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
             >
               <Calendar className="h-6 w-6 mr-3" />
               <span className="font-semibold">Content Calendar</span>
@@ -258,7 +258,7 @@ function Dashboard() {
 
             <button 
               onClick={() => navigate('/admin/content-portfolio')}
-              className="flex items-center justify-center p-6 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
+              className="w-full flex items-center justify-center p-6 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
             >
               <Palette className="h-6 w-6 mr-3" />
               <span className="font-semibold">Content Portfolio</span>
@@ -266,18 +266,10 @@ function Dashboard() {
 
             <button 
               onClick={() => navigate('/admin/scheduled-posts')}
-              className="flex items-center justify-center p-6 bg-gradient-to-r from-orange-600 to-red-600 text-white rounded-xl hover:from-orange-700 hover:to-red-700 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
+              className="w-full flex items-center justify-center p-6 bg-gradient-to-r from-orange-600 to-red-600 text-white rounded-xl hover:from-orange-700 hover:to-red-700 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
             >
               <Send className="h-6 w-6 mr-3" />
               <span className="font-semibold">Scheduled Posts</span>
-            </button>
-
-            <button 
-              onClick={() => navigate('/admin/customer-social-manager')}
-              className="flex items-center justify-center p-6 bg-gradient-to-r from-cyan-600 to-blue-600 text-white rounded-xl hover:from-cyan-700 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
-            >
-              <Activity className="h-6 w-6 mr-3" />
-              <span className="font-semibold">Social Manager</span>
             </button>
           </div>
         </div>

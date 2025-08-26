@@ -7,7 +7,7 @@ import AssignCreatorModal from '../../components/modals/AssignCreatorModal';
 import ContentCalendarModal from '../../components/modals/ContentCalendarModal';
 import {
   ChevronLeft, Pencil, Trash2, Plus, AlertCircle, Calendar, Clock, User, FileText, Activity, Target, UserCheck,
-  ChevronRight, ChevronDown, MoreVertical
+  ChevronRight, ChevronDown, MoreVertical, Upload
 } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_API_URL;
@@ -647,6 +647,16 @@ const CustomerDetails = () => {
                                             title="Delete item"
                                           >
                                             <Trash2 className="h-4 w-4" />
+                                          </button>
+                                          <button
+                                            className="p-2 text-gray-400 hover:text-indigo-600 transition-colors rounded-lg hover:bg-indigo-50"
+                                            onClick={e => {
+                                              e.stopPropagation();
+                                              navigate(`/admin/content-upload/${calendar._id}/${index}`);
+                                            }}
+                                            title="Upload Content"
+                                          >
+                                            <Upload className="h-4 w-4" />
                                           </button>
                                         </div>
                                       </div>

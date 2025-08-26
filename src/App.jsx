@@ -49,6 +49,7 @@ import Profile from './content-creators/Profile';
 import Settings from './content-creators/Settings';
 import { useAuth } from './admin/contexts/AuthContext';
 import AIImageGenerator from './components/AIImageGenerator';
+import ContentUpload from './admin/pages/admin/ContentUpload';
 
 // --- ProtectedRoute for all portals ---
 function ProtectedRoutePortal({ children, role }) {
@@ -277,6 +278,9 @@ function App() {
                   <AIImageGenerator />
                 </ProtectedRoutePortal>
               } />
+
+              {/* Admin Content Upload Route */}
+              <Route path="/admin/content-upload/:calendarId/:index" element={<ContentUpload />} />
 
               {/* Default route */}
               <Route path="/" element={<Navigate to="/login" replace />} />

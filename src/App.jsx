@@ -16,6 +16,7 @@ import ContentCreators from './admin/pages/admin/ContentCreators';
 import ContentCreatorDetails from './admin/pages/admin/ContentCreatorDetails';
 import ScheduledPosts from './admin/ScheduledPosts';
 import AdminContentPortfolio from './admin/pages/admin/AdminContentPortfolio';
+import AdminContentUpload from './admin/pages/admin/ContentUpload';
 
 // Customer imports
 import CustomerDashboard from './customer/Dashboard';
@@ -148,6 +149,11 @@ function App() {
                   <AdminContentPortfolio />
                 </ProtectedRoutePortal>
               } />
+              <Route path="/admin/content-upload/:calendarId/:itemIndex" element={
+                <ProtectedRoutePortal role="admin">
+                  <AdminContentUpload />
+                </ProtectedRoutePortal>
+              } />
               <Route path="/admin/approve/:id" element={
                 <ProtectedRoutePortal role="admin">
                   <ContentApproval />
@@ -277,9 +283,6 @@ function App() {
                   <AIImageGenerator />
                 </ProtectedRoutePortal>
               } />
-
-              {/* Admin Content Upload Route */}
-              <Route path="/admin/content-upload/:calendarId/:index" element={<ContentUpload />} />
 
               {/* Default route */}
               <Route path="/" element={<Navigate to="/login" replace />} />

@@ -49,7 +49,6 @@ import Profile from './content-creators/Profile';
 import Settings from './content-creators/Settings';
 import { useAuth } from './admin/contexts/AuthContext';
 import AIImageGenerator from './components/AIImageGenerator';
-import ContentUpload from './admin/pages/admin/ContentUpload';
 
 // --- ProtectedRoute for all portals ---
 function ProtectedRoutePortal({ children, role }) {

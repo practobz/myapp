@@ -5,7 +5,7 @@ import {
   CheckCircle, AlertCircle, ChevronLeft, ChevronRight, Image, FileText, 
   Play, Video, Filter, Search, Facebook, Instagram, Send, Plus, 
   MoreVertical, Edit, Trash2, Users, Grid, List, XCircle, Loader2, Hash,
-  Youtube, Twitter, Check, X, Zap, Settings, RefreshCw
+  Youtube, Linkedin, Check, X, Zap, Settings, RefreshCw
 } from 'lucide-react';
 
 import SocialIntegrations from '../../../customer/Integration/SocialIntegrations';
@@ -409,7 +409,7 @@ function AdminContentPortfolio() {
             accountId: '',
             pageId: '',
             channelId: '',
-            twitterAccountId: ''
+            linkedinAccountId: ''
           }
         };
         
@@ -532,6 +532,12 @@ function AdminContentPortfolio() {
       return false;
     }
 
+    // LinkedIn supports both text and images
+    if (scheduleFormData.platforms.includes('linkedin') && !scheduleFormData.caption && scheduleFormData.selectedImages.length === 0) {
+      alert('LinkedIn requires either text content or images');
+      return false;
+    }
+
     // Only validate date/time for scheduled posts
     if (isScheduled && (!scheduleFormData.scheduledDate || !scheduleFormData.scheduledTime)) {
       alert('Please select a date and time for scheduling');
@@ -623,10 +629,10 @@ function AdminContentPortfolio() {
           channelName: selectedChannel.name,
           youtubeAccessToken: selectedAccount.accessToken
         });
-      } else if (platform === 'twitter') {
+      } else if (platform === 'linkedin') {
         Object.assign(postData, {
-          twitterAccountId: selectedAccount.platformUserId,
-          sessionId: selectedAccount.sessionId,
+          linkedinAccountId: selectedAccount.platformUserId,
+          linkedinAccessToken: selectedAccount.accessToken,
         });
       }
 
@@ -729,7 +735,7 @@ function AdminContentPortfolio() {
             if (result.facebookPostId) successMsg += ` (ID: ${result.facebookPostId})`;
             if (result.instagramPostId) successMsg += ` (ID: ${result.instagramPostId})`;
             if (result.youtubePostId) successMsg += ` (ID: ${result.youtubePostId})`;
-            if (result.twitterPostId) successMsg += ` (ID: ${result.twitterPostId})`;
+            if (result.linkedinPostId) successMsg += ` (ID: ${result.linkedinPostId})`;
             
             results.push(successMsg);
 
@@ -1830,30 +1836,39 @@ function AdminContentPortfolio() {
                       )}
                     </label>
                     <label className={`flex items-center p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
-                      scheduleFormData.platforms.includes('twitter') 
-                        ? 'border-blue-400 bg-blue-50 shadow-md' 
-                        : hasAccountsForPlatform(selectedContentForSchedule?.customerId, 'twitter')
+                      scheduleFormData.platforms.includes('linkedin') 
+                        ? 'border-blue-500 bg-blue-50 shadow-md' 
+                        : hasAccountsForPlatform(selectedContentForSchedule?.customerId, 'linkedin')
                         ? 'border-gray-300 hover:border-blue-400 hover:bg-blue-50'
                         : 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-60'
                     }`}>
                       <input
                         type="checkbox"
-                                               name="platforms"
-                        value="twitter"
-                        checked={scheduleFormData.platforms.includes('twitter')}
-                        onChange={() => hasAccountsForPlatform(selectedContentForSchedule?.customerId, 'twitter') && handlePlatformToggle('twitter')}
-                        disabled={!hasAccountsForPlatform(selectedContentForSchedule?.customerId, 'twitter')}
+                        name="platforms"
+                        value="linkedin"
+                        checked={scheduleFormData.platforms.includes('linkedin')}
+                        onChange={() => hasAccountsForPlatform(selectedContentForSchedule?.customerId, 'linkedin') && handlePlatformToggle('linkedin')}
+                        disabled={!hasAccountsForPlatform(selectedContentForSchedule?.customerId, 'linkedin')}
                         className="sr-only"
                       />
-                      <Twitter className="h-6 w-6 text-blue-400 mr-3" />
+                      <Linkedin className="h-6 w-6 text-blue-600 mr-3" />
                       <div className="flex-1">
-                        <span className="font-medium text-gray-900">Twitter</span>
-                        {!hasAccountsForPlatform(selectedContentForSchedule?.customerId, 'twitter') && (
-                          <div className="text-xs text-orange-600 mt-1">Not available</div>
+                        <span className="font-medium text-gray-900">LinkedIn</span>
+                        {!hasAccountsForPlatform(selectedContentForSchedule?.customerId, 'linkedin') && (
+                          <div className="text-xs text-orange-600 mt-1">No account connected</div>
                         )}
                       </div>
-                      {scheduleFormData.platforms.includes('twitter') && (
-                        <Check className="h-5 w-5 text-blue-400 ml-auto" />
+                      {scheduleFormData.platforms.includes('linkedin') && (
+                        <Check className="h-5 w-5 text-blue-600 ml-auto" />
+                      )}
+                      {!hasAccountsForPlatform(selectedContentForSchedule?.customerId, 'linkedin') && (
+                        <button
+                          type="button"
+                          onClick={() => showIntegration('linkedin', selectedContentForSchedule?.customerId, getCustomerName(selectedContentForSchedule?.customerId))}
+                          className="ml-2 bg-blue-600 text-white px-2 py-1 rounded text-xs hover:bg-blue-700"
+                        >
+                          Connect
+                        </button>
                       )}
                     </label>
                   </div>
@@ -1881,7 +1896,7 @@ function AdminContentPortfolio() {
                           {platform === 'facebook' && <Facebook className="h-5 w-5 text-blue-600 mr-2" />}
                           {platform === 'instagram' && <Instagram className="h-5 w-5 text-pink-600 mr-2" />}
                           {platform === 'youtube' && <Youtube className="h-5 w-5 text-red-600 mr-2" />}
-                          {platform === 'twitter' && <Twitter className="h-5 w-5 text-blue-400 mr-2" />}
+                          {platform === 'linkedin' && <Linkedin className="h-5 w-5 text-blue-600 mr-2" />}
                           {platform} Settings
                         </h3>
                         
@@ -1996,7 +2011,7 @@ function AdminContentPortfolio() {
                 </div>
 
                 {/* Media Selection */}
-                {scheduleFormData.platforms.some(p => ['facebook', 'instagram', 'youtube'].includes(p)) && (
+                {scheduleFormData.platforms.some(p => ['facebook', 'instagram', 'youtube', 'linkedin'].includes(p)) && (
                   <div className="bg-gray-50 p-6 rounded-xl border border-gray-200">
                     <label className="block text-lg font-semibold text-gray-900 mb-4">
                       Media Selection
@@ -2007,7 +2022,7 @@ function AdminContentPortfolio() {
                           (YouTube: Single video only)
                         </span>
                       )}
-                      {scheduleFormData.platforms.some(p => ['facebook', 'instagram'].includes(p)) && 
+                      {scheduleFormData.platforms.some(p => ['facebook', 'instagram', 'linkedin'].includes(p)) && 
                         scheduleFormData.availableImages.length > 1 && (
                         <span className="text-sm text-gray-500 ml-2">
                           (Carousel supported - up to 10 media)

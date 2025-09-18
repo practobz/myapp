@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Youtube, TrendingUp, ExternalLink, CheckCircle, AlertCircle, Loader2, Users, Eye, Play, Clock, Plus, UserCheck, Trash2 } from 'lucide-react';
+import { Youtube, TrendingUp, ExternalLink, CheckCircle, AlertCircle, Loader2, Users, Eye, Play, Clock, Plus, UserCheck, Trash2, Calendar, RefreshCw } from 'lucide-react';
 import TrendChart from '../../components/TrendChart';
+import TimePeriodChart from '../../components/TimeperiodChart';
 import { subDays, format } from 'date-fns';
 import { getUserData, setUserData, removeUserData, migrateToUserSpecificStorage } from '../../utils/sessionUtils';
 
 // YouTube Integration Constants
-const CLIENT_ID = '472498493428-lt5thlt6do1e5ep1spuhdjgv8oebnva2.apps.googleusercontent.com';
-const API_KEY = 'AIzaSyBGJ8wSwTfYQrqu0fUueDBApGuJKEO8NmM';
+const CLIENT_ID = '593529385135-snp35l6s9dtje8g8f1l1b3ajtp375cjr.apps.googleusercontent.com';
+const API_KEY = 'AIzaSyD2fYMvhlDJwk6cMEJSBRQmJnsidFjCFtc';
 const DISCOVERY_DOCS = ['https://www.googleapis.com/discovery/v1/apis/youtube/v3/rest'];
 const SCOPES = 'https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/yt-analytics.readonly https://www.googleapis.com/auth/youtube.upload';
 
@@ -21,7 +22,7 @@ function parseISO8601Duration(iso) {
   return total;
 }
 
-function YouTubeIntegration() {
+function YouTubeIntegration(props) {
   const [gapiLoaded, setGapiLoaded] = useState(false);
   const [gisLoaded, setGisLoaded] = useState(false);
   const [gapiClientReady, setGapiClientReady] = useState(false);
@@ -49,6 +50,44 @@ function YouTubeIntegration() {
   
   const [error, setError] = useState(null);
   const [tokenClient, setTokenClient] = useState(null);
+  const [subscribersTimeline, setSubscribersTimeline] = useState({});
+
+  // Chart view state
+  const [showHistoricalCharts, setShowHistoricalCharts] = useState({});
+
+  // Function to store current metrics as historical snapshot
+  const storeHistoricalSnapshot = async (channelId, channelName, metrics) => {
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/historical-data/store`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          platform: 'youtube',
+          accountId: channelId,
+          pageId: channelId,
+          accountName: channelName,
+          metrics: {
+            subscriberCount: metrics.subscriberCount || 0,
+            videoCount: metrics.videoCount || 0,
+            viewCount: metrics.viewCount || 0,
+            totalViews: metrics.totalViews || metrics.viewCount || 0,
+            totalSubscribers: metrics.totalSubscribers || metrics.subscriberCount || 0,
+            shortsCount: metrics.shortsCount || 0,
+            videosCount: metrics.videosCount || 0,
+            estimatedWatchTime: metrics.estimatedWatchTime || 0
+          },
+          dataSource: 'api'
+        })
+      });
+      
+      const result = await response.json();
+      if (result.success) {
+        console.log(`✅ Stored historical snapshot for YouTube channel: ${channelName}`);
+      }
+    } catch (error) {
+      console.warn('Failed to store historical snapshot:', error);
+    }
+  };
 
   // Load connected accounts from localStorage on component mount
   useEffect(() => {
@@ -132,14 +171,11 @@ function YouTubeIntegration() {
     }
 
     const { caption, mediaFiles } = postData;
-    
     if (!mediaFiles || mediaFiles.length === 0) {
       throw new Error('No media files provided');
     }
 
-    const file = mediaFiles[0]; // YouTube supports one video per upload
-    
-    // Handle image to video conversion if needed
+    const file = mediaFiles[0];
     let fileToUpload = file;
     let mimeType = file.type;
 
@@ -162,12 +198,10 @@ function YouTubeIntegration() {
       const boundary = '-------314159265358979323846';
       const delimiter = "\r\n--" + boundary + "\r\n";
       const close_delim = "\r\n--" + boundary + "--";
-
       const reader = new FileReader();
       reader.onload = async (e) => {
         try {
           const base64Data = e.target.result.split(',')[1];
-          
           const multipartRequestBody =
             delimiter +
             'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
@@ -179,7 +213,7 @@ function YouTubeIntegration() {
             base64Data +
             close_delim;
 
-          const response = await fetch(
+          let response = await fetch(
             'https://www.googleapis.com/upload/youtube/v3/videos?part=snippet,status&uploadType=multipart',
             {
               method: 'POST',
@@ -191,34 +225,42 @@ function YouTubeIntegration() {
             }
           );
 
+          // If 401, try to refresh token and retry once
+          if (response.status === 401 && activeAccount.refreshToken) {
+            const refreshed = await refreshYouTubeToken(activeAccount.id);
+            if (refreshed) {
+              // Get updated token
+              const refreshedAccount = connectedAccounts.find(acc => acc.id === activeAccount.id);
+              response = await fetch(
+                'https://www.googleapis.com/upload/youtube/v3/videos?part=snippet,status&uploadType=multipart',
+                {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${refreshedAccount.accessToken}`,
+                    'Content-Type': `multipart/related; boundary="${boundary}"`
+                  },
+                  body: multipartRequestBody
+                }
+              );
+            }
+          }
+
           if (!response.ok) {
             const errorData = await response.json();
-            console.error('YouTube upload error:', errorData);
-            
-            if (response.status === 401) {
-              reject(new Error('YouTube authentication failed. Please reconnect your YouTube account.'));
-              return;
-            }
-            
             reject(new Error(errorData.error?.message || `YouTube upload failed with status ${response.status}`));
             return;
           }
 
           const data = await response.json();
-          console.log('✅ YouTube upload successful:', data);
-          
           resolve({
             success: true,
             videoId: data.id,
             url: `https://www.youtube.com/watch?v=${data.id}`
           });
-          
         } catch (error) {
-          console.error('YouTube upload processing error:', error);
           reject(new Error(`YouTube upload failed: ${error.message}`));
         }
       };
-      
       reader.onerror = () => reject(new Error('Failed to read file'));
       reader.readAsDataURL(fileToUpload);
     });
@@ -307,6 +349,28 @@ function YouTubeIntegration() {
         
         // Fetch additional data - pass the newAccount instead of relying on state
         await fetchChannelData(channel, newAccount);
+        
+        // Store initial historical snapshot
+        storeHistoricalSnapshot(channel.id, channel.snippet.title, {
+          subscriberCount: channel.statistics?.subscriberCount,
+          videoCount: channel.statistics?.videoCount,
+          viewCount: channel.statistics?.viewCount,
+          totalViews: channel.statistics?.viewCount,
+          totalSubscribers: channel.statistics?.subscriberCount
+        });
+        
+        // Call onData with correct structure
+        if (typeof props?.onData === 'function') {
+          props.onData({
+            channelInfo: {
+              statistics: {
+                subscriberCount: channel.statistics?.subscriberCount,
+                viewCount: channel.statistics?.viewCount,
+                videoCount: channel.statistics?.videoCount
+              }
+            }
+          });
+        }
         
         // Clear any existing error
         setError(null);
@@ -503,16 +567,7 @@ function YouTubeIntegration() {
     }
   };
 
-  // Add token refresh functionality
-  // (Removed duplicate declaration of refreshYouTubeToken)
-
-  // (Removed duplicate declaration of updateStoredToken)
-
-  // (Duplicate ensureValidToken removed)
-
-  // Duplicate fetchChannelInfo removed to fix redeclaration error.
-
-  // Fetch channel data (videos, analytics, etc.
+  // Fetch channel data (videos, analytics, etc.)
   const fetchChannelData = async (channel, account = null) => {
     try {
       const uploadsPlaylistId = channel.contentDetails.relatedPlaylists.uploads;
@@ -547,6 +602,17 @@ function YouTubeIntegration() {
         });
         setShortsCount(shorts);
         setVideosCount(normalVideos);
+
+        // Store updated historical snapshot with video counts
+        storeHistoricalSnapshot(channel.id, channel.snippet.title, {
+          subscriberCount: channel.statistics?.subscriberCount,
+          videoCount: channel.statistics?.videoCount,
+          viewCount: channel.statistics?.viewCount,
+          totalViews: channel.statistics?.viewCount,
+          totalSubscribers: channel.statistics?.subscriberCount,
+          shortsCount: shorts,
+          videosCount: normalVideos
+        });
       } else {
         setShortsCount(0);
         setVideosCount(0);
@@ -783,6 +849,18 @@ function YouTubeIntegration() {
       if (response.result.items && response.result.items.length > 0) {
         const channel = response.result.items[0];
         setChannelInfo(channel);
+        // Call onData with correct structure
+        if (typeof props?.onData === 'function') {
+          props.onData({
+            channelInfo: {
+              statistics: {
+                subscriberCount: channel.statistics?.subscriberCount,
+                viewCount: channel.statistics?.viewCount,
+                videoCount: channel.statistics?.videoCount
+              }
+            }
+          });
+        }
         await fetchChannelData(channel);
       } else {
         setError('No YouTube channel found for this account');
@@ -959,6 +1037,7 @@ function YouTubeIntegration() {
             <p>⏰ <strong>Expires:</strong> {new Date(parseInt(storedExpiry, 10)).toLocaleString()}</p>
           )}
           <p>🔄 <strong>Refresh Available:</strong> {activeAccount.refreshToken ? '✅ Yes' : '❌ No'}</p>
+          <p>📊 <strong>Historical Data:</strong> Automatically captured daily</p>
           <div className="mt-2 space-x-2">
             {(tokenExpired || tokenExpiringSoon) && (
               <button
@@ -990,145 +1069,6 @@ function YouTubeIntegration() {
       </div>
     );
   };
-
-  // Update renderConnectedState to include token status
-  const renderConnectedState = () => (
-    <div className="space-y-6">
-      {renderAccountSelector()}
-      
-      {activeAccount && (
-        <>
-          <div className="flex items-center justify-between p-4 bg-white rounded-lg border">
-            <div className="flex items-center space-x-3">
-              {activeAccount.picture && (
-                <img 
-                  src={activeAccount.picture.url} 
-                  alt="Profile"
-                  className="w-10 h-10 rounded-full"
-                />
-              )}
-              <div>
-                <p className="font-medium">Active Account: {activeAccount.name}</p>
-                <p className="text-sm text-gray-600">{activeAccount.email}</p>
-              </div>
-            </div>
-            <button
-              onClick={handleSignOutAll}
-              className="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400 transition-colors text-sm"
-            >
-              Disconnect All
-            </button>
-          </div>
-
-          {renderTokenStatus()}
-
-          {renderUploadSection()}
-
-          {channelInfo && (
-            <div className="bg-gradient-to-br from-red-50 to-pink-50 border border-red-200 rounded-2xl p-6">
-              <div className="flex items-center space-x-4 mb-6">
-                <img
-                  src={channelInfo.snippet.thumbnails.default.url}
-                  alt="Channel thumbnail"
-                  className="w-20 h-20 rounded-full border-4 border-red-200"
-                />
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-900">{channelInfo.snippet.title}</h2>
-                  <p className="text-gray-700 text-sm">{channelInfo.snippet.description}</p>
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-3 gap-6 text-center">
-                <div className="bg-white rounded-xl p-4 shadow-sm">
-                  <div className="text-2xl font-bold text-red-600">
-                    {channelInfo.statistics.subscriberCount && channelInfo.statistics.subscriberCount !== '0' 
-                      ? parseInt(channelInfo.statistics.subscriberCount).toLocaleString()
-                      : 'Hidden'
-                    }
-                  </div>
-                  <div className="text-sm text-gray-600 font-medium">Subscribers</div>
-                </div>
-                <div className="bg-white rounded-xl p-4 shadow-sm">
-                  <div className="text-2xl font-bold text-red-600">
-                    {videosCount.toLocaleString()}
-                  </div>
-                  <div className="text-sm text-gray-600 font-medium">Videos</div>
-                </div>
-                <div className="bg-white rounded-xl p-4 shadow-sm">
-                  <div className="text-2xl font-bold text-red-600">
-                    {shortsCount.toLocaleString()}
-                  </div>
-                  <div className="text-sm text-gray-600 font-medium">Shorts</div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="flex space-x-3">
-            <button
-              onClick={fetchAnalytics}
-              disabled={loadingAnalytics}
-              className="flex items-center space-x-2 bg-gradient-to-r from-red-600 to-red-700 text-white px-6 py-3 rounded-xl hover:from-red-700 hover:to-red-800 disabled:opacity-50 transition-all duration-200 font-medium"
-            >
-              {loadingAnalytics ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <TrendingUp className="h-4 w-4" />
-              )}
-              <span>View Analytics</span>
-            </button>
-          </div>
-
-          {renderAnalytics()}
-
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
-              Latest Videos ({channelInfo && channelInfo.statistics.videoCount 
-                ? parseInt(channelInfo.statistics.videoCount).toLocaleString()
-                : videos.length
-              })
-            </h3>
-            <div className="space-y-4">
-              {videos.length > 0 ? videos.map(video => (
-                <div key={video.id} className="flex items-center space-x-4 p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
-                  <img
-                    src={video.snippet.thumbnails.default.url}
-                    alt={video.snippet.title}
-                    className="w-24 h-18 object-cover rounded-lg"
-                    onError={e => {
-                      e.target.onerror = null;
-                      e.target.src = "https://via.placeholder.com/120x90?text=No+Image";
-                    }}
-                  />
-                  <div className="flex-1">
-                    <h4 className="font-medium text-gray-900 mb-1">{video.snippet.title}</h4>
-                    <p className="text-sm text-gray-600 mb-2">
-                      Published: {new Date(video.snippet.publishedAt).toLocaleDateString()}
-                    </p>
-                    <div className="flex items-center space-x-4 text-xs text-gray-500">
-                      <span className="flex items-center space-x-1">
-                        <Play className="h-3 w-3" />
-                        <span>Video</span>
-                      </span>
-                      <span className="flex items-center space-x-1">
-                        <Youtube className="h-3 w-3" />
-                        <span>YouTube</span>
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              )) : (
-                <div className="text-center py-12">
-                  <Youtube className="h-16 w-16 mx-auto mb-4 text-gray-400" />
-                  <p className="text-gray-500">No videos found</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </>
-      )}
-    </div>
-  );
 
   // Render account selector
   const renderAccountSelector = () => {
@@ -1391,26 +1331,32 @@ function YouTubeIntegration() {
     const endDate = new Date();
     const startDate = subDays(endDate, 30);
 
-    const response = await window.gapi.client.request({
-      path: 'https://youtubeanalytics.googleapis.com/v2/reports',
-      params: {
-        ids: `channel==${channelInfo.id}`,
-        startDate: format(startDate, 'yyyy-MM-dd'),
-        endDate: format(endDate, 'yyyy-MM-dd'),
-        metrics: 'views,subscribersGained,subscribersLost,estimatedMinutesWatched',
-        dimensions: 'day'
+    try {
+      const response = await window.gapi.client.request({
+        path: 'https://youtubeanalytics.googleapis.com/v2/reports',
+        params: {
+          ids: `channel==${channelInfo.id}`,
+          startDate: format(startDate, 'yyyy-MM-dd'),
+          endDate: format(endDate, 'yyyy-MM-dd'),
+          metrics: 'views,subscribersGained,subscribersLost,estimatedMinutesWatched',
+          dimensions: 'day'
+        }
+      });
+
+      // Check for error response
+      if (response.result && response.result.error) {
+        throw new Error(response.result.error.message || 'YouTube Analytics API error');
       }
-    });
 
-    console.log('YouTube Analytics API response:', response);
-
-    if (response.result && response.result.rows) {
-      const processedData = processYouTubeAnalytics(response.result);
-      console.log('Processed YouTube Analytics data:', processedData);
-      setAnalyticsData(processedData);
-    } else {
-      console.warn('No analytics data available from API:', response.result);
-      throw new Error('No analytics data available');
+      if (response.result && response.result.rows) {
+        const processedData = processYouTubeAnalytics(response.result);
+        setAnalyticsData(processedData);
+      } else {
+        throw new Error('No analytics data available');
+      }
+    } catch (err) {
+      console.error('YouTube Analytics API error:', err);
+      throw err; // Let parent handler fallback to video-based analytics
     }
   };
 
@@ -1643,6 +1589,255 @@ function YouTubeIntegration() {
     }
   }, [gisLoaded]);
 
+  // Helper to fetch and store subscriber count for each YT account
+  const fetchAndStoreSubscribersTimeline = async () => {
+    if (!connectedAccounts || connectedAccounts.length === 0) return;
+    const today = format(new Date(), 'yyyy-MM-dd');
+    const updatedTimeline = { ...subscribersTimeline };
+
+    for (const acc of connectedAccounts) {
+      const timeline = updatedTimeline[acc.id] || [];
+      const lastEntry = timeline.length > 0 ? timeline[timeline.length - 1] : null;
+      const lastDate = lastEntry ? lastEntry.date : null;
+      const daysSinceLast = lastDate ? (new Date(today) - new Date(lastDate)) / (1000 * 60 * 60 * 24) : 999;
+
+      if (daysSinceLast >= 1 && acc.accessToken) {
+        // Set token before API call
+        window.gapi.client.setToken({ access_token: acc.accessToken });
+        const resp = await window.gapi.client.youtube.channels.list({
+          part: 'statistics',
+          mine: true
+        });
+        const count = resp.result.items?.[0]?.statistics?.subscriberCount;
+        if (count !== undefined) {
+          const newTimeline = [...timeline, { date: today, value: parseInt(count) }];
+          updatedTimeline[acc.id] = newTimeline;
+          setSubscribersTimeline({ ...updatedTimeline });
+          setUserData(`yt_subscribers_timeline_${acc.id}`, newTimeline);
+        }
+      }
+    }
+  };
+
+  // Load timeline series on mount
+  useEffect(() => {
+    if (connectedAccounts && connectedAccounts.length > 0 && gapiClientReady) {
+      const loaded = {};
+      connectedAccounts.forEach(acc => {
+        loaded[acc.id] = getUserData(`yt_subscribers_timeline_${acc.id}`) || [];
+      });
+      setSubscribersTimeline(loaded);
+      fetchAndStoreSubscribersTimeline();
+    }
+  }, [connectedAccounts, gapiClientReady]);
+
+  // Render subscribers timeline chart for each account
+  const renderSubscribersTrendChart = (accountId) => {
+    const timeline = subscribersTimeline[accountId] || [];
+    if (timeline.length === 0) return null;
+    return (
+      <TrendChart
+        data={timeline}
+        title="Subscribers Timeline"
+        color="#FF0000"
+        metric="value"
+      />
+    );
+  };
+
+  // Update renderConnectedState to include token status and historical charts
+  const renderConnectedState = () => (
+    <div className="space-y-6">
+      {renderAccountSelector()}
+      
+      {activeAccount && (
+        <>
+          <div className="flex items-center justify-between p-4 bg-white rounded-lg border">
+            <div className="flex items-center space-x-3">
+              {activeAccount.picture && (
+                <img 
+                  src={activeAccount.picture.url} 
+                  alt="Profile"
+                  className="w-10 h-10 rounded-full"
+                />
+              )}
+              <div>
+                <p className="font-medium">Active Account: {activeAccount.name}</p>
+                <p className="text-sm text-gray-600">{activeAccount.email}</p>
+              </div>
+            </div>
+            <button
+              onClick={handleSignOutAll}
+              className="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400 transition-colors text-sm"
+            >
+              Disconnect All
+            </button>
+          </div>
+
+          {renderTokenStatus()}
+
+          {renderUploadSection()}
+
+          {channelInfo && (
+            <div className="bg-gradient-to-br from-red-50 to-pink-50 border border-red-200 rounded-2xl p-6">
+              <div className="flex items-center space-x-4 mb-6">
+                <img
+                  src={channelInfo.snippet.thumbnails.default.url}
+                  alt="Channel thumbnail"
+                  className="w-20 h-20 rounded-full border-4 border-red-200"
+                />
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">{channelInfo.snippet.title}</h2>
+                  <p className="text-gray-700 text-sm">{channelInfo.snippet.description}</p>
+                </div>
+                <div className="ml-auto">
+                  <button
+                    onClick={() => storeHistoricalSnapshot(channelInfo.id, channelInfo.snippet.title, {
+                      subscriberCount: channelInfo.statistics?.subscriberCount,
+                      videoCount: channelInfo.statistics?.videoCount,
+                      viewCount: channelInfo.statistics?.viewCount,
+                      totalViews: channelInfo.statistics?.viewCount,
+                      totalSubscribers: channelInfo.statistics?.subscriberCount,
+                      shortsCount,
+                      videosCount
+                    })}
+                    className="flex items-center space-x-2 px-3 py-2 bg-cyan-100 text-cyan-700 rounded-lg hover:bg-cyan-200 transition-colors text-sm"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    <span>Capture Snapshot</span>
+                  </button>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-3 gap-6 text-center mb-6">
+                <div className="bg-white rounded-xl p-4 shadow-sm">
+                  <div className="text-2xl font-bold text-red-600">
+                    {channelInfo.statistics.subscriberCount && channelInfo.statistics.subscriberCount !== '0' 
+                      ? parseInt(channelInfo.statistics.subscriberCount).toLocaleString()
+                      : 'Hidden'
+                    }
+                  </div>
+                  <div className="text-sm text-gray-600 font-medium">Subscribers</div>
+                </div>
+                <div className="bg-white rounded-xl p-4 shadow-sm">
+                  <div className="text-2xl font-bold text-red-600">
+                    {videosCount.toLocaleString()}
+                  </div>
+                  <div className="text-sm text-gray-600 font-medium">Videos</div>
+                </div>
+                <div className="bg-white rounded-xl p-4 shadow-sm">
+                  <div className="text-2xl font-bold text-red-600">
+                    {shortsCount.toLocaleString()}
+                  </div>
+                  <div className="text-sm text-gray-600 font-medium">Shorts</div>
+                </div>
+              </div>
+
+              {/* Historical Charts Toggle */}
+              <div className="mb-6">
+                <div className="flex items-center justify-between bg-white rounded-lg border border-gray-200 p-4">
+                  <div className="flex items-center space-x-3">
+                    <Calendar className="h-5 w-5 text-red-600" />
+                    <div>
+                      <h4 className="font-medium text-gray-900">Historical Analytics</h4>
+                      <p className="text-sm text-gray-600">View long-term trends and growth patterns</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowHistoricalCharts(prev => ({ 
+                      ...prev, 
+                      [activeAccount.id]: !prev[activeAccount.id] 
+                    }))}
+                    className="flex items-center space-x-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors text-sm"
+                  >
+                    <Calendar className="h-4 w-4" />
+                    <span>
+                      {showHistoricalCharts[activeAccount.id] ? 'Hide' : 'Show'} Historical Data
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Show Historical Charts */}
+              {showHistoricalCharts[activeAccount.id] && (
+                <TimePeriodChart
+                  platform="youtube"
+                  accountId={activeAccount.id}
+                  title="YouTube Channel Historical Analytics"
+                  defaultMetric="views"
+                />
+              )}
+            </div>
+          )}
+
+          <div className="flex space-x-3">
+            <button
+              onClick={fetchAnalytics}
+              disabled={loadingAnalytics}
+              className="flex items-center space-x-2 bg-gradient-to-r from-red-600 to-red-700 text-white px-6 py-3 rounded-xl hover:from-red-700 hover:to-red-800 disabled:opacity-50 transition-all duration-200 font-medium"
+            >
+              {loadingAnalytics ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <TrendingUp className="h-4 w-4" />
+              )}
+              <span>View Analytics</span>
+            </button>
+          </div>
+
+          {renderAnalytics()}
+
+          {renderSubscribersTrendChart(activeAccount.id)}
+
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+              Latest Videos ({channelInfo && channelInfo.statistics.videoCount 
+                ? parseInt(channelInfo.statistics.videoCount).toLocaleString()
+                : videos.length
+              })
+            </h3>
+            <div className="space-y-4">
+              {videos.length > 0 ? videos.map(video => (
+                <div key={video.id} className="flex items-center space-x-4 p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
+                  <img
+                    src={video.snippet.thumbnails.default.url}
+                    alt={video.snippet.title}
+                    className="w-24 h-18 object-cover rounded-lg"
+                    onError={e => {
+                      e.target.onerror = null;
+                      e.target.src = "https://via.placeholder.com/120x90?text=No+Image";
+                    }}
+                  />
+                  <div className="flex-1">
+                    <h4 className="font-medium text-gray-900 mb-1">{video.snippet.title}</h4>
+                    <p className="text-sm text-gray-600 mb-2">
+                      Published: {new Date(video.snippet.publishedAt).toLocaleDateString()}
+                    </p>
+                    <div className="flex items-center space-x-4 text-xs text-gray-500">
+                      <span className="flex items-center space-x-1">
+                        <Play className="h-3 w-3" />
+                        <span>Video</span>
+                      </span>
+                      <span className="flex items-center space-x-1">
+                        <Youtube className="h-3 w-3" />
+                        <span>YouTube</span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )) : (
+                <div className="text-center py-12">
+                  <Youtube className="h-16 w-16 mx-auto mb-4 text-gray-400" />
+                  <p className="text-gray-500">No videos found</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+
   if (error) {
     return (
       <div className="bg-red-50 border border-red-200 rounded-2xl p-6">
@@ -1690,11 +1885,11 @@ function YouTubeIntegration() {
             </div>
             <h3 className="text-xl font-semibold text-gray-900 mb-2">Connect YouTube Account</h3>
             <p className="text-gray-600 mb-6 max-w-md mx-auto">
-              Connect your YouTube accounts to manage your channels and access video analytics.
+              Connect your YouTube accounts to manage your channels and access video analytics with historical data tracking.
             </p>
             <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-6 max-w-md mx-auto">
               <p className="text-sm text-yellow-800">
-                <strong>Note:</strong> For detailed analytics, you may need to enable YouTube Analytics API in your Google Cloud Console.
+                <strong>Note:</strong> For detailed analytics, you may need to enable YouTube Analytics API in your Google Cloud Console. Historical data will be captured automatically.
               </p>
             </div>
             <button

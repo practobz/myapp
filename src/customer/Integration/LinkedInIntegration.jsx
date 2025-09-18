@@ -436,17 +436,6 @@ function LinkedInIntegration() {
       return;
     }
 
-    if (postImage) {
-      setPostError('Direct image upload is not supported yet. Please choose an image from your library or remove the image and try again.');
-      setPosting(false);
-      return;
-    }
-
-    // Warn if image is selected (from bucket)
-    if (postImagePreview) {
-      setPostError('LinkedIn does not support posting images in proper format for personal accounts. Only your text and a link to the image will be posted. For true image posts, LinkedIn requires special API access.');
-    }
-
     const selectedAccount = connectedAccounts.find(acc => acc.id === selectedAccountId);
     if (!selectedAccount) {
       setPostError('No account selected');
@@ -455,13 +444,75 @@ function LinkedInIntegration() {
 
     setPosting(true);
     setPostSuccess('');
+    setPostError('');
 
     try {
-      // Only support text posts; imageUrl will be ignored by backend
+      let imageAsset = null;
+      let imageUploadFailed = false;
+
+      // Handle image upload if present
+      if (postImage) {
+        console.log('🖼️ Attempting to upload direct image file...');
+        // Upload new image file
+        const formData = new FormData();
+        formData.append('image', postImage);
+        formData.append('linkedin_token', selectedAccount.token);
+
+        try {
+          const imageResponse = await fetch(`${process.env.REACT_APP_API_URL}/linkedin/upload-image`, {
+            method: 'POST',
+            body: formData
+          });
+
+          if (!imageResponse.ok) {
+            const errorData = await imageResponse.json();
+            console.error('❌ Image upload failed:', errorData);
+            imageUploadFailed = true;
+          } else {
+            const imageData = await imageResponse.json();
+            imageAsset = imageData.asset;
+            console.log('✅ Image uploaded successfully:', imageAsset);
+          }
+        } catch (uploadError) {
+          console.warn('❌ Image upload failed:', uploadError);
+          imageUploadFailed = true;
+        }
+      } else if (postImagePreview) {
+        console.log('🖼️ Attempting to upload image from URL...');
+        // Handle existing image from bucket
+        try {
+          const imageResponse = await fetch(`${process.env.REACT_APP_API_URL}/linkedin/upload-image-from-url`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              imageUrl: postImagePreview,
+              linkedin_token: selectedAccount.token
+            })
+          });
+
+          if (!imageResponse.ok) {
+            const errorData = await imageResponse.json();
+            console.error('❌ Image upload from URL failed:', errorData);
+            imageUploadFailed = true;
+          } else {
+            const imageData = await imageResponse.json();
+            imageAsset = imageData.asset;
+            console.log('✅ Image from URL uploaded successfully:', imageAsset);
+          }
+        } catch (uploadError) {
+          console.warn('❌ Image upload from URL failed:', uploadError);
+          imageUploadFailed = true;
+        }
+      }
+
+      // Create the post (regardless of image upload success/failure)
+      console.log('📝 Creating LinkedIn post...');
       const payload = {
         text: postText,
         linkedin_token: selectedAccount.token,
-        imageUrl: postImagePreview || ''
+        ...(imageAsset && { imageAsset })
       };
 
       const response = await axios.post(
@@ -476,7 +527,11 @@ function LinkedInIntegration() {
       );
 
       if (response.data && response.data.success) {
-        setPostSuccess('Post created successfully on LinkedIn! (Image not supported)');
+        let successMessage = 'Post created successfully on LinkedIn!';
+        if (imageUploadFailed && (postImage || postImagePreview)) {
+          successMessage += ' (Note: Image upload failed, posted as text-only)';
+        }
+        setPostSuccess(successMessage);
         setPostText('');
         setPostImage(null);
         setPostImagePreview(null);
@@ -484,15 +539,28 @@ function LinkedInIntegration() {
         // Reset file input
         const fileInput = document.getElementById('post-image-input');
         if (fileInput) fileInput.value = '';
+
+        // Refresh LinkedIn data
+        fetchLinkedinData();
       } else {
         setPostError(response.data?.error || 'Failed to create post on LinkedIn.');
       }
     } catch (err) {
-      setPostError(
-        err.response?.data?.error
-          ? `Failed to create post: ${err.response.data.error}${err.response.data.details ? ' - ' + JSON.stringify(err.response.data.details) : ''}`
-          : 'Failed to create post. Please try again.'
-      );
+      console.error('❌ Error creating post:', err);
+      
+      // Provide more specific error messages
+      let errorMessage = 'Failed to create post. Please try again.';
+      
+      if (err.response?.data?.error) {
+        errorMessage = `Failed to create post: ${err.response.data.error}`;
+        if (err.response.data.details) {
+          errorMessage += ` (${JSON.stringify(err.response.data.details)})`;
+        }
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      setPostError(errorMessage);
     } finally {
       setPosting(false);
     }
@@ -681,44 +749,55 @@ function LinkedInIntegration() {
           </div>
 
           {/* Image upload and bucket browser */}
-          <div className="flex items-center space-x-4">
-            <label className="flex items-center space-x-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 cursor-pointer transition-colors">
-              <Image className="h-4 w-4" />
-              <span>Upload Image</span>
-              <input
-                id="post-image-input"
-                type="file"
-                accept="image/*"
-                onChange={handleImageUpload}
-                className="hidden"
-                disabled={posting}
-              />
-            </label>
-            <button
-              type="button"
-              onClick={() => {
-                setShowImageBrowser(true);
-                fetchBucketImages();
-              }}
-              className="px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 text-sm"
-              disabled={posting}
-            >
-              Browse Library
-            </button>
-            {postImagePreview && (
-              <div className="relative">
-                <img
-                  src={postImagePreview}
-                  alt="Post preview"
-                  className="w-20 h-20 object-cover rounded-lg"
-                />
-                <button
-                  onClick={removeImage}
-                  className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600"
+          <div className="space-y-2">
+            <div className="flex items-center space-x-4">
+              <label className="flex items-center space-x-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 cursor-pointer transition-colors">
+                <Image className="h-4 w-4" />
+                <span>Upload Image</span>
+                <input
+                  id="post-image-input"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  className="hidden"
                   disabled={posting}
-                >
-                  ×
-                </button>
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowImageBrowser(true);
+                  fetchBucketImages();
+                }}
+                className="px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 text-sm"
+                disabled={posting}
+              >
+                Browse Library
+              </button>
+              {postImagePreview && (
+                <div className="relative">
+                  <img
+                    src={postImagePreview}
+                    alt="Post preview"
+                    className="w-20 h-20 object-cover rounded-lg"
+                  />
+                  <button
+                    onClick={removeImage}
+                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600"
+                    disabled={posting}
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+            </div>
+            
+            {/* Debug notice */}
+            {(postImage || postImagePreview) && (
+              <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <p className="text-sm text-yellow-800">
+                  <strong>Note:</strong> Image upload is currently being debugged. If image upload fails, your post will be created as text-only. Check the browser console for detailed error logs.
+                </p>
               </div>
             )}
           </div>

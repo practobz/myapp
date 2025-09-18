@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../admin/contexts/AuthContext';
-import { AtSign, Lock, AlertCircle, User, Phone, MapPin, FileText, Eye, EyeOff, ArrowRight, CheckCircle } from 'lucide-react';
+import { AtSign, Lock, AlertCircle, User, Phone, MapPin, FileText, Eye, EyeOff, ArrowRight, CheckCircle, Mail, Clock, RefreshCw } from 'lucide-react';
 import Logo from '../../admin/components/layout/Logo';
 
 function CustomerSignup() {
@@ -19,8 +19,29 @@ function CustomerSignup() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   
-  const { customerSignup } = useAuth();
+  // OTP related states
+  const [showOtpForm, setShowOtpForm] = useState(false);
+  const [otp, setOtp] = useState('');
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [otpTimer, setOtpTimer] = useState(0);
+  const [canResend, setCanResend] = useState(false);
+  
+  const { customerSignup, sendOtp, verifyOtp } = useAuth();
   const navigate = useNavigate();
+
+  // Timer effect for OTP resend
+  useEffect(() => {
+    let interval = null;
+    if (otpTimer > 0) {
+      interval = setInterval(() => {
+        setOtpTimer(otpTimer - 1);
+      }, 1000);
+    } else if (otpTimer === 0 && showOtpForm) {
+      setCanResend(true);
+    }
+    return () => clearInterval(interval);
+  }, [otpTimer, showOtpForm]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -28,6 +49,11 @@ function CustomerSignup() {
       ...prev,
       [name]: value
     }));
+  };
+
+  const handleOtpChange = (e) => {
+    const value = e.target.value.replace(/\D/g, '').slice(0, 6);
+    setOtp(value);
   };
 
   const getPasswordStrength = (password) => {
@@ -74,23 +100,91 @@ function CustomerSignup() {
     try {
       setError('');
       setLoading(true);
-      // Always send email lowercased and only pass one object
-      const data = { ...formData, email: formData.email.trim().toLowerCase() };
-      await customerSignup(data);
-      navigate('/customer');
+      
+      // Send OTP to email
+      await sendOtp(formData.email.trim().toLowerCase(), 'signup');
+      
+      // Show OTP form and start timer
+      setShowOtpForm(true);
+      setOtpTimer(300); // 5 minutes
+      setCanResend(false);
+      
     } catch (err) {
-      // Enhanced error handling
       if (err.message?.includes('already exists') || err.message?.includes('409')) {
         setError('An account with this email already exists. Please sign in instead.');
-      } else if (err.message?.includes('Invalid email')) {
-        setError('Please enter a valid email address.');
       } else {
-        setError(err.message || 'Failed to create account. Please try again.');
+        setError(err.message || 'Failed to send OTP. Please try again.');
       }
       console.error(err);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleOtpVerification = async (e) => {
+    e.preventDefault();
+    
+    if (!otp || otp.length !== 6) {
+      setError('Please enter a valid 6-digit OTP');
+      return;
+    }
+    
+    try {
+      setError('');
+      setOtpLoading(true);
+      
+      // Verify OTP
+      await verifyOtp(formData.email.trim().toLowerCase(), otp);
+      
+      // If OTP is verified, proceed with signup
+      const data = { ...formData, email: formData.email.trim().toLowerCase() };
+      await customerSignup(data);
+      navigate('/customer');
+      
+    } catch (err) {
+      if (err.message?.includes('Invalid OTP') || err.message?.includes('expired')) {
+        setError('Invalid or expired OTP. Please try again.');
+      } else {
+        setError(err.message || 'OTP verification failed. Please try again.');
+      }
+      console.error(err);
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    try {
+      setResendLoading(true);
+      setError('');
+      
+      await sendOtp(formData.email.trim().toLowerCase(), 'signup');
+      
+      // Reset timer and states
+      setOtpTimer(300);
+      setCanResend(false);
+      setOtp('');
+      
+    } catch (err) {
+      setError(err.message || 'Failed to resend OTP. Please try again.');
+      console.error(err);
+    } finally {
+      setResendLoading(false);
+    }
+  };
+
+  const handleBackToForm = () => {
+    setShowOtpForm(false);
+    setOtp('');
+    setOtpTimer(0);
+    setCanResend(false);
+    setError('');
+  };
+
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
   const togglePasswordVisibility = () => {
@@ -110,12 +204,17 @@ function CustomerSignup() {
             <Logo size="large" />
           </div>
           <h2 className="text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
-            Create Account
+            {showOtpForm ? 'Verify Your Email' : 'Create Account'}
           </h2>
-          <p className="mt-2 text-gray-600">Join us and start managing your content</p>
+          <p className="mt-2 text-gray-600">
+            {showOtpForm 
+              ? `Enter the OTP sent to ${formData.email}` 
+              : 'Join us and start managing your content'
+            }
+          </p>
         </div>
 
-        {/* Signup Form */}
+        {/* Signup Form or OTP Form */}
         <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-xl p-8 border border-gray-200/50">
           {error && (
             <div className="mb-6 bg-red-50/80 backdrop-blur-sm border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-start">
@@ -124,269 +223,367 @@ function CustomerSignup() {
             </div>
           )}
 
-          <form className="space-y-6" onSubmit={handleSubmit}>
-            {/* Name Field */}
-            <div>
-              <label htmlFor="name" className="block text-sm font-semibold text-gray-700 mb-2">
-                Full Name
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <User className="h-5 w-5 text-gray-400" />
-                </div>
-                <input
-                  id="name"
-                  name="name"
-                  type="text"
-                  required
-                  className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition-all duration-200 hover:border-gray-400"
-                  placeholder="Enter your full name"
-                  value={formData.name}
-                  onChange={handleInputChange}
-                />
-              </div>
-            </div>
-
-            {/* Email Field */}
-            <div>
-              <label htmlFor="email" className="block text-sm font-semibold text-gray-700 mb-2">
-                Email Address
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <AtSign className="h-5 w-5 text-gray-400" />
-                </div>
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  autoComplete="email"
-                  required
-                  className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition-all duration-200 hover:border-gray-400"
-                  placeholder="Enter your email address"
-                  value={formData.email}
-                  onChange={handleInputChange}
-                />
-              </div>
-            </div>
-
-            {/* Mobile Field */}
-            <div>
-              <label htmlFor="mobile" className="block text-sm font-semibold text-gray-700 mb-2">
-                Mobile Number
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Phone className="h-5 w-5 text-gray-400" />
-                </div>
-                <input
-                  id="mobile"
-                  name="mobile"
-                  type="tel"
-                  required
-                  className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition-all duration-200 hover:border-gray-400"
-                  placeholder="+91 9876543210"
-                  value={formData.mobile}
-                  onChange={handleInputChange}
-                />
-              </div>
-            </div>
-
-            {/* Address Field */}
-            <div>
-              <label htmlFor="address" className="block text-sm font-semibold text-gray-700 mb-2">
-                Address
-              </label>
-              <div className="relative">
-                <div className="absolute top-3 left-3 pointer-events-none">
-                  <MapPin className="h-5 w-5 text-gray-400" />
-                </div>
-                <textarea
-                  id="address"
-                  name="address"
-                  rows={3}
-                  required
-                  className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition-all duration-200 hover:border-gray-400 resize-none"
-                  placeholder="Enter your complete address"
-                  value={formData.address}
-                  onChange={handleInputChange}
-                />
-              </div>
-            </div>
-
-            {/* GST Number Field */}
-            <div>
-              <label htmlFor="gstNumber" className="block text-sm font-semibold text-gray-700 mb-2">
-                GST Number
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <FileText className="h-5 w-5 text-gray-400" />
-                </div>
-                <input
-                  id="gstNumber"
-                  name="gstNumber"
-                  type="text"
-                  required
-                  className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition-all duration-200 hover:border-gray-400"
-                  placeholder="27ABCDE1234F1Z5"
-                  value={formData.gstNumber}
-                  onChange={handleInputChange}
-                />
-              </div>
-            </div>
-
-            {/* Password Field */}
-            <div>
-              <label htmlFor="password" className="block text-sm font-semibold text-gray-700 mb-2">
-                Password
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Lock className="h-5 w-5 text-gray-400" />
-                </div>
-                <input
-                  id="password"
-                  name="password"
-                  type={showPassword ? "text" : "password"}
-                  autoComplete="new-password"
-                  required
-                  className="w-full pl-10 pr-12 py-3 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition-all duration-200 hover:border-gray-400"
-                  placeholder="Create a strong password"
-                  value={formData.password}
-                  onChange={handleInputChange}
-                />
-                <button
-                  type="button"
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                  onClick={togglePasswordVisibility}
-                >
-                  {showPassword ? (
-                    <EyeOff className="h-5 w-5 text-gray-400 hover:text-gray-600 transition-colors" />
-                  ) : (
-                    <Eye className="h-5 w-5 text-gray-400 hover:text-gray-600 transition-colors" />
-                  )}
-                </button>
-              </div>
-
-              {/* Password Strength Indicator */}
-              {formData.password && (
-                <div className="mt-2">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs text-gray-500">Password strength:</span>
-                    <span className={`text-xs font-medium ${passwordStrength.color}`}>
-                      {passwordStrength.text}
-                    </span>
+          {!showOtpForm ? (
+            <form className="space-y-6" onSubmit={handleSubmit}>
+              {/* Name Field */}
+              <div>
+                <label htmlFor="name" className="block text-sm font-semibold text-gray-700 mb-2">
+                  Full Name
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <User className="h-5 w-5 text-gray-400" />
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div
-                      className={`h-2 rounded-full transition-all duration-300 ${
-                        passwordStrength.strength === 1 ? 'bg-red-500 w-1/4' :
-                        passwordStrength.strength === 2 ? 'bg-yellow-500 w-2/4' :
-                        passwordStrength.strength === 3 ? 'bg-blue-500 w-3/4' :
-                        passwordStrength.strength === 4 ? 'bg-green-500 w-full' : 'w-0'
-                      }`}
-                    ></div>
-                  </div>
-                  <div className="text-xs text-gray-500 mt-1">
-                    Use 8+ characters with uppercase, lowercase, numbers, and symbols
-                  </div>
+                  <input
+                    id="name"
+                    name="name"
+                    type="text"
+                    required
+                    className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition-all duration-200 hover:border-gray-400"
+                    placeholder="Enter your full name"
+                    value={formData.name}
+                    onChange={handleInputChange}
+                  />
                 </div>
-              )}
-            </div>
-
-            {/* Confirm Password Field */}
-            <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-semibold text-gray-700 mb-2">
-                Confirm Password
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Lock className="h-5 w-5 text-gray-400" />
-                </div>
-                <input
-                  id="confirmPassword"
-                  name="confirmPassword"
-                  type={showConfirmPassword ? "text" : "password"}
-                  autoComplete="new-password"
-                  required
-                  className="w-full pl-10 pr-12 py-3 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition-all duration-200 hover:border-gray-400"
-                  placeholder="Confirm your password"
-                  value={formData.confirmPassword}
-                  onChange={handleInputChange}
-                />
-                <button
-                  type="button"
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                  onClick={toggleConfirmPasswordVisibility}
-                >
-                  {showConfirmPassword ? (
-                    <EyeOff className="h-5 w-5 text-gray-400 hover:text-gray-600 transition-colors" />
-                  ) : (
-                    <Eye className="h-5 w-5 text-gray-400 hover:text-gray-600 transition-colors" />
-                  )}
-                </button>
               </div>
 
-              {/* Password Match Indicator */}
-              {formData.confirmPassword && (
-                <div className="mt-2 flex items-center">
-                  {formData.password === formData.confirmPassword ? (
-                    <div className="flex items-center text-green-600">
-                      <CheckCircle className="h-4 w-4 mr-1" />
-                      <span className="text-xs">Passwords match</span>
+              {/* Email Field */}
+              <div>
+                <label htmlFor="email" className="block text-sm font-semibold text-gray-700 mb-2">
+                  Email Address
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <AtSign className="h-5 w-5 text-gray-400" />
+                  </div>
+                  <input
+                    id="email"
+                    name="email"
+                    type="email"
+                    autoComplete="email"
+                    required
+                    className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition-all duration-200 hover:border-gray-400"
+                    placeholder="Enter your email address"
+                    value={formData.email}
+                    onChange={handleInputChange}
+                  />
+                </div>
+              </div>
+
+              {/* Mobile Field */}
+              <div>
+                <label htmlFor="mobile" className="block text-sm font-semibold text-gray-700 mb-2">
+                  Mobile Number
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Phone className="h-5 w-5 text-gray-400" />
+                  </div>
+                  <input
+                    id="mobile"
+                    name="mobile"
+                    type="tel"
+                    required
+                    className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition-all duration-200 hover:border-gray-400"
+                    placeholder="+91 9876543210"
+                    value={formData.mobile}
+                    onChange={handleInputChange}
+                  />
+                </div>
+              </div>
+
+              {/* Address Field */}
+              <div>
+                <label htmlFor="address" className="block text-sm font-semibold text-gray-700 mb-2">
+                  Address
+                </label>
+                <div className="relative">
+                  <div className="absolute top-3 left-3 pointer-events-none">
+                    <MapPin className="h-5 w-5 text-gray-400" />
+                  </div>
+                  <textarea
+                    id="address"
+                    name="address"
+                    rows={3}
+                    required
+                    className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition-all duration-200 hover:border-gray-400 resize-none"
+                    placeholder="Enter your complete address"
+                    value={formData.address}
+                    onChange={handleInputChange}
+                  />
+                </div>
+              </div>
+
+              {/* GST Number Field */}
+              <div>
+                <label htmlFor="gstNumber" className="block text-sm font-semibold text-gray-700 mb-2">
+                  GST Number
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <FileText className="h-5 w-5 text-gray-400" />
+                  </div>
+                  <input
+                    id="gstNumber"
+                    name="gstNumber"
+                    type="text"
+                    required
+                    className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition-all duration-200 hover:border-gray-400"
+                    placeholder="27ABCDE1234F1Z5"
+                    value={formData.gstNumber}
+                    onChange={handleInputChange}
+                  />
+                </div>
+              </div>
+
+              {/* Password Field */}
+              <div>
+                <label htmlFor="password" className="block text-sm font-semibold text-gray-700 mb-2">
+                  Password
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Lock className="h-5 w-5 text-gray-400" />
+                  </div>
+                  <input
+                    id="password"
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="new-password"
+                    required
+                    className="w-full pl-10 pr-12 py-3 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition-all duration-200 hover:border-gray-400"
+                    placeholder="Create a strong password"
+                    value={formData.password}
+                    onChange={handleInputChange}
+                  />
+                  <button
+                    type="button"
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                    onClick={togglePasswordVisibility}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-5 w-5 text-gray-400 hover:text-gray-600 transition-colors" />
+                    ) : (
+                      <Eye className="h-5 w-5 text-gray-400 hover:text-gray-600 transition-colors" />
+                    )}
+                  </button>
+                </div>
+
+                {/* Password Strength Indicator */}
+                {formData.password && (
+                  <div className="mt-2">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs text-gray-500">Password strength:</span>
+                      <span className={`text-xs font-medium ${passwordStrength.color}`}>
+                        {passwordStrength.text}
+                      </span>
                     </div>
-                  ) : (
-                    <div className="flex items-center text-red-600">
-                      <AlertCircle className="h-4 w-4 mr-1" />
-                      <span className="text-xs">Passwords do not match</span>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div
+                        className={`h-2 rounded-full transition-all duration-300 ${
+                          passwordStrength.strength === 1 ? 'bg-red-500 w-1/4' :
+                          passwordStrength.strength === 2 ? 'bg-yellow-500 w-2/4' :
+                          passwordStrength.strength === 3 ? 'bg-blue-500 w-3/4' :
+                          passwordStrength.strength === 4 ? 'bg-green-500 w-full' : 'w-0'
+                        }`}
+                      ></div>
                     </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Submit Button */}
-            <div>
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full flex items-center justify-center px-4 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-              >
-                {loading ? (
-                  <div className="flex items-center">
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                    Creating account...
-                  </div>
-                ) : (
-                  <div className="flex items-center">
-                    Create Account
-                    <ArrowRight className="h-5 w-5 ml-2" />
+                    <div className="text-xs text-gray-500 mt-1">
+                      Use 8+ characters with uppercase, lowercase, numbers, and symbols
+                    </div>
                   </div>
                 )}
-              </button>
-            </div>
-          </form>
+              </div>
 
-          {/* Footer */}
-          <div className="mt-8 text-center">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300"></div>
+              {/* Confirm Password Field */}
+              <div>
+                <label htmlFor="confirmPassword" className="block text-sm font-semibold text-gray-700 mb-2">
+                  Confirm Password
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Lock className="h-5 w-5 text-gray-400" />
+                  </div>
+                  <input
+                    id="confirmPassword"
+                    name="confirmPassword"
+                    type={showConfirmPassword ? "text" : "password"}
+                    autoComplete="new-password"
+                    required
+                    className="w-full pl-10 pr-12 py-3 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition-all duration-200 hover:border-gray-400"
+                    placeholder="Confirm your password"
+                    value={formData.confirmPassword}
+                    onChange={handleInputChange}
+                  />
+                  <button
+                    type="button"
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                    onClick={toggleConfirmPasswordVisibility}
+                  >
+                    {showConfirmPassword ? (
+                      <EyeOff className="h-5 w-5 text-gray-400 hover:text-gray-600 transition-colors" />
+                    ) : (
+                      <Eye className="h-5 w-5 text-gray-400 hover:text-gray-600 transition-colors" />
+                    )}
+                  </button>
+                </div>
+
+                {/* Password Match Indicator */}
+                {formData.confirmPassword && (
+                  <div className="mt-2 flex items-center">
+                    {formData.password === formData.confirmPassword ? (
+                      <div className="flex items-center text-green-600">
+                        <CheckCircle className="h-4 w-4 mr-1" />
+                        <span className="text-xs">Passwords match</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center text-red-600">
+                        <AlertCircle className="h-4 w-4 mr-1" />
+                        <span className="text-xs">Passwords do not match</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-gray-500">Already have an account?</span>
+
+              {/* Submit Button */}
+              <div>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full flex items-center justify-center px-4 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                >
+                  {loading ? (
+                    <div className="flex items-center">
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                      Sending OTP...
+                    </div>
+                  ) : (
+                    <div className="flex items-center">
+                      Send OTP
+                      <Mail className="h-5 w-5 ml-2" />
+                    </div>
+                  )}
+                </button>
+              </div>
+            </form>
+          ) : (
+            /* OTP Verification Form */
+            <form className="space-y-6" onSubmit={handleOtpVerification}>
+              {/* OTP Input */}
+              <div>
+                <label htmlFor="otp" className="block text-sm font-semibold text-gray-700 mb-2">
+                  Enter OTP
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Mail className="h-5 w-5 text-gray-400" />
+                  </div>
+                  <input
+                    id="otp"
+                    name="otp"
+                    type="text"
+                    maxLength="6"
+                    required
+                    className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition-all duration-200 hover:border-gray-400 text-center text-lg font-mono tracking-widest"
+                    placeholder="000000"
+                    value={otp}
+                    onChange={handleOtpChange}
+                  />
+                </div>
+                <div className="mt-2 text-xs text-gray-500 text-center">
+                  Enter the 6-digit code sent to your email
+                </div>
+              </div>
+
+              {/* Timer */}
+              {otpTimer > 0 && (
+                <div className="flex items-center justify-center text-sm text-gray-600">
+                  <Clock className="h-4 w-4 mr-1" />
+                  <span>Resend OTP in {formatTime(otpTimer)}</span>
+                </div>
+              )}
+
+              {/* Verify Button */}
+              <div>
+                <button
+                  type="submit"
+                  disabled={otpLoading || !otp || otp.length !== 6}
+                  className="w-full flex items-center justify-center px-4 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold rounded-xl hover:from-green-700 hover:to-emerald-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                >
+                  {otpLoading ? (
+                    <div className="flex items-center">
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                      Verifying...
+                    </div>
+                  ) : (
+                    <div className="flex items-center">
+                      Verify & Create Account
+                      <CheckCircle className="h-5 w-5 ml-2" />
+                    </div>
+                  )}
+                </button>
+              </div>
+
+              {/* Resend OTP */}
+              {canResend && (
+                <div className="text-center">
+                  <button
+                    type="button"
+                    onClick={handleResendOtp}
+                    disabled={resendLoading}
+                    className="inline-flex items-center px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    {resendLoading ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                        Sending...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="h-4 w-4 mr-1" />
+                        Resend OTP
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+
+              {/* Back to Form */}
+              <div className="text-center">
+                <button
+                  type="button"
+                  onClick={handleBackToForm}
+                  className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 rounded-lg transition-colors"
+                >
+                  <ArrowRight className="h-4 w-4 mr-1 rotate-180" />
+                  Back to form
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* Footer - only show when not in OTP mode */}
+          {!showOtpForm && (
+            <div className="mt-8 text-center">
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-gray-300"></div>
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="px-2 bg-white text-gray-500">Already have an account?</span>
+                </div>
+              </div>
+              <div className="mt-4">
+                <Link
+                  to="/customer/login"
+                  className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200"
+                >
+                  Sign in instead
+                </Link>
               </div>
             </div>
-            <div className="mt-4">
-              <Link
-                to="/customer/login"
-                className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200"
-              >
-                Sign in instead
-              </Link>
-            </div>
-          </div>
+          )}
         </div>
 
         {/* Additional Info */}

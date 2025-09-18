@@ -2,10 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AdminLayout from '../../components/layout/AdminLayout';
 import { Eye, AlertCircle, ArrowLeft } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
 
 function Customers() {
+  const { currentUser } = useAuth();
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const navigate = useNavigate();
 
   const handleViewCustomer = (id) => {
@@ -40,61 +43,6 @@ function Customers() {
     return { color: 'green', text: `${days} days left` };
   };
 
-  useEffect(() => {
-    const fetchCustomersAndCalendars = async () => {
-      try {
-        const customersRes = await fetch(`${process.env.REACT_APP_API_URL}/api/customers`);
-        const calendarsRes = await fetch(`${process.env.REACT_APP_API_URL}/calendars`);
-
-        const customersData = await customersRes.json();
-        const calendarsData = await calendarsRes.json();
-
-        // ✅ Group calendars by customerId
-        const calendarMap = new Map();
-        for (const calendar of calendarsData) {
-          const { customerId } = calendar;
-          if (!calendarMap.has(customerId)) calendarMap.set(customerId, []);
-          calendarMap.get(customerId).push(calendar);
-        }
-
-        // ✅ Map customers with calendar data, but only include those with at least one calendar
-        const enrichedCustomers = customersData.customers
-          .filter((customer) => {
-            const id = customer.id || customer._id;
-            return calendarMap.has(id) && calendarMap.get(id).length > 0;
-          })
-          .map((customer) => {
-            const id = customer.id || customer._id;
-            const customerCalendars = calendarMap.get(id) || [];
-            
-            // Get all content items from all calendars
-            const allContentItems = customerCalendars.flatMap(cal => cal.contentItems || []);
-            const itemsWithDates = allContentItems.filter(item => item.date);
-            
-            // Sort to get next content item
-            itemsWithDates.sort((a, b) => new Date(a.date) - new Date(b.date));
-            const nextItem = itemsWithDates[0];
-
-            return {
-              ...customer,
-              nextDueDate: nextItem?.date || null,
-              nextDueContent: nextItem?.description || '—',
-              totalCalendars: customerCalendars.length,
-              totalItems: allContentItems.length,
-            };
-          });
-
-        setCustomers(enrichedCustomers);
-        setLoading(false);
-      } catch (err) {
-        console.error('Error fetching data:', err);
-        setLoading(false);
-      }
-    };
-
-    fetchCustomersAndCalendars();
-  }, []);
-
   const getStatusBadgeColor = (status) => {
     switch (status.color) {
       case 'red':
@@ -109,6 +57,43 @@ function Customers() {
         return 'bg-gray-50 text-gray-700 border-gray-200';
     }
   };
+
+  // Fetch only assigned customers for current admin
+  const fetchAssignedCustomers = async () => {
+    if (!currentUser || currentUser.role !== 'admin') {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+      const response = await fetch(`${apiUrl}/admin/assigned-customers?adminId=${currentUser._id || currentUser.id}`);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch assigned customers`);
+      }
+      
+      const data = await response.json();
+      setCustomers(data);
+    } catch (err) {
+      console.error('Error fetching assigned customers:', err);
+      setError('Failed to fetch your assigned customers');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAssignedCustomers();
+  }, [currentUser]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
 
   return (
     <AdminLayout title="Customers">

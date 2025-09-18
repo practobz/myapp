@@ -116,7 +116,7 @@ function ScheduledPosts() {
 
   // Helper to detect video URLs
   const isVideoUrl = (url) => {
-    if (!url) return false;
+    if (!url || typeof url !== 'string') return false;
     const ext = url.split('.').pop().toLowerCase();
     return ['mp4', 'webm', 'ogg', 'mov', 'avi'].includes(ext);
   };
@@ -138,6 +138,8 @@ function ScheduledPosts() {
         return <div className="h-5 w-5 bg-red-600 text-white rounded text-xs flex items-center justify-center font-bold">YT</div>;
       case 'twitter':
         return <div className="h-5 w-5 bg-blue-400 text-white rounded text-xs flex items-center justify-center font-bold">X</div>;
+      case 'linkedin':
+        return <div className="h-5 w-5 bg-blue-700 text-white rounded text-xs flex items-center justify-center font-bold">In</div>;
       default:
         return <div className="h-5 w-5 bg-gray-400 text-white rounded text-xs flex items-center justify-center">?</div>;
     }
@@ -330,6 +332,18 @@ function ScheduledPosts() {
                         <span className="flex items-center space-x-1 text-red-600">
                           <div className="h-3 w-3 bg-blue-400 text-white rounded text-xs flex items-center justify-center">X</div>
                           <span>❌ X Failed</span>
+                        </span>
+                      ) : null}
+
+                      {post.linkedinPostId ? (
+                        <span className="flex items-center space-x-1 text-green-600">
+                          <div className="h-3 w-3 bg-blue-700 text-white rounded text-xs flex items-center justify-center">In</div>
+                          <span>✅ LinkedIn: {post.linkedinPostId}</span>
+                        </span>
+                      ) : post.platform === 'linkedin' ? (
+                        <span className="flex items-center space-x-1 text-red-600">
+                          <div className="h-3 w-3 bg-blue-700 text-white rounded text-xs flex items-center justify-center">In</div>
+                          <span>❌ LinkedIn Failed</span>
                         </span>
                       ) : null}
                     </div>

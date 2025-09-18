@@ -1,13 +1,25 @@
 import React, { useState, useEffect } from 'react';
-import { Instagram, TrendingUp, ExternalLink, CheckCircle, AlertCircle, Loader2, Users, Heart, MessageCircle, Eye, Plus, Settings, ChevronDown, ChevronRight, UserCheck, Trash2 } from 'lucide-react';
+import { Instagram, TrendingUp, ExternalLink, CheckCircle, AlertCircle, Loader2, Users, Heart, MessageCircle, Eye, Plus, Settings, ChevronDown, ChevronRight, UserCheck, Trash2, Calendar, RefreshCw } from 'lucide-react';
 import TrendChart from '../../components/TrendChart';
+import TimePeriodChart from '../../components/TimeperiodChart';
 import { subDays, format } from 'date-fns';
 import { getUserData, setUserData, removeUserData, migrateToUserSpecificStorage } from '../../utils/sessionUtils';
 
 // Your Facebook App ID (Instagram uses Facebook's Graph API)
-const FACEBOOK_APP_ID = '4416243821942660'; // Updated to your new AirSpark app
+const FACEBOOK_APP_ID = '4416243821942660';
 
-function InstagramIntegration() {
+// Time period options for historical data
+const TIME_PERIOD_OPTIONS = [
+  { value: 7, label: 'Last 7 days' },
+  { value: 15, label: 'Last 15 days' },
+  { value: 30, label: 'Last 30 days' },
+  { value: 60, label: 'Last 2 months' },
+  { value: 90, label: 'Last 3 months' },
+  { value: 180, label: 'Last 6 months' },
+  { value: 365, label: 'Last 1 year' }
+];
+
+function InstagramIntegration({ onData }) {
   // Multi-account state management (similar to Facebook integration)
   const [fbSdkLoaded, setFbSdkLoaded] = useState(false);
   const [connectedAccounts, setConnectedAccounts] = useState([]); // Array of connected Instagram accounts
@@ -26,9 +38,56 @@ function InstagramIntegration() {
   const [isSignedIn, setIsSignedIn] = useState(false);
   const [selectedAccountId, setSelectedAccountId] = useState(null);
 
+  // Add state for selected post analytics
+  const [selectedPostId, setSelectedPostId] = useState(null);
+  const [singlePostAnalytics, setSinglePostAnalytics] = useState(null);
+
+  // State for followers timeline
+  const [followersTimeline, setFollowersTimeline] = useState({});
+
+  // Chart view state
+  const [showHistoricalCharts, setShowHistoricalCharts] = useState({});
+
   // Helper function to check if Facebook API is ready
   const isFacebookApiReady = () => {
     return window.FB && window.FB.api && typeof window.FB.api === 'function';
+  };
+
+  // Function to store current metrics as historical snapshot
+  const storeHistoricalSnapshot = async (accountId, accountName, metrics) => {
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/historical-data/store`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          platform: 'instagram',
+          accountId: accountId,
+          pageId: accountId,
+          accountName: accountName,
+          metrics: {
+            followersCount: metrics.followersCount || 0,
+            mediaCount: metrics.mediaCount || 0,
+            likesCount: metrics.totalLikes || 0,
+            totalLikes: metrics.totalLikes || 0,
+            commentsCount: metrics.totalComments || 0,
+            totalComments: metrics.totalComments || 0,
+            engagementCount: (metrics.totalLikes || 0) + (metrics.totalComments || 0),
+            totalEngagement: (metrics.totalLikes || 0) + (metrics.totalComments || 0),
+            postsCount: metrics.postsCount || 0,
+            photosCount: metrics.photosCount || 0,
+            videosCount: metrics.videosCount || 0
+          },
+          dataSource: 'api'
+        })
+      });
+      
+      const result = await response.json();
+      if (result.success) {
+        console.log(`✅ Stored historical snapshot for Instagram account: ${accountName}`);
+      }
+    } catch (error) {
+      console.warn('Failed to store historical snapshot:', error);
+    }
   };
 
   // Load connected accounts from localStorage on component mount
@@ -123,7 +182,7 @@ function InstagramIntegration() {
         appId: FACEBOOK_APP_ID,
         cookie: true,
         xfbml: false,
-        version: 'v19.0'
+        version: 'v18.0'
       });
       
       // Wait for FB to be fully ready
@@ -349,7 +408,7 @@ function InstagramIntegration() {
     });
   };
 
-  // Enhanced connectInstagramAccount with better persistence
+  // Enhanced connectInstagramAccount with better persistence and snapshot storage
   const connectInstagramAccount = async (accountData) => {
     setLoading(true);
     
@@ -407,6 +466,23 @@ function InstagramIntegration() {
 
           // Store customer social account for admin access
           storeCustomerSocialAccount(newAccount);
+
+          // Store initial historical snapshot
+          const media = mediaResponse.data || [];
+          const totalLikes = media.reduce((sum, m) => sum + (m.like_count || 0), 0);
+          const totalComments = media.reduce((sum, m) => sum + (m.comments_count || 0), 0);
+          const photosCount = media.filter(m => m.media_type === 'IMAGE').length;
+          const videosCount = media.filter(m => m.media_type === 'VIDEO').length;
+
+          storeHistoricalSnapshot(newAccount.id, profileResponse.username, {
+            followersCount: profileResponse.followers_count,
+            mediaCount: profileResponse.media_count,
+            totalLikes,
+            totalComments,
+            postsCount: media.length,
+            photosCount,
+            videosCount
+          });
 
           // Remove from available accounts
           setAvailableAccounts(prev => prev.filter(acc => acc.id !== accountData.id));
@@ -766,6 +842,23 @@ function InstagramIntegration() {
             const updatedActiveAccount = updatedAccounts.find(acc => acc.id === accountId);
             setActiveAccount(updatedActiveAccount);
           }
+
+          // Store updated historical snapshot
+          const media = mediaResponse.data || [];
+          const totalLikes = media.reduce((sum, m) => sum + (m.like_count || 0), 0);
+          const totalComments = media.reduce((sum, m) => sum + (m.comments_count || 0), 0);
+          const photosCount = media.filter(m => m.media_type === 'IMAGE').length;
+          const videosCount = media.filter(m => m.media_type === 'VIDEO').length;
+
+          storeHistoricalSnapshot(accountId, profileResponse.username, {
+            followersCount: profileResponse.followers_count,
+            mediaCount: profileResponse.media_count,
+            totalLikes,
+            totalComments,
+            postsCount: media.length,
+            photosCount,
+            videosCount
+          });
           
           setLoading(false);
         });
@@ -823,6 +916,31 @@ function InstagramIntegration() {
     setLoadingAnalytics(false);
   };
 
+  // --- AUTO-FETCH ANALYTICS LOGIC ---
+  useEffect(() => {
+    const lastFetch = localStorage.getItem('ig_analytics_last_fetch');
+    const now = Date.now();
+    if (!lastFetch || now - parseInt(lastFetch, 10) > 24 * 60 * 60 * 1000) {
+      // Fetch analytics for all connected accounts
+      connectedAccounts.forEach(acc => {
+        if (acc.media && acc.media.length > 0) {
+          generateMediaBasedAnalytics(acc);
+        }
+      });
+      localStorage.setItem('ig_analytics_last_fetch', now.toString());
+    }
+  }, [connectedAccounts]);
+
+  // --- SINGLE POST ANALYTICS LOGIC ---
+  const fetchSinglePostAnalytics = (post) => {
+    if (!post) return;
+    const analytics = {
+      likes: [{ date: post.timestamp, value: post.like_count || 0 }],
+      comments: [{ date: post.timestamp, value: post.comments_count || 0 }]
+    };
+    setSinglePostAnalytics(analytics);
+  };
+
   const renderAnalytics = () => {
     if (!analyticsData) return null;
     
@@ -840,13 +958,17 @@ function InstagramIntegration() {
           </div>
         </div>
         
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div
+          className="grid grid-cols-1 lg:grid-cols-2 gap-6"
+          style={{ minWidth: 300, minHeight: 250 }} // <-- Ensure chart container has size
+        >
           {analyticsData.followers.length > 0 && (
             <TrendChart
               data={analyticsData.followers}
               title="Follower Growth"
               color="#E4405F"
               metric="value"
+              style={{ minHeight: 250 }} // <-- Chart minHeight
             />
           )}
           
@@ -856,6 +978,7 @@ function InstagramIntegration() {
               title="Daily Impressions"
               color="#C13584"
               metric="value"
+              style={{ minHeight: 250 }}
             />
           )}
           
@@ -865,6 +988,7 @@ function InstagramIntegration() {
               title="Daily Reach"
               color="#F56040"
               metric="value"
+              style={{ minHeight: 250 }}
             />
           )}
           
@@ -874,6 +998,40 @@ function InstagramIntegration() {
               title="Posts per Day"
               color="#FF6B9D"
               metric="value"
+              style={{ minHeight: 250 }}
+            />
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // Add UI for single post analytics
+  const renderSinglePostAnalytics = () => {
+    if (!singlePostAnalytics) return null;
+    return (
+      <div className="mt-6">
+        <h5 className="font-medium text-gray-700 mb-2">Single Post Analytics</h5>
+        <div
+          className="grid grid-cols-1 md:grid-cols-2 gap-4"
+          style={{ minWidth: 300, minHeight: 200 }} // <-- Ensure chart container has size
+        >
+          {singlePostAnalytics.likes && (
+            <TrendChart
+              data={singlePostAnalytics.likes}
+              title="Likes"
+              color="#E4405F"
+              metric="value"
+              style={{ minHeight: 200 }}
+            />
+          )}
+          {singlePostAnalytics.comments && (
+            <TrendChart
+              data={singlePostAnalytics.comments}
+              title="Comments"
+              color="#C13584"
+              metric="value"
+              style={{ minHeight: 200 }}
             />
           )}
         </div>
@@ -975,6 +1133,7 @@ function InstagramIntegration() {
               <p>⏰ <strong>Session Management:</strong> Persistent connection across browser sessions</p>
               <p>🔗 <strong>Manual Actions:</strong> Use "Refresh Tokens" if you encounter issues</p>
               <p>✅ <strong>Permissions:</strong> instagram_basic, instagram_content_publish</p>
+              <p>📊 <strong>Historical Data:</strong> Automatically captured daily</p>
               {activeAccount.tokenExpiresAt && (
                 <p>⏳ <strong>Token Expires:</strong> {new Date(activeAccount.tokenExpiresAt).toLocaleString()}</p>
               )}
@@ -1194,10 +1353,23 @@ function InstagramIntegration() {
                 <ExternalLink className="h-4 w-4" />
                 <span>Disconnect</span>
               </button>
+              <button
+                onClick={() => storeHistoricalSnapshot(activeAccount.id, activeAccount.profile?.username || 'Unknown', {
+                  followersCount: activeAccount.profile?.followers_count,
+                  mediaCount: activeAccount.profile?.media_count,
+                  totalLikes: activeAccount.media?.reduce((sum, m) => sum + (m.like_count || 0), 0) || 0,
+                  totalComments: activeAccount.media?.reduce((sum, m) => sum + (m.comments_count || 0), 0) || 0,
+                  postsCount: activeAccount.media?.length || 0
+                })}
+                className="flex items-center space-x-2 px-3 py-2 bg-cyan-100 text-cyan-700 rounded-lg hover:bg-cyan-200 transition-colors text-sm"
+              >
+                <RefreshCw className="h-4 w-4" />
+                <span>Capture</span>
+              </button>
             </div>
           </div>
           
-          <div className="grid grid-cols-3 gap-6 text-center">
+          <div className="grid grid-cols-3 gap-6 text-center mb-6">
             <div className="bg-white rounded-xl p-4 shadow-sm">
               <div className="text-2xl font-bold text-pink-600">
                 {activeAccount.profile?.media_count?.toLocaleString() || activeAccount.media?.length || 0}
@@ -1217,6 +1389,44 @@ function InstagramIntegration() {
               <div className="text-sm text-gray-600 font-medium">Total Likes</div>
             </div>
           </div>
+
+          {/* Historical Charts Toggle */}
+          <div className="mb-6">
+            <div className="flex items-center justify-between bg-white rounded-lg border border-gray-200 p-4">
+              <div className="flex items-center space-x-3">
+                <Calendar className="h-5 w-5 text-pink-600" />
+                <div>
+                  <h4 className="font-medium text-gray-900">Historical Analytics</h4>
+                  <p className="text-sm text-gray-600">View long-term trends and growth patterns</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowHistoricalCharts(prev => ({ 
+                  ...prev, 
+                  [activeAccount.id]: !prev[activeAccount.id] 
+                }))}
+                className="flex items-center space-x-2 bg-pink-600 text-white px-4 py-2 rounded-lg hover:bg-pink-700 transition-colors text-sm"
+              >
+                <Calendar className="h-4 w-4" />
+                <span>
+                  {showHistoricalCharts[activeAccount.id] ? 'Hide' : 'Show'} Historical Data
+                </span>
+              </button>
+            </div>
+          </div>
+
+          {/* Show Historical Charts */}
+          {showHistoricalCharts[activeAccount.id] && (
+            <TimePeriodChart
+              platform="instagram"
+              accountId={activeAccount.id}
+              title="Instagram Historical Analytics"
+              defaultMetric="followers"
+            />
+          )}
+
+          {/* Render followers timeline chart */}
+          {renderFollowersTrendChart(activeAccount.id)}
         </div>
       )}
 
@@ -1287,6 +1497,15 @@ function InstagramIntegration() {
                       <ExternalLink className="h-3 w-3" />
                     </a>
                   )}
+                  <button
+                    className="text-xs text-purple-600 mt-2"
+                    onClick={() => {
+                      setSelectedPostId(media.id);
+                      fetchSinglePostAnalytics(media);
+                    }}
+                  >
+                    Show Analytics
+                  </button>
                 </div>
               </div>
             )) : (
@@ -1298,8 +1517,75 @@ function InstagramIntegration() {
           </div>
         </div>
       )}
+
+      {renderSinglePostAnalytics()}
     </div>
   );
+
+  // Helper to fetch and store followers count for each IG account
+  const fetchAndStoreFollowersTimeline = async () => {
+    if (!connectedAccounts || connectedAccounts.length === 0) return;
+    const today = format(new Date(), 'yyyy-MM-dd');
+    const updatedTimeline = { ...followersTimeline };
+
+    for (const acc of connectedAccounts) {
+      const timeline = updatedTimeline[acc.id] || [];
+      const lastEntry = timeline.length > 0 ? timeline[timeline.length - 1] : null;
+      const lastDate = lastEntry ? lastEntry.date : null;
+      const daysSinceLast = lastDate ? (new Date(today) - new Date(lastDate)) / (1000 * 60 * 60 * 24) : 999;
+
+      if (daysSinceLast >= 1 && acc.pageAccessToken) {
+        window.FB.api(
+          `/${acc.id}`,
+          { fields: 'followers_count', access_token: acc.pageAccessToken },
+          function(response) {
+            if (response && response.followers_count !== undefined) {
+              const newTimeline = [...timeline, { date: today, value: response.followers_count }];
+              updatedTimeline[acc.id] = newTimeline;
+              setFollowersTimeline({ ...updatedTimeline });
+              setUserData(`ig_followers_timeline_${acc.id}`, newTimeline);
+            }
+          }
+        );
+      }
+    }
+  };
+
+  // Load timeline series on mount
+  useEffect(() => {
+    if (connectedAccounts && connectedAccounts.length > 0) {
+      const loaded = {};
+      connectedAccounts.forEach(acc => {
+        loaded[acc.id] = getUserData(`ig_followers_timeline_${acc.id}`) || [];
+      });
+      setFollowersTimeline(loaded);
+      fetchAndStoreFollowersTimeline();
+    }
+  }, [connectedAccounts]);
+
+  // Render followers timeline chart for each account
+  const renderFollowersTrendChart = (accountId) => {
+    const timeline = followersTimeline[accountId] || [];
+    if (timeline.length === 0) return null;
+    return (
+      <div style={{ minWidth: 300, minHeight: 200 }}>
+        <TrendChart
+          data={timeline}
+          title="Followers Timeline"
+          color="#E4405F"
+          metric="value"
+          style={{ minHeight: 200 }}
+        />
+      </div>
+    );
+  };
+
+  useEffect(() => {
+    if (onData && activeAccount) {
+      // Pass the active account object to parent
+      onData(activeAccount);
+    }
+  }, [activeAccount, onData]);
 
   if (!fbSdkLoaded) {
     return (
@@ -1390,7 +1676,7 @@ function InstagramIntegration() {
               </div>
               <h3 className="text-xl font-semibold text-gray-900 mb-2">Connect Instagram Business Accounts</h3>
               <p className="text-gray-600 mb-6 max-w-md mx-auto">
-                Connect multiple Instagram Business accounts through Facebook. Manage all your accounts from one dashboard!
+                Connect multiple Instagram Business accounts through Facebook. Manage all your accounts from one dashboard with historical data tracking!
               </p>
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 max-w-md mx-auto">
                 <h4 className="font-medium text-blue-800 mb-2">📱 Multi-Account Setup Guide</h4>
@@ -1400,6 +1686,7 @@ function InstagramIntegration() {
                   <p>3. Click "Connect" below and log in to Facebook</p>
                   <p>4. Grant permissions to access all your connected accounts</p>
                   <p>5. Select which accounts to connect and manage</p>
+                  <p>6. Historical data will be captured automatically</p>
                 </div>
               </div>
               <button

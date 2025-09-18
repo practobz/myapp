@@ -4,6 +4,7 @@ import {
   Instagram, 
   Youtube, 
   Twitter, 
+  Linkedin,
   CheckCircle, 
   AlertCircle, 
   Loader2, 
@@ -310,6 +311,102 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
     }
   };
 
+  const handleLinkedInConnect = async () => {
+    setLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const LINKEDIN_CLIENT_ID = process.env.REACT_APP_LINKEDIN_CLIENT_ID;
+      const LINKEDIN_REDIRECT_URI = process.env.REACT_APP_LINKEDIN_REDIRECT_URI;
+      const LINKEDIN_SCOPE = 'openid profile email w_member_social';
+
+      if (!LINKEDIN_CLIENT_ID || !LINKEDIN_REDIRECT_URI) {
+        throw new Error('LinkedIn OAuth configuration is missing');
+      }
+
+      const state = Math.random().toString(36).substring(2);
+      localStorage.setItem('linkedin_oauth_state', state);
+
+      const authUrl = `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${LINKEDIN_CLIENT_ID}&redirect_uri=${encodeURIComponent(LINKEDIN_REDIRECT_URI)}&scope=${encodeURIComponent(LINKEDIN_SCOPE)}&state=${state}`;
+      
+      const width = 600, height = 700;
+      const left = window.screenX + (window.outerWidth - width) / 2;
+      const top = window.screenY + (window.outerHeight - height) / 2;
+      const popup = window.open(
+        authUrl,
+        'linkedin-login',
+        `width=${width},height=${height},left=${left},top=${top}`
+      );
+      
+      // Listen for messages from popup
+      const handleMessage = (event) => {
+        if (event.data?.source === 'linkedin-callback') {
+          window.removeEventListener('message', handleMessage);
+          if (event.data.success) {
+            handleLinkedInSuccess(event.data.access_token, event.data.userinfo);
+          } else {
+            setError(event.data.error || 'LinkedIn authentication failed');
+            setLoading(false);
+          }
+        }
+      };
+
+      window.addEventListener('message', handleMessage);
+
+      // Check if popup was closed manually
+      const checkClosed = setInterval(() => {
+        if (popup.closed) {
+          clearInterval(checkClosed);
+          window.removeEventListener('message', handleMessage);
+          setLoading(false);
+          if (!success) {
+            setError('Popup closed before authentication completed');
+          }
+        }
+      }, 1000);
+
+    } catch (err) {
+      setError('Failed to connect to LinkedIn: ' + err.message);
+      setLoading(false);
+    }
+  };
+
+  const handleLinkedInSuccess = async (token, userinfo) => {
+    try {
+      if (userinfo && userinfo.sub) {
+        // Prepare LinkedIn account data for saving
+        const accountData = {
+          customerId: customer.id,
+          platform: 'linkedin',
+          platformUserId: userinfo.sub,
+          name: userinfo.name || '',
+          email: userinfo.email || '',
+          profilePicture: userinfo.picture || '',
+          accessToken: token,
+          pages: [], // LinkedIn doesn't have pages like Facebook
+          connectedAt: new Date().toISOString()
+        };
+
+        console.log('📤 Saving LinkedIn account data:', { 
+          customerId: customer.id, 
+          platform: 'linkedin', 
+          platformUserId: userinfo.sub 
+        });
+
+        // Save to database
+        await saveAccountToDatabase(accountData);
+        
+      } else {
+        setError('Failed to get user information from LinkedIn');
+        setLoading(false);
+      }
+    } catch (err) {
+      setError('Failed to process LinkedIn authentication');
+      setLoading(false);
+    }
+  };
+
   const handleTwitterConnect = async () => {
     setLoading(true);
     setError('');
@@ -473,6 +570,22 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
           </button>
         );
       
+      case 'linkedin':
+        return (
+          <button
+            onClick={handleLinkedInConnect}
+            disabled={loading}
+            className={`${baseClasses} bg-blue-700 text-white hover:bg-blue-800 shadow-lg hover:shadow-xl`}
+          >
+            {loading ? (
+              <Loader2 className="h-5 w-5 animate-spin mr-2" />
+            ) : (
+              <Linkedin className="h-5 w-5 mr-2" />
+            )}
+            {loading ? 'Connecting...' : 'Connect LinkedIn'}
+          </button>
+        );
+      
       case 'twitter':
         return (
           <button
@@ -499,6 +612,7 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
       case 'facebook': return <Facebook className="h-6 w-6 text-blue-600" />;
       case 'instagram': return <Instagram className="h-6 w-6 text-pink-600" />;
       case 'youtube': return <Youtube className="h-6 w-6 text-red-600" />;
+      case 'linkedin': return <Linkedin className="h-6 w-6 text-blue-700" />;
       case 'twitter': return <Twitter className="h-6 w-6 text-blue-400" />;
       default: return null;
     }
@@ -632,6 +746,22 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
               <li className="flex items-center space-x-2">
                 <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
                 <span>Schedule video publishing</span>
+              </li>
+            </>
+          )}
+          {platform === 'linkedin' && (
+            <>
+              <li className="flex items-center space-x-2">
+                <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
+                <span>Access to your LinkedIn professional profile</span>
+              </li>
+              <li className="flex items-center space-x-2">
+                <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
+                <span>Post text and image content to your network</span>
+              </li>
+              <li className="flex items-center space-x-2">
+                <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
+                <span>Schedule professional content publishing</span>
               </li>
             </>
           )}

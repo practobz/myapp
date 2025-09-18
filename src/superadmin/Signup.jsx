@@ -1,29 +1,37 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../admin/contexts/AuthContext';
 import { AtSign, Lock, AlertCircle, Eye, EyeOff, ArrowRight, CheckCircle, User } from 'lucide-react';
-import Logo from '../../components/layout/Logo';
 
-const Signup = () => {
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+const SuperAdminSignup = () => {
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    password: '',
+    confirmPassword: ''
+  });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   
-  const { signup } = useAuth();
+  const { superAdminSignup } = useAuth();
   const navigate = useNavigate();
 
+  const handleChange = (e) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value
+    });
+  };
+
   const validateForm = () => {
-    if (!name) return 'Name is required';
-    if (!email) return 'Email is required';
-    if (!/\S+@\S+\.\S+/.test(email)) return 'Please enter a valid email address';
-    if (!password) return 'Password is required';
-    if (password.length < 6) return 'Password must be at least 6 characters long';
-    if (password !== confirmPassword) return 'Passwords do not match';
+    if (!formData.name) return 'Name is required';
+    if (!formData.email) return 'Email is required';
+    if (!/\S+@\S+\.\S+/.test(formData.email)) return 'Please enter a valid email address';
+    if (!formData.password) return 'Password is required';
+    if (formData.password.length < 6) return 'Password must be at least 6 characters long';
+    if (formData.password !== formData.confirmPassword) return 'Passwords do not match';
     return '';
   };
 
@@ -37,7 +45,7 @@ const Signup = () => {
     return { strength: 3, text: 'Good', color: 'text-blue-500' };
   };
 
-  const passwordStrength = getPasswordStrength(password);
+  const passwordStrength = getPasswordStrength(formData.password);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -51,8 +59,8 @@ const Signup = () => {
     try {
       setError('');
       setLoading(true);
-      await signup(name, email, password);
-      navigate('/admin');
+      await superAdminSignup(formData.name, formData.email, formData.password);
+      navigate('/superadmin/dashboard');
     } catch (err) {
       // Enhanced error handling
       if (err.message?.includes('already exists') || err.message?.includes('409')) {
@@ -77,17 +85,14 @@ const Signup = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-purple-50 to-indigo-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="w-full max-w-md space-y-8">
         {/* Header Section */}
         <div className="text-center">
-          <div className="flex justify-center mb-6">
-            <Logo size="large" />
-          </div>
-          <h2 className="text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
-            Create Account
+          <h2 className="text-3xl font-bold bg-gradient-to-r from-purple-900 to-indigo-600 bg-clip-text text-transparent">
+            Super Admin Sign Up
           </h2>
-          <p className="mt-2 text-gray-600">Join us and start managing your content</p>
+          <p className="mt-2 text-gray-600">Create your super admin account</p>
         </div>
 
         {/* Signup Form */}
@@ -115,10 +120,10 @@ const Signup = () => {
                   type="text"
                   autoComplete="name"
                   required
-                  className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition-all duration-200 hover:border-gray-400"
+                  className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent shadow-sm transition-all duration-200 hover:border-gray-400"
                   placeholder="Enter your full name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  value={formData.name}
+                  onChange={handleChange}
                 />
               </div>
             </div>
@@ -138,10 +143,10 @@ const Signup = () => {
                   type="email"
                   autoComplete="email"
                   required
-                  className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition-all duration-200 hover:border-gray-400"
+                  className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent shadow-sm transition-all duration-200 hover:border-gray-400"
                   placeholder="Enter your email address"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  value={formData.email}
+                  onChange={handleChange}
                 />
               </div>
             </div>
@@ -161,10 +166,10 @@ const Signup = () => {
                   type={showPassword ? "text" : "password"}
                   autoComplete="new-password"
                   required
-                  className="w-full pl-10 pr-12 py-3 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition-all duration-200 hover:border-gray-400"
+                  className="w-full pl-10 pr-12 py-3 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent shadow-sm transition-all duration-200 hover:border-gray-400"
                   placeholder="Create a strong password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  value={formData.password}
+                  onChange={handleChange}
                 />
                 <button
                   type="button"
@@ -180,7 +185,7 @@ const Signup = () => {
               </div>
               
               {/* Password Strength Indicator */}
-              {password && (
+              {formData.password && (
                 <div className="mt-2">
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-xs text-gray-500">Password strength:</span>
@@ -217,10 +222,10 @@ const Signup = () => {
                   type={showConfirmPassword ? "text" : "password"}
                   autoComplete="new-password"
                   required
-                  className="w-full pl-10 pr-12 py-3 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition-all duration-200 hover:border-gray-400"
+                  className="w-full pl-10 pr-12 py-3 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent shadow-sm transition-all duration-200 hover:border-gray-400"
                   placeholder="Confirm your password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  value={formData.confirmPassword}
+                  onChange={handleChange}
                 />
                 <button
                   type="button"
@@ -236,9 +241,9 @@ const Signup = () => {
               </div>
               
               {/* Password Match Indicator */}
-              {confirmPassword && (
+              {formData.confirmPassword && (
                 <div className="mt-2 flex items-center">
-                  {password === confirmPassword ? (
+                  {formData.password === formData.confirmPassword ? (
                     <div className="flex items-center text-green-600">
                       <CheckCircle className="h-4 w-4 mr-1" />
                       <span className="text-xs">Passwords match</span>
@@ -258,7 +263,7 @@ const Signup = () => {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full flex items-center justify-center px-4 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                className="w-full flex items-center justify-center px-4 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-semibold rounded-xl hover:from-purple-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
               >
                 {loading ? (
                   <div className="flex items-center">
@@ -267,7 +272,7 @@ const Signup = () => {
                   </div>
                 ) : (
                   <div className="flex items-center">
-                    Create Account
+                    Create Super Admin Account
                     <ArrowRight className="h-5 w-5 ml-2" />
                   </div>
                 )}
@@ -287,8 +292,8 @@ const Signup = () => {
             </div>
             <div className="mt-4">
               <Link
-                to="/login"
-                className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200"
+                to="/superadmin/login"
+                className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-all duration-200"
               >
                 Sign in instead
               </Link>
@@ -299,7 +304,7 @@ const Signup = () => {
         {/* Additional Info */}
         <div className="text-center">
           <p className="text-xs text-gray-500">
-            By creating an account, you agree to our Terms of Service and Privacy Policy
+            By creating a super admin account, you agree to our Terms of Service and Privacy Policy
           </p>
         </div>
       </div>
@@ -307,4 +312,4 @@ const Signup = () => {
   );
 };
 
-export default Signup;
+export default SuperAdminSignup;

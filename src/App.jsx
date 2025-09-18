@@ -38,6 +38,7 @@ import FacebookIntegration from './customer/Integration/FacebookIntegration';
 import InstagramIntegration from './customer/Integration/InstagramIntegration';
 import YouTubeIntegration from './customer/Integration/YouTubeIntegration';
 import LinkedInIntegration from './customer/Integration/LinkedInIntegration';
+import SocialAnalyticsDashboard from './customer/Integration/SocialAnalyticsDashboard';
 
 // Content Creator imports
 import ContentCreatorDashboard from './content-creators/Dashboard';
@@ -51,6 +52,16 @@ import Settings from './content-creators/Settings';
 import { useAuth } from './admin/contexts/AuthContext';
 import AIImageGenerator from './components/AIImageGenerator';
 
+// Superadmin imports
+import SuperadminDashboard from './superadmin/Dashboard';
+import SuperadminSignup from './superadmin/auth/SuperadminSignup';
+import SuperadminLogin from './superadmin/auth/SuperadminLogin';
+import AdminManagement from './superadmin/AdminManagement';
+import SystemSettings from './superadmin/SystemSettings';
+import GlobalAnalytics from './superadmin/GlobalAnalytics';
+import UserRoles from './superadmin/UserRoles';
+import AuditLogs from './superadmin/AuditLogs';
+
 // --- ProtectedRoute for all portals ---
 function ProtectedRoutePortal({ children, role }) {
   const { currentUser } = useAuth();
@@ -60,6 +71,7 @@ function ProtectedRoutePortal({ children, role }) {
     if (role === 'admin') return <Navigate to="/login" replace />;
     if (role === 'customer') return <Navigate to="/customer/login" replace />;
     if (role === 'content_creator') return <Navigate to="/content-creator/login" replace />;
+    if (role === 'superadmin') return <Navigate to="/superadmin/login" replace />;
     return <Navigate to="/login" replace />;
   }
 
@@ -68,6 +80,7 @@ function ProtectedRoutePortal({ children, role }) {
     if (currentUser.role === 'admin') return <Navigate to="/admin" replace />;
     if (currentUser.role === 'customer') return <Navigate to="/customer" replace />;
     if (currentUser.role === 'content_creator') return <Navigate to="/content-creator" replace />;
+    if (currentUser.role === 'superadmin') return <Navigate to="/superadmin" replace />;
     return <Navigate to="/login" replace />;
   }
 
@@ -88,10 +101,44 @@ function App() {
               <Route path="/customer/login" element={<CustomerLogin />} />
               <Route path="/content-creator/signup" element={<ContentCreatorSignup />} />
               <Route path="/content-creator/login" element={<ContentCreatorLogin />} />
+              <Route path="/superadmin/signup" element={<SuperadminSignup />} />
+              <Route path="/superadmin/login" element={<SuperadminLogin />} />
 
               {/* Customer Media Library & Analytics */}
               <Route path="/customer/media-library" element={<MediaLibrary />} />
               <Route path="/customer/analytics" element={<Analytics />} />
+
+              {/* Superadmin Portal (protected) */}
+              <Route path="/superadmin" element={
+                <ProtectedRoutePortal role="superadmin">
+                  <SuperadminDashboard />
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/superadmin/admin-management" element={
+                <ProtectedRoutePortal role="superadmin">
+                  <AdminManagement />
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/superadmin/system-settings" element={
+                <ProtectedRoutePortal role="superadmin">
+                  <SystemSettings />
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/superadmin/global-analytics" element={
+                <ProtectedRoutePortal role="superadmin">
+                  <GlobalAnalytics />
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/superadmin/user-roles" element={
+                <ProtectedRoutePortal role="superadmin">
+                  <UserRoles />
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/superadmin/audit-logs" element={
+                <ProtectedRoutePortal role="superadmin">
+                  <AuditLogs />
+                </ProtectedRoutePortal>
+              } />
 
               {/* Admin Portal (protected) */}
               <Route path="/admin" element={
@@ -237,6 +284,11 @@ function App() {
               <Route path="/customer/integration/linkedin" element={
                 <ProtectedRoutePortal role="customer">
                   <LinkedInIntegration />
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/customer/social-analytics" element={
+                <ProtectedRoutePortal role="customer">
+                  <SocialAnalyticsDashboard />
                 </ProtectedRoutePortal>
               } />
 

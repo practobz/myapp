@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AdminLayout from '../../components/layout/AdminLayout';
+import { useAuth } from '../../contexts/AuthContext';
 import { Eye, Search, AlertCircle, User, Users, Plus, Mail, Phone, Calendar, TrendingUp, ArrowLeft } from 'lucide-react';
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 
@@ -9,24 +10,54 @@ function CustomersList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const { currentUser } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetchCustomers();
-  }, []);
+    fetchAssignedCustomers();
+  }, [currentUser]);
 
-  const fetchCustomers = async () => {
+  const fetchAssignedCustomers = async () => {
+    if (!currentUser || currentUser.role !== 'admin') {
+      setError('Admin authentication required');
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
-      const response = await fetch(`${API_URL}/api/customers`);
+      setError('');
+      
+      // Fetch only customers assigned to current admin
+      const response = await fetch(`${API_URL}/admin/assigned-customers?adminId=${currentUser._id || currentUser.id}`);
+      
       if (!response.ok) {
-        throw new Error('Failed to fetch customers');
+        if (response.status === 404) {
+          // Admin not found or no assignments
+          setCustomers([]);
+          return;
+        }
+        throw new Error(`Failed to fetch assigned customers: ${response.status}`);
       }
+      
       const data = await response.json();
-      setCustomers(data.customers || []);
+      setCustomers(data || []);
     } catch (err) {
-      setError('Failed to load customers');
-      console.error('Error fetching customers:', err);
+      console.error('Error fetching assigned customers:', err);
+      setError('Failed to load your assigned customers. Please contact the Super Admin if you need customers assigned.');
+      
+      // Fallback: try to fetch all customers if assignment system is not working
+      try {
+        console.log('Attempting fallback to all customers...');
+        const fallbackResponse = await fetch(`${API_URL}/customers`);
+        if (fallbackResponse.ok) {
+          const fallbackData = await fallbackResponse.json();
+          setCustomers(fallbackData || []);
+          setError('Showing all customers (assignment system unavailable)');
+        }
+      } catch (fallbackErr) {
+        console.error('Fallback also failed:', fallbackErr);
+      }
     } finally {
       setLoading(false);
     }
@@ -57,12 +88,12 @@ function CustomersList() {
 
   if (loading) {
     return (
-      <AdminLayout title="Customers List">
+      <AdminLayout title="Your Assigned Customers">
         <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
           <div className="flex items-center justify-center h-64">
             <div className="flex flex-col items-center">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-              <p className="text-gray-500 font-medium">Loading customers...</p>
+              <p className="text-gray-500 font-medium">Loading your assigned customers...</p>
             </div>
           </div>
         </div>
@@ -71,7 +102,7 @@ function CustomersList() {
   }
 
   return (
-    <AdminLayout title="Customers List">
+    <AdminLayout title="Your Assigned Customers">
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
         <div className="space-y-6 sm:space-y-8">
           {/* Header Section with Navigation */}
@@ -86,13 +117,13 @@ function CustomersList() {
                 </button>
                 <div>
                   <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
-                    Customer Directory
+                    Your Assigned Customers
                   </h1>
-                  <p className="text-gray-600 mt-1 sm:mt-2 text-sm sm:text-base">Manage and view all registered customers</p>
+                  <p className="text-gray-600 mt-1 sm:mt-2 text-sm sm:text-base">
+                    Customers assigned to you by the Super Admin
+                  </p>
                 </div>
               </div>
-              
-              
             </div>
           </div>
 
@@ -103,7 +134,7 @@ function CustomersList() {
                 <Search className="h-5 w-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
                 <input
                   type="text"
-                  placeholder="Search customers by name or email..."
+                  placeholder="Search your assigned customers..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10 pr-4 py-3 w-full bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm"
@@ -114,7 +145,11 @@ function CustomersList() {
 
           {/* Error Message */}
           {error && (
-            <div className="bg-red-50/80 backdrop-blur-sm border border-red-200 text-red-700 px-4 sm:px-6 py-4 rounded-2xl flex items-start shadow-lg">
+            <div className={`backdrop-blur-sm border px-4 sm:px-6 py-4 rounded-2xl flex items-start shadow-lg ${
+              error.includes('unavailable') 
+                ? 'bg-yellow-50/80 border-yellow-200 text-yellow-700'
+                : 'bg-red-50/80 border-red-200 text-red-700'
+            }`}>
               <AlertCircle className="h-5 w-5 mr-3 mt-0.5 flex-shrink-0" />
               <span className="font-medium text-sm sm:text-base">{error}</span>
             </div>
@@ -124,9 +159,14 @@ function CustomersList() {
           <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden">
             <div className="px-4 sm:px-6 py-4 border-b border-gray-200/50">
               <h2 className="text-lg sm:text-xl font-bold text-gray-900">
-                Customer Directory ({filteredCustomers.length})
+                Your Assigned Customers ({filteredCustomers.length})
               </h2>
-              <p className="text-sm text-gray-600 mt-1">Manage customer information and details</p>
+              <p className="text-sm text-gray-600 mt-1">
+                {customers.length === 0 
+                  ? 'No customers have been assigned to you yet'
+                  : 'Manage customers assigned to you by the Super Admin'
+                }
+              </p>
             </div>
             
             <div className="p-4 sm:p-6">
@@ -181,8 +221,8 @@ function CustomersList() {
                               
                               {/* Meta Info */}
                               <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 mt-3 space-y-2 sm:space-y-0">
-                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200 w-fit">
-                                  {customer.role?.toUpperCase() || 'CUSTOMER'}
+                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200 w-fit">
+                                  ASSIGNED TO YOU
                                 </span>
                                 <span className="text-xs text-gray-500">
                                   Joined {formatDate(customer.createdAt)}
@@ -200,18 +240,21 @@ function CustomersList() {
                   <div className="bg-gray-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
                     <Users className="h-8 w-8 text-gray-400" />
                   </div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No customers found</h3>
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">
+                    {searchTerm ? 'No matching customers found' : 'No customers assigned'}
+                  </h3>
                   <p className="text-gray-500 mb-6 text-sm sm:text-base">
                     {searchTerm 
                       ? 'No customers match your search criteria.' 
-                      : 'No customers have been registered yet.'
+                      : 'You don\'t have any customers assigned to you yet. Please contact the Super Admin to get customers assigned.'
                     }
                   </p>
                   {!searchTerm && (
-                    <button className="inline-flex items-center px-4 sm:px-6 py-2 sm:py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm sm:text-base font-semibold rounded-xl hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl">
-                      <Plus className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
-                      Add First Customer
-                    </button>
+                    <div className="text-center">
+                      <p className="text-sm text-gray-600 mb-4">
+                        Need customers assigned? Contact your Super Admin.
+                      </p>
+                    </div>
                   )}
                 </div>
               )}

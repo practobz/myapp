@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import AdminLayout from '../../components/layout/AdminLayout';
 import { Users, Calendar, Clock, TrendingUp, BarChart3, Target, Activity, Zap, Award, UserCheck, Send, Palette } from 'lucide-react';
 
 function Dashboard() {
-  const [customers, setCustomers] = useState([]);
+  const { currentUser } = useAuth();
+  const [assignedCustomers, setAssignedCustomers] = useState([]);
   const [contentCreators, setContentCreators] = useState([]);
   const [contentItems, setContentItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -20,10 +22,18 @@ function Dashboard() {
     setLoading(true);
     setError('');
     try {
-      // Fetch customers
-      const customersRes = await fetch(`${process.env.REACT_APP_API_URL}/api/customers`);
-      const customersData = await customersRes.json();
-      setCustomers(customersData.customers || []);
+      // Fetch assigned customers for current admin
+      if (currentUser && currentUser.role === 'admin') {
+        const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+        const response = await fetch(`${apiUrl}/admin/assigned-customers?adminId=${currentUser._id || currentUser.id}`);
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        setAssignedCustomers(data);
+      }
 
       // Fetch content creators
       const creatorsRes = await fetch(`${process.env.REACT_APP_API_URL}/users?role=content_creator`);
@@ -48,7 +58,7 @@ function Dashboard() {
   };
 
   // Calculate statistics
-  const totalCustomers = customers.length;
+  const totalCustomers = assignedCustomers.length;
   const totalContentCreators = contentCreators.length;
   const totalContentItems = contentItems.length;
 

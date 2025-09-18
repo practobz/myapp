@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 
 import { AuthProvider } from './admin/contexts/AuthContext';
@@ -18,6 +18,13 @@ import ScheduledPosts from './admin/ScheduledPosts';
 import AdminContentPortfolio from './admin/pages/admin/AdminContentPortfolio';
 import AdminContentUpload from './admin/pages/admin/ContentUpload';
 
+// Super Admin imports
+import SuperAdminLogin from './superadmin/Login';
+import SuperAdminDashboard from './superadmin/Dashboard';
+import SuperAdminSignup from './superadmin/Signup';
+import ViewAssignments from './superadmin/ViewAssignments';
+import SuperAdminAnalytics from './superadmin/Analytics';
+
 // Customer imports
 import CustomerDashboard from './customer/Dashboard';
 import ContentCalendar from './customer/ContentCalendar';
@@ -32,13 +39,16 @@ import MediaLibrary from './customer/MediaLibrary';
 import Analytics from './customer/Analytics';
 import CustomerSocialMediaLinks from './components/CustomerSocialMediaLinks';
 import AdminCustomerSocialManager from './components/AdminCustomerSocialManager';
+import IntegratedPostAnalytics from './components/IntegratedPostAnalytics';
+import PostAnalytics from './components/PostAnalytics';
+import CustomerValueDashboard from './components/CustomerValueDashboard';
+import SocialAnalyticsDashboard from './customer/Integration/SocialAnalyticsDashboard';
 
 // Integration imports
 import FacebookIntegration from './customer/Integration/FacebookIntegration';
 import InstagramIntegration from './customer/Integration/InstagramIntegration';
 import YouTubeIntegration from './customer/Integration/YouTubeIntegration';
 import LinkedInIntegration from './customer/Integration/LinkedInIntegration';
-import SocialAnalyticsDashboard from './customer/Integration/SocialAnalyticsDashboard';
 
 // Content Creator imports
 import ContentCreatorDashboard from './content-creators/Dashboard';
@@ -51,16 +61,8 @@ import Profile from './content-creators/Profile';
 import Settings from './content-creators/Settings';
 import { useAuth } from './admin/contexts/AuthContext';
 import AIImageGenerator from './components/AIImageGenerator';
-
-// Superadmin imports
-import SuperadminDashboard from './superadmin/Dashboard';
-import SuperadminSignup from './superadmin/auth/SuperadminSignup';
-import SuperadminLogin from './superadmin/auth/SuperadminLogin';
-import AdminManagement from './superadmin/AdminManagement';
-import SystemSettings from './superadmin/SystemSettings';
-import GlobalAnalytics from './superadmin/GlobalAnalytics';
-import UserRoles from './superadmin/UserRoles';
-import AuditLogs from './superadmin/AuditLogs';
+import TimePeriodChart from './components/TimeperiodChart';
+import WhatsAppIntegration from './components/WhatsAppIntegration';
 
 // --- ProtectedRoute for all portals ---
 function ProtectedRoutePortal({ children, role }) {
@@ -88,11 +90,27 @@ function ProtectedRoutePortal({ children, role }) {
 }
 
 function App() {
+  // State to hold integration data
+  const [facebookPages, setFacebookPages] = useState([]);
+  const [instagramAccount, setInstagramAccount] = useState(null);
+  const [youtubeChannels, setYoutubeChannels] = useState([]);
+  const [customerInfo, setCustomerInfo] = useState(null);
+
   return (
     <Router>
       <AuthProvider>
         <CustomerProvider>
           <div className="min-h-screen bg-gray-50">
+            <div>
+              {/* Remove duplicated IntegratedPostAnalytics here */}
+              {/* Pass data as props to dashboard */}
+              {/* <IntegratedPostAnalytics
+                instagramAccount={instagramAccount}
+                facebookPages={facebookPages}
+                youtubeChannels={youtubeChannels}
+                customerInfo={customerInfo}
+              /> */}
+            </div>
             <Routes>
               {/* Public Auth Routes */}
               <Route path="/signup" element={<Signup />} />
@@ -101,42 +119,34 @@ function App() {
               <Route path="/customer/login" element={<CustomerLogin />} />
               <Route path="/content-creator/signup" element={<ContentCreatorSignup />} />
               <Route path="/content-creator/login" element={<ContentCreatorLogin />} />
-              <Route path="/superadmin/signup" element={<SuperadminSignup />} />
-              <Route path="/superadmin/login" element={<SuperadminLogin />} />
+              
+              {/* Super Admin Auth Routes */}
+              <Route path="/superadmin/signup" element={<SuperAdminSignup />} />
+              <Route path="/superadmin/login" element={<SuperAdminLogin />} />
 
               {/* Customer Media Library & Analytics */}
               <Route path="/customer/media-library" element={<MediaLibrary />} />
               <Route path="/customer/analytics" element={<Analytics />} />
 
-              {/* Superadmin Portal (protected) */}
+              {/* Super Admin Portal (protected) */}
               <Route path="/superadmin" element={
                 <ProtectedRoutePortal role="superadmin">
-                  <SuperadminDashboard />
+                  <SuperAdminDashboard />
                 </ProtectedRoutePortal>
               } />
-              <Route path="/superadmin/admin-management" element={
+              <Route path="/superadmin/dashboard" element={
                 <ProtectedRoutePortal role="superadmin">
-                  <AdminManagement />
+                  <SuperAdminDashboard />
                 </ProtectedRoutePortal>
               } />
-              <Route path="/superadmin/system-settings" element={
+              <Route path="/superadmin/view-assignments" element={
                 <ProtectedRoutePortal role="superadmin">
-                  <SystemSettings />
+                  <ViewAssignments />
                 </ProtectedRoutePortal>
               } />
-              <Route path="/superadmin/global-analytics" element={
+              <Route path="/superadmin/analytics" element={
                 <ProtectedRoutePortal role="superadmin">
-                  <GlobalAnalytics />
-                </ProtectedRoutePortal>
-              } />
-              <Route path="/superadmin/user-roles" element={
-                <ProtectedRoutePortal role="superadmin">
-                  <UserRoles />
-                </ProtectedRoutePortal>
-              } />
-              <Route path="/superadmin/audit-logs" element={
-                <ProtectedRoutePortal role="superadmin">
-                  <AuditLogs />
+                  <SuperAdminAnalytics />
                 </ProtectedRoutePortal>
               } />
 
@@ -213,6 +223,36 @@ function App() {
                   <AdminCustomerSocialManager />
                 </ProtectedRoutePortal>
               } />
+              <Route path="/admin/integrated-post-analytics" element={
+                <ProtectedRoutePortal role="admin">
+                  <IntegratedPostAnalytics
+                    instagramAccount={instagramAccount}
+                    facebookPages={facebookPages}
+                    youtubeChannels={youtubeChannels}
+                    customerInfo={customerInfo}
+                  />
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/admin/post-analytics" element={
+                <ProtectedRoutePortal role="admin">
+                  <PostAnalytics />
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/admin/customer-value-dashboard" element={
+                <ProtectedRoutePortal role="admin">
+                  <CustomerValueDashboard />
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/admin/social-analytics-dashboard" element={
+                <ProtectedRoutePortal role="admin">
+                  <SocialAnalyticsDashboard />
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/admin/timeperiod-chart" element={
+                <ProtectedRoutePortal role="admin">
+                  <TimePeriodChart />
+                </ProtectedRoutePortal>
+              } />
 
               {/* Customer Portal (protected) */}
               <Route path="/customer" element={
@@ -264,12 +304,44 @@ function App() {
                   </CustomerLayout>
                 </ProtectedRoutePortal>
               } />
-
-              {/* Customer Social Media Links Route */}
-              <Route path="/customer/social-media-links" element={
+              <Route path="/customer/customer-value-dashboard" element={
                 <ProtectedRoutePortal role="customer">
                   <CustomerLayout>
-                    <CustomerSocialMediaLinks />
+                    <CustomerValueDashboard />
+                  </CustomerLayout>
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/customer/integrated-post-analytics" element={
+                <ProtectedRoutePortal role="customer">
+                  <CustomerLayout>
+                    <IntegratedPostAnalytics
+                      instagramAccount={instagramAccount}
+                      facebookPages={facebookPages}
+                      youtubeChannels={youtubeChannels}
+                      customerInfo={customerInfo}
+                    />
+                  </CustomerLayout>
+                </ProtectedRoutePortal>
+              } />
+              {/* Add route for PostAnalytics */}
+              <Route path="/customer/post-analytics" element={
+                <ProtectedRoutePortal role="customer">
+                  <CustomerLayout>
+                    <PostAnalytics />
+                  </CustomerLayout>
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/customer/social-analytics-dashboard" element={
+                <ProtectedRoutePortal role="customer">
+                  <CustomerLayout>
+                    <SocialAnalyticsDashboard />
+                  </CustomerLayout>
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/customer/timeperiod-chart" element={
+                <ProtectedRoutePortal role="customer">
+                  <CustomerLayout>
+                    <TimePeriodChart />
                   </CustomerLayout>
                 </ProtectedRoutePortal>
               } />
@@ -295,9 +367,11 @@ function App() {
                   <LinkedInIntegration />
                 </ProtectedRoutePortal>
               } />
-              <Route path="/customer/social-analytics" element={
+              <Route path="/customer/whatsapp-integration" element={
                 <ProtectedRoutePortal role="customer">
-                  <SocialAnalyticsDashboard />
+                  <CustomerLayout>
+                    <WhatsAppIntegration />
+                  </CustomerLayout>
                 </ProtectedRoutePortal>
               } />
 
@@ -342,6 +416,11 @@ function App() {
               <Route path="/content-creator/ai-image-generator" element={
                 <ProtectedRoutePortal role="content_creator">
                   <AIImageGenerator />
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/content-creator/whatsapp-integration" element={
+                <ProtectedRoutePortal role="content_creator">
+                  <WhatsAppIntegration />
                 </ProtectedRoutePortal>
               } />
 

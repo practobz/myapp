@@ -265,6 +265,15 @@ function App() {
                 </ProtectedRoutePortal>
               } />
 
+              {/* Customer Social Media Links Route */}
+              <Route path="/customer/social-media-links" element={
+                <ProtectedRoutePortal role="customer">
+                  <CustomerLayout>
+                    <CustomerSocialMediaLinks />
+                  </CustomerLayout>
+                </ProtectedRoutePortal>
+              } />
+
               {/* Customer Integration Routes (without CustomerLayout wrapper) */}
               <Route path="/customer/integration/facebook" element={
                 <ProtectedRoutePortal role="customer">

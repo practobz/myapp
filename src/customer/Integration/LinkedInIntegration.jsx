@@ -30,6 +30,18 @@ function LinkedInIntegration() {
   // Only use available scopes
   const LINKEDIN_SCOPE = 'openid profile email w_member_social';
 
+  // Warn if redirect URI is not set or mismatched
+  useEffect(() => {
+    if (
+      !LINKEDIN_REDIRECT_URI ||
+      LINKEDIN_REDIRECT_URI !== 'https://my-backend-593529385135.asia-south1.run.app/auth/linkedin/callback'
+    ) {
+      setError(
+        'LinkedIn redirect URI is not set correctly. Please check your .env and LinkedIn Developer portal settings.'
+      );
+    }
+  }, [LINKEDIN_REDIRECT_URI]);
+
   // Load saved accounts from localStorage on mount
   useEffect(() => {
     // First, migrate any existing data to user-specific storage
@@ -59,6 +71,7 @@ function LinkedInIntegration() {
     const state = Math.random().toString(36).substring(2);
     localStorage.setItem('linkedin_oauth_state', state);
 
+    // Make sure to use the correct redirect URI from .env
     const authUrl = `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${LINKEDIN_CLIENT_ID}&redirect_uri=${encodeURIComponent(LINKEDIN_REDIRECT_URI)}&scope=${encodeURIComponent(LINKEDIN_SCOPE)}&state=${state}`;
     
     const width = 600, height = 700;

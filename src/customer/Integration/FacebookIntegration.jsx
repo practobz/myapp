@@ -303,7 +303,7 @@ const CustomPieChart = ({ data, title, colors = ["#3B82F6", "#10B981", "#8B5CF6"
   );
 };
 
-function FacebookIntegration({ onData }) {
+function FacebookIntegration({ onData, onConnectionStatusChange }) {
   // Multi-account state
   const [fbSdkLoaded, setFbSdkLoaded] = useState(false);
   const [connectedAccounts, setConnectedAccounts] = useState([]);
@@ -2666,6 +2666,15 @@ function FacebookIntegration({ onData }) {
       onData(enhancedData);
     }
   }, [fbPages, pagePosts, analyticsData, onData]);
+
+  // Notify parent about connection status
+  useEffect(() => {
+    if (onConnectionStatusChange) {
+      // Connected if there is at least one account and token is not expired
+      const isConnected = connectedAccounts.length > 0 && !connectedAccounts.some(isTokenExpired);
+      onConnectionStatusChange(isConnected);
+    }
+  }, [connectedAccounts, activeAccount, fbSdkLoaded]);
 
   if (!fbSdkLoaded) {
     return (

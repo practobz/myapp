@@ -1,8 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LayoutGrid, Calendar as CalendarIcon, Clock, FileText, TrendingUp, User, MessageSquare, CheckCircle, Eye, Bell, ChevronDown, Image as ImageIcon } from 'lucide-react';
+import { LayoutGrid, Calendar as CalendarIcon, Clock, FileText, TrendingUp, User, MessageSquare, CheckCircle, Eye, Bell, ChevronDown, Image as ImageIcon, Award, BarChart3, Send } from 'lucide-react';
 import { format } from 'date-fns';
 import { useAuth } from '../admin/contexts/AuthContext';
+import PostAnalytics from '../components/PostAnalytics';
+import CustomerValueDashboard from '../components/CustomerValueDashboard';
+import IntegratedPostAnalytics from '../components/IntegratedPostAnalytics';
 
 function Dashboard() {
   const navigate = useNavigate();
@@ -226,7 +229,7 @@ function Dashboard() {
               </div>
             </div>
 
-                        {/* Quick Actions */}
+            {/* Quick Actions */}
             <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg p-8 border border-gray-200/50">
               <h2 className="text-2xl font-bold text-gray-900 mb-6">Quick Actions</h2>
               <div className="space-y-4">
@@ -260,15 +263,21 @@ function Dashboard() {
                   <span className="ml-3 font-semibold text-gray-900">Manage Media Library</span>
                 </button>
 
+               
+               
+                {/* Add Social ROI & Analytics Dashboard quick action */}
                 <button 
-                  onClick={() => navigate('/customer/analytics')}
-                  className="w-full flex items-center p-4 bg-gradient-to-r from-orange-50 to-red-50 rounded-xl hover:from-orange-100 hover:to-red-100 transition-all duration-200 border border-orange-200/50 group"
+                  onClick={() => navigate('/customer/social-analytics-dashboard')}
+                  className="w-full flex items-center p-4 bg-gradient-to-r from-green-50 to-blue-50 rounded-xl hover:from-green-100 hover:to-blue-100 transition-all duration-200 border border-green-200/50 group"
                 >
-                  <div className="p-2 bg-orange-100 rounded-lg group-hover:bg-orange-200 transition-colors">
-                    <TrendingUp className="h-5 w-5 text-orange-600" />
+                  <div className="p-2 bg-green-100 rounded-lg group-hover:bg-green-200 transition-colors">
+                    <TrendingUp className="h-5 w-5 text-green-600" />
                   </div>
-                  <span className="ml-3 font-semibold text-gray-900">View Analytics</span>
+                  <span className="ml-3 font-semibold text-gray-900">Social ROI & Analytics Dashboard</span>
                 </button>
+
+               
+                
               </div>
             </div>
           </div>

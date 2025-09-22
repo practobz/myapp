@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   User, Smartphone, Mail, MapPin, FileText,
-  Instagram, Facebook, Linkedin, Youtube, Twitter,
+  Instagram, Facebook, Linkedin, Youtube, Twitter, MessageCircle,
   ExternalLink, Settings as SettingsIcon,
   ArrowLeft, CheckCircle, AlertCircle, 
   TrendingUp, Users, BarChart3, Eye,
@@ -14,7 +14,9 @@ import InstagramIntegration from './Integration/InstagramIntegration';
 import YouTubeIntegration from './Integration/YouTubeIntegration';
 import TwitterIntegration from './Integration/TwitterIntegration';
 import LinkedInIntegration from './Integration/LinkedInIntegration';
+import WhatsAppIntegration from '../components/WhatsAppIntegration';
 import CustomerSocialMediaLinks from '../components/CustomerSocialMediaLinks';
+import { getUserData } from '../utils/sessionUtils'; // Add this import if not present
 
 // Enhanced platform configuration with better styling
 const platformIcons = {
@@ -22,7 +24,8 @@ const platformIcons = {
   facebook: <Facebook className="h-6 w-6" />,
   linkedin: <Linkedin className="h-6 w-6" />,
   youtube: <Youtube className="h-6 w-6" />,
-  twitter: <Twitter className="h-6 w-6" /> // <-- Add Twitter icon
+  twitter: <Twitter className="h-6 w-6" />,
+  whatsapp: <MessageCircle className="h-6 w-6" />
 };
 
 const platforms = [
@@ -80,6 +83,17 @@ const platforms = [
     bgColor: 'bg-blue-50',
     textColor: 'text-blue-500',
     features: ['Tweet Management', 'Real Analytics', 'Audience Insights', 'Engagement Metrics']
+  },
+  { 
+    key: 'whatsapp', 
+    label: 'WhatsApp Business', 
+    description: 'Send notifications and updates to customers via WhatsApp',
+    route: '/customer/integration/whatsapp',
+    icon: platformIcons.whatsapp,
+    color: 'from-green-500 to-emerald-600',
+    bgColor: 'bg-green-50',
+    textColor: 'text-green-600',
+    features: ['Customer Notifications', 'Content Alerts', 'Business Templates', 'Automated Messages']
   }
 ];
 
@@ -103,7 +117,8 @@ function Settings() {
     instagram: false,
     youtube: false,
     linkedin: false,
-    twitter: false // <-- Add Twitter status
+    twitter: false,
+    whatsapp: false
   });
 
   // Handle URL-based navigation
@@ -124,22 +139,62 @@ function Settings() {
     }
     
     fetchCustomerData();
+    fetchConnectionStatus(); // <-- Add this line to fetch connection status
   }, [currentUser]);
+
+  // Fetch integration connection status for the current user
+  const fetchConnectionStatus = async () => {
+    try {
+      let apiStatus = {};
+      if (currentUser && currentUser._id) {
+        const res = await fetch(`${process.env.REACT_APP_API_URL}/customer/${currentUser._id}/integration-status`);
+        if (res.ok) {
+          apiStatus = await res.json();
+        }
+      }
+
+      // Use getUserData for robust local/session storage checks
+      const fbConnected = Array.isArray(getUserData('fb_connected_accounts')) && getUserData('fb_connected_accounts').length > 0;
+      const igConnected = Array.isArray(getUserData('instagram_connected_accounts')) && getUserData('instagram_connected_accounts').length > 0;
+      const ytConnected = Array.isArray(getUserData('yt_connected_accounts')) && getUserData('yt_connected_accounts').length > 0;
+      const twConnected = Array.isArray(getUserData('tw_connected_accounts')) && getUserData('tw_connected_accounts').length > 0;
+      const liConnected = Array.isArray(getUserData('linkedin_connected_accounts')) && getUserData('linkedin_connected_accounts').length > 0; // <-- Added fallback
+
+      setConnectionStatus(prev => ({
+        ...prev,
+        facebook: apiStatus.facebook === undefined ? fbConnected : apiStatus.facebook,
+        instagram: apiStatus.instagram === undefined ? igConnected : apiStatus.instagram,
+        youtube: apiStatus.youtube === undefined ? ytConnected : apiStatus.youtube,
+        twitter: apiStatus.twitter === undefined ? twConnected : apiStatus.twitter,
+        linkedin: apiStatus.linkedin === undefined ? liConnected : apiStatus.linkedin, // <-- Fix here
+        whatsapp: apiStatus.whatsapp === undefined ? false : apiStatus.whatsapp
+      }));
+    } catch (err) {
+      console.error('Error fetching integration status:', err);
+    }
+  };
 
   const fetchCustomerData = async () => {
     try {
+      console.log('Fetching customer data for ID:', currentUser._id);
       const res = await fetch(`${process.env.REACT_APP_API_URL}/customer/${currentUser._id}`);
       const data = await res.json();
+      console.log('Fetched customer data:', data);
+      
       if (!res.ok || !data.email) throw new Error('Failed to fetch customer data');
       setCustomerData(data);
     } catch (err) {
-      setCustomerData({
+      console.error('Error fetching customer data:', err);
+      // Fallback to currentUser data if API fails
+      const fallbackData = {
         name: currentUser.name || '',
         email: currentUser.email || '',
         mobile: currentUser.mobile || '',
         address: currentUser.address || '',
         gstNumber: currentUser.gstNumber || ''
-      });
+      };
+      console.log('Using fallback customer data:', fallbackData);
+      setCustomerData(fallbackData);
     } finally {
       setLoading(false);
     }
@@ -164,6 +219,13 @@ function Settings() {
   const handleBackToIntegrations = () => {
     setActiveIntegration(null);
     // navigate('/customer/settings/integrations');
+  };
+
+  const handleConnectionStatusChange = (platform, status) => {
+    setConnectionStatus(prev => ({
+      ...prev,
+      [platform]: status
+    }));
   };
 
   const renderConnectionStatus = (platform) => {
@@ -287,9 +349,6 @@ function Settings() {
           Contact Support
         </button>
       </div>
-
-      {/* Social Media Links Section */}
-      <CustomerSocialMediaLinks />
     </div>
   );
 
@@ -363,38 +422,6 @@ function Settings() {
           </div>
         ))}
       </div>
-
-      
-        
-          
-
-      <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-          <BarChart3 className="h-5 w-5 mr-2" />
-          Integration Status Overview
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {platforms.map((platform) => (
-            <div key={platform.key} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-              <div className="flex items-center space-x-3">
-                <div className={`${platform.textColor}`}>
-                  {platform.icon}
-                </div>
-                <span className="font-medium text-gray-900">{platform.label}</span>
-              </div>
-              <div className="flex items-center space-x-3">
-                {renderConnectionStatus(platform.key)}
-                <button
-                  onClick={() => handleIntegrationSelect(platform.key)}
-                  className="text-blue-600 hover:text-blue-700 text-sm font-medium transition-colors"
-                >
-                  Configure →
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
     </div>
   );
 
@@ -428,16 +455,82 @@ function Settings() {
           </div>
 
           <div className="p-6">
-            {activeIntegration === 'facebook' && <FacebookIntegration />}
-            {activeIntegration === 'instagram' && <InstagramIntegration />}
-            {activeIntegration === 'youtube' && <YouTubeIntegration />}
-            {activeIntegration === 'linkedin' && <LinkedInIntegration />} {/* <-- Add LinkedInIntegration */}
-            {activeIntegration === 'twitter' && <TwitterIntegration />} {/* <-- Add TwitterIntegration */}
+            {activeIntegration === 'facebook' && (
+              <FacebookIntegration
+                onConnectionStatusChange={status => handleConnectionStatusChange('facebook', status)}
+              />
+            )}
+            {activeIntegration === 'instagram' && (
+              <InstagramIntegration
+                onConnectionStatusChange={status => handleConnectionStatusChange('instagram', status)}
+              />
+            )}
+            {activeIntegration === 'youtube' && (
+              <YouTubeIntegration
+                onConnectionStatusChange={status => handleConnectionStatusChange('youtube', status)}
+              />
+            )}
+            {activeIntegration === 'linkedin' && (
+              <LinkedInIntegration
+                onConnectionStatusChange={status => handleConnectionStatusChange('linkedin', status)}
+              />
+            )}
+            {activeIntegration === 'twitter' && (
+              <TwitterIntegration
+                onConnectionStatusChange={status => handleConnectionStatusChange('twitter', status)}
+              />
+            )}
+            {activeIntegration === 'whatsapp' && (
+              <div>
+                {/* Debug info to show what data we have */}
+                <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <h4 className="text-sm font-medium text-blue-900 mb-2">Customer Data Debug</h4>
+                  <div className="text-xs text-blue-800 space-y-1">
+                    <div><strong>Name:</strong> {customerData?.name || 'Not loaded'}</div>
+                    <div><strong>Email:</strong> {customerData?.email || 'Not loaded'}</div>
+                    <div><strong>Mobile:</strong> {customerData?.mobile || 'Not loaded'}</div>
+                    <div><strong>Customer ID:</strong> {currentUser?._id || 'Not loaded'}</div>
+                    <div><strong>Mobile Type:</strong> {typeof customerData?.mobile}</div>
+                    <div><strong>Mobile Length:</strong> {customerData?.mobile?.length || 0}</div>
+                    <div><strong>Raw Customer Data:</strong> {JSON.stringify(customerData, null, 2)}</div>
+                  </div>
+                </div>
+                
+                <WhatsAppIntegration 
+                  contentDetails={{
+                    id: 'test-content-id',
+                    creatorId: currentUser?._id || '',
+                    creatorName: customerData?.name || currentUser?.name || 'Test Creator',
+                    title: 'Test Content Notification',
+                    contentType: 'Instagram Post',
+                    customerId: currentUser?._id || '',
+                    customerEmail: customerData?.email || currentUser?.email || '',
+                    customerPhone: customerData?.mobile || currentUser?.mobile || null
+                  }}
+                  onNotificationSent={(data) => {
+                    console.log('WhatsApp notification sent:', data);
+                    // Update connection status if successful
+                    if (data.success) {
+                      setConnectionStatus(prev => ({
+                        ...prev,
+                        whatsapp: true
+                      }));
+                    }
+                  }}
+                />
+              </div>
+            )}
           </div>
         </div>
       </div>
     );
   };
+
+  useEffect(() => {
+    if (activeIntegration === null) {
+      fetchConnectionStatus();
+    }
+  }, [activeIntegration]);
 
   if (loading) {
     return (

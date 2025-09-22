@@ -22,6 +22,59 @@ function parseISO8601Duration(iso) {
   return total;
 }
 
+// Utility function to safely convert errors to readable strings
+function getErrorMessage(error) {
+  if (!error) return 'Unknown error occurred';
+  
+  // If it's already a string, return it
+  if (typeof error === 'string') return error;
+  
+  // Handle Google API errors
+  if (error.result && error.result.error) {
+    if (error.result.error.message) return error.result.error.message;
+    if (error.result.error.code) return `API Error ${error.result.error.code}`;
+  }
+  
+  // Handle standard Error objects
+  if (error.message) return error.message;
+  
+  // Handle objects with error properties
+  if (error.error) {
+    if (typeof error.error === 'string') return error.error;
+    if (error.error.message) return error.error.message;
+  }
+  
+  // Handle YouTube API specific errors
+  if (error.code === 401 || error.status === 401) {
+    return 'YouTube access token expired. Please reconnect your account.';
+  }
+  
+  if (error.code === 403 || error.status === 403) {
+    return 'YouTube API access denied. Please check your permissions.';
+  }
+  
+  if (error.code === 400 || error.status === 400) {
+    return 'Invalid request to YouTube API. Please try again.';
+  }
+  
+  // Last resort: try to JSON stringify but safely
+  try {
+    const str = JSON.stringify(error);
+    if (str !== '{}') return `Error: ${str}`;
+  } catch (e) {
+    // JSON stringify failed, return generic message
+  }
+  
+  return 'An unexpected error occurred. Please try again.';
+}
+
+// Safe error setter that always converts to string
+function setSafeError(setErrorFn, error) {
+  const errorMessage = getErrorMessage(error);
+  console.error('YouTube Integration Error:', error);
+  setErrorFn(errorMessage);
+}
+
 function YouTubeIntegration(props) {
   const [gapiLoaded, setGapiLoaded] = useState(false);
   const [gisLoaded, setGisLoaded] = useState(false);
@@ -54,6 +107,10 @@ function YouTubeIntegration(props) {
 
   // Chart view state
   const [showHistoricalCharts, setShowHistoricalCharts] = useState({});
+
+  // Safe error setter wrapper
+  const setSafeErrorState = (error) => setSafeError(setError, error);
+  const setSafeUploadError = (error) => setSafeError(setUploadError, error);
 
   // Function to store current metrics as historical snapshot
   const storeHistoricalSnapshot = async (channelId, channelName, metrics) => {
@@ -91,44 +148,63 @@ function YouTubeIntegration(props) {
 
   // Load connected accounts from localStorage on component mount
   useEffect(() => {
-    // First, migrate any existing data to user-specific storage
-    migrateToUserSpecificStorage([
-      'yt_connected_accounts',
-      'yt_active_account_id'
-    ]);
+    try {
+      // First, migrate any existing data to user-specific storage
+      migrateToUserSpecificStorage([
+        'yt_connected_accounts',
+        'yt_active_account_id'
+      ]);
 
-    const savedAccounts = getUserData('yt_connected_accounts');
-    const savedActiveId = getUserData('yt_active_account_id');
-    
-    if (savedAccounts) {
-      setConnectedAccounts(savedAccounts);
+      const savedAccounts = getUserData('yt_connected_accounts');
+      const savedActiveId = getUserData('yt_active_account_id');
       
-      if (savedActiveId && savedAccounts.some(acc => acc.id === savedActiveId)) {
-        setActiveAccountId(savedActiveId);
-        const activeAcc = savedAccounts.find(acc => acc.id === savedActiveId);
-        setActiveAccount(activeAcc);
-      } else if (savedAccounts.length > 0) {
-        // Set first account as active if no valid active account
-        setActiveAccountId(savedAccounts[0].id);
-        setActiveAccount(savedAccounts[0]);
-        setUserData('yt_active_account_id', savedAccounts[0].id);
+      if (savedAccounts) {
+        setConnectedAccounts(savedAccounts);
+        
+        if (savedActiveId && savedAccounts.some(acc => acc.id === savedActiveId)) {
+          setActiveAccountId(savedActiveId);
+          const activeAcc = savedAccounts.find(acc => acc.id === savedActiveId);
+          setActiveAccount(activeAcc);
+        } else if (savedAccounts.length > 0) {
+          // Set first account as active if no valid active account
+          setActiveAccountId(savedAccounts[0].id);
+          setActiveAccount(savedAccounts[0]);
+          setUserData('yt_active_account_id', savedAccounts[0].id);
+        }
       }
+    } catch (error) {
+      console.warn('Failed to load saved accounts:', error);
     }
   }, []);
 
-  // Load Google API scripts
+  // Load Google API scripts with improved error handling
   useEffect(() => {
-    const gapiScript = document.createElement('script');
-    gapiScript.src = 'https://apis.google.com/js/api.js';
-    gapiScript.onload = () => setGapiLoaded(true);
-    gapiScript.onerror = () => setError('Failed to load Google API script.');
-    document.body.appendChild(gapiScript);
+    const loadScript = (src, onLoad, onError) => {
+      const script = document.createElement('script');
+      script.src = src;
+      script.onload = onLoad;
+      script.onerror = onError;
+      document.body.appendChild(script);
+      return script;
+    };
 
-    const gisScript = document.createElement('script');
-    gisScript.src = 'https://accounts.google.com/gsi/client';
-    gisScript.onload = () => setGisLoaded(true);
-    gisScript.onerror = () => setError('Failed to load Google Identity Services script.');
-    document.body.appendChild(gisScript);
+    const gapiScript = loadScript(
+      'https://apis.google.com/js/api.js',
+      () => setGapiLoaded(true),
+      (error) => {
+        console.error('Failed to load Google API script:', error);
+        setSafeErrorState('Failed to load Google API script. Please check your internet connection.');
+      }
+    );
+
+    const gisScript = loadScript(
+      'https://accounts.google.com/gsi/client',
+      () => setGisLoaded(true),
+      (error) => {
+        console.error('Failed to load Google Identity Services script:', error);
+        setSafeErrorState('Failed to load Google Identity Services script. Please check your internet connection.');
+      }
+    );
 
     return () => {
       if (document.body.contains(gapiScript)) gapiScript.remove();
@@ -136,26 +212,36 @@ function YouTubeIntegration(props) {
     };
   }, []);
 
-  // Initialize GAPI client
+  // Initialize GAPI client with improved error handling
   useEffect(() => {
     if (gapiLoaded) {
-      window.gapi.load('client', async () => {
-        try {
-          await window.gapi.client.init({
-            apiKey: API_KEY,
-            discoveryDocs: DISCOVERY_DOCS,
-          });
-          setGapiClientReady(true);
-        } catch (err) {
-          setError('Failed to initialize Google API client');
-        }
-      });
+      try {
+        window.gapi.load('client', async () => {
+          try {
+            await window.gapi.client.init({
+              apiKey: API_KEY,
+              discoveryDocs: DISCOVERY_DOCS,
+            });
+            setGapiClientReady(true);
+          } catch (err) {
+            console.error('GAPI client initialization error:', err);
+            setSafeErrorState('Failed to initialize Google API client. Please refresh the page and try again.');
+          }
+        });
+      } catch (err) {
+        console.error('GAPI load error:', err);
+        setSafeErrorState('Failed to load Google API client. Please refresh the page and try again.');
+      }
     }
   }, [gapiLoaded]);
 
   // Save accounts to localStorage
   const saveAccountsToStorage = (accounts) => {
-    setUserData('yt_connected_accounts', accounts);
+    try {
+      setUserData('yt_connected_accounts', accounts);
+    } catch (error) {
+      console.warn('Failed to save accounts to storage:', error);
+    }
   };
 
   // Add the missing publishToYouTube function
@@ -164,124 +250,132 @@ function YouTubeIntegration(props) {
       throw new Error('No active YouTube account');
     }
 
-    // Ensure valid token
-    const tokenValid = await ensureValidToken(activeAccount.id);
-    if (!tokenValid) {
-      throw new Error('YouTube token expired. Please reconnect your account.');
-    }
-
-    const { caption, mediaFiles } = postData;
-    if (!mediaFiles || mediaFiles.length === 0) {
-      throw new Error('No media files provided');
-    }
-
-    const file = mediaFiles[0];
-    let fileToUpload = file;
-    let mimeType = file.type;
-
-    if (file.type.startsWith('image/')) {
-      fileToUpload = await imageToVideo(file);
-      mimeType = 'video/webm';
-    }
-
-    const metadata = {
-      snippet: {
-        title: caption || 'Untitled Video',
-        description: caption || '',
-      },
-      status: {
-        privacyStatus: 'public'
+    try {
+      // Ensure valid token
+      const tokenValid = await ensureValidToken(activeAccount.id);
+      if (!tokenValid) {
+        throw new Error('YouTube token expired. Please reconnect your account.');
       }
-    };
 
-    return new Promise((resolve, reject) => {
-      const boundary = '-------314159265358979323846';
-      const delimiter = "\r\n--" + boundary + "\r\n";
-      const close_delim = "\r\n--" + boundary + "--";
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        try {
-          const base64Data = e.target.result.split(',')[1];
-          const multipartRequestBody =
-            delimiter +
-            'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
-            JSON.stringify(metadata) +
-            delimiter +
-            'Content-Type: ' + mimeType + '\r\n' +
-            'Content-Transfer-Encoding: base64\r\n' +
-            '\r\n' +
-            base64Data +
-            close_delim;
+      const { caption, mediaFiles } = postData;
+      if (!mediaFiles || mediaFiles.length === 0) {
+        throw new Error('No media files provided');
+      }
 
-          let response = await fetch(
-            'https://www.googleapis.com/upload/youtube/v3/videos?part=snippet,status&uploadType=multipart',
-            {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${activeAccount.accessToken}`,
-                'Content-Type': `multipart/related; boundary="${boundary}"`
-              },
-              body: multipartRequestBody
-            }
-          );
+      const file = mediaFiles[0];
+      let fileToUpload = file;
+      let mimeType = file.type;
 
-          // If 401, try to refresh token and retry once
-          if (response.status === 401 && activeAccount.refreshToken) {
-            const refreshed = await refreshYouTubeToken(activeAccount.id);
-            if (refreshed) {
-              // Get updated token
-              const refreshedAccount = connectedAccounts.find(acc => acc.id === activeAccount.id);
-              response = await fetch(
-                'https://www.googleapis.com/upload/youtube/v3/videos?part=snippet,status&uploadType=multipart',
-                {
-                  method: 'POST',
-                  headers: {
-                    'Authorization': `Bearer ${refreshedAccount.accessToken}`,
-                    'Content-Type': `multipart/related; boundary="${boundary}"`
-                  },
-                  body: multipartRequestBody
-                }
-              );
-            }
-          }
+      if (file.type.startsWith('image/')) {
+        fileToUpload = await imageToVideo(file);
+        mimeType = 'video/webm';
+      }
 
-          if (!response.ok) {
-            const errorData = await response.json();
-            reject(new Error(errorData.error?.message || `YouTube upload failed with status ${response.status}`));
-            return;
-          }
-
-          const data = await response.json();
-          resolve({
-            success: true,
-            videoId: data.id,
-            url: `https://www.youtube.com/watch?v=${data.id}`
-          });
-        } catch (error) {
-          reject(new Error(`YouTube upload failed: ${error.message}`));
+      const metadata = {
+        snippet: {
+          title: caption || 'Untitled Video',
+          description: caption || '',
+        },
+        status: {
+          privacyStatus: 'public'
         }
       };
-      reader.onerror = () => reject(new Error('Failed to read file'));
-      reader.readAsDataURL(fileToUpload);
-    });
+
+      return new Promise((resolve, reject) => {
+        const boundary = '-------314159265358979323846';
+        const delimiter = "\r\n--" + boundary + "\r\n";
+        const close_delim = "\r\n--" + boundary + "--";
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+          try {
+            const base64Data = e.target.result.split(',')[1];
+            const multipartRequestBody =
+              delimiter +
+              'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+              JSON.stringify(metadata) +
+              delimiter +
+              'Content-Type: ' + mimeType + '\r\n' +
+              'Content-Transfer-Encoding: base64\r\n' +
+              '\r\n' +
+              base64Data +
+              close_delim;
+
+            let response = await fetch(
+              'https://www.googleapis.com/upload/youtube/v3/videos?part=snippet,status&uploadType=multipart',
+              {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${activeAccount.accessToken}`,
+                  'Content-Type': `multipart/related; boundary="${boundary}"`
+                },
+                body: multipartRequestBody
+              }
+            );
+
+            // If 401, try to refresh token and retry once
+            if (response.status === 401 && activeAccount.refreshToken) {
+              const refreshed = await refreshYouTubeToken(activeAccount.id);
+              if (refreshed) {
+                // Get updated token
+                const refreshedAccount = connectedAccounts.find(acc => acc.id === activeAccount.id);
+                response = await fetch(
+                  'https://www.googleapis.com/upload/youtube/v3/videos?part=snippet,status&uploadType=multipart',
+                  {
+                    method: 'POST',
+                    headers: {
+                      'Authorization': `Bearer ${refreshedAccount.accessToken}`,
+                      'Content-Type': `multipart/related; boundary="${boundary}"`
+                    },
+                    body: multipartRequestBody
+                  }
+                );
+              }
+            }
+
+            if (!response.ok) {
+              const errorData = await response.json();
+              reject(new Error(errorData.error?.message || `YouTube upload failed with status ${response.status}`));
+              return;
+            }
+
+            const data = await response.json();
+            resolve({
+              success: true,
+              videoId: data.id,
+              url: `https://www.youtube.com/watch?v=${data.id}`
+            });
+          } catch (error) {
+            reject(new Error(`YouTube upload failed: ${getErrorMessage(error)}`));
+          }
+        };
+        reader.onerror = () => reject(new Error('Failed to read file'));
+        reader.readAsDataURL(fileToUpload);
+      });
+    } catch (error) {
+      throw new Error(`YouTube publish error: ${getErrorMessage(error)}`);
+    }
   };
 
   // Export the function for use by other components with better error handling
   React.useEffect(() => {
-    // Validate the function before exporting
-    if (typeof publishToYouTube === 'function') {
-      window.publishToYouTube = publishToYouTube;
-      console.log('✅ YouTube publish function exported successfully');
-    } else {
-      console.error('❌ Failed to export YouTube publish function - not a function');
+    try {
+      // Validate the function before exporting
+      if (typeof publishToYouTube === 'function') {
+        window.publishToYouTube = publishToYouTube;
+        console.log('✅ YouTube publish function exported successfully');
+      } else {
+        console.error('❌ Failed to export YouTube publish function - not a function');
+      }
+      
+      return () => {
+        delete window.publishToYouTube;
+      };
+    } catch (error) {
+      console.warn('Error exporting YouTube publish function:', error);
     }
-    
-    return () => {
-      delete window.publishToYouTube;
-    };
   }, [publishToYouTube, activeAccount]);
 
-  // Handle new token from Google OAuth
+  // Handle new token from Google OAuth with improved error handling
   const handleNewToken = async (tokenResponse) => {
     console.log('🔍 Token response:', {
       hasAccessToken: !!tokenResponse.access_token,
@@ -361,29 +455,33 @@ function YouTubeIntegration(props) {
         
         // Call onData with correct structure
         if (typeof props?.onData === 'function') {
-          props.onData({
-            channelInfo: {
-              statistics: {
-                subscriberCount: channel.statistics?.subscriberCount,
-                viewCount: channel.statistics?.viewCount,
-                videoCount: channel.statistics?.videoCount
+          try {
+            props.onData({
+              channelInfo: {
+                statistics: {
+                  subscriberCount: channel.statistics?.subscriberCount,
+                  viewCount: channel.statistics?.viewCount,
+                  videoCount: channel.statistics?.videoCount
+                }
               }
-            }
-          });
+            });
+          } catch (error) {
+            console.warn('Error calling onData callback:', error);
+          }
         }
         
         // Clear any existing error
         setError(null);
       } else {
-        setError('No YouTube channel found for this account');
+        setSafeErrorState('No YouTube channel found for this account');
       }
     } catch (err) {
       console.error('Error handling new token:', err);
-      setError('Failed to connect YouTube account');
+      setSafeErrorState(err);
     }
   };
 
-  // Store connected channel information
+  // Store connected channel information with error handling
   const storeConnectedChannel = async (channel, account = null) => {
     try {
       // Use passed account or fallback to activeAccount
@@ -423,7 +521,7 @@ function YouTubeIntegration(props) {
     }
   };
 
-  // Store customer social account for admin access
+  // Store customer social account for admin access with improved error handling
   const storeCustomerSocialAccount = async (channel, account = null) => {
     try {
       // Use passed account or fallback to activeAccount
@@ -437,22 +535,19 @@ function YouTubeIntegration(props) {
       // Get current user/customer ID from auth context or localStorage
       let customerId = null;
       
-      // Try multiple ways to get customer ID (similar to contentRoutes.js pattern)
-      const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
-      customerId = currentUser.userId || currentUser.id || currentUser._id || currentUser.customer_id;
-      
-      // If still no customer ID, try getting from other possible sources
-      if (!customerId) {
-        const authUser = JSON.parse(localStorage.getItem('user') || '{}');
-        customerId = authUser.userId || authUser.id || authUser._id || authUser.customer_id;
+      try {
+        // Try multiple ways to get customer ID
+        const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
+        customerId = currentUser.userId || currentUser.id || currentUser._id || currentUser.customer_id;
+        
+        // If still no customer ID, try getting from other possible sources
+        if (!customerId) {
+          const authUser = JSON.parse(localStorage.getItem('user') || '{}');
+          customerId = authUser.userId || authUser.id || authUser._id || authUser.customer_id;
+        }
+      } catch (parseError) {
+        console.warn('Error parsing user data from localStorage:', parseError);
       }
-      
-      // Log what we found for debugging
-      console.log('🔍 Customer ID search:', {
-        currentUser,
-        customerId,
-        found: !!customerId
-      });
       
       if (!customerId) {
         console.warn('No customer ID found, cannot store social account');
@@ -461,13 +556,15 @@ function YouTubeIntegration(props) {
 
       // CRITICAL: Validate access token before storing
       if (!accountToUse.accessToken || accountToUse.accessToken.length < 50) {
-        console.error('🚨 Invalid or missing YouTube access token:', {
+        const errorMsg = 'YouTube access token is invalid or missing. Please try reconnecting your YouTube account.';
+        console.error('🚨 Invalid YouTube access token:', {
           channelId: channel.id,
           channelName: channel.snippet.title,
           hasToken: !!accountToUse.accessToken,
           tokenLength: accountToUse.accessToken?.length || 0
         });
-        throw new Error('YouTube access token is invalid or missing. Please try reconnecting your YouTube account.');
+        setSafeErrorState(errorMsg);
+        return;
       }
 
       console.log('✅ Valid YouTube access token found:', {
@@ -563,11 +660,12 @@ function YouTubeIntegration(props) {
       
     } catch (error) {
       console.warn('Failed to store customer YouTube account:', error);
-      alert(`Warning: ${error.message}. You may need to reconnect your YouTube account.`);
+      // Show user-friendly error without breaking the flow
+      setSafeErrorState(`Warning: ${getErrorMessage(error)}. You may need to reconnect your YouTube account.`);
     }
   };
 
-  // Fetch channel data (videos, analytics, etc.)
+  // Fetch channel data with improved error handling
   const fetchChannelData = async (channel, account = null) => {
     try {
       const uploadsPlaylistId = channel.contentDetails.relatedPlaylists.uploads;
@@ -619,98 +717,126 @@ function YouTubeIntegration(props) {
       }
     } catch (err) {
       console.error('Error fetching channel data:', err);
+      // Don't set a blocking error for this, just log it
+      console.warn('Failed to fetch some channel data, continuing with available information');
     }
   };
 
   // Handle sign in (add new account)
   const handleSignIn = () => {
-    if (tokenClient) {
-      tokenClient.requestAccessToken();
-    }
-  };
-
-  // Switch active account
-  const switchAccount = (accountId) => {
-    const account = connectedAccounts.find(acc => acc.id === accountId);
-    if (account) {
-      setActiveAccountId(accountId);
-      setActiveAccount(account);
-      setUserData('yt_active_account_id', accountId);
-      
-      // Clear current data
-      setChannelInfo(null);
-      setVideos([]);
-      setAnalyticsData(null);
-      setShortsCount(0);
-      setVideosCount(0);
-      
-      // Set access token and fetch new data
-      const storedExpiry = getUserData(`yt_token_expiry_${accountId}`);
-      if (account.accessToken && storedExpiry && Date.now() < parseInt(storedExpiry, 10)) {
-        window.gapi.client.setToken({ access_token: account.accessToken });
-        setChannelInfo(account.channelInfo);
-        fetchChannelData(account.channelInfo);
-      }
-    }
-  };
-
-  // Remove account
-  const removeAccount = (accountId) => {
-    const updatedAccounts = connectedAccounts.filter(acc => acc.id !== accountId);
-    setConnectedAccounts(updatedAccounts);
-    saveAccountsToStorage(updatedAccounts);
-    
-    // Clean up stored tokens with user-specific keys
-    removeUserData(`yt_access_token_${accountId}`);
-    removeUserData(`yt_token_expiry_${accountId}`);
-    
-    if (activeAccountId === accountId) {
-      if (updatedAccounts.length > 0) {
-        // Switch to first remaining account
-        switchAccount(updatedAccounts[0].id);
+    try {
+      if (tokenClient) {
+        tokenClient.requestAccessToken();
       } else {
-        // No accounts left
-        setActiveAccountId(null);
-        setActiveAccount(null);
+        setSafeErrorState('Authentication service not ready. Please refresh the page and try again.');
+      }
+    } catch (error) {
+      console.error('Error during sign in:', error);
+      setSafeErrorState('Failed to start authentication process. Please refresh the page and try again.');
+    }
+  };
+
+  // Switch active account with error handling
+  const switchAccount = (accountId) => {
+    try {
+      const account = connectedAccounts.find(acc => acc.id === accountId);
+      if (account) {
+        setActiveAccountId(accountId);
+        setActiveAccount(account);
+        setUserData('yt_active_account_id', accountId);
+        
+        // Clear current data
         setChannelInfo(null);
         setVideos([]);
         setAnalyticsData(null);
         setShortsCount(0);
         setVideosCount(0);
-        removeUserData('yt_active_account_id');
+        
+        // Set access token and fetch new data
+        const storedExpiry = getUserData(`yt_token_expiry_${accountId}`);
+        if (account.accessToken && storedExpiry && Date.now() < parseInt(storedExpiry, 10)) {
+          window.gapi.client.setToken({ access_token: account.accessToken });
+          setChannelInfo(account.channelInfo);
+          fetchChannelData(account.channelInfo);
+        }
       }
+    } catch (error) {
+      console.error('Error switching account:', error);
+      setSafeErrorState('Failed to switch YouTube account. Please try again.');
     }
   };
 
-  // Sign out all accounts
-  const handleSignOutAll = () => {
-    // Revoke all tokens
-    connectedAccounts.forEach(account => {
-      if (account.accessToken) {
-        fetch(`https://oauth2.googleapis.com/revoke?token=${account.accessToken}`, {
-          method: 'POST',
-          headers: { 'Content-type': 'application/x-www-form-urlencoded' }
-        });
+  // Remove account with error handling
+  const removeAccount = (accountId) => {
+    try {
+      const updatedAccounts = connectedAccounts.filter(acc => acc.id !== accountId);
+      setConnectedAccounts(updatedAccounts);
+      saveAccountsToStorage(updatedAccounts);
+      
+      // Clean up stored tokens with user-specific keys
+      removeUserData(`yt_access_token_${accountId}`);
+      removeUserData(`yt_token_expiry_${accountId}`);
+      
+      if (activeAccountId === accountId) {
+        if (updatedAccounts.length > 0) {
+          // Switch to first remaining account
+          switchAccount(updatedAccounts[0].id);
+        } else {
+          // No accounts left
+          setActiveAccountId(null);
+          setActiveAccount(null);
+          setChannelInfo(null);
+          setVideos([]);
+          setAnalyticsData(null);
+          setShortsCount(0);
+          setVideosCount(0);
+          removeUserData('yt_active_account_id');
+        }
       }
-      removeUserData(`yt_access_token_${account.id}`);
-      removeUserData(`yt_token_expiry_${account.id}`);
-    });
-    
-    // Clear all state
-    setConnectedAccounts([]);
-    setActiveAccountId(null);
-    setActiveAccount(null);
-    setChannelInfo(null);
-    setVideos([]);
-    setAnalyticsData(null);
-    setShortsCount(0);
-    setVideosCount(0);
-    window.gapi.client.setToken('');
-    removeUserData('yt_connected_accounts');
-    removeUserData('yt_active_account_id');
+    } catch (error) {
+      console.error('Error removing account:', error);
+      setSafeErrorState('Failed to remove YouTube account. Please try again.');
+    }
   };
 
-  // Add token refresh functionality
+  // Sign out all accounts with error handling
+  const handleSignOutAll = () => {
+    try {
+      // Revoke all tokens
+      connectedAccounts.forEach(account => {
+        if (account.accessToken) {
+          try {
+            fetch(`https://oauth2.googleapis.com/revoke?token=${account.accessToken}`, {
+              method: 'POST',
+              headers: { 'Content-type': 'application/x-www-form-urlencoded' }
+            }).catch(err => console.warn('Failed to revoke token:', err));
+          } catch (err) {
+            console.warn('Error revoking token:', err);
+          }
+        }
+        removeUserData(`yt_access_token_${account.id}`);
+        removeUserData(`yt_token_expiry_${account.id}`);
+      });
+      
+      // Clear all state
+      setConnectedAccounts([]);
+      setActiveAccountId(null);
+      setActiveAccount(null);
+      setChannelInfo(null);
+      setVideos([]);
+      setAnalyticsData(null);
+      setShortsCount(0);
+      setVideosCount(0);
+      window.gapi.client.setToken('');
+      removeUserData('yt_connected_accounts');
+      removeUserData('yt_active_account_id');
+    } catch (error) {
+      console.error('Error signing out:', error);
+      setSafeErrorState('Failed to sign out completely. Some data may remain cached.');
+    }
+  };
+
+  // Add token refresh functionality with improved error handling
   const refreshYouTubeToken = async (accountId) => {
     const account = connectedAccounts.find(acc => acc.id === accountId);
     if (!account || !account.refreshToken) {
@@ -776,7 +902,7 @@ function YouTubeIntegration(props) {
     }
   };
 
-  // Update stored token in database
+  // Update stored token in database with error handling
   const updateStoredToken = async (accountId, newToken, expiresIn) => {
     try {
       const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
@@ -812,35 +938,40 @@ function YouTubeIntegration(props) {
 
   // Check and refresh token if needed before operations
   const ensureValidToken = async (accountId) => {
-    const account = connectedAccounts.find(acc => acc.id === accountId);
-    if (!account) return false;
+    try {
+      const account = connectedAccounts.find(acc => acc.id === accountId);
+      if (!account) return false;
 
-    const storedExpiry = getUserData(`yt_token_expiry_${accountId}`);
-    const tokenExpired = !storedExpiry || Date.now() >= parseInt(storedExpiry, 10) - 300000; // Refresh 5 minutes before expiry
+      const storedExpiry = getUserData(`yt_token_expiry_${accountId}`);
+      const tokenExpired = !storedExpiry || Date.now() >= parseInt(storedExpiry, 10) - 300000; // Refresh 5 minutes before expiry
 
-    if (tokenExpired && account.refreshToken) {
-      console.log('🔄 Token expired or expiring soon, attempting refresh...');
-      const refreshed = await refreshYouTubeToken(accountId);
-      if (!refreshed) {
-        setError('Failed to refresh YouTube token. Please reconnect your YouTube account.');
-        return false;
+      if (tokenExpired && account.refreshToken) {
+        console.log('🔄 Token expired or expiring soon, attempting refresh...');
+        const refreshed = await refreshYouTubeToken(accountId);
+        if (!refreshed) {
+          setSafeErrorState('Failed to refresh YouTube token. Please reconnect your YouTube account.');
+          return false;
+        }
       }
-    }
 
-    return true;
+      return true;
+    } catch (error) {
+      console.error('Error checking token validity:', error);
+      return false;
+    }
   };
 
-  // Update fetchChannelInfo to check token validity
+  // Update fetchChannelInfo to check token validity with improved error handling
   const fetchChannelInfo = async () => {
     if (!activeAccount) return;
     
-    // Ensure we have a valid token before making API calls
-    const tokenValid = await ensureValidToken(activeAccount.id);
-    if (!tokenValid) {
-      return;
-    }
-    
     try {
+      // Ensure we have a valid token before making API calls
+      const tokenValid = await ensureValidToken(activeAccount.id);
+      if (!tokenValid) {
+        return;
+      }
+      
       const response = await window.gapi.client.youtube.channels.list({
         part: 'snippet,contentDetails,statistics',
         mine: true
@@ -851,19 +982,23 @@ function YouTubeIntegration(props) {
         setChannelInfo(channel);
         // Call onData with correct structure
         if (typeof props?.onData === 'function') {
-          props.onData({
-            channelInfo: {
-              statistics: {
-                subscriberCount: channel.statistics?.subscriberCount,
-                viewCount: channel.statistics?.viewCount,
-                videoCount: channel.statistics?.videoCount
+          try {
+            props.onData({
+              channelInfo: {
+                statistics: {
+                  subscriberCount: channel.statistics?.subscriberCount,
+                  viewCount: channel.statistics?.viewCount,
+                  videoCount: channel.statistics?.videoCount
+                }
               }
-            }
-          });
+            });
+          } catch (callbackError) {
+            console.warn('Error calling onData callback:', callbackError);
+          }
         }
         await fetchChannelData(channel);
       } else {
-        setError('No YouTube channel found for this account');
+        setSafeErrorState('No YouTube channel found for this account');
       }
     } catch (err) {
       console.error('YouTube API error:', err);
@@ -890,47 +1025,47 @@ function YouTubeIntegration(props) {
             console.error('Retry failed:', retryErr);
           }
         }
-        setError('YouTube access token expired. Please reconnect your YouTube account.');
+        setSafeErrorState('YouTube access token expired. Please reconnect your YouTube account.');
       } else {
-        setError((err.result && err.result.error && err.result.error.message) || 'Failed to fetch YouTube data');
+        setSafeErrorState(err);
       }
     }
   };
 
-  // Update handleUpload to check token validity
+  // Update handleUpload to check token validity with improved error handling
   const handleUpload = async () => {
     setUploadError(null);
     setUploadSuccess(null);
 
     if (!uploadFile) {
-      setUploadError('Please select a video or photo file.');
+      setSafeUploadError('Please select a video or photo file.');
       return;
     }
     if (!uploadCaption.trim()) {
-      setUploadError('Please enter a caption.');
+      setSafeUploadError('Please enter a caption.');
       return;
     }
-
-    // Ensure we have a valid token before uploading
-    const tokenValid = await ensureValidToken(activeAccount.id);
-    if (!tokenValid) {
-      setUploadError('YouTube token expired. Please reconnect your account.');
-      return;
-    }
-
-    const allowedTypes = [
-      'video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/x-ms-wmv', 'video/x-flv', 'video/webm', 'video/mpeg',
-      'image/jpeg', 'image/png', 'image/gif'
-    ];
-    if (!allowedTypes.includes(uploadFile.type)) {
-      setUploadError('Unsupported file type. Please select a supported video (mp4, mov, avi, wmv, flv, webm, mpeg) or image (jpg, png, gif). MKV is not supported by YouTube.');
-      return;
-    }
-
-    setUploading(true);
-    setUploadProgress(0);
 
     try {
+      // Ensure we have a valid token before uploading
+      const tokenValid = await ensureValidToken(activeAccount.id);
+      if (!tokenValid) {
+        setSafeUploadError('YouTube token expired. Please reconnect your account.');
+        return;
+      }
+
+      const allowedTypes = [
+        'video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/x-ms-wmv', 'video/x-flv', 'video/webm', 'video/mpeg',
+        'image/jpeg', 'image/png', 'image/gif'
+      ];
+      if (!allowedTypes.includes(uploadFile.type)) {
+        setSafeUploadError('Unsupported file type. Please select a supported video (mp4, mov, avi, wmv, flv, webm, mpeg) or image (jpg, png, gif). MKV is not supported by YouTube.');
+        return;
+      }
+
+      setUploading(true);
+      setUploadProgress(0);
+
       let fileToUpload = uploadFile;
       let mimeType = uploadFile.type;
 
@@ -957,64 +1092,75 @@ function YouTubeIntegration(props) {
 
       const reader = new FileReader();
       reader.onload = async (e) => {
-        const fileData = e.target.result;
-        const base64Data = btoa(
-          new Uint8Array(fileData)
-            .reduce((data, byte) => data + String.fromCharCode(byte), '')
-        );
+        try {
+          const fileData = e.target.result;
+          const base64Data = btoa(
+            new Uint8Array(fileData)
+              .reduce((data, byte) => data + String.fromCharCode(byte), '')
+          );
 
-        const multipartRequestBody =
-          delimiter +
-          'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
-          JSON.stringify(metadata) +
-          delimiter +
-          'Content-Type: ' + mimeType + '\r\n' +
-          'Content-Transfer-Encoding: base64\r\n' +
-          '\r\n' +
-          base64Data +
-          close_delim;
+          const multipartRequestBody =
+            delimiter +
+            'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+            JSON.stringify(metadata) +
+            delimiter +
+            'Content-Type: ' + mimeType + '\r\n' +
+            'Content-Transfer-Encoding: base64\r\n' +
+            '\r\n' +
+            base64Data +
+            close_delim;
 
-        const request = window.gapi.client.request({
-          path: '/upload/youtube/v3/videos',
-          method: 'POST',
-          params: {
-            part: 'snippet,status'
-          },
-          headers: {
-            'Content-Type': 'multipart/related; boundary="' + boundary + '"'
-          },
-          body: multipartRequestBody
-        });
+          const request = window.gapi.client.request({
+            path: '/upload/youtube/v3/videos',
+            method: 'POST',
+            params: {
+              part: 'snippet,status'
+            },
+            headers: {
+              'Content-Type': 'multipart/related; boundary="' + boundary + '"'
+            },
+            body: multipartRequestBody
+          });
 
-        request.execute(async (response) => {
-          if (response && response.id) {
-            setUploadSuccess('Upload successful! Your video is being processed by YouTube.');
-            setUploadFile(null);
-            setUploadCaption('');
-            setUploadProgress(0);
-            await fetchChannelInfo();
-          } else {
-            setUploadError('Upload failed: ' + (response && response.error && response.error.message ? response.error.message : 'Unknown error'));
-          }
+          request.execute(async (response) => {
+            try {
+              if (response && response.id) {
+                setUploadSuccess('Upload successful! Your video is being processed by YouTube.');
+                setUploadFile(null);
+                setUploadCaption('');
+                setUploadProgress(0);
+                await fetchChannelInfo();
+              } else {
+                setSafeUploadError(response && response.error ? response.error : 'Upload failed with unknown error');
+              }
+            } catch (executeError) {
+              setSafeUploadError(executeError);
+            } finally {
+              setUploading(false);
+            }
+          });
+        } catch (readerError) {
+          setSafeUploadError(readerError);
           setUploading(false);
-        });
+        }
       };
       reader.onerror = () => {
-        setUploadError('Failed to read file for upload.');
+        setSafeUploadError('Failed to read file for upload.');
         setUploading(false);
       };
       reader.readAsArrayBuffer(fileToUpload);
     } catch (err) {
+      console.error('Upload error:', err);
       // Handle auth errors during upload
       if (err.status === 401 || (err.result && err.result.error && err.result.error.code === 401)) {
         const refreshed = await refreshYouTubeToken(activeAccount.id);
         if (refreshed) {
-          setUploadError('Token was refreshed. Please try uploading again.');
+          setSafeUploadError('Token was refreshed. Please try uploading again.');
         } else {
-          setUploadError('Upload failed due to expired token. Please reconnect your YouTube account.');
+          setSafeUploadError('Upload failed due to expired token. Please reconnect your YouTube account.');
         }
       } else {
-        setUploadError(err.message || 'Upload failed');
+        setSafeUploadError(err);
       }
       setUploading(false);
     }
@@ -1070,7 +1216,7 @@ function YouTubeIntegration(props) {
     );
   };
 
-  // Render account selector
+  // Render account selector with improved error handling
   const renderAccountSelector = () => {
     return (
       <div className="mb-6">
@@ -1306,7 +1452,7 @@ function YouTubeIntegration(props) {
     </div>
   );
 
-  // Fetch analytics
+  // Fetch analytics with improved error handling
   const fetchAnalytics = async () => {
     if (!channelInfo || !activeAccount) return;
 
@@ -1320,7 +1466,7 @@ function YouTubeIntegration(props) {
       }
     } catch (err) {
       console.error('Analytics fetch error:', err);
-      setError('Failed to fetch analytics data. Using available video data instead.');
+      setSafeErrorState('Failed to fetch analytics data. Using available video data instead.');
       await fetchVideoBasedAnalytics();
     } finally {
       setLoadingAnalytics(false);
@@ -1527,7 +1673,11 @@ function YouTubeIntegration(props) {
   // Fetch analytics automatically when channelInfo is loaded and signed in
   useEffect(() => {
     if (activeAccount && channelInfo && !analyticsData && !loadingAnalytics) {
-      fetchAnalytics();
+      try {
+        fetchAnalytics();
+      } catch (error) {
+        console.warn('Error in automatic analytics fetch:', error);
+      }
     }
   }, [activeAccount, channelInfo]);
 
@@ -1558,76 +1708,98 @@ function YouTubeIntegration(props) {
     // loadAccounts();
   }, []);
 
-  // Restore active account token if available
+  // Restore active account token if available with error handling
   useEffect(() => {
     if (gapiClientReady && gisLoaded && activeAccount) {
-      const storedExpiry = getUserData(`yt_token_expiry_${activeAccount.id}`);
-      if (activeAccount.accessToken && storedExpiry && Date.now() < parseInt(storedExpiry, 10)) {
-        window.gapi.client.setToken({ access_token: activeAccount.accessToken });
-        // Only fetch channel info if not already loaded
-        if (!channelInfo) fetchChannelInfo();
+      try {
+        const storedExpiry = getUserData(`yt_token_expiry_${activeAccount.id}`);
+        if (activeAccount.accessToken && storedExpiry && Date.now() < parseInt(storedExpiry, 10)) {
+          window.gapi.client.setToken({ access_token: activeAccount.accessToken });
+          // Only fetch channel info if not already loaded
+          if (!channelInfo) fetchChannelInfo();
+        }
+      } catch (error) {
+        console.warn('Error restoring active account token:', error);
       }
     }
   }, [gapiClientReady, gisLoaded, activeAccount]);
 
-  // Initialize token client
+  // Initialize token client with error handling
   useEffect(() => {
     if (gisLoaded) {
-      const client = window.google.accounts.oauth2.initTokenClient({
-        client_id: CLIENT_ID,
-        scope: SCOPES,
-        // Add these parameters for offline access and refresh tokens
-        access_type: 'offline',
-        prompt: 'consent', // Force consent to get refresh token
-        callback: (tokenResponse) => {
-          if (tokenResponse && tokenResponse.access_token) {
-            handleNewToken(tokenResponse);
-          }
-        },
-      });
-      setTokenClient(client);
+      try {
+        const client = window.google.accounts.oauth2.initTokenClient({
+          client_id: CLIENT_ID,
+          scope: SCOPES,
+          // Add these parameters for offline access and refresh tokens
+          access_type: 'offline',
+          prompt: 'consent', // Force consent to get refresh token
+          callback: (tokenResponse) => {
+            try {
+              if (tokenResponse && tokenResponse.access_token) {
+                handleNewToken(tokenResponse);
+              }
+            } catch (callbackError) {
+              console.error('Error in token callback:', callbackError);
+              setSafeErrorState('Failed to process authentication response. Please try again.');
+            }
+          },
+        });
+        setTokenClient(client);
+      } catch (error) {
+        console.error('Error initializing token client:', error);
+        setSafeErrorState('Failed to initialize authentication. Please refresh the page and try again.');
+      }
     }
   }, [gisLoaded]);
 
-  // Helper to fetch and store subscriber count for each YT account
+  // Helper to fetch and store subscriber count for each YT account with error handling
   const fetchAndStoreSubscribersTimeline = async () => {
     if (!connectedAccounts || connectedAccounts.length === 0) return;
     const today = format(new Date(), 'yyyy-MM-dd');
     const updatedTimeline = { ...subscribersTimeline };
 
     for (const acc of connectedAccounts) {
-      const timeline = updatedTimeline[acc.id] || [];
-      const lastEntry = timeline.length > 0 ? timeline[timeline.length - 1] : null;
-      const lastDate = lastEntry ? lastEntry.date : null;
-      const daysSinceLast = lastDate ? (new Date(today) - new Date(lastDate)) / (1000 * 60 * 60 * 24) : 999;
+      try {
+        const timeline = updatedTimeline[acc.id] || [];
+        const lastEntry = timeline.length > 0 ? timeline[timeline.length - 1] : null;
+        const lastDate = lastEntry ? lastEntry.date : null;
+        const daysSinceLast = lastDate ? (new Date(today) - new Date(lastDate)) / (1000 * 60 * 60 * 24) : 999;
 
-      if (daysSinceLast >= 1 && acc.accessToken) {
-        // Set token before API call
-        window.gapi.client.setToken({ access_token: acc.accessToken });
-        const resp = await window.gapi.client.youtube.channels.list({
-          part: 'statistics',
-          mine: true
-        });
-        const count = resp.result.items?.[0]?.statistics?.subscriberCount;
-        if (count !== undefined) {
-          const newTimeline = [...timeline, { date: today, value: parseInt(count) }];
-          updatedTimeline[acc.id] = newTimeline;
-          setSubscribersTimeline({ ...updatedTimeline });
-          setUserData(`yt_subscribers_timeline_${acc.id}`, newTimeline);
+        if (daysSinceLast >= 1 && acc.accessToken) {
+          // Set token before API call
+          window.gapi.client.setToken({ access_token: acc.accessToken });
+          const resp = await window.gapi.client.youtube.channels.list({
+            part: 'statistics',
+            mine: true
+          });
+          const count = resp.result.items?.[0]?.statistics?.subscriberCount;
+          if (count !== undefined) {
+            const newTimeline = [...timeline, { date: today, value: parseInt(count) }];
+            updatedTimeline[acc.id] = newTimeline;
+            setSubscribersTimeline({ ...updatedTimeline });
+            setUserData(`yt_subscribers_timeline_${acc.id}`, newTimeline);
+          }
         }
+      } catch (error) {
+        console.warn(`Failed to fetch subscriber timeline for account ${acc.id}:`, error);
       }
     }
   };
 
-  // Load timeline series on mount
+  // Load timeline series on mount with error handling
   useEffect(() => {
     if (connectedAccounts && connectedAccounts.length > 0 && gapiClientReady) {
-      const loaded = {};
-      connectedAccounts.forEach(acc => {
-        loaded[acc.id] = getUserData(`yt_subscribers_timeline_${acc.id}`) || [];
-      });
-      setSubscribersTimeline(loaded);
-      fetchAndStoreSubscribersTimeline();
+      try {
+        const loaded = {};
+        connectedAccounts.forEach(acc => {
+          loaded[acc.id] = getUserData(`yt_subscribers_timeline_${acc.id}`) || [];
+        });
+        setSubscribersTimeline(loaded);
+        fetchAndStoreSubscribersTimeline();
+      } catch (error) {
+        console.warn('Error loading subscriber timelines:', error);
+      }
     }
   }, [connectedAccounts, gapiClientReady]);
 
@@ -1838,74 +2010,176 @@ function YouTubeIntegration(props) {
     </div>
   );
 
-  if (error) {
+  // Notify parent about connection status with error handling
+  useEffect(() => {
+    if (props.onConnectionStatusChange) {
+      try {
+        // Connected if at least one account and token not expired
+        const isConnected =
+          connectedAccounts.length > 0 &&
+          connectedAccounts.some(acc => {
+            const expiry = getUserData(`yt_token_expiry_${acc.id}`);
+            return acc.accessToken && expiry && Date.now() < parseInt(expiry, 10);
+          });
+        props.onConnectionStatusChange(isConnected);
+      } catch (error) {
+        console.warn('Error notifying parent about connection status:', error);
+      }
+    }
+  }, [connectedAccounts, activeAccount]);
+
+  // Add a helper to detect token expiration errors
+  const isTokenExpiredError = (err) => {
+    if (!err) return false;
+    const errorMsg = getErrorMessage(err).toLowerCase();
+    // Google API error codes for expired/invalid tokens
+    if (
+      errorMsg.includes('invalid_grant') ||
+      errorMsg.includes('invalid_token') ||
+      errorMsg.includes('token_expired') ||
+      errorMsg.includes('token') ||
+      errorMsg.includes('expired') ||
+      errorMsg.includes('invalid') ||
+      errorMsg.includes('unauthorized') ||
+      errorMsg.includes('401')
+    ) {
+      return true;
+    }
+    return false;
+  };
+
+  // Add a user-friendly error renderer
+  const renderError = () => {
+    if (!error) return null;
+    const expired = isTokenExpiredError(error);
     return (
-      <div className="bg-red-50 border border-red-200 rounded-2xl p-6">
+      <div className="bg-red-50 border border-red-200 rounded-2xl p-6 mb-6">
         <div className="flex items-center space-x-3 mb-4">
           <AlertCircle className="h-6 w-6 text-red-600" />
-          <h3 className="text-lg font-semibold text-red-800">Connection Error</h3>
+          <span className="text-lg font-semibold text-red-800">
+            {expired ? 'YouTube Session Expired' : 'YouTube Integration Error'}
+          </span>
         </div>
-        <p className="text-red-700">{error}</p>
-        <div className="mt-4">
+        <p className="text-red-700 mb-4">
+          {expired
+            ? 'Your YouTube session has expired. Please refresh your token or reconnect your account to continue.'
+            : error}
+        </p>
+        <div className="flex space-x-3">
+          {expired && (
+            <button
+              onClick={() => {
+                setError(null);
+                handleSignIn();
+              }}
+              className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors text-sm"
+            >
+              Reconnect YouTube Account
+            </button>
+          )}
           <button
-            onClick={handleSignOutAll}
-            className="flex items-center space-x-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+            onClick={() => setError(null)}
+            className="text-red-600 hover:text-red-700 text-sm font-medium border border-red-200 px-4 py-2 rounded-lg hover:bg-red-50 transition-colors"
           >
-            <ExternalLink className="h-4 w-4" />
-            <span>Disconnect All</span>
+            Dismiss Error
           </button>
         </div>
       </div>
     );
-  }
+  };
 
-  if (!gapiLoaded || !gisLoaded) {
+  // Enhanced error boundary wrapper for the entire component
+  const renderWithErrorBoundary = (content) => {
+    try {
+      return content();
+    } catch (renderError) {
+      console.error('YouTube Integration render error:', renderError);
+      setSafeErrorState('Component rendering failed. Please refresh the page and try again.');
+      return (
+        <div className="border rounded-lg p-6 mb-6 bg-gradient-to-r from-red-50 to-pink-50">
+          <div className="text-center py-12">
+            <AlertCircle className="h-16 w-16 mx-auto mb-4 text-red-600" />
+            <h3 className="text-lg font-semibold text-red-900 mb-2">YouTube Integration Error</h3>
+            <p className="text-red-700 mb-4">Something went wrong with the YouTube integration.</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
+            >
+              Refresh Page
+            </button>
+          </div>
+        </div>
+      );
+    }
+  };
+
+  return renderWithErrorBoundary(() => {
+    // Handle different error states gracefully
+    if (error) {
+      return (
+        <div className="border rounded-lg p-6 mb-6 bg-gradient-to-r from-red-50 to-pink-50">
+          <div className="flex items-center space-x-3 mb-4">
+            <Youtube className="h-6 w-6 text-red-600" />
+            <h3 className="font-medium text-lg">YouTube Integration</h3>
+          </div>
+          {renderError()}
+        </div>
+      );
+    }
+
+    if (!gapiLoaded || !gisLoaded) {
+      return (
+        <div className="border rounded-lg p-6 mb-6 bg-gradient-to-r from-red-50 to-pink-50">
+          <div className="flex items-center justify-center py-12">
+            <div className="text-center">
+              <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-red-600" />
+              <p className="text-gray-600">Loading YouTube integration...</p>
+              <p className="text-sm text-gray-500 mt-2">
+                If this takes too long, please refresh the page
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
-      <div className="flex items-center justify-center py-12">
-        <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-red-600" />
-          <p className="text-gray-600">Loading Google API...</p>
+      <div className="border rounded-lg p-6 mb-6 bg-gradient-to-r from-red-50 to-pink-50">
+        <div className="flex items-center space-x-3 mb-4">
+          <Youtube className="h-6 w-6 text-red-600" />
+          <h3 className="font-medium text-lg">YouTube Integration</h3>
+        </div>
+
+        <div className="space-y-6">
+          {connectedAccounts.length === 0 ? (
+            <div className="text-center py-12">
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-red-100 to-pink-100 rounded-2xl mb-4">
+                <Youtube className="h-8 w-8 text-red-600" />
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">Connect YouTube Account</h3>
+              <p className="text-gray-600 mb-6 max-w-md mx-auto">
+                Connect your YouTube accounts to manage your channels and access video analytics with historical data tracking.
+              </p>
+              <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-6 max-w-md mx-auto">
+                <p className="text-sm text-yellow-800">
+                  <strong>Note:</strong> For detailed analytics, you may need to enable YouTube Analytics API in your Google Cloud Console. Historical data will be captured automatically.
+                </p>
+              </div>
+              <button
+                onClick={handleSignIn}
+                className="bg-gradient-to-r from-red-600 to-red-700 text-white px-8 py-3 rounded-xl hover:from-red-700 hover:to-red-800 transition-all duration-200 flex items-center space-x-3 mx-auto font-medium"
+              >
+                <Youtube className="h-5 w-5" />
+                <span>Connect YouTube Account</span>
+              </button>
+            </div>
+          ) : (
+            renderConnectedState()
+          )}
         </div>
       </div>
     );
-  }
-
-  return (
-    <div className="border rounded-lg p-6 mb-6 bg-gradient-to-r from-red-50 to-pink-50">
-      <div className="flex items-center space-x-3 mb-4">
-        <Youtube className="h-6 w-6 text-red-600" />
-        <h3 className="font-medium text-lg">YouTube Integration</h3>
-      </div>
-
-      <div className="space-y-6">
-        {connectedAccounts.length === 0 ? (
-          <div className="text-center py-12">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-red-100 to-pink-100 rounded-2xl mb-4">
-              <Youtube className="h-8 w-8 text-red-600" />
-            </div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">Connect YouTube Account</h3>
-            <p className="text-gray-600 mb-6 max-w-md mx-auto">
-              Connect your YouTube accounts to manage your channels and access video analytics with historical data tracking.
-            </p>
-            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-6 max-w-md mx-auto">
-              <p className="text-sm text-yellow-800">
-                <strong>Note:</strong> For detailed analytics, you may need to enable YouTube Analytics API in your Google Cloud Console. Historical data will be captured automatically.
-              </p>
-            </div>
-            <button
-              onClick={handleSignIn}
-              className="bg-gradient-to-r from-red-600 to-red-700 text-white px-8 py-3 rounded-xl hover:from-red-700 hover:to-red-800 transition-all duration-200 flex items-center space-x-3 mx-auto font-medium"
-            >
-              <Youtube className="h-5 w-5" />
-              <span>Connect YouTube Account</span>
-            </button>
-          </div>
-        ) : (
-          renderConnectedState()
-        )}
-      </div>
-    </div>
-  );
+  });
 }
 
 export default YouTubeIntegration;

@@ -19,7 +19,7 @@ const TIME_PERIOD_OPTIONS = [
   { value: 365, label: 'Last 1 year' }
 ];
 
-function InstagramIntegration({ onData }) {
+function InstagramIntegration({ onData, onConnectionStatusChange }) {
   // Multi-account state management (similar to Facebook integration)
   const [fbSdkLoaded, setFbSdkLoaded] = useState(false);
   const [connectedAccounts, setConnectedAccounts] = useState([]); // Array of connected Instagram accounts
@@ -1586,6 +1586,15 @@ function InstagramIntegration({ onData }) {
       onData(activeAccount);
     }
   }, [activeAccount, onData]);
+
+  // Notify parent about connection status
+  useEffect(() => {
+    if (onConnectionStatusChange) {
+      // Connected if at least one account and not expired
+      const isConnected = connectedAccounts.length > 0 && !connectedAccounts.some(isTokenExpired);
+      onConnectionStatusChange(isConnected);
+    }
+  }, [connectedAccounts, activeAccount, fbSdkLoaded]);
 
   if (!fbSdkLoaded) {
     return (

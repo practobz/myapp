@@ -5,7 +5,7 @@ import { useAuth } from '../../admin/contexts/AuthContext';
 import axios from 'axios';
 import { getUserData, setUserData, removeUserData, migrateToUserSpecificStorage } from '../../utils/sessionUtils';
 
-function LinkedInIntegration() {
+function LinkedInIntegration({ onConnectionStatusChange }) {
   const navigate = useNavigate();
   const { currentUser } = useAuth();
 
@@ -29,18 +29,6 @@ function LinkedInIntegration() {
   const LINKEDIN_REDIRECT_URI = process.env.REACT_APP_LINKEDIN_REDIRECT_URI;
   // Only use available scopes
   const LINKEDIN_SCOPE = 'openid profile email w_member_social';
-
-  // Warn if redirect URI is not set or mismatched
-  useEffect(() => {
-    if (
-      !LINKEDIN_REDIRECT_URI ||
-      LINKEDIN_REDIRECT_URI !== 'https://my-backend-593529385135.asia-south1.run.app/auth/linkedin/callback'
-    ) {
-      setError(
-        'LinkedIn redirect URI is not set correctly. Please check your .env and LinkedIn Developer portal settings.'
-      );
-    }
-  }, [LINKEDIN_REDIRECT_URI]);
 
   // Load saved accounts from localStorage on mount
   useEffect(() => {
@@ -71,7 +59,6 @@ function LinkedInIntegration() {
     const state = Math.random().toString(36).substring(2);
     localStorage.setItem('linkedin_oauth_state', state);
 
-    // Make sure to use the correct redirect URI from .env
     const authUrl = `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${LINKEDIN_CLIENT_ID}&redirect_uri=${encodeURIComponent(LINKEDIN_REDIRECT_URI)}&scope=${encodeURIComponent(LINKEDIN_SCOPE)}&state=${state}`;
     
     const width = 600, height = 700;
@@ -160,7 +147,12 @@ function LinkedInIntegration() {
         setError('');
         setSuccess('LinkedIn account connected successfully!');
         setLoading(false);
-        
+
+        // Notify parent that LinkedIn is now connected
+        if (onConnectionStatusChange) {
+          onConnectionStatusChange(true);
+        }
+
         // Refetch LinkedIn data
         fetchLinkedinData();
       } else {
@@ -323,6 +315,24 @@ function LinkedInIntegration() {
     }
   }, [selectedAccount]);
 
+  // Helper: Check if LinkedIn token is expired (optional, if you store expiry)
+  const isTokenExpired = (account) => {
+    if (!account.tokenExpiresAt) return false;
+    const expiryTime = new Date(account.tokenExpiresAt);
+    const now = new Date();
+    const bufferTime = 5 * 60 * 1000; // 5 minutes buffer
+    return (expiryTime.getTime() - now.getTime()) < bufferTime;
+  };
+
+  // Notify parent about LinkedIn connection status
+  useEffect(() => {
+    if (onConnectionStatusChange) {
+      // Connected if at least one account with a token (and not expired if you track expiry)
+      const isConnected = connectedAccounts.length > 0 && connectedAccounts.some(acc => !!acc.token && !isTokenExpired(acc));
+      onConnectionStatusChange(isConnected);
+    }
+  }, [connectedAccounts, onConnectionStatusChange]);
+
   // Disconnect all accounts
   const handleDisconnectAll = () => {
     setConnectedAccounts([]);
@@ -332,6 +342,11 @@ function LinkedInIntegration() {
     removeUserData('connected_linkedin_accounts');
     removeUserData('selected_linkedin_account');
     fetchLinkedinData();
+
+    // Notify parent that LinkedIn is now disconnected
+    if (onConnectionStatusChange) {
+      onConnectionStatusChange(false);
+    }
   };
 
   // Disconnect specific account

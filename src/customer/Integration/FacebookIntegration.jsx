@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Facebook, BarChart3, Eye, Calendar, Instagram, Trash2, TrendingUp, Plus, Users, UserCheck
+  Facebook, BarChart3, Eye, Calendar, Trash2, TrendingUp, Plus, Users, UserCheck
 } from 'lucide-react';
 import TrendChart from '../../components/TrendChart';
 import { subDays, format } from 'date-fns';
@@ -8,6 +8,17 @@ import { getUserData, setUserData, removeUserData, migrateToUserSpecificStorage 
 
 // Your Facebook App ID
 const FACEBOOK_APP_ID = '4416243821942660';
+
+function getCurrentCustomerId() {
+  let customerId = null;
+  const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
+  customerId = currentUser.userId || currentUser.id || currentUser._id || currentUser.customer_id;
+  if (!customerId) {
+    const authUser = JSON.parse(localStorage.getItem('user') || '{}');
+    customerId = authUser.userId || authUser.id || authUser._id || authUser.customer_id;
+  }
+  return customerId;
+}
 
 function FacebookIntegration() {
   // Multi-account state
@@ -26,10 +37,6 @@ function FacebookIntegration() {
   const [analyticsData, setAnalyticsData] = useState({});
   const [loadingAnalytics, setLoadingAnalytics] = useState({});
   const [timePeriods, setTimePeriods] = useState({});
-  const [instagramPosts, setInstagramPosts] = useState({});
-  const [loadingInstagramPosts, setLoadingInstagramPosts] = useState({});
-  const [showFacebookPosts, setShowFacebookPosts] = useState({});
-  const [showInstagramPosts, setShowInstagramPosts] = useState({});
 
   // Post upload modal state
   const [showPostModal, setShowPostModal] = useState(false);
@@ -38,7 +45,7 @@ function FacebookIntegration() {
   const [postImageUrl, setPostImageUrl] = useState('');
   const [uploadingPost, setUploadingPost] = useState(false);
   const [uploadResult, setUploadResult] = useState(null);
-
+const [showFacebookPosts, setShowFacebookPosts] = useState({});
   // Time period options
   const TIME_PERIOD_OPTIONS = [
     { value: 7, label: 'Last 7 days' },
@@ -65,34 +72,74 @@ function FacebookIntegration() {
       'fb_active_account_id'
     ]);
 
-    const savedAccounts = getUserData('fb_connected_accounts');
-    const savedActiveId = getUserData('fb_active_account_id');
-    
-    console.log('📦 Storage check on mount:', {
-      savedAccounts: savedAccounts ? savedAccounts.length : 0,
-      savedActiveId,
-      accountsData: savedAccounts
-    });
-    
-    if (savedAccounts && Array.isArray(savedAccounts) && savedAccounts.length > 0) {
-      console.log('✅ Setting accounts from storage:', savedAccounts);
-      setConnectedAccounts(savedAccounts);
-      
-      if (savedActiveId && savedAccounts.some(acc => acc.id === savedActiveId)) {
-        setActiveAccountId(savedActiveId);
-        const activeAcc = savedAccounts.find(acc => acc.id === savedActiveId);
-        setActiveAccount(activeAcc);
-        console.log('✅ Set active account:', activeAcc?.name);
-      } else if (savedAccounts.length > 0) {
-        // Set first account as active if no valid active account
-        setActiveAccountId(savedAccounts[0].id);
-        setActiveAccount(savedAccounts[0]);
-        setUserData('fb_active_account_id', savedAccounts[0].id);
-        console.log('✅ Set first account as active:', savedAccounts[0].name);
+    // NEW: Try to fetch from backend first
+    const fetchConnectedAccountsFromBackend = async () => {
+      const customerId = getCurrentCustomerId();
+      if (!customerId) return null;
+      try {
+        const res = await fetch(`${process.env.REACT_APP_API_URL}/api/customer-social-links/${customerId}`);
+        const data = await res.json();
+        if (data.success && Array.isArray(data.accounts)) {
+          // Map backend accounts to the same format as localStorage
+          return data.accounts.map(acc => ({
+            id: acc.platformUserId,
+            name: acc.name,
+            email: acc.email,
+            picture: acc.profilePicture ? { data: { url: acc.profilePicture } } : null,
+            accessToken: acc.accessToken,
+            connectedAt: acc.connectedAt,
+            tokenExpiresAt: acc.tokenExpiresAt,
+            // Add any other fields as needed
+          }));
+        }
+      } catch (err) {
+        console.warn('Failed to fetch accounts from backend:', err);
       }
-    } else {
-      console.log('ℹ️ No connected accounts found in storage');
-    }
+      return null;
+    };
+
+    (async () => {
+      // NEW: Try to fetch from backend first
+      const backendAccounts = await fetchConnectedAccountsFromBackend();
+      if (backendAccounts && backendAccounts.length > 0) {
+        setConnectedAccounts(backendAccounts);
+        setUserData('fb_connected_accounts', backendAccounts); // Sync to localStorage
+        setActiveAccountId(backendAccounts[0].id);
+        setActiveAccount(backendAccounts[0]);
+        setUserData('fb_active_account_id', backendAccounts[0].id);
+        return;
+      }
+
+      // Fallback to localStorage if backend empty
+      const savedAccounts = getUserData('fb_connected_accounts');
+      const savedActiveId = getUserData('fb_active_account_id');
+      
+      console.log('📦 Storage check on mount:', {
+        savedAccounts: savedAccounts ? savedAccounts.length : 0,
+        savedActiveId,
+        accountsData: savedAccounts
+      });
+      
+      if (savedAccounts && Array.isArray(savedAccounts) && savedAccounts.length > 0) {
+        console.log('✅ Setting accounts from storage:', savedAccounts);
+        setConnectedAccounts(savedAccounts);
+        
+        if (savedActiveId && savedAccounts.some(acc => acc.id === savedActiveId)) {
+          setActiveAccountId(savedActiveId);
+          const activeAcc = savedAccounts.find(acc => acc.id === savedActiveId);
+          setActiveAccount(activeAcc);
+          console.log('✅ Set active account:', activeAcc?.name);
+        } else if (savedAccounts.length > 0) {
+          // Set first account as active if no valid active account
+          setActiveAccountId(savedAccounts[0].id);
+          setActiveAccount(savedAccounts[0]);
+          setUserData('fb_active_account_id', savedAccounts[0].id);
+          console.log('✅ Set first account as active:', savedAccounts[0].name);
+        }
+      } else {
+        console.log('ℹ️ No connected accounts found in storage');
+      }
+    })();
   }, []);
 
   // Load Facebook SDK
@@ -252,7 +299,7 @@ function FacebookIntegration() {
         setFbError({ message: 'Facebook login failed or was cancelled' });
       }
     }, {
-      scope: 'pages_show_list,pages_read_engagement,pages_manage_metadata,instagram_basic,email,public_profile',
+      scope: 'pages_show_list,pages_read_engagement,pages_manage_metadata,email,public_profile',
       return_scopes: true,
       auth_type: 'rerequest'
     });
@@ -440,7 +487,7 @@ function FacebookIntegration() {
     console.log('🔍 Fetching pages...');
     
     window.FB.api('/me/accounts', {
-      fields: 'id,name,access_token,category,about,fan_count,link,picture,username,website,phone,verification_status,instagram_business_account,tasks',
+      fields: 'id,name,access_token,category,about,fan_count,link,picture,username,website,phone,verification_status,tasks',
       access_token: activeAccount.accessToken
     }, function(response) {
       if (!response || response.error) {
@@ -456,17 +503,13 @@ function FacebookIntegration() {
           console.log(`📄 Processing page: ${page.name} (${page.id})`);
           
           await storeConnectedPage(page);
-          
-          if (page.instagram_business_account) {
-            fetchInstagramDetails(page.instagram_business_account.id, page.access_token);
-          }
         });
       }
     });
   };
 
   // Modified fetchPageInsights with error handling
-  const fetchPageInsights = (pageId, pageAccessToken, instagramId = null) => {
+  const fetchPageInsights = (pageId, pageAccessToken) => {
     if (!isFacebookApiReady()) {
       setFbError({ message: 'Facebook API is not ready' });
       return;
@@ -504,51 +547,9 @@ function FacebookIntegration() {
             { name: 'FB Reactions', value: totalReactions, title: 'Facebook Reactions (Last 10 posts)' }
           ];
           
-          if (instagramId) {
-            fetchInstagramMetrics(instagramId, pageAccessToken, pageId, engagementMetrics);
-          } else {
-            setPageInsights(prev => ({
-              ...prev,
-              [pageId]: engagementMetrics
-            }));
-          }
-        }
-      }
-    );
-  };
-
-  const fetchInstagramMetrics = (instagramId, pageAccessToken, pageId, fbMetrics) => {
-    if (!isFacebookApiReady()) return;
-
-    window.FB.api(
-      `/${instagramId}/media`,
-      {
-        fields: 'like_count,comments_count',
-        limit: 10,
-        access_token: pageAccessToken
-      },
-      function(response) {
-        if (!response || response.error) {
-          console.error('Instagram metrics fetch error:', response.error);
           setPageInsights(prev => ({
             ...prev,
-            [pageId]: fbMetrics
-          }));
-        } else {
-          const instagramPosts = response.data;
-          const totalInstagramLikes = instagramPosts.reduce((sum, post) => sum + (post.like_count || 0), 0);
-          const totalInstagramComments = instagramPosts.reduce((sum, post) => sum + (post.comments_count || 0), 0);
-          
-          const instagramMetrics = [
-            { name: 'IG Likes', value: totalInstagramLikes, title: 'Instagram Likes (Last 10 posts)' },
-            { name: 'IG Comments', value: totalInstagramComments, title: 'Instagram Comments (Last 10 posts)' }
-          ];
-          
-          const combinedMetrics = [...fbMetrics, ...instagramMetrics];
-          
-          setPageInsights(prev => ({
-            ...prev,
-            [pageId]: combinedMetrics
+            [pageId]: engagementMetrics
           }));
         }
       }
@@ -580,13 +581,13 @@ function FacebookIntegration() {
     }
   };
 
-  const fetchPageAnalytics = (pageId, pageAccessToken, instagramId = null, days = 30) => {
+  const fetchPageAnalytics = (pageId, pageAccessToken, days = 30) => {
     setLoadingAnalytics(prev => ({ ...prev, [pageId]: true }));
     
     setTimePeriods(prev => ({ ...prev, [pageId]: days }));
     
     console.log('Using post-based analytics (Facebook Insights API not available for this app type)');
-    fetchPostBasedAnalytics(pageId, pageAccessToken, instagramId, days);
+    fetchPostBasedAnalytics(pageId, pageAccessToken, days);
   };
 
   const processAnalyticsData = (insightsData, days = 30) => {
@@ -640,7 +641,7 @@ function FacebookIntegration() {
     return result;
   };
 
-  const fetchPostBasedAnalytics = (pageId, pageAccessToken, instagramId = null, days = 30) => {
+  const fetchPostBasedAnalytics = (pageId, pageAccessToken, days = 30) => {
     if (!isFacebookApiReady()) {
       setLoadingAnalytics(prev => ({ ...prev, [pageId]: false }));
       setFbError({ message: 'Facebook API is not ready' });
@@ -666,26 +667,22 @@ function FacebookIntegration() {
         const posts = response.data;
         const analyticsData = generatePostBasedAnalytics(posts, days);
         
-        if (instagramId) {
-          fetchInstagramPostAnalytics(instagramId, pageAccessToken, pageId, analyticsData, days);
-        } else {
-          setAnalyticsData(prev => ({
-            ...prev,
-            [pageId]: { facebook: analyticsData }
-          }));
-          setLoadingAnalytics(prev => ({ ...prev, [pageId]: false }));
-          
-          fetch(`${process.env.REACT_APP_API_URL}/api/analytics/store`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              pageId,
-              platform: 'facebook',
-              analytics: analyticsData,
-              timePeriod: days
-            })
-          }).catch(err => console.warn('Failed to store analytics:', err));
-        }
+        setAnalyticsData(prev => ({
+          ...prev,
+          [pageId]: { facebook: analyticsData }
+        }));
+        setLoadingAnalytics(prev => ({ ...prev, [pageId]: false }));
+        
+        fetch(`${process.env.REACT_APP_API_URL}/api/analytics/store`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            pageId,
+            platform: 'facebook',
+            analytics: analyticsData,
+            timePeriod: days
+          })
+        }).catch(err => console.warn('Failed to store analytics:', err));
       }
     );
   };
@@ -723,7 +720,7 @@ function FacebookIntegration() {
     return result;
   };
 
-  const fetchInstagramPostAnalytics = (instagramId, pageAccessToken, pageId, fbData, days = 30) => {
+  const fetchInstagramPostAnalytics = (instagramId, pageAccessToken, pageId, fbMetrics, days = 30) => {
     if (!isFacebookApiReady()) {
       setLoadingAnalytics(prev => ({ ...prev, [pageId]: false }));
       return;
@@ -745,7 +742,7 @@ function FacebookIntegration() {
           console.warn('Instagram posts fetch error:', response.error);
           setAnalyticsData(prev => ({
             ...prev,
-            [pageId]: { facebook: fbData }
+            [pageId]: { facebook: fbMetrics }
           }));
           
           fetch(`${process.env.REACT_APP_API_URL}/api/analytics/store`, {
@@ -754,7 +751,7 @@ function FacebookIntegration() {
             body: JSON.stringify({
               pageId,
               platform: 'facebook',
-              analytics: fbData,
+              analytics: fbMetrics,
               timePeriod: days
             })
           }).catch(err => console.warn('Failed to store analytics:', err));
@@ -767,7 +764,7 @@ function FacebookIntegration() {
         setAnalyticsData(prev => ({
           ...prev,
           [pageId]: {
-            facebook: fbData,
+            facebook: fbMetrics,
             instagram: igAnalytics
           }
         }));
@@ -779,7 +776,7 @@ function FacebookIntegration() {
             pageId,
             platform: 'facebook_instagram',
             analytics: {
-              facebook: fbData,
+              facebook: fbMetrics,
               instagram: igAnalytics
             },
             timePeriod: days
@@ -789,7 +786,7 @@ function FacebookIntegration() {
     );
   };
 
-  const fetchPageAnalyticsWithDbFirst = async (pageId, pageAccessToken, instagramId = null, days = 30) => {
+  const fetchPageAnalyticsWithDbFirst = async (pageId, pageAccessToken, days = 30) => {
     setLoadingAnalytics(prev => ({ ...prev, [pageId]: true }));
     
     setTimePeriods(prev => ({ ...prev, [pageId]: days }));
@@ -804,7 +801,7 @@ function FacebookIntegration() {
       }
       
       console.log('🔄 No stored data found, fetching live analytics...');
-      await fetchPageAnalyticsLive(pageId, pageAccessToken, instagramId, days);
+      await fetchPageAnalyticsLive(pageId, pageAccessToken, days);
       
     } catch (error) {
       console.error('Analytics fetch error:', error);
@@ -812,9 +809,9 @@ function FacebookIntegration() {
     }
   };
 
-  const fetchPageAnalyticsLive = async (pageId, pageAccessToken, instagramId = null, days = 30) => {
+  const fetchPageAnalyticsLive = async (pageId, pageAccessToken, days = 30) => {
     console.log('📡 Fetching live analytics from Facebook APIs...');
-    fetchPostBasedAnalytics(pageId, pageAccessToken, instagramId, days);
+    fetchPostBasedAnalytics(pageId, pageAccessToken, days);
   };
 
   const renderAnalytics = (pageId) => {
@@ -842,7 +839,7 @@ function FacebookIntegration() {
                 const days = parseInt(e.target.value);
                 const page = fbPages.find(p => p.id === pageId);
                 if (page) {
-                  fetchPageAnalyticsWithDbFirst(pageId, page.access_token, page.instagram_details?.id, days);
+                  fetchPageAnalyticsWithDbFirst(pageId, page.access_token, days);
                 }
               }}
               className="border border-gray-300 rounded-md px-3 py-1 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -896,33 +893,6 @@ function FacebookIntegration() {
               metric="value"
             />
           )}
-
-          {analytics.instagram?.likes && (
-            <TrendChart
-              data={analytics.instagram.likes}
-              title="Instagram Daily Likes"
-              color="#E4405F"
-              metric="value"
-            />
-          )}
-          
-          {analytics.instagram?.comments && (
-            <TrendChart
-              data={analytics.instagram.comments}
-              title="Instagram Daily Comments"
-              color="#C13584"
-              metric="value"
-            />
-          )}
-          
-          {analytics.instagram?.posts && (
-            <TrendChart
-              data={analytics.instagram.posts}
-              title="Instagram Daily Posts"
-              color="#F56040"
-              metric="value"
-            />
-          )}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
@@ -941,30 +911,12 @@ function FacebookIntegration() {
             </div>
           )}
 
-          {analytics.instagram && (
-            <div className="bg-pink-50 border border-pink-200 rounded-lg p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-pink-600 font-medium">Instagram Likes</p>
-                  <p className="text-2xl font-bold text-pink-800">
-                    {analytics.instagram.likes?.reduce((sum, item) => sum + item.value, 0)?.toLocaleString() || 0}
-                  </p>
-                  <p className="text-xs text-pink-500">Last {selectedPeriod} days total</p>
-                </div>
-                <Instagram className="h-8 w-8 text-pink-600" />
-              </div>
-            </div>
-          )}
-
           <div className="bg-green-50 border border-green-200 rounded-lg p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-green-600 font-medium">Total Comments</p>
                 <p className="text-2xl font-bold text-green-800">
-                  {[
-                    ...(analytics.facebook?.comments || []),
-                    ...(analytics.instagram?.comments || [])
-                  ].reduce((sum, item) => sum + item.value, 0)?.toLocaleString() || 0}
+                  {(analytics.facebook?.comments || []).reduce((sum, item) => sum + item.value, 0)?.toLocaleString() || 0}
                 </p>
                 <p className="text-xs text-green-500">All platforms</p>
               </div>
@@ -977,10 +929,7 @@ function FacebookIntegration() {
               <div>
                 <p className="text-sm text-purple-600 font-medium">Avg Daily Activity</p>
                 <p className="text-2xl font-bold text-purple-800">
-                  {Math.round([
-                    ...(analytics.facebook?.engagement || []),
-                    ...(analytics.instagram?.likes || [])
-                  ].reduce((sum, item) => sum + item.value, 0) / selectedPeriod)?.toLocaleString() || 0}
+                  {Math.round((analytics.facebook?.engagement || []).reduce((sum, item) => sum + item.value, 0) / selectedPeriod)?.toLocaleString() || 0}
                 </p>
                 <p className="text-xs text-purple-500">Per day average</p>
               </div>
@@ -993,7 +942,7 @@ function FacebookIntegration() {
           <h6 className="font-medium text-blue-800 mb-2">📊 Smart Analytics Loading</h6>
           <div className="text-sm text-blue-700 space-y-1">
             <p>🗄️ <strong>Database First:</strong> Loads stored analytics instantly when available</p>
-            <p>📡 <strong>Live Fallback:</strong> Fetches from Facebook/Instagram APIs only when needed</p>
+            <p>📡 <strong>Live Fallback:</strong> Fetches from Facebook APIs only when needed</p>
             <p>⚡ <strong>Fast Loading:</strong> Stored data loads immediately, no API delays</p>
             <p>🔄 <strong>Auto-Store:</strong> New data is automatically saved for future quick access</p>
             <p>📈 <strong>Period:</strong> Showing data for the last {selectedPeriod} days</p>
@@ -1029,37 +978,6 @@ function FacebookIntegration() {
             [pageId]: response.data
           }));
           setShowFacebookPosts(prev => ({ ...prev, [pageId]: true }));
-        }
-      }
-    );
-  };
-
-  // Add the missing fetchInstagramPosts function
-  const fetchInstagramPosts = (instagramId, pageAccessToken) => {
-    if (!isFacebookApiReady()) {
-      setFbError({ message: 'Facebook API is not ready' });
-      return;
-    }
-
-    setLoadingInstagramPosts(prev => ({ ...prev, [instagramId]: true }));
-
-    window.FB.api(
-      `/${instagramId}/media`,
-      {
-        fields: 'id,caption,timestamp,like_count,comments_count,media_type,media_url,thumbnail_url,permalink',
-        limit: 10,
-        access_token: pageAccessToken
-      },
-      function(response) {
-        setLoadingInstagramPosts(prev => ({ ...prev, [instagramId]: false }));
-        if (!response || response.error) {
-          console.error('Instagram posts fetch error:', response.error);
-        } else {
-          setInstagramPosts(prev => ({
-            ...prev,
-            [instagramId]: response.data
-          }));
-          setShowInstagramPosts(prev => ({ ...prev, [instagramId]: true }));
         }
       }
     );
@@ -1195,129 +1113,16 @@ function FacebookIntegration() {
     );
   };
 
-  const renderInstagramPosts = (instagramId) => {
-    const posts = instagramPosts[instagramId];
-    const isVisible = showInstagramPosts[instagramId];
-    
-    if (!posts || posts.length === 0) return null;
-
-    return (
-      <div className="mt-4 p-4 bg-pink-50 rounded-lg">
-        <div className="flex items-center justify-between mb-3">
-          <h5 className="font-medium text-pink-700 flex items-center">
-            <Instagram className="h-4 w-4 mr-2" />
-            Instagram Posts ({posts.length})
-          </h5>
-          <button
-            onClick={() => setShowInstagramPosts(prev => ({ ...prev, [instagramId]: !prev[instagramId] }))
-            }
-            className="text-sm text-pink-600 hover:text-pink-800 font-medium"
-          >
-            {isVisible ? 'Hide Posts' : 'Show Posts'}
-          </button>
-        </div>
-        
-        {isVisible && (
-          <div className="space-y-4 max-h-96 overflow-y-auto">
-            {posts.map((post) => (
-              <div key={post.id} className="bg-white p-4 rounded-lg border shadow-sm">
-                <div className="flex items-start space-x-3">
-                  {(post.media_url || post.thumbnail_url) && (
-                    <div className="flex-shrink-0">
-                      <img 
-                        src={post.thumbnail_url || post.media_url} 
-                        alt="Instagram media" 
-                        className="w-20 h-20 object-cover rounded-lg"
-                      />
-                      {post.media_type && (
-                        <div className="text-xs text-center mt-1">
-                          <span className={`px-2 py-1 rounded text-white text-xs ${
-                            post.media_type === 'VIDEO' ? 'bg-red-500' : 
-                            post.media_type === 'CAROUSEL_ALBUM' ? 'bg-purple-500' : 'bg-blue-500'
-                          }`}>
-                            {post.media_type === 'IMAGE' ? '📷' : 
-                             post.media_type === 'VIDEO' ? '🎥' : 
-                             post.media_type === 'CAROUSEL_ALBUM' ? '🎠' : '📱'}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className={`text-xs px-2 py-1 rounded text-white ${
-                        post.media_type === 'VIDEO' ? 'bg-red-500' : 
-                        post.media_type === 'CAROUSEL_ALBUM' ? 'bg-purple-500' : 'bg-pink-500'
-                      }`}>
-                        {post.media_type === 'IMAGE' ? 'Photo' : 
-                         post.media_type === 'VIDEO' ? 'Video' : 
-                         post.media_type === 'CAROUSEL_ALBUM' ? 'Album' : 'Post'}
-                      </span>
-                      <span className="text-xs text-gray-500">
-                        {new Date(post.timestamp).toLocaleDateString('en-US', {
-                          year: 'numeric',
-                          month: 'short',
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
-                      </span>
-                    </div>
-                    
-                    {post.caption && (
-                      <p className="text-sm text-gray-800 mb-3 leading-relaxed">
-                        {post.caption.length > 200 ? (
-                          <>
-                            {post.caption.substring(0, 200)}...
-                            <span className="text-pink-600 text-xs ml-1 cursor-pointer">read more</span>
-                          </>
-                        ) : post.caption}
-                      </p>
-                    )}
-                    
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-4 text-xs text-gray-600">
-                        <span className="flex items-center space-x-1">
-                          <span>❤️</span>
-                          <span>{post.like_count || 0}</span>
-                        </span>
-                        <span className="flex items-center space-x-1">
-                          <span>💬</span>
-                          <span>{post.comments_count || 0}</span>
-                        </span>
-                      </div>
-                      
-                      {post.permalink && (
-                        <a 
-                          href={post.permalink} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="text-xs text-pink-600 hover:text-pink-800 font-medium"
-                        >
-                          View on Instagram →
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  };
-
   const renderPostModal = () => {
     if (!showPostModal || !postTarget) return null;
-    const { type, page, instagramId } = postTarget;
+    const { type, page } = postTarget;
 
     const handleFileChange = async (e) => {
       const file = e.target.files[0];
       if (!file) return;
       setUploadResult({
         success: false,
-        error: 'Instagram requires a public image URL. Please upload your image to a public host (e.g. imgur, Cloudinary, S3) and paste the URL below.'
+        error: 'Image requires a public image URL. Please upload your image to a public host and paste the URL below.'
       });
       setPostImageUrl('');
     };
@@ -1335,7 +1140,7 @@ function FacebookIntegration() {
             }}
           >✕</button>
           <h4 className="font-bold mb-4">
-            {type === 'facebook' ? 'Create Facebook Post' : 'Create Instagram Post'}
+            Create Facebook Post
           </h4>
           <div className="space-y-3">
             <textarea
@@ -1357,21 +1162,18 @@ function FacebookIntegration() {
             <input
               className="w-full border rounded p-2"
               type="text"
-              placeholder="Image URL (publicly accessible, optional for FB, required for IG)"
+              placeholder="Image URL (publicly accessible, optional)"
               value={postImageUrl}
               onChange={e => setPostImageUrl(e.target.value)}
             />
             <div className="text-xs text-gray-500">
-              {type === 'instagram'
-                ? 'Instagram requires a public image URL. Upload your image to a public host (e.g. imgur, Cloudinary, S3) and paste the URL above.'
-                : 'Image is optional for Facebook posts.'}
+              Image is optional for Facebook posts.
             </div>
             <button
               className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:opacity-50 mt-2"
               disabled={uploadingPost || (!postMessage && !postImageUrl)}
               onClick={() => {
-                if (type === 'facebook') uploadFacebookPost(page);
-                else if (type === 'instagram') uploadInstagramPost(page, instagramId);
+                uploadFacebookPost(page);
               }}
             >
               {uploadingPost ? 'Posting...' : 'Post'}
@@ -1442,35 +1244,6 @@ function FacebookIntegration() {
             </div>
           </div>
 
-          {page.instagram_details && (
-            <div className="mb-4 p-4 bg-gradient-to-r from-pink-50 to-purple-50 rounded-lg border border-pink-200">
-              <h5 className="font-medium text-pink-700 mb-2 flex items-center">
-                <Instagram className="h-4 w-4 mr-2" />
-                Connected Instagram Account
-              </h5>
-              <div className="flex items-center space-x-4">
-                {page.instagram_details.profile_picture_url && (
-                  <img 
-                    src={page.instagram_details.profile_picture_url} 
-                    alt="Instagram profile"
-                    className="w-12 h-12 rounded-full"
-                  />
-                )}
-                <div>
-                  <p className="font-medium">@{page.instagram_details.username}</p>
-                  <div className="flex space-x-4 text-sm text-gray-600">
-                    <span>Followers: {page.instagram_details.followers_count?.toLocaleString()}</span>
-                    <span>Following: {page.instagram_details.follows_count?.toLocaleString()}</span>
-                    <span>Posts: {page.instagram_details.media_count}</span>
-                  </div>
-                </div>
-              </div>
-              {page.instagram_details.biography && (
-                <p className="text-sm text-gray-700 mt-2">{page.instagram_details.biography}</p>
-              )}
-            </div>
-          )}
-
           <div className="flex flex-wrap gap-2">
             <button
               className="bg-blue-700 text-white px-4 py-2 rounded text-sm hover:bg-blue-800 flex items-center space-x-2"
@@ -1486,24 +1259,8 @@ function FacebookIntegration() {
               <Facebook className="h-4 w-4" />
               <span>Create FB Post</span>
             </button>
-            {page.instagram_details && (
-              <button
-                className="bg-pink-600 text-white px-4 py-2 rounded text-sm hover:bg-pink-700 flex items-center space-x-2"
-                onClick={() => {
-                  setPostTarget({ type: 'instagram', page, instagramId: page.instagram_details.id });
-                  setShowPostModal(true);
-                  setPostMessage('');
-                  setPostImageUrl('');
-                  setUploadResult(null);
-                }}
-                disabled={!isFacebookApiReady()}
-              >
-                <Instagram className="h-4 w-4" />
-                <span>Create IG Post</span>
-              </button>
-            )}
             <button
-              onClick={() => fetchPageInsights(page.id, page.access_token, page.instagram_details?.id)}
+              onClick={() => fetchPageInsights(page.id, page.access_token)}
               disabled={loadingInsights[page.id] || !isFacebookApiReady()}
               className="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600 disabled:opacity-50 flex items-center space-x-2"
             >
@@ -1512,7 +1269,7 @@ function FacebookIntegration() {
             </button>
             
             <button
-              onClick={() => fetchPageAnalyticsWithDbFirst(page.id, page.access_token, page.instagram_details?.id, timePeriods[page.id] || 30)}
+              onClick={() => fetchPageAnalyticsWithDbFirst(page.id, page.access_token, undefined, timePeriods[page.id] || 30)}
               disabled={loadingAnalytics[page.id] || !isFacebookApiReady()}
               className="bg-purple-500 text-white px-4 py-2 rounded text-sm hover:bg-purple-600 disabled:opacity-50 flex items-center space-x-2"
             >
@@ -1521,7 +1278,7 @@ function FacebookIntegration() {
             </button>
             
             <button
-              onClick={() => fetchPageAnalyticsLive(page.id, page.access_token, page.instagram_details?.id, timePeriods[page.id] || 30)}
+              onClick={() => fetchPageAnalyticsLive(page.id, page.access_token, undefined, timePeriods[page.id] || 30)}
               disabled={loadingAnalytics[page.id] || !isFacebookApiReady()}
               className="bg-orange-500 text-white px-4 py-2 rounded text-sm hover:bg-orange-600 disabled:opacity-50 flex items-center space-x-2"
             >
@@ -1537,23 +1294,11 @@ function FacebookIntegration() {
               <Facebook className="h-4 w-4" />
               <span>{loadingPosts[page.id] ? 'Loading...' : 'Show FB Posts'}</span>
             </button>
-
-            {page.instagram_details && (
-              <button
-                onClick={() => fetchInstagramPosts(page.instagram_details.id, page.access_token)}
-                disabled={loadingInstagramPosts[page.instagram_details.id] || !isFacebookApiReady()}
-                className="bg-pink-500 text-white px-4 py-2 rounded text-sm hover:bg-pink-600 disabled:opacity-50 flex items-center space-x-2"
-              >
-                <Instagram className="h-4 w-4" />
-                <span>{loadingInstagramPosts[page.instagram_details.id] ? 'Loading...' : 'Show IG Posts'}</span>
-              </button>
-            )}
           </div>
 
           {renderPageInsights(page.id)}
           {renderAnalytics(page.id)}
           {renderPagePosts(page.id)}
-          {page.instagram_details && renderInstagramPosts(page.instagram_details.id)}
         </div>
       </div>
     </div>
@@ -1572,16 +1317,35 @@ function FacebookIntegration() {
       setPageInsights({});
       setPagePosts({});
       setAnalyticsData({});
-      setInstagramPosts({});
     }
   };
 
   // Remove account
-  const removeAccount = (accountId) => {
+  const removeAccount = async (accountId) => {
     const updatedAccounts = connectedAccounts.filter(acc => acc.id !== accountId);
     setConnectedAccounts(updatedAccounts);
     saveAccountsToStorage(updatedAccounts);
-    
+
+    // Remove from backend
+    const customerId = getCurrentCustomerId();
+    if (customerId) {
+      // Find backend account _id by platformUserId
+      try {
+        const res = await fetch(`${process.env.REACT_APP_API_URL}/api/customer-social-links/${customerId}`);
+        const data = await res.json();
+        if (data.success && Array.isArray(data.accounts)) {
+          const backendAcc = data.accounts.find(acc => acc.platformUserId === accountId);
+          if (backendAcc && backendAcc._id) {
+            await fetch(`${process.env.REACT_APP_API_URL}/api/customer-social-links/${backendAcc._id}`, {
+              method: 'DELETE'
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to remove account from backend:', err);
+      }
+    }
+
     if (activeAccountId === accountId) {
       if (updatedAccounts.length > 0) {
         // Switch to first remaining account
@@ -1594,7 +1358,6 @@ function FacebookIntegration() {
         setPageInsights({});
         setPagePosts({});
         setAnalyticsData({});
-        setInstagramPosts({});
         removeUserData('fb_active_account_id');
       }
     }
@@ -1631,7 +1394,6 @@ function FacebookIntegration() {
     setPageInsights({});
     setPagePosts({});
     setAnalyticsData({});
-    setInstagramPosts({});
     removeUserData('fb_connected_accounts');
     removeUserData('fb_active_account_id');
   };
@@ -1647,8 +1409,6 @@ function FacebookIntegration() {
           pageId: page.id,
           pageName: page.name,
           accessToken: page.access_token,
-          instagramId: page.instagram_details?.id || null,
-          instagramUsername: page.instagram_details?.username || null,
           userId: activeAccount?.id || 'unknown',
           accountName: activeAccount?.name || 'unknown'
         })
@@ -1719,9 +1479,6 @@ function FacebookIntegration() {
             fanCount: page.fan_count,
             permissions: ['pages_read_engagement'],
             tasks: page.tasks || [],
-            instagramBusinessAccount: page.instagram_business_account ? {
-              id: page.instagram_business_account.id
-            } : null,
             tokenValidatedAt: new Date().toISOString()
           }
         ],
@@ -1857,6 +1614,8 @@ function FacebookIntegration() {
           // Fallback to re-fetching pages normally
           fetchFbPages();
           alert('✅ Tokens refreshed successfully!');
+       
+
         }
       } else {
         alert('❌ Failed to refresh session. Please try reconnecting your Facebook account.');
@@ -1963,12 +1722,16 @@ function FacebookIntegration() {
                   onClick={() => switchAccount(account.id)}
                 >
                   <div className="flex items-center space-x-3">
-                    {account.picture && (
+                    {account.picture?.data?.url ? (
                       <img
                         src={account.picture.data.url}
                         alt={account.name}
                         className="w-12 h-12 rounded-full"
                       />
+                    ) : (
+                      <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                        <Facebook className="h-6 w-6 text-blue-600" />
+                      </div>
                     )}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center space-x-2">
@@ -1986,11 +1749,6 @@ function FacebookIntegration() {
                       <p className="text-xs text-gray-500">
                         Connected {new Date(account.connectedAt).toLocaleDateString()}
                       </p>
-                      {account.tokenExpiresAt && (
-                        <p className="text-xs text-gray-500">
-                          Token expires: {new Date(account.tokenExpiresAt).toLocaleDateString()}
-                        </p>
-                      )}
                     </div>
                     <button
                       onClick={(e) => {
@@ -2008,46 +1766,8 @@ function FacebookIntegration() {
             })}
           </div>
         )}
-
-        {/* Enhanced Token Status Information */}
-        {activeAccount && (
-          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-            <h6 className="font-medium text-blue-800 mb-2">🔑 Token Management</h6>
-            <div className="text-sm text-blue-700 space-y-1">
-              <p>📝 <strong>Active Account:</strong> {activeAccount.name}</p>
-              <p>🔄 <strong>Auto-Refresh:</strong> Tokens are automatically refreshed when needed</p>
-              <p>⏰ <strong>Session Management:</strong> Only expires when you manually disconnect</p>
-              <p>🔗 <strong>Manual Actions:</strong> Use "Refresh Tokens" if you encounter issues</p>
-              <p>✅ <strong>Permissions:</strong> pages_read_engagement, pages_manage_metadata</p>
-              {activeAccount.tokenExpiresAt && (
-                <p>⏳ <strong>Token Expires:</strong> {new Date(activeAccount.tokenExpiresAt).toLocaleString()}</p>
-              )}
-            </div>
-          </div>
-        )}
       </div>
     );
-  };
-
-  // Add this debug function after the existing functions
-  const debugStorage = () => {
-    console.log('🔍 Manual storage check:');
-    console.log('localStorage fb_connected_accounts:', localStorage.getItem('fb_connected_accounts'));
-    console.log('localStorage fb_active_account_id:', localStorage.getItem('fb_active_account_id'));
-    console.log('getUserData fb_connected_accounts:', getUserData('fb_connected_accounts'));
-    console.log('getUserData fb_active_account_id:', getUserData('fb_active_account_id'));
-    console.log('Current state - connectedAccounts:', connectedAccounts);
-    console.log('Current state - activeAccountId:', activeAccountId);
-    console.log('Current state - activeAccount:', activeAccount);
-    
-    // Try to manually load accounts
-    const accounts = getUserData('fb_connected_accounts');
-    if (accounts && accounts.length > 0) {
-      console.log('✅ Found accounts, manually setting:', accounts);
-      setConnectedAccounts(accounts);
-      setActiveAccountId(accounts[0].id);
-      setActiveAccount(accounts[0]);
-    }
   };
 
   // Upload Facebook Post
@@ -2114,211 +1834,183 @@ function FacebookIntegration() {
     }
   };
 
-  // Upload Instagram Post
-  const uploadInstagramPost = async (page, instagramId) => {
-    if (!isFacebookApiReady()) {
-      setUploadResult({ success: false, error: 'Facebook API is not ready' });
-      return;
-    }
-
-    if (!postImageUrl) {
-      setUploadResult({ 
-        success: false, 
-        error: 'Instagram posts require an image URL. Please provide a publicly accessible image URL.' 
-      });
-      return;
-    }
-
-    setUploadingPost(true);
-    setUploadResult(null);
-
-    try {
-      console.log('📤 Uploading Instagram post...');
-      
-      // Step 1: Create media object
-      const mediaData = {
-        image_url: postImageUrl,
-        caption: postMessage,
-        access_token: page.access_token
-      };
-
-      window.FB.api(
-        `/${instagramId}/media`,
-        'POST',
-        mediaData,
-        function(mediaResponse) {
-          if (mediaResponse && !mediaResponse.error && mediaResponse.id) {
-            console.log('✅ Instagram media created:', mediaResponse.id);
-            
-            // Step 2: Publish the media
-            window.FB.api(
-              `/${instagramId}/media_publish`,
-              'POST',
-              {
-                creation_id: mediaResponse.id,
-                access_token: page.access_token
-              },
-              function(publishResponse) {
-                setUploadingPost(false);
-                
-                if (publishResponse && !publishResponse.error) {
-                  console.log('✅ Instagram post published successfully:', publishResponse.id);
-                  setUploadResult({
-                    success: true,
-                    id: publishResponse.id,
-                    message: 'Instagram post uploaded successfully!'
-                  });
-                  
-                  // Clear form after successful upload
-                  setTimeout(() => {
-                    setPostMessage('');
-                    setPostImageUrl('');
-                    setShowPostModal(false);
-                    setUploadResult(null);
-                  }, 3000);
-                } else {
-                  console.error('❌ Instagram post publish failed:', publishResponse.error);
-                  setUploadResult({
-                    success: false,
-                    error: publishResponse.error?.message || 'Failed to publish Instagram post'
-                  });
-                }
-              }
-            );
-          } else {
-            setUploadingPost(false);
-            console.error('❌ Instagram media creation failed:', mediaResponse.error);
-            setUploadResult({
-              success: false,
-              error: mediaResponse.error?.message || 'Failed to create Instagram media'
-            });
-          }
-        }
-      );
-    } catch (error) {
-      console.error('❌ Instagram post upload error:', error);
-      setUploadingPost(false);
-      setUploadResult({
-        success: false,
-        error: error.message || 'Failed to upload Instagram post'
-      });
-    }
-  };
-
   return (
-    <div className="border rounded-lg p-6 mb-6 bg-gradient-to-r from-blue-50 to-indigo-50">
-      <div className="flex items-center space-x-3 mb-4">
-        <Facebook className="h-6 w-6 text-blue-600" />
-        <h3 className="font-medium text-lg">Facebook/Meta Integration</h3>
-        {/* Debug info */}
-        <div className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
-          Accounts: {connectedAccounts.length} | SDK: {fbSdkLoaded ? '✅' : '⏳'} | Active: {activeAccount?.name || 'None'}
-        </div>
-        {/* Debug button - remove after fixing */}
-        <button
-          onClick={debugStorage}
-          className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded hover:bg-red-200"
-        >
-          🔧 Debug Storage
-        </button>
-      </div>
-
-      {!fbSdkLoaded ? (
-        <div className="flex items-center space-x-2">
-          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-          <p>Loading Facebook SDK...</p>
-        </div>
-      ) : (
-        <>
-          {/* Debug section - remove this after fixing */}
-          <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-xs">
-            <h6 className="font-medium text-yellow-800 mb-1">🔧 Debug Info:</h6>
-            <div className="text-yellow-700 space-y-1">
-              <p>• Connected Accounts: {connectedAccounts.length}</p>
-              <p>• Active Account ID: {activeAccountId || 'None'}</p>
-              <p>• Active Account: {activeAccount?.name || 'None'}</p>
-              <p>• FB SDK Loaded: {fbSdkLoaded ? 'Yes' : 'No'}</p>
-              <p>• FB API Ready: {isFacebookApiReady() ? 'Yes' : 'No'}</p>
-              <p>• Pages Count: {fbPages.length}</p>
-              <p>• Storage Check: {JSON.stringify(getUserData('fb_connected_accounts'))}</p>
-            </div>
+    <div className="min-h-screen bg-gray-50">
+      <header className="bg-white shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center h-16">
+            <Facebook className="h-8 w-8 text-blue-600" />
+            <span className="ml-2 text-xl font-bold text-[#1a1f2e]">Facebook Integration</span>
           </div>
-
-          {connectedAccounts.length === 0 ? (
-            <div className="space-y-4">
-              <p className="text-sm text-gray-600">
-                Connect your Facebook accounts to manage your pages and access detailed analytics.
-              </p>
-              <button
-                onClick={fbLogin}
-                disabled={!isFacebookApiReady()}
-                className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 transition-colors"
-              >
-                <Facebook className="h-5 w-5" />
-                <span>Connect Facebook Account</span>
-              </button>
+        </div>
+      </header>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="bg-white rounded-lg shadow-md p-6">
+          {!fbSdkLoaded ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                <p className="text-gray-600">Loading Facebook SDK...</p>
+              </div>
             </div>
           ) : (
-            <div className="space-y-4">
-              {renderAccountSelector()}
-              
-              {activeAccount && (
-                <>
-                  <div className="flex items-center justify-between p-4 bg-white rounded-lg border">
-                    <div className="flex items-center space-x-3">
-                      {activeAccount.picture && (
-                        <img 
-                          src={activeAccount.picture.data.url} 
-                          alt="Profile"
-                          className="w-10 h-10 rounded-full"
-                        />
+            <>
+              {fbError && renderError()}
+              {connectedAccounts.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-2xl mb-4">
+                    <Facebook className="h-8 w-8 text-blue-600" />
+                  </div>
+                  <h3 className="text-xl font-semibold text-gray-900 mb-2">Connect Facebook Accounts</h3>
+                  <p className="text-gray-600 mb-6 max-w-md mx-auto">
+                    Connect your Facebook accounts to manage your pages and access detailed analytics.
+                  </p>
+                  <button
+                    onClick={fbLogin}
+                    disabled={!isFacebookApiReady()}
+                    className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-8 py-3 rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 flex items-center space-x-3 mx-auto font-medium"
+                  >
+                    <Facebook className="h-5 w-5" />
+                    <span>Connect Facebook Account</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Connected Accounts Header */}
+                  <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center space-x-4">
+                      <div className="flex items-center space-x-1 bg-green-100 px-3 py-1 rounded-full">
+                        <span className="text-sm font-medium text-green-700">
+                          {connectedAccounts.length} Account{connectedAccounts.length !== 1 ? 's' : ''} Connected
+                        </span>
+                      </div>
+                      {activeAccount && (
+                        <div className="flex items-center space-x-2">
+                          {activeAccount.picture?.data?.url ? (
+                            <img
+                              src={activeAccount.picture.data.url}
+                              alt="Profile"
+                              className="w-6 h-6 rounded-full"
+                            />
+                          ) : (
+                            <Facebook className="h-4 w-4 text-blue-600" />
+                          )}
+                          <span className="text-sm font-medium text-gray-700">
+                            {activeAccount.name}
+                          </span>
+                        </div>
                       )}
-                      <div>
-                        <p className="font-medium">Active Account: {activeAccount.name}</p>
-                        <p className="text-sm text-gray-600">{activeAccount.email}</p>
-                        {isTokenExpired(activeAccount) && (
-                          <p className="text-xs text-orange-600 font-medium">⚠️ Token expired - refresh recommended</p>
-                        )}
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={fbLogin}
+                        disabled={!fbSdkLoaded || !isFacebookApiReady()}
+                        className="flex items-center space-x-2 px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors disabled:opacity-50"
+                      >
+                        <Plus className="h-4 w-4" />
+                        <span>Add Account</span>
+                      </button>
+                      <button
+                        onClick={fbLogoutAll}
+                        className="flex items-center space-x-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        <span>Disconnect All</span>
+                      </button>
+                    </div>
+                  </div>
+                  {/* Account Selector (if multiple) */}
+                  {connectedAccounts.length > 1 && (
+                    <div className="mb-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {connectedAccounts.map((account) => {
+                          const expired = isTokenExpired(account);
+                          return (
+                            <div
+                              key={account.id}
+                              className={`border rounded-lg p-4 transition-all cursor-pointer ${
+                                activeAccountId === account.id
+                                  ? 'border-blue-500 bg-blue-50 shadow-md'
+                                  : 'border-gray-200 bg-white hover:border-gray-300'
+                              } ${expired ? 'border-orange-300 bg-orange-50' : ''}`}
+                              onClick={() => switchAccount(account.id)}
+                            >
+                              <div className="flex items-center space-x-3">
+                                {account.picture?.data?.url ? (
+                                  <img
+                                    src={account.picture.data.url}
+                                    alt={account.name}
+                                    className="w-12 h-12 rounded-full"
+                                  />
+                                ) : (
+                                  <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                                    <Facebook className="h-6 w-6 text-blue-600" />
+                                  </div>
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center space-x-2">
+                                    <h5 className="font-medium text-gray-900 truncate">{account.name}</h5>
+                                    {activeAccountId === account.id && (
+                                      <UserCheck className="h-4 w-4 text-blue-600" />
+                                    )}
+                                    {expired && (
+                                      <span className="text-xs bg-orange-200 text-orange-800 px-2 py-1 rounded">
+                                        Expired
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-sm text-gray-600 truncate">{account.email}</p>
+                                  <p className="text-xs text-gray-500">
+                                    Connected {new Date(account.connectedAt).toLocaleDateString()}
+                                  </p>
+                                </div>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    removeAccount(account.id);
+                                  }}
+                                  className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                                  title="Remove account"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
-                    <button
-                      onClick={fbLogoutAll}
-                      className="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400 transition-colors text-sm"
-                    >
-                      Disconnect All
-                    </button>
-                  </div>
-
-                  <div>
-                    <h4 className="font-medium mb-3">Pages for {activeAccount.name}:</h4>
-                    {fbPages.length === 0 ? (
-                      <div className="text-center py-8 text-gray-500">
-                        <Facebook className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                        <p>No pages found or you don't manage any pages.</p>
-                        <p className="text-sm">Make sure you're an admin or editor of at least one Facebook page.</p>
-                        {/* Add retry button */}
-                        <button
-                          onClick={fetchFbPages}
-                          disabled={!isFacebookApiReady()}
-                          className="mt-3 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50 text-sm"
-                        >
-                          🔄 Retry Loading Pages
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        {fbPages.map(page => renderPageDetails(page))}
-                      </div>
-                    )}
-                  </div>
-                </>
+                  )}
+                  {/* Pages for Active Account */}
+                  {activeAccount && (
+                    <div>
+                      <h4 className="font-medium mb-3">Pages for {activeAccount.name}:</h4>
+                      {fbPages.length === 0 ? (
+                        <div className="text-center py-12 text-gray-500">
+                          <Facebook className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                          <p>No pages found or you don't manage any pages.</p>
+                          <p className="text-sm">Make sure you're an admin or editor of at least one Facebook page.</p>
+                          <button
+                            onClick={fetchFbPages}
+                            disabled={!isFacebookApiReady()}
+                            className="mt-3 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50 text-sm"
+                          >
+                            🔄 Retry Loading Pages
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          {fbPages.map(page => renderPageDetails(page))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               )}
-            </div>
+            </>
           )}
-          {renderError()}
-        </>
-      )}
-      {renderPostModal()}
+        </div>
+      </div>
     </div>
   );
 }

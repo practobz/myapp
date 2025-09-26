@@ -187,56 +187,7 @@ function Dashboard() {
           </div>
         </div>
 
-        {/* Engagement Metrics
-        <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden">
-          <div className="px-8 py-6 border-b border-gray-200/50">
-            <h2 className="text-2xl font-bold text-gray-900">Performance Metrics</h2>
-            <p className="text-gray-600 mt-2">Track your content performance and engagement</p>
-          </div>
-          
-          <div className="p-8">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              <div className="bg-gradient-to-br from-yellow-50 to-orange-50 rounded-xl p-6 border border-yellow-200/50 hover:shadow-lg transition-all duration-300">
-                <div className="flex items-center">
-                  <div className="p-3 bg-gradient-to-r from-yellow-500 to-orange-500 rounded-xl shadow-md">
-                    <TrendingUp className="h-6 w-6 text-white" />
-                  </div>
-                  <div className="ml-4">
-                    <p className="text-sm font-semibold text-gray-600 uppercase tracking-wider">Engagement Rate</p>
-                    <h3 className="text-2xl font-bold text-gray-900 mt-1">{engagementRate}</h3>
-                    <p className="text-sm text-green-600 font-medium mt-1">Above average</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-gradient-to-br from-pink-50 to-rose-50 rounded-xl p-6 border border-pink-200/50 hover:shadow-lg transition-all duration-300">
-                <div className="flex items-center">
-                  <div className="p-3 bg-gradient-to-r from-pink-500 to-rose-500 rounded-xl shadow-md">
-                    <BarChart3 className="h-6 w-6 text-white" />
-                  </div>
-                  <div className="ml-4">
-                    <p className="text-sm font-semibold text-gray-600 uppercase tracking-wider">Monthly Growth</p>
-                    <h3 className="text-2xl font-bold text-gray-900 mt-1">{monthlyGrowth}</h3>
-                    <p className="text-sm text-green-600 font-medium mt-1">Trending up</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-xl p-6 border border-indigo-200/50 hover:shadow-lg transition-all duration-300">
-                <div className="flex items-center">
-                  <div className="p-3 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-xl shadow-md">
-                    <Target className="h-6 w-6 text-white" />
-                  </div>
-                  <div className="ml-4">
-                    <p className="text-sm font-semibold text-gray-600 uppercase tracking-wider">Reach Target</p>
-                    <h3 className="text-2xl font-bold text-gray-900 mt-1">{reachTarget}</h3>
-                    <p className="text-sm text-green-600 font-medium mt-1">On track</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div> */}
+       
 
         {/* Quick Actions */}
         <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 p-8">

@@ -30,26 +30,80 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
   // Only use available scopes
   const LINKEDIN_SCOPE = 'openid profile email w_member_social';
 
-  // Load saved accounts from localStorage on mount
-  useEffect(() => {
-    // First, migrate any existing data to user-specific storage
-    migrateToUserSpecificStorage([
-      'connected_linkedin_accounts',
-      'selected_linkedin_account'
-    ]);
-
-    const savedAccounts = getUserData('connected_linkedin_accounts');
-    const savedSelectedId = getUserData('selected_linkedin_account');
-    
-    if (savedAccounts) {
-      setConnectedAccounts(savedAccounts);
-      
-      if (savedSelectedId && savedAccounts.find(acc => acc.id === savedSelectedId)) {
-        setSelectedAccountId(savedSelectedId);
-      } else if (savedAccounts.length > 0) {
-        setSelectedAccountId(savedAccounts[0].id);
-      }
+  // Helper: Get current customerId (same logic as storeCustomerSocialAccount)
+  const getCustomerId = () => {
+    const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
+    let customerId = currentUser.userId || currentUser.id || currentUser._id || currentUser.customer_id;
+    if (!customerId) {
+      const authUser = JSON.parse(localStorage.getItem('user') || '{}');
+      customerId = authUser.userId || authUser.id || authUser._id || authUser.customer_id;
     }
+    return customerId;
+  };
+
+  // Helper: Normalize accounts so each has an 'id' property
+  const normalizeAccounts = (accounts) => {
+    return accounts.map(acc => ({
+      ...acc,
+      id: acc.id || acc._id,
+      profile: acc.profile
+        ? acc.profile
+        : {
+            name: acc.name || '',
+            headline: acc.headline || acc.preferred_username || '',
+            email: acc.email || '',
+            picture: acc.picture || ''
+          }
+    }));
+  };
+
+  // Load accounts from backend on mount
+  useEffect(() => {
+    const customerId = getCustomerId();
+    if (!customerId) return;
+
+    // Fetch from backend
+    const fetchFromBackend = async () => {
+      try {
+        const res = await fetch(`${process.env.REACT_APP_API_URL}/api/customer-social-links/${customerId}`);
+        const result = await res.json();
+        if (result.success && Array.isArray(result.accounts)) {
+          // Only keep LinkedIn accounts
+          const linkedinAccounts = result.accounts.filter(acc => acc.platform === 'linkedin');
+          const normalized = normalizeAccounts(linkedinAccounts);
+          setConnectedAccounts(normalized);
+          setUserData('connected_linkedin_accounts', normalized);
+          setUserData('linkedin_connected_accounts', normalized); // <-- Add this line
+
+          // Select account logic
+          const savedSelectedId = getUserData('selected_linkedin_account');
+          if (savedSelectedId && normalized.find(acc => acc.id === savedSelectedId)) {
+            setSelectedAccountId(savedSelectedId);
+          } else if (normalized.length > 0) {
+            setSelectedAccountId(normalized[0].id);
+            setUserData('selected_linkedin_account', normalized[0].id);
+          }
+        }
+      } catch (err) {
+        // fallback to localStorage if backend fails
+        const savedAccounts = getUserData('connected_linkedin_accounts');
+        const savedSelectedId = getUserData('selected_linkedin_account');
+        if (savedAccounts) {
+          // Only keep LinkedIn accounts
+          const linkedinAccounts = savedAccounts.filter(acc => acc.platform === 'linkedin');
+          const normalized = normalizeAccounts(linkedinAccounts);
+          setConnectedAccounts(normalized);
+          setUserData('linkedin_connected_accounts', normalized); // <-- Add this line
+          if (savedSelectedId && normalized.find(acc => acc.id === savedSelectedId)) {
+            setSelectedAccountId(savedSelectedId);
+          } else if (normalized.length > 0) {
+            setSelectedAccountId(normalized[0].id);
+          }
+        }
+      }
+    };
+
+    fetchFromBackend();
   }, []);
 
   // Start LinkedIn OAuth in popup
@@ -140,6 +194,7 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
 
         // Save to localStorage with user-specific keys
         setUserData('connected_linkedin_accounts', updatedAccounts);
+        setUserData('linkedin_connected_accounts', updatedAccounts); // <-- Add this line
         
         // Store customer social account for admin access
         await storeCustomerSocialAccount(newAccount);
@@ -334,34 +389,52 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
   }, [connectedAccounts, onConnectionStatusChange]);
 
   // Disconnect all accounts
-  const handleDisconnectAll = () => {
+  const handleDisconnectAll = async () => {
+    // Remove each from backend
+    for (const acc of connectedAccounts) {
+      try {
+        await fetch(`${process.env.REACT_APP_API_URL}/api/customer-social-links/${acc.id || acc._id}`, {
+          method: 'DELETE'
+        });
+      } catch (err) {}
+    }
     setConnectedAccounts([]);
     setSelectedAccountId(null);
     setError('');
     setSuccess('');
     removeUserData('connected_linkedin_accounts');
+    removeUserData('linkedin_connected_accounts'); // <-- Add this line
     removeUserData('selected_linkedin_account');
     fetchLinkedinData();
 
-    // Notify parent that LinkedIn is now disconnected
     if (onConnectionStatusChange) {
       onConnectionStatusChange(false);
     }
   };
 
-  // Disconnect specific account
-  const disconnectAccount = (accountId) => {
+  // Disconnect specific account (remove from backend too)
+  const disconnectAccount = async (accountId) => {
     const updatedAccounts = connectedAccounts.filter(acc => acc.id !== accountId);
     setConnectedAccounts(updatedAccounts);
-    
+
+    // Remove from backend
+    try {
+      // Try both id and _id for compatibility
+      await fetch(`${process.env.REACT_APP_API_URL}/api/customer-social-links/${accountId}`, {
+        method: 'DELETE'
+      });
+    } catch (err) {
+      // Ignore backend errors for now
+    }
+
     // If disconnecting the selected account, select another one
     if (selectedAccountId === accountId) {
       const newSelectedId = updatedAccounts.length > 0 ? updatedAccounts[0].id : null;
       setSelectedAccountId(newSelectedId);
       setUserData('selected_linkedin_account', newSelectedId || '');
     }
-
     setUserData('connected_linkedin_accounts', updatedAccounts);
+    setUserData('linkedin_connected_accounts', updatedAccounts); // <-- Add this line
     fetchLinkedinData();
   };
 
@@ -393,7 +466,6 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
             ? { ...acc, profile: data, lastRefreshed: new Date().toISOString() }
             : acc
         );
-        
         setConnectedAccounts(updatedAccounts);
         setUserData('connected_linkedin_accounts', updatedAccounts);
       }
@@ -719,7 +791,20 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
                     </div>
                     <p className="text-sm text-gray-600 truncate">{account.profile?.headline || account.profile?.email}</p>
                     <p className="text-xs text-gray-500">
-                      Connected {new Date(account.connectedAt).toLocaleDateString()}
+                      {/* Fix: Parse and format the connection date correctly */}
+                      Connected {
+                        (() => {
+                          let date = account.connectedAt;
+                          if (date) {
+                            // Try to parse ISO string or timestamp
+                            const parsedDate = new Date(date);
+                            if (!isNaN(parsedDate.getTime())) {
+                              return parsedDate.toLocaleDateString();
+                            }
+                          }
+                          return "Unknown";
+                        })()
+                      }
                     </p>
                   </div>
                   <button
@@ -937,89 +1022,9 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
     );
   };
 
-  // Render analytics section (placeholder)
-  const renderAnalytics = () => {
-    if (!selectedAccount) return null;
-
-    return (
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 mb-8">
-        <div className="flex items-center space-x-3 mb-6">
-          <div className="bg-blue-700 p-2 rounded-lg">
-            <TrendingUp className="h-5 w-5 text-white" />
-          </div>
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">LinkedIn Analytics</h3>
-            <p className="text-sm text-gray-600">Track your professional network growth</p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4">
-            <div className="flex items-center space-x-3">
-              <div className="bg-blue-100 p-2 rounded-lg">
-                <Eye className="h-5 w-5 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Profile Views</p>
-                <p className="text-2xl font-bold text-gray-900">{linkedinAnalytics.profileViews}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-4">
-            <div className="flex items-center space-x-3">
-              <div className="bg-green-100 p-2 rounded-lg">
-                <Users className="h-5 w-5 text-green-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Connections</p>
-                <p className="text-2xl font-bold text-gray-900">{linkedinAnalytics.connections}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-4">
-            <div className="flex items-center space-x-3">
-              <div className="bg-purple-100 p-2 rounded-lg">
-                <MessageSquare className="h-5 w-5 text-purple-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Post Engagement</p>
-                <p className="text-2xl font-bold text-gray-900">{linkedinAnalytics.postEngagement}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-xl">
-          <p className="text-sm text-yellow-800">
-            <strong>Note:</strong> Detailed analytics require LinkedIn Marketing Developer Platform access. 
-            Current integration shows basic profile information only.
-          </p>
-        </div>
-      </div>
-    );
-  };
-
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center h-16">
-            <button
-              onClick={() => navigate('/customer/settings')}
-              className="mr-4 text-gray-600 hover:text-gray-900 transition-colors"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </button>
-            <div className="flex items-center">
-              <Linkedin className="h-8 w-8 text-blue-700" />
-              <span className="ml-2 text-xl font-bold text-[#1a1f2e]">LinkedIn Integration</span>
-            </div>
-          </div>
-        </div>
-      </header>
+     
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -1123,84 +1128,9 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
                     </div>
                   </div>
 
-                  {renderPostCreation()
-                  }
-                  {renderAnalytics()}
-
-                  <div className="flex space-x-2 mt-4">
-                    <button
-                      onClick={() => fetchOidcUserinfo(selectedAccount.id)}
-                      disabled={loading}
-                      className="flex items-center space-x-2 px-3 py-2 bg-white border border-indigo-200 text-indigo-700 rounded-lg hover:bg-indigo-50 transition-colors disabled:opacity-50 text-sm"
-                    >
-                      <ExternalLink className="h-4 w-4" />
-                      <span>Show OIDC Userinfo</span>
-                    </button>
-                  </div>
-
-                  {oidcUserinfo && (
-                    <div className="mt-6 bg-white rounded-xl p-4 shadow-sm border border-indigo-200">
-                      <div className="font-medium text-indigo-600 mb-2">OIDC Userinfo</div>
-                      <pre className="text-xs text-gray-700 bg-gray-50 rounded p-2 overflow-x-auto">{JSON.stringify(oidcUserinfo, null, 2)}</pre>
-                    </div>
-                  )}
+                  {renderPostCreation()}
                 </>
               )}
-
-              {/* LinkedIn Data Grid */}
-              <div className="mt-8">
-                <h2 className="text-xl font-semibold mb-4">LinkedIn Data</h2>
-                {linkedinDataLoading ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
-                    <span className="ml-2 text-gray-600">Loading...</span>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {linkedinData.length > 0 ? (
-                      linkedinData.map((item, index) => (
-                        <div key={index} className="border border-gray-200 p-4 rounded-lg shadow-sm">
-                          <p><strong>Company:</strong> {item.company}</p>
-                          <p><strong>URL:</strong> {item.url}</p>
-                          <p><strong>Status:</strong> {item.status}</p>
-                          {/* Show image URL as text if present */}
-                          {item.imageUrl ? (
-                            <div className="mt-2 text-xs text-blue-700 break-all">
-                              <strong>Image URL:</strong> <a href={item.imageUrl} target="_blank" rel="noopener noreferrer">{item.imageUrl}</a>
-                            </div>
-                          ) : (
-                            // Try to extract image URL from text if present
-                            (() => {
-                              const match = item.text && item.text.match(/\[Image:\s*(https?:\/\/[^\]]+)\]/);
-                              if (match) {
-                                return (
-                                  <div className="mt-2 text-xs text-blue-700 break-all">
-                                    <strong>Image URL:</strong> <a href={match[1]} target="_blank" rel="noopener noreferrer">{match[1]}</a>
-                                  </div>
-                                );
-                              }
-                              return null;
-                            })()
-                          )}
-                          {/* Show post text */}
-                          {item.text && (
-                            <div className="mt-2 text-gray-700 text-sm">
-                              {item.text}
-                            </div>
-                          )}
-                        </div>
-                      ))
-                    ) : (
-                      <div className="col-span-2 text-center py-8 text-gray-500">
-                        <Linkedin className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-                        <p>No LinkedIn data available yet</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-             
             </div>
           )}
 

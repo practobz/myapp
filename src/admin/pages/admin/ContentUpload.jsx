@@ -355,8 +355,8 @@ function ContentUpload() {
         caption: caption || '',
         hashtags: hashtags || '',
         notes: notes || '',
-        images: uploadedMediaUrls, // ✅ This contains the media URLs and metadata
-        media: uploadedMediaUrls,  // ✅ Duplicate for backward compatibility
+        images: uploadedMediaUrls,
+        media: uploadedMediaUrls,
         created_by: creatorEmail,
         customer_id: finalCustomerId,
         customer_name: finalCustomerName,
@@ -364,6 +364,8 @@ function ContentUpload() {
         platform: assignment.platform || 'Instagram',
         calendar_id: assignment.calendarId,
         calendar_name: assignment.calendarName,
+        item_id: assignment._id || assignment.id || assignment.itemId || '',
+        item_name: assignment.title || assignment.itemName || assignment.description || '',
         assignment_title: assignment.title,
         assignment_description: assignment.description,
         due_date: assignment.dueDate,

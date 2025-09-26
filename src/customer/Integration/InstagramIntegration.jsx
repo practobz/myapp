@@ -90,9 +90,20 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
     }
   };
 
+  function getCurrentCustomerId() {
+    let customerId = null;
+    const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
+    customerId = currentUser.userId || currentUser.id || currentUser._id || currentUser.customer_id;
+    if (!customerId) {
+      const authUser = JSON.parse(localStorage.getItem('user') || '{}');
+      customerId = authUser.userId || authUser.id || authUser._id || authUser.customer_id;
+    }
+    return customerId;
+  }
+
   // Load connected accounts from localStorage on component mount
   useEffect(() => {
-    console.log('🔍 Instagram component mounted, loading accounts from storage...');
+    console.log('🔍 Instagram component mounted, loading accounts from backend...');
     
     // First, migrate any existing data to user-specific storage
     migrateToUserSpecificStorage([
@@ -102,39 +113,124 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
       'instagram_active_account_id'
     ]);
 
-    const savedAccounts = getUserData('instagram_connected_accounts') || getUserData('connected_instagram_accounts');
-    const savedActiveId = getUserData('instagram_active_account_id') || getUserData('selected_instagram_account');
-    
-    console.log('📦 Instagram storage check on mount:', {
-      savedAccounts: savedAccounts ? savedAccounts.length : 0,
-      savedActiveId,
-      accountsData: savedAccounts
-    });
-    
-    if (savedAccounts && Array.isArray(savedAccounts) && savedAccounts.length > 0) {
-      console.log('✅ Setting Instagram accounts from storage:', savedAccounts);
-      setConnectedAccounts(savedAccounts);
-      setIsSignedIn(true); // Set signed in state
-      
-      if (savedActiveId && savedAccounts.some(acc => acc.id === savedActiveId)) {
-        setActiveAccountId(savedActiveId);
-        setSelectedAccountId(savedActiveId); // Backward compatibility
-        const activeAcc = savedAccounts.find(acc => acc.id === savedActiveId);
-        setActiveAccount(activeAcc);
-        setUserAccessToken(activeAcc.userAccessToken || activeAcc.accessToken);
-        console.log('✅ Set active Instagram account:', activeAcc?.profile?.username);
-      } else if (savedAccounts.length > 0) {
-        // Set first account as active if no valid active account
-        setActiveAccountId(savedAccounts[0].id);
-        setSelectedAccountId(savedAccounts[0].id); // Backward compatibility
-        setActiveAccount(savedAccounts[0]);
-        setUserAccessToken(savedAccounts[0].userAccessToken || savedAccounts[0].accessToken);
-        setUserData('instagram_active_account_id', savedAccounts[0].id);
-        console.log('✅ Set first Instagram account as active:', savedAccounts[0].profile?.username);
+    // NEW: Fetch from backend first
+    const fetchConnectedAccountsFromBackend = async () => {
+      const customerId = getCurrentCustomerId();
+      if (!customerId) return null;
+      try {
+        const res = await fetch(`${process.env.REACT_APP_API_URL}/api/customer-social-links/${customerId}`);
+        const data = await res.json();
+        if (data.success && Array.isArray(data.accounts)) {
+          // Only Instagram accounts
+          return data.accounts
+            .filter(acc => acc.platform === 'instagram')
+            .map(acc => ({
+              id: acc.platformUserId,
+              pageId: acc.facebookPageId,
+              pageName: acc.name,
+              profile: {
+                username: acc.username,
+                profile_picture_url: acc.profilePicture,
+                followers_count: acc.instagramData?.followersCount,
+                media_count: acc.instagramData?.mediaCount,
+                biography: acc.instagramData?.biography,
+                website: acc.instagramData?.website
+              },
+              media: [], // Optionally fetch media if needed
+              userAccessToken: acc.accessToken,
+              pageAccessToken: acc.pages?.[0]?.accessToken,
+              connected: true,
+              connectedAt: acc.connectedAt,
+              tokenExpiresAt: acc.tokenExpiresAt || null
+            }));
+        }
+      } catch (err) {
+        console.warn('Failed to fetch Instagram accounts from backend:', err);
       }
-    } else {
-      console.log('ℹ️ No connected Instagram accounts found in storage');
-    }
+      return null;
+    };
+
+    // Helper to hydrate backend accounts with live profile/media
+    const hydrateInstagramAccounts = async (accounts) => {
+      if (!window.FB || !window.FB.api) return accounts;
+      const hydrated = await Promise.all(accounts.map(acc => {
+        return new Promise(resolve => {
+          // Fetch profile
+          window.FB.api(`/${acc.id}`, {
+            fields: 'id,username,media_count,profile_picture_url,biography,website,followers_count',
+            access_token: acc.pageAccessToken
+          }, function(profileResponse) {
+            // Fetch media
+            window.FB.api(`/${acc.id}/media`, {
+              fields: 'id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count',
+              limit: 12,
+              access_token: acc.pageAccessToken
+            }, function(mediaResponse) {
+              resolve({
+                ...acc,
+                profile: profileResponse && !profileResponse.error ? profileResponse : acc.profile,
+                media: mediaResponse && mediaResponse.data ? mediaResponse.data : []
+              });
+            });
+          });
+        });
+      }));
+      return hydrated;
+    };
+
+    (async () => {
+      const backendAccounts = await fetchConnectedAccountsFromBackend();
+      if (backendAccounts && backendAccounts.length > 0) {
+        // Hydrate with live profile/media
+        const hydratedAccounts = await hydrateInstagramAccounts(backendAccounts);
+        setConnectedAccounts(hydratedAccounts);
+        setIsSignedIn(true);
+        setUserData('instagram_connected_accounts', hydratedAccounts);
+        setUserData('connected_instagram_accounts', hydratedAccounts);
+        setActiveAccountId(hydratedAccounts[0].id);
+        setSelectedAccountId(hydratedAccounts[0].id);
+        setActiveAccount(hydratedAccounts[0]);
+        setUserAccessToken(hydratedAccounts[0].userAccessToken || hydratedAccounts[0].accessToken);
+        setUserData('instagram_active_account_id', hydratedAccounts[0].id);
+        setUserData('selected_instagram_account', hydratedAccounts[0].id);
+        return;
+      }
+
+      // Fallback to localStorage if backend empty
+      const savedAccounts = getUserData('instagram_connected_accounts') || getUserData('connected_instagram_accounts');
+      const savedActiveId = getUserData('instagram_active_account_id') || getUserData('selected_instagram_account');
+      
+      console.log('📦 Instagram storage check on mount:', {
+        savedAccounts: savedAccounts ? savedAccounts.length : 0,
+        savedActiveId,
+        accountsData: savedAccounts
+      });
+      
+      if (savedAccounts && Array.isArray(savedAccounts) && savedAccounts.length > 0) {
+        console.log('✅ Setting Instagram accounts from storage:', savedAccounts);
+        setConnectedAccounts(savedAccounts);
+        setIsSignedIn(true); // Set signed in state
+        
+        if (savedActiveId && savedAccounts.some(acc => acc.id === savedActiveId)) {
+          setActiveAccountId(savedActiveId);
+          setSelectedAccountId(savedActiveId); // Backward compatibility
+          const activeAcc = savedAccounts.find(acc => acc.id === savedActiveId);
+          setActiveAccount(activeAcc);
+          setUserAccessToken(activeAcc.userAccessToken || activeAcc.accessToken);
+          console.log('✅ Set active Instagram account:', activeAcc?.profile?.username);
+        } else if (savedAccounts.length > 0) {
+          // Set first account as active if no valid active account
+          setActiveAccountId(savedAccounts[0].id);
+          setSelectedAccountId(savedAccounts[0].id); // Backward compatibility
+          setActiveAccount(savedAccounts[0]);
+          setUserAccessToken(savedAccounts[0].userAccessToken || savedAccounts[0].accessToken);
+          setUserData('instagram_active_account_id', savedAccounts[0].id);
+          console.log('✅ Set first Instagram account as active:', savedAccounts[0].profile?.username);
+        }
+      } else {
+        console.log('ℹ️ No connected Instagram accounts found in storage');
+      }
+    })();
   }, []);
 
   useEffect(() => {
@@ -510,12 +606,32 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
     }
   };
 
-  // Remove account
-  const removeAccount = (accountId) => {
+  // Remove account: Also remove from backend
+  const removeAccount = async (accountId) => {
     const updatedAccounts = connectedAccounts.filter(acc => acc.id !== accountId);
     setConnectedAccounts(updatedAccounts);
     saveAccountsToStorage(updatedAccounts);
-    
+
+    // Remove from backend
+    const customerId = getCurrentCustomerId();
+    if (customerId) {
+      try {
+        // Find backend account _id by platformUserId
+        const res = await fetch(`${process.env.REACT_APP_API_URL}/api/customer-social-links/${customerId}`);
+        const data = await res.json();
+        if (data.success && Array.isArray(data.accounts)) {
+          const backendAcc = data.accounts.find(acc => acc.platformUserId === accountId && acc.platform === 'instagram');
+          if (backendAcc && backendAcc._id) {
+            await fetch(`${process.env.REACT_APP_API_URL}/api/customer-social-links/${backendAcc._id}`, {
+              method: 'DELETE'
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to remove Instagram account from backend:', err);
+      }
+    }
+
     if (activeAccountId === accountId) {
       if (updatedAccounts.length > 0) {
         // Switch to first remaining account
@@ -1650,16 +1766,16 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
                 <h3 className="text-lg font-semibold text-red-800">Connection Error</h3>
               </div>
               <p className="text-red-700 mb-4">{error}</p>
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                <p className="text-sm text-blue-900 font-medium mb-2">
-                  Requirements for Instagram integration:
-                </p>
-                <ul className="text-sm text-blue-800 list-disc list-inside space-y-1">
-                  <li>Instagram Business or Creator account</li>
-                  <li>Instagram account connected to a Facebook page</li>
-                  <li>Admin access to the Facebook page</li>
-                  <li>Proper permissions granted during Facebook login</li>
-                </ul>
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 max-w-md mx-auto">
+                <h4 className="font-medium text-blue-800 mb-2">📱 Multi-Account Setup Guide</h4>
+                <div className="text-sm text-blue-700 text-left space-y-1">
+                  <p>1. Convert Instagram accounts to Business/Creator accounts</p>
+                  <p>2. Connect each account to a Facebook page you manage</p>
+                  <p>3. Click "Connect" below and log in to Facebook</p>
+                  <p>4. Grant permissions to access all your connected accounts</p>
+                  <p>5. Select which accounts to connect and manage</p>
+                  <p>6. Historical data will be captured automatically</p>
+                </div>
               </div>
               <div className="flex space-x-3">
                 <button

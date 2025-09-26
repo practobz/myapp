@@ -17,7 +17,8 @@ import ContentCreatorDetails from './admin/pages/admin/ContentCreatorDetails';
 import ScheduledPosts from './admin/ScheduledPosts';
 import AdminContentPortfolio from './admin/pages/admin/AdminContentPortfolio';
 import AdminContentUpload from './admin/pages/admin/ContentUpload';
-
+import ContentDetailView from './admin/components/modals/ContentDetailView';
+import SchedulePostModal from './admin/components/modals/SchedulePostModal';
 // Super Admin imports
 import SuperAdminLogin from './superadmin/Login';
 import SuperAdminDashboard from './superadmin/Dashboard';
@@ -343,6 +344,16 @@ function App() {
                   <CustomerLayout>
                     <TimePeriodChart />
                   </CustomerLayout>
+                </ProtectedRoutePortal>
+              } />
+               <Route path="/admin/schedule-post-modal" element={
+                <ProtectedRoutePortal role="admin">
+                  <SchedulePostModal />
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/admin/content-detail-view" element={
+                <ProtectedRoutePortal role="admin">
+                  <ContentDetailView />
                 </ProtectedRoutePortal>
               } />
 

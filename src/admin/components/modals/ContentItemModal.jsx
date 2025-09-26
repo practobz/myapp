@@ -1,23 +1,47 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Modal from './Modal';
 import { v4 as uuidv4 } from 'uuid';
+import { ChevronDown } from 'lucide-react';
 
-function ContentItemModal({ isOpen, onClose, onSave, contentItem, title, creators = [] }) {
+function ContentItemModal({
+  isOpen,
+  onClose,
+  onSave,
+  title,
+  creators = [],
+  contentItem,
+  platformOptions = ['facebook', 'instagram', 'youtube', 'linkedin'],
+  multiPlatform = false
+}) {
   const [date, setDate] = useState('');
   const [description, setDescription] = useState('');
   const [contentTitle, setContentTitle] = useState('');
-  const [type, setType] = useState('Instagram Post');
+  const [selectedPlatforms, setSelectedPlatforms] = useState(
+    Array.isArray(contentItem?.type)
+      ? contentItem.type
+      : contentItem?.type
+        ? [contentItem.type]
+        : []
+  );
   const [dueDate, setDueDate] = useState('');
   const [priority, setPriority] = useState('High');
   const [assignedTo, setAssignedTo] = useState('');
   const [errors, setErrors] = useState({});
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef();
 
   useEffect(() => {
     if (contentItem) {
       setDate(contentItem.date || '');
       setDescription(contentItem.description || '');
       setContentTitle(contentItem.title || '');
-      setType(contentItem.type || 'Instagram Post');
+      setSelectedPlatforms(
+        Array.isArray(contentItem.type)
+          ? contentItem.type
+          : contentItem.type
+            ? [contentItem.type]
+            : []
+      );
       setDueDate(contentItem.dueDate || '');
       setPriority(contentItem.priority || 'High');
       setAssignedTo(contentItem.assignedTo || '');
@@ -27,11 +51,23 @@ function ContentItemModal({ isOpen, onClose, onSave, contentItem, title, creator
       setDueDate(today);
       setDescription('');
       setContentTitle('');
-      setType('Instagram Post');
+      setSelectedPlatforms([]);
       setPriority('High');
       setAssignedTo('');
     }
   }, [contentItem, isOpen]);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setDropdownOpen(false);
+      }
+    }
+    if (dropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [dropdownOpen]);
 
   const validate = () => {
     const newErrors = {};
@@ -54,7 +90,7 @@ function ContentItemModal({ isOpen, onClose, onSave, contentItem, title, creator
         date,
         description,
         title: contentTitle,
-        type,
+        type: multiPlatform ? selectedPlatforms : selectedPlatforms[0],
         dueDate,
         priority,
         assignedTo,
@@ -63,6 +99,14 @@ function ContentItemModal({ isOpen, onClose, onSave, contentItem, title, creator
       });
       onClose();
     }
+  };
+
+  const handleCheckboxChange = (platform) => {
+    setSelectedPlatforms(prev =>
+      prev.includes(platform)
+        ? prev.filter(p => p !== platform)
+        : [...prev, platform]
+    );
   };
 
   return (
@@ -80,14 +124,47 @@ function ContentItemModal({ isOpen, onClose, onSave, contentItem, title, creator
             {errors.contentTitle && <p className="text-sm text-red-600">{errors.contentTitle}</p>}
           </div>
 
-          <div className="mb-4">
+          <div className="mb-4" ref={dropdownRef}>
             <label className="block text-sm font-medium mb-1">Type</label>
-            <select className="input-field" value={type} onChange={(e) => setType(e.target.value)}>
-              <option>Instagram Post</option>
-              <option>Facebook Post</option>
-              <option>LinkedIn Post</option>
-              <option>Story</option>
-            </select>
+            <div className="relative">
+              <button
+                type="button"
+                className={`form-select w-full text-left flex items-center justify-between bg-white border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 hover:border-blue-400 transition`}
+                onClick={() => setDropdownOpen((open) => !open)}
+                tabIndex={0}
+              >
+                <div className="flex flex-wrap gap-1">
+                  {selectedPlatforms.length === 0
+                    ? <span className="text-gray-400">Select platforms</span>
+                    : selectedPlatforms.map(p => (
+                        <span
+                          key={p}
+                          className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700 mr-1`}
+                        >
+                          {p.charAt(0).toUpperCase() + p.slice(1)}
+                        </span>
+                      ))
+                  }
+                </div>
+                <ChevronDown className="h-4 w-4 text-gray-500 ml-2" />
+              </button>
+              {dropdownOpen && (
+                <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded shadow-lg max-h-48 overflow-y-auto animate-fade-in">
+                  {platformOptions.map(opt => (
+                    <label key={opt} className="flex items-center px-3 py-2 hover:bg-blue-50 cursor-pointer transition">
+                      <input
+                        type="checkbox"
+                        checked={selectedPlatforms.includes(opt)}
+                        onChange={() => handleCheckboxChange(opt)}
+                        className="mr-2 accent-blue-600"
+                      />
+                      <span className="text-gray-700">{opt.charAt(0).toUpperCase() + opt.slice(1)}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+            <span className="text-xs text-gray-500">Select one or more platforms.</span>
           </div>
 
           <div className="mb-4">
@@ -125,20 +202,6 @@ function ContentItemModal({ isOpen, onClose, onSave, contentItem, title, creator
               ))}
             </select>
             {errors.assignedTo && <p className="text-sm text-red-600">{errors.assignedTo}</p>}
-          </div>
-
-          <div className="mb-4">
-            <label htmlFor="date" className="block text-sm font-medium mb-1">
-              Publish Date
-            </label>
-            <input
-              type="date"
-              id="date"
-              className="input-field"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-            />
-            {errors.date && <p className="text-sm text-red-600">{errors.date}</p>}
           </div>
 
           <div className="mb-6">

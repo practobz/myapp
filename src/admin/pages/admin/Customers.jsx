@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AdminLayout from '../../components/layout/AdminLayout';
 import { Eye, AlertCircle, ArrowLeft } from 'lucide-react';
@@ -7,6 +7,8 @@ import { useAuth } from '../../contexts/AuthContext';
 function Customers() {
   const { currentUser } = useAuth();
   const [customers, setCustomers] = useState([]);
+  const [calendarsByCustomer, setCalendarsByCustomer] = useState({});
+  const [scheduledPosts, setScheduledPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const navigate = useNavigate();
@@ -83,9 +85,70 @@ function Customers() {
     }
   };
 
+  // Fetch all calendars and group by customerId
+  const fetchCalendars = async () => {
+    try {
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+      const response = await fetch(`${apiUrl}/calendars`);
+      if (!response.ok) return {};
+      const allCalendars = await response.json();
+      // Group calendars by customerId
+      const grouped = {};
+      allCalendars.forEach(cal => {
+        if (!grouped[cal.customerId]) grouped[cal.customerId] = [];
+        grouped[cal.customerId].push(cal);
+      });
+      setCalendarsByCustomer(grouped);
+    } catch {
+      setCalendarsByCustomer({});
+    }
+  };
+
+  // Fetch published scheduled posts for assigned customers
+  const fetchPublishedPosts = async (customerIds) => {
+    try {
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+      const response = await fetch(`${apiUrl}/api/scheduled-posts`);
+      if (!response.ok) return [];
+      const allPosts = await response.json();
+      // Only published posts for assigned customers
+      return allPosts.filter(
+        post =>
+          post.status === 'published' &&
+          customerIds.includes(post.customerId || post.userId)
+      );
+    } catch {
+      return [];
+    }
+  };
+
   useEffect(() => {
     fetchAssignedCustomers();
+    fetchCalendars();
   }, [currentUser]);
+
+  useEffect(() => {
+    // After customers are loaded, fetch published posts
+    if (customers.length > 0) {
+      const customerIds = customers.map(c => c._id || c.id);
+      fetchPublishedPosts(customerIds).then(setScheduledPosts);
+    }
+  }, [customers]);
+
+  // Memoize published dates by customerId for fast lookup
+  const publishedDatesByCustomer = useMemo(() => {
+    const map = {};
+    scheduledPosts.forEach(post => {
+      if (post.status === 'published') {
+        const cid = post.customerId || post.userId;
+        if (!map[cid]) map[cid] = new Set();
+        // Match only the date part (YYYY-MM-DD)
+        const postDate = new Date(post.scheduledAt).toISOString().slice(0, 10);
+        map[cid].add(postDate);
+      }
+    });
+    return map;
+  }, [scheduledPosts]);
 
   if (loading) {
     return (
@@ -168,7 +231,26 @@ function Customers() {
                     </tr>
                   ) : (
                     customers.map((customer) => {
-                      const status = getDueDateStatus(customer.nextDueDate);
+                      const calendars = calendarsByCustomer[customer._id || customer.id] || [];
+                      const totalCalendars = calendars.length;
+                      const totalItems = calendars.reduce(
+                        (acc, cal) => acc + (Array.isArray(cal.contentItems) ? cal.contentItems.length : 0),
+                        0
+                      );
+                      // Filter out published items for overdue calculation
+                      const publishedDates = publishedDatesByCustomer[customer._id || customer.id] || new Set();
+                      const allDueDates = calendars
+                        .flatMap(cal => Array.isArray(cal.contentItems) ? cal.contentItems.map(item => item.date).filter(Boolean) : [])
+                        .filter(date => {
+                          // Only include if not published
+                          const isoDate = new Date(date).toISOString().slice(0, 10);
+                          return !publishedDates.has(isoDate) && !isNaN(new Date(date));
+                        });
+                      const nextDueDate = allDueDates.length > 0
+                        ? allDueDates.sort((a, b) => new Date(a) - new Date(b))[0]
+                        : null;
+                      const status = getDueDateStatus(nextDueDate);
+
                       return (
                         <tr key={customer.id || customer._id} className="hover:bg-white/70 transition-all duration-200 group">
                           <td className="px-6 py-4 whitespace-nowrap">
@@ -187,18 +269,20 @@ function Customers() {
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm font-medium text-gray-900">{formatDate(customer.nextDueDate)}</div>
+                            <div className="text-sm font-medium text-gray-900">
+                              {nextDueDate ? formatDate(nextDueDate) : 'No due date'}
+                            </div>
                             <div className="text-xs text-gray-500">
-                              {getDaysUntilDue(customer.nextDueDate) !== null && (
+                              {nextDueDate ? (
                                 <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${getStatusBadgeColor(status)}`}>
                                   {status.text}
                                 </span>
-                              )}
+                              ) : ''}
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-900 font-medium">{customer.totalCalendars || 0}</div>
-                            <div className="text-xs text-gray-500">{customer.totalItems || 0} total items</div>
+                            <div className="text-sm text-gray-900 font-medium">{totalCalendars}</div>
+                            <div className="text-xs text-gray-500">{totalItems} total items</div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-right">
                             <button

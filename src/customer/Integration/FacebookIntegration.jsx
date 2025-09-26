@@ -80,8 +80,9 @@ const [showFacebookPosts, setShowFacebookPosts] = useState({});
         const res = await fetch(`${process.env.REACT_APP_API_URL}/api/customer-social-links/${customerId}`);
         const data = await res.json();
         if (data.success && Array.isArray(data.accounts)) {
-          // Map backend accounts to the same format as localStorage
-          return data.accounts.map(acc => ({
+          // Only keep Facebook accounts
+          const facebookAccounts = data.accounts.filter(acc => acc.platform === 'facebook');
+          return facebookAccounts.map(acc => ({
             id: acc.platformUserId,
             name: acc.name,
             email: acc.email,
@@ -113,6 +114,10 @@ const [showFacebookPosts, setShowFacebookPosts] = useState({});
       // Fallback to localStorage if backend empty
       const savedAccounts = getUserData('fb_connected_accounts');
       const savedActiveId = getUserData('fb_active_account_id');
+      // Only keep Facebook accounts
+      const facebookAccounts = Array.isArray(savedAccounts)
+        ? savedAccounts.filter(acc => acc.platform === 'facebook')
+        : [];
       
       console.log('📦 Storage check on mount:', {
         savedAccounts: savedAccounts ? savedAccounts.length : 0,
@@ -120,21 +125,20 @@ const [showFacebookPosts, setShowFacebookPosts] = useState({});
         accountsData: savedAccounts
       });
       
-      if (savedAccounts && Array.isArray(savedAccounts) && savedAccounts.length > 0) {
-        console.log('✅ Setting accounts from storage:', savedAccounts);
-        setConnectedAccounts(savedAccounts);
+      if (facebookAccounts.length > 0) {
+        setConnectedAccounts(facebookAccounts);
         
-        if (savedActiveId && savedAccounts.some(acc => acc.id === savedActiveId)) {
+        if (savedActiveId && facebookAccounts.some(acc => acc.id === savedActiveId)) {
           setActiveAccountId(savedActiveId);
-          const activeAcc = savedAccounts.find(acc => acc.id === savedActiveId);
+          const activeAcc = facebookAccounts.find(acc => acc.id === savedActiveId);
           setActiveAccount(activeAcc);
           console.log('✅ Set active account:', activeAcc?.name);
-        } else if (savedAccounts.length > 0) {
+        } else if (facebookAccounts.length > 0) {
           // Set first account as active if no valid active account
-          setActiveAccountId(savedAccounts[0].id);
-          setActiveAccount(savedAccounts[0]);
-          setUserData('fb_active_account_id', savedAccounts[0].id);
-          console.log('✅ Set first account as active:', savedAccounts[0].name);
+          setActiveAccountId(facebookAccounts[0].id);
+          setActiveAccount(facebookAccounts[0]);
+          setUserData('fb_active_account_id', facebookAccounts[0].id);
+          console.log('✅ Set first account as active:', facebookAccounts[0].name);
         }
       } else {
         console.log('ℹ️ No connected accounts found in storage');
@@ -612,35 +616,6 @@ const [showFacebookPosts, setShowFacebookPosts] = useState({});
     return result;
   };
 
-  const generateInstagramPostAnalytics = (posts, days = 30) => {
-    const endDate = new Date();
-    const result = {
-      likes: [],
-      comments: [],
-      posts: []
-    };
-
-    for (let i = days - 1; i >= 0; i--) {
-      const date = subDays(endDate, i);
-      const dateStr = format(date, 'yyyy-MM-dd');
-      
-      const dayPosts = posts.filter(post => {
-        const postDate = new Date(post.timestamp);
-        return format(postDate, 'yyyy-MM-dd') === dateStr;
-      });
-
-      const dayLikes = dayPosts.reduce((sum, post) => sum + (post.like_count || 0), 0);
-      const dayComments = dayPosts.reduce((sum, post) => sum + (post.comments_count || 0), 0);
-      const postCount = dayPosts.length;
-
-      result.likes.push({ date: dateStr, value: dayLikes });
-      result.comments.push({ date: dateStr, value: dayComments });
-      result.posts.push({ date: dateStr, value: postCount });
-    }
-
-    return result;
-  };
-
   const fetchPostBasedAnalytics = (pageId, pageAccessToken, days = 30) => {
     if (!isFacebookApiReady()) {
       setLoadingAnalytics(prev => ({ ...prev, [pageId]: false }));
@@ -718,100 +693,6 @@ const [showFacebookPosts, setShowFacebookPosts] = useState({});
     }
 
     return result;
-  };
-
-  const fetchInstagramPostAnalytics = (instagramId, pageAccessToken, pageId, fbMetrics, days = 30) => {
-    if (!isFacebookApiReady()) {
-      setLoadingAnalytics(prev => ({ ...prev, [pageId]: false }));
-      return;
-    }
-
-    const postsLimit = Math.min(500, Math.max(50, days * 2));
-    
-    window.FB.api(
-      `/${instagramId}/media`,
-      {
-        fields: 'id,caption,timestamp,like_count,comments_count,media_type',
-        limit: postsLimit,
-        access_token: pageAccessToken
-      },
-      function(response) {
-        setLoadingAnalytics(prev => ({ ...prev, [pageId]: false }));
-        
-        if (!response || response.error) {
-          console.warn('Instagram posts fetch error:', response.error);
-          setAnalyticsData(prev => ({
-            ...prev,
-            [pageId]: { facebook: fbMetrics }
-          }));
-          
-          fetch(`${process.env.REACT_APP_API_URL}/api/analytics/store`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              pageId,
-              platform: 'facebook',
-              analytics: fbMetrics,
-              timePeriod: days
-            })
-          }).catch(err => console.warn('Failed to store analytics:', err));
-          return;
-        }
-
-        const instagramPosts = response.data;
-        const igAnalytics = generateInstagramPostAnalytics(instagramPosts, days);
-        
-        setAnalyticsData(prev => ({
-          ...prev,
-          [pageId]: {
-            facebook: fbMetrics,
-            instagram: igAnalytics
-          }
-        }));
-        
-        fetch(`${process.env.REACT_APP_API_URL}/api/analytics/store`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            pageId,
-            platform: 'facebook_instagram',
-            analytics: {
-              facebook: fbMetrics,
-              instagram: igAnalytics
-            },
-            timePeriod: days
-          })
-        }).catch(err => console.warn('Failed to store analytics:', err));
-      }
-    );
-  };
-
-  const fetchPageAnalyticsWithDbFirst = async (pageId, pageAccessToken, days = 30) => {
-    setLoadingAnalytics(prev => ({ ...prev, [pageId]: true }));
-    
-    setTimePeriods(prev => ({ ...prev, [pageId]: days }));
-    
-    try {
-      const loadedFromDb = await fetchStoredAnalytics(pageId);
-      
-      if (loadedFromDb) {
-        console.log('📊 Using stored analytics data');
-        setLoadingAnalytics(prev => ({ ...prev, [pageId]: false }));
-        return;
-      }
-      
-      console.log('🔄 No stored data found, fetching live analytics...');
-      await fetchPageAnalyticsLive(pageId, pageAccessToken, days);
-      
-    } catch (error) {
-      console.error('Analytics fetch error:', error);
-      setLoadingAnalytics(prev => ({ ...prev, [pageId]: false }));
-    }
-  };
-
-  const fetchPageAnalyticsLive = async (pageId, pageAccessToken, days = 30) => {
-    console.log('📡 Fetching live analytics from Facebook APIs...');
-    fetchPostBasedAnalytics(pageId, pageAccessToken, days);
   };
 
   const renderAnalytics = (pageId) => {
@@ -1537,30 +1418,6 @@ const [showFacebookPosts, setShowFacebookPosts] = useState({});
     } catch (error) {
       console.warn('Failed to store customer social account:', error);
     }
-  };
-
-  // Fetch Instagram details
-  const fetchInstagramDetails = (instagramId, pageAccessToken) => {
-    if (!isFacebookApiReady()) return;
-
-    window.FB.api(
-      `/${instagramId}`,
-      {
-        fields: 'id,username,media_count,followers_count,follows_count,profile_picture_url,biography,website',
-        access_token: pageAccessToken
-      },
-      function(response) {
-        if (!response || response.error) {
-          console.error('Instagram fetch error:', response.error);
-        } else {
-          setFbPages(prev => prev.map(page => 
-            page.instagram_business_account?.id === instagramId 
-              ? { ...page, instagram_details: response }
-              : page
-          ));
-        }
-      }
-    );
   };
 
   // Enhanced token refresh with never-expiring page tokens

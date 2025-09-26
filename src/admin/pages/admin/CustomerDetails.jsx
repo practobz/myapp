@@ -652,7 +652,15 @@ const CustomerDetails = () => {
                                             className="p-2 text-gray-400 hover:text-indigo-600 transition-colors rounded-lg hover:bg-indigo-50"
                                             onClick={e => {
                                               e.stopPropagation();
-                                              navigate(`/admin/content-upload/${calendar._id}/${index}`);
+                                              // Pass calendarId, item index, calendar name, item name, and item id
+                                              navigate(`/admin/content-upload/${calendar._id}/${index}`, {
+                                                state: {
+                                                  calendarId: calendar._id,
+                                                  calendarName: calendar.name,
+                                                  itemId: item._id || `${calendar._id}_${item.date}_${item.description}`,
+                                                  itemName: item.title || item.description
+                                                }
+                                              });
                                             }}
                                             title="Upload Content"
                                           >
@@ -738,6 +746,8 @@ const CustomerDetails = () => {
         }}
         title={selectedCalendar ? `Add Content to ${selectedCalendar.name}` : "Add New Content"}
         creators={Array.isArray(creators) ? creators : []}
+        platformOptions={['facebook', 'instagram', 'youtube', 'linkedin']}
+        multiPlatform={true} // <-- enable multi-select for type/platform
       />
       <ContentItemModal
         isOpen={isEditModalOpen}
@@ -746,6 +756,8 @@ const CustomerDetails = () => {
         contentItem={selectedItem}
         title="Edit Content"
         creators={Array.isArray(creators) ? creators : []}
+        platformOptions={['facebook', 'instagram', 'youtube', 'linkedin']}
+        multiPlatform={true}
       />
       <AssignCreatorModal
         isOpen={isAssignModalOpen}

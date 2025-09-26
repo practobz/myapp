@@ -800,6 +800,8 @@ function CustomerDetailsView() {
         onSave={handleAddContentItem}
         title="Add Content Item"
         creators={creators}
+        platformOptions={['facebook', 'instagram', 'youtube', 'linkedin']}
+        multiPlatform={true}
       />
 
       <AssignCreatorModal
@@ -819,6 +821,8 @@ function CustomerDetailsView() {
         contentItem={selectedItem}
         title="Edit Content"
         creators={creators}
+        platformOptions={['facebook', 'instagram', 'youtube', 'linkedin']}
+        multiPlatform={true}
       />
 
       {/* Edit Calendar Modal with prefilled values */}

@@ -19,7 +19,12 @@ function ScheduledPosts() {
   // Fetch scheduled posts on component mount
   useEffect(() => {
     fetchScheduledPosts();
-    fetchCustomers(); // Fetch customer details for name lookup
+    fetchCustomers();
+    // Change polling interval to 5 seconds
+    const intervalId = setInterval(() => {
+      fetchScheduledPosts();
+    }, 10000); // 5 seconds
+    return () => clearInterval(intervalId);
   }, [currentUser]);
 
   const fetchCustomers = async () => {

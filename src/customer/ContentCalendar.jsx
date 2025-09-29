@@ -1,7 +1,52 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
-import { MessageSquare, Instagram, Facebook, Linkedin, Youtube, AlertCircle, Eye } from 'lucide-react';
+import { MessageSquare, Instagram, Facebook, Linkedin, Youtube, AlertCircle, Eye, CheckCircle } from 'lucide-react';
+
+// Move these helper functions to the top, before ContentCalendar function
+const getPlatformIcon = (platform) => {
+  switch (platform) {
+    case 'instagram':
+      return <Instagram className="h-5 w-5 text-pink-600" />;
+    case 'facebook':
+      return <Facebook className="h-5 w-5 text-blue-600" />;
+    case 'linkedin':
+      return <Linkedin className="h-5 w-5 text-blue-700" />;
+    case 'youtube':
+      return <Youtube className="h-5 w-5 text-red-600" />;
+    default:
+      return null;
+  }
+};
+
+const getStatusColor = (status) => {
+  switch (status) {
+    case 'published':
+      return 'bg-green-100 text-green-800';
+    case 'under_review':
+      return 'bg-yellow-100 text-yellow-800';
+    case 'draft':
+      return 'bg-gray-100 text-gray-800';
+    case 'scheduled':
+      return 'bg-blue-100 text-blue-800';
+    case 'waiting_input':
+      return 'bg-orange-100 text-orange-800';
+    default:
+      return 'bg-gray-100 text-gray-800';
+  }
+};
+
+const getStatusLabel = (status) => {
+  if (!status) return '';
+  switch (status) {
+    case 'published':
+      return 'Published';
+    case 'waiting_input':
+      return 'Waiting Input';
+    default:
+      return status.replace('_', ' ').charAt(0).toUpperCase() + status.slice(1);
+  }
+};
 
 function ContentCalendar() {
   const navigate = useNavigate();
@@ -10,6 +55,7 @@ function ContentCalendar() {
   const [calendars, setCalendars] = useState([]);
   const [customer, setCustomer] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [scheduledPosts, setScheduledPosts] = useState([]);
 
   // Get logged-in customer info (assume it's stored in localStorage as 'user')
   let user = null;
@@ -33,12 +79,21 @@ function ContentCalendar() {
         // Fetch all calendars, then filter by customerId
         const calendarsRes = await fetch(`${process.env.REACT_APP_API_URL}/calendars`);
         const allCalendars = await calendarsRes.json();
-        // Only calendars for this customer
         const customerCalendars = allCalendars.filter(c => c.customerId === customerId);
         setCalendars(customerCalendars);
+
+        // --- Fetch scheduled posts for this customer ---
+        const postsRes = await fetch(`${process.env.REACT_APP_API_URL}/api/scheduled-posts`);
+        let postsData = await postsRes.json();
+        if (!Array.isArray(postsData)) postsData = [];
+        // Only posts for this customer
+        const customerPosts = postsData.filter(p => p.customerId === customerId && p.status === 'published');
+        setScheduledPosts(customerPosts);
+        // --- End ---
       } catch (err) {
         setCustomer(null);
         setCalendars([]);
+        setScheduledPosts([]);
       } finally {
         setLoading(false);
       }
@@ -49,50 +104,25 @@ function ContentCalendar() {
     }
   }, [customerId]);
 
-  const getPlatformIcon = (platform) => {
-    switch (platform) {
-      case 'instagram':
-        return <Instagram className="h-5 w-5 text-pink-600" />;
-      case 'facebook':
-        return <Facebook className="h-5 w-5 text-blue-600" />;
-      case 'linkedin':
-        return <Linkedin className="h-5 w-5 text-blue-700" />;
-      case 'youtube':
-        return <Youtube className="h-5 w-5 text-red-600" />;
-      default:
-        return null;
-    }
+  // Helper: get published platforms for an item
+  const getPublishedPlatformsForItem = (item) => {
+    // Try to match by item_id, item_name, or contentId
+    return scheduledPosts
+      .filter(post =>
+        (post.item_id && post.item_id === item.id) ||
+        (post.contentId && post.contentId === item.id) ||
+        (post.item_name && post.item_name === item.title)
+      )
+      .map(post => post.platform);
   };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'published':
-        return 'bg-green-100 text-green-800';
-      case 'under_review':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'draft':
-        return 'bg-gray-100 text-gray-800';
-      case 'scheduled':
-        return 'bg-blue-100 text-blue-800';
-      case 'waiting_input':
-        return 'bg-orange-100 text-orange-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const getStatusLabel = (status) => {
-    if (!status) return '';
-    switch (status) {
-      case 'waiting_input':
-        return 'Waiting Input';
-      default:
-        return status.replace('_', ' ').charAt(0).toUpperCase() + status.slice(1);
-    }
-  };
-
-  const handleContentClick = (content) => {
-    setSelectedContent(content.status === 'published' ? content : null);
+  // Helper: check if item is published
+  const isItemPublished = (item) => {
+    return scheduledPosts.some(post =>
+      (post.item_id && post.item_id === item.id) ||
+      (post.contentId && post.contentId === item.id) ||
+      (post.item_name && post.item_name === item.title)
+    );
   };
 
   // Flatten all content items from all calendars for this customer
@@ -100,11 +130,15 @@ function ContentCalendar() {
   calendars.forEach(calendar => {
     if (Array.isArray(calendar.contentItems)) {
       calendar.contentItems.forEach(item => {
+        // --- Override status if published in scheduledPosts ---
+        const published = isItemPublished(item);
         allItems.push({
           ...item,
           calendarName: calendar.name || '',
           id: item.id || item._id || Math.random().toString(36).slice(2),
-          creator: item.assignedToName || item.assignedTo || calendar.assignedToName || calendar.assignedTo || '', // show creator if available
+          creator: item.assignedToName || item.assignedTo || calendar.assignedToName || calendar.assignedTo || '',
+          status: published ? 'published' : item.status,
+          publishedPlatforms: published ? getPublishedPlatformsForItem(item) : []
         });
       });
     }
@@ -137,6 +171,11 @@ function ContentCalendar() {
       </div>
     );
   }
+
+  // Add this function to handle item clicks
+  const handleContentClick = (item) => {
+    setSelectedContent(item);
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -207,9 +246,23 @@ function ContentCalendar() {
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center space-x-3">
                         <span className="text-gray-600">{format(new Date(item.date), 'MMM dd, yyyy')}</span>
-                        <span className={`px-3 py-1 rounded-full text-sm ${getStatusColor(item.status)}`}>
-                          {getStatusLabel(item.status)}
-                        </span>
+                        {/* Published status with icon */}
+                        {item.status === 'published' ? (
+                          <span className="px-3 py-1 rounded-full text-sm font-medium flex items-center gap-1 bg-green-100 text-green-800">
+                            <CheckCircle className="h-4 w-4" />
+                            Published
+                            {/* --- Show published platforms --- */}
+                            {item.publishedPlatforms && item.publishedPlatforms.length > 0 && (
+                              <span className="ml-2 text-xs text-blue-600">
+                                on: {item.publishedPlatforms.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(', ')}
+                              </span>
+                            )}
+                          </span>
+                        ) : (
+                          <span className={`px-3 py-1 rounded-full text-sm ${getStatusColor(item.status)}`}>
+                            {getStatusLabel(item.status)}
+                          </span>
+                        )}
                       </div>
                       <div className="flex items-center space-x-3">
                         <div className="flex items-center text-gray-500">
@@ -274,7 +327,7 @@ function ContentCalendar() {
                 <div>
                   <p className="text-sm text-gray-500">Published On</p>
                   <div className="flex items-center space-x-3 mt-2">
-                    {(selectedContent.platforms || []).map((platform) => (
+                    {(selectedContent.publishedPlatforms || selectedContent.platforms || []).map((platform) => (
                       <div key={platform} className="flex items-center space-x-2 bg-gray-100 px-3 py-2 rounded-md">
                         {getPlatformIcon(platform)}
                         <span className="capitalize">{platform}</span>

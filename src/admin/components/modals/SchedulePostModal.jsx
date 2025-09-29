@@ -4,6 +4,26 @@ import {
   Check, Hash, Loader2, Zap, AlertCircle
 } from 'lucide-react';
 
+// Accept a callback to update local accounts state
+async function disconnectSocialAccount(accountId, onRefresh, onLocalDisconnect) {
+  try {
+    const response = await fetch(
+      `${process.env.REACT_APP_API_URL}/api/customer-social-links/${accountId}`,
+      { method: 'DELETE' }
+    );
+    const result = await response.json();
+    if (result.success || result.error === 'not_found' || result.reason === 'deleted') {
+      alert('Account disconnected. You can now reconnect.');
+      if (onLocalDisconnect) onLocalDisconnect(accountId); // update local state
+      if (onRefresh) onRefresh();
+    } else {
+      alert('Failed to disconnect: ' + (result.error || 'Unknown error'));
+    }
+  } catch (err) {
+    alert('Error disconnecting account');
+  }
+}
+
 function SchedulePostModal({ 
   selectedContent, 
   onClose, 
@@ -31,8 +51,14 @@ function SchedulePostModal({
   const [submitting, setSubmitting] = useState(false);
   const [isPostingNow, setIsPostingNow] = useState(false);
 
+  // Local state for connected accounts
+  const [localAccounts, setLocalAccounts] = useState([]);
+
   useEffect(() => {
     if (selectedContent) {
+      // Initialize localAccounts from props
+      setLocalAccounts(getCustomerSocialAccounts(selectedContent.customerId));
+      
       const latestVersion = selectedContent.versions[selectedContent.versions.length - 1];
       
       // Get all media from the latest version
@@ -57,12 +83,11 @@ function SchedulePostModal({
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
       });
     }
-  }, [selectedContent]);
+  }, [selectedContent, getCustomerSocialAccounts]);
 
-  // Get available pages/accounts for scheduling
+  // Use localAccounts instead of getCustomerSocialAccounts for UI
   const getAvailableAccountsForPlatform = (customerId, platform) => {
-    const accounts = getCustomerSocialAccounts(customerId);
-    return accounts.filter(account => account.platform === platform);
+    return localAccounts.filter(account => account.platform === platform);
   };
 
   // Check if customer has any accounts for a platform
@@ -405,6 +430,42 @@ function SchedulePostModal({
     }
   };
 
+  // Helper: Upload image to LinkedIn and get asset URN
+  const uploadLinkedInImage = async (imageUrl, linkedinToken) => {
+    try {
+      // If imageUrl is a file object, upload as FormData
+      if (typeof imageUrl !== 'string' && imageUrl instanceof File) {
+        const formData = new FormData();
+        formData.append('image', imageUrl);
+        formData.append('linkedin_token', linkedinToken);
+
+        const imageResponse = await fetch(`${process.env.REACT_APP_API_URL}/linkedin/upload-image`, {
+          method: 'POST',
+          body: formData
+        });
+        if (!imageResponse.ok) throw new Error('LinkedIn image upload failed');
+        const imageData = await imageResponse.json();
+        return imageData.asset;
+      } else if (typeof imageUrl === 'string') {
+        // Upload from URL
+        const imageResponse = await fetch(`${process.env.REACT_APP_API_URL}/linkedin/upload-image-from-url`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            imageUrl,
+            linkedin_token: linkedinToken
+          })
+        });
+        if (!imageResponse.ok) throw new Error('LinkedIn image upload from URL failed');
+        const imageData = await imageResponse.json();
+        return imageData.asset;
+      }
+    } catch (err) {
+      console.warn('LinkedIn image upload error:', err);
+      return null;
+    }
+  };
+
   const handlePostNow = async () => {
     if (!validatePostData(false)) return;
 
@@ -417,29 +478,44 @@ function SchedulePostModal({
       // Post to each platform immediately
       for (const postData of postsData) {
         try {
-          const endpoint = `${process.env.REACT_APP_API_URL}/api/immediate-posts`;
+          // LinkedIn image upload logic
+          if (postData.platform === 'linkedin' && postData.imageUrls && postData.imageUrls.length > 0) {
+            // Only support one image for LinkedIn post
+            const selectedAccount = getCustomerSocialAccounts(selectedContent.customerId)
+              .find(acc => acc._id === postData.accountId);
+            const linkedinToken = selectedAccount?.accessToken;
+            let asset = null;
+            // Try to upload the first image (either file or URL)
+            asset = await uploadLinkedInImage(postData.imageUrls[0], linkedinToken);
+            if (asset) {
+              postData.imageAsset = asset;
+            }
+          }
 
-          console.log(`⚡ Posting to ${postData.platform} immediately:`, {
-            platform: postData.platform,
-            mediaCount: postData.imageUrls?.length || 0,
-            isCarousel: postData.isCarousel
-          });
+          const endpoint = postData.platform === 'linkedin'
+            ? `${process.env.REACT_APP_API_URL}/linkedin/post`
+            : `${process.env.REACT_APP_API_URL}/api/immediate-posts`;
+
+          const payload = postData.platform === 'linkedin'
+            ? {
+                text: postData.caption,
+                linkedin_token: getCustomerSocialAccounts(selectedContent.customerId)
+                  .find(acc => acc._id === postData.accountId)?.accessToken,
+                ...(postData.imageAsset && { imageAsset: postData.imageAsset })
+              }
+            : postData;
 
           const response = await fetch(endpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(postData)
+            body: JSON.stringify(payload)
           });
 
           const result = await response.json();
           
           if (response.ok) {
             let successMsg = `✅ ${postData.platform}: Posted successfully`;
-            if (result.facebookPostId) successMsg += ` (ID: ${result.facebookPostId})`;
-            if (result.instagramPostId) successMsg += ` (ID: ${result.instagramPostId})`;
-            if (result.youtubePostId) successMsg += ` (ID: ${result.youtubePostId})`;
             if (result.linkedinPostId) successMsg += ` (ID: ${result.linkedinPostId})`;
-            
             results.push(successMsg);
           } else {
             errors.push(`❌ ${postData.platform}: ${result.error || 'Failed to post'}`);
@@ -529,6 +605,33 @@ function SchedulePostModal({
     }
   };
 
+  // Add this function to fix the error
+  const handleLocalDisconnect = (accountId) => {
+    setLocalAccounts(prev => prev.filter(acc => acc._id !== accountId));
+    setScheduleFormData(prev => {
+      // Find which platform this account belonged to
+      const disconnectedAccount = prev.platforms
+        .map(platform => ({ platform, account: localAccounts.find(acc => acc._id === accountId && acc.platform === platform) }))
+        .find(item => item.account);
+      if (!disconnectedAccount) return prev;
+      const platform = disconnectedAccount.platform;
+      // Clear selected account for this platform
+      return {
+        ...prev,
+        platformSettings: {
+          ...prev.platformSettings,
+          [platform]: {
+            ...prev.platformSettings[platform],
+            accountId: '',
+            pageId: '',
+            channelId: '',
+            linkedinAccountId: ''
+          }
+        }
+      };
+    });
+  };
+
   if (!selectedContent) return null;
 
   return (
@@ -582,11 +685,19 @@ function SchedulePostModal({
                     {!hasAccountsForPlatform(selectedContent?.customerId, 'facebook') && (
                       <div className="text-xs text-orange-600 mt-1">No account connected</div>
                     )}
+                    {hasAccountsForPlatform(selectedContent?.customerId, 'facebook') && (
+                      <div className="flex items-center mt-1">
+                        <span className="text-xs text-green-700 font-semibold flex items-center">
+                          <Check className="h-4 w-4 text-green-600 mr-1" />
+                          Connected
+                        </span>
+                      </div>
+                    )}
                   </div>
                   {scheduleFormData.platforms.includes('facebook') && (
                     <Check className="h-5 w-5 text-blue-600 ml-auto" />
                   )}
-                  {!hasAccountsForPlatform(selectedContent?.customerId, 'facebook') && (
+                  {!hasAccountsForPlatform(selectedContent?.customerId, 'facebook') ? (
                     <button
                       type="button"
                       onClick={() => showIntegration('facebook', selectedContent?.customerId, getCustomerName(selectedContent?.customerId))}
@@ -594,6 +705,22 @@ function SchedulePostModal({
                     >
                       Connect
                     </button>
+                  ) : (
+                    (() => {
+                      const connected = getAvailableAccountsForPlatform(selectedContent?.customerId, 'facebook');
+                      return connected.length > 0 ? (
+                        <button
+                          type="button"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            await disconnectSocialAccount(connected[0]._id, null, handleLocalDisconnect);
+                          }}
+                          className="ml-2 bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700"
+                        >
+                          Disconnect
+                        </button>
+                      ) : null;
+                    })()
                   )}
                 </label>
 
@@ -601,7 +728,7 @@ function SchedulePostModal({
                 <label className={`flex items-center p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
                   scheduleFormData.platforms.includes('instagram') 
                     ? 'border-pink-500 bg-pink-50 shadow-md' 
-                    : hasAccountsForPlatform(selectedContent?.customerId, 'instagram')
+                    : getAvailableAccountsForPlatform(selectedContent?.customerId, 'instagram').length > 0
                     ? 'border-gray-300 hover:border-pink-400 hover:bg-pink-50'
                     : 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-60'
                 }`}>
@@ -610,21 +737,29 @@ function SchedulePostModal({
                     name="platforms"
                     value="instagram"
                     checked={scheduleFormData.platforms.includes('instagram')}
-                    onChange={() => hasAccountsForPlatform(selectedContent?.customerId, 'instagram') && handlePlatformToggle('instagram')}
-                    disabled={!hasAccountsForPlatform(selectedContent?.customerId, 'instagram')}
+                    onChange={() => getAvailableAccountsForPlatform(selectedContent?.customerId, 'instagram').length > 0 && handlePlatformToggle('instagram')}
+                    disabled={getAvailableAccountsForPlatform(selectedContent?.customerId, 'instagram').length === 0}
                     className="sr-only"
                   />
                   <Instagram className="h-6 w-6 text-pink-600 mr-3" />
                   <div className="flex-1">
                     <span className="font-medium text-gray-900">Instagram</span>
-                    {!hasAccountsForPlatform(selectedContent?.customerId, 'instagram') && (
+                    {getAvailableAccountsForPlatform(selectedContent?.customerId, 'instagram').length === 0 && (
                       <div className="text-xs text-orange-600 mt-1">No account connected</div>
+                    )}
+                    {getAvailableAccountsForPlatform(selectedContent?.customerId, 'instagram').length > 0 && (
+                      <div className="flex items-center mt-1">
+                        <span className="text-xs text-green-700 font-semibold flex items-center">
+                          <Check className="h-4 w-4 text-green-600 mr-1" />
+                          Connected
+                        </span>
+                      </div>
                     )}
                   </div>
                   {scheduleFormData.platforms.includes('instagram') && (
                     <Check className="h-5 w-5 text-pink-600 ml-auto" />
                   )}
-                  {!hasAccountsForPlatform(selectedContent?.customerId, 'instagram') && (
+                  {getAvailableAccountsForPlatform(selectedContent?.customerId, 'instagram').length === 0 ? (
                     <button
                       type="button"
                       onClick={() => showIntegration('instagram', selectedContent?.customerId, getCustomerName(selectedContent?.customerId))}
@@ -632,6 +767,22 @@ function SchedulePostModal({
                     >
                       Connect
                     </button>
+                  ) : (
+                    (() => {
+                      const connected = getAvailableAccountsForPlatform(selectedContent?.customerId, 'instagram');
+                      return connected.length > 0 ? (
+                        <button
+                          type="button"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            await disconnectSocialAccount(connected[0]._id, null, handleLocalDisconnect);
+                          }}
+                          className="ml-2 bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700"
+                        >
+                          Disconnect
+                        </button>
+                      ) : null;
+                    })()
                   )}
                 </label>
 
@@ -658,9 +809,42 @@ function SchedulePostModal({
                     {!hasAccountsForPlatform(selectedContent?.customerId, 'youtube') && (
                       <div className="text-xs text-orange-600 mt-1">Not available</div>
                     )}
+                    {hasAccountsForPlatform(selectedContent?.customerId, 'youtube') && (
+                      <div className="flex items-center mt-1">
+                        <span className="text-xs text-green-700 font-semibold flex items-center">
+                          <Check className="h-4 w-4 text-green-600 mr-1" />
+                          Connected
+                        </span>
+                      </div>
+                    )}
                   </div>
                   {scheduleFormData.platforms.includes('youtube') && (
                     <Check className="h-5 w-5 text-red-600 ml-auto" />
+                  )}
+                  {!hasAccountsForPlatform(selectedContent?.customerId, 'youtube') ? (
+                    <button
+                      type="button"
+                      onClick={() => showIntegration('youtube', selectedContent?.customerId, getCustomerName(selectedContent?.customerId))}
+                      className="ml-2 bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700"
+                    >
+                      Connect
+                    </button>
+                  ) : (
+                    (() => {
+                      const connected = getAvailableAccountsForPlatform(selectedContent?.customerId, 'youtube');
+                      return connected.length > 0 ? (
+                        <button
+                          type="button"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            await disconnectSocialAccount(connected[0]._id, null, handleLocalDisconnect);
+                          }}
+                          className="ml-2 bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700"
+                        >
+                          Disconnect
+                        </button>
+                      ) : null;
+                    })()
                   )}
                 </label>
 
@@ -691,7 +875,7 @@ function SchedulePostModal({
                   {scheduleFormData.platforms.includes('linkedin') && (
                     <Check className="h-5 w-5 text-blue-600 ml-auto" />
                   )}
-                  {!hasAccountsForPlatform(selectedContent?.customerId, 'linkedin') && (
+                  {!hasAccountsForPlatform(selectedContent?.customerId, 'linkedin') ? (
                     <button
                       type="button"
                       onClick={() => showIntegration('linkedin', selectedContent?.customerId, getCustomerName(selectedContent?.customerId))}
@@ -699,6 +883,22 @@ function SchedulePostModal({
                     >
                       Connect
                     </button>
+                  ) : (
+                    (() => {
+                      const connected = getAvailableAccountsForPlatform(selectedContent?.customerId, 'linkedin');
+                      return connected.length > 0 ? (
+                        <button
+                          type="button"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            await disconnectSocialAccount(connected[0]._id, null, handleLocalDisconnect);
+                          }}
+                          className="ml-2 bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700"
+                        >
+                          Disconnect
+                        </button>
+                      ) : null;
+                    })()
                   )}
                 </label>
               </div>

@@ -50,10 +50,30 @@ function Dashboard() {
           }
         });
 
+        // --- Fetch scheduled posts for this customer ---
+        const postsRes = await fetch(`${process.env.REACT_APP_API_URL}/api/scheduled-posts`);
+        let postsData = await postsRes.json();
+        if (!Array.isArray(postsData)) postsData = [];
+        // Only posts for this customer
+        const customerPosts = postsData.filter(p =>
+          (p.customerId === currentUser._id || p.customerId === currentUser.id) &&
+          p.status === 'published'
+        );
+        // Helper: check if item is published
+        const isItemPublished = (item) => {
+          return customerPosts.some(post =>
+            (post.item_id && post.item_id === item.id) ||
+            (post.contentId && post.contentId === item.id) ||
+            (post.item_name && post.item_name === item.title)
+          );
+        };
+        // --- End ---
+
         // Stats calculation
         const totalPosts = allItems.length;
         const contentCalendars = customerCalendars.length;
-        const publishedContent = allItems.filter(i => i.status === 'published').length;
+        // Use scheduled posts logic for publishedContent
+        const publishedContent = allItems.filter(i => isItemPublished(i)).length;
 
         setStats({
           totalPosts,
@@ -70,7 +90,9 @@ function Dashboard() {
             id: item.id,
             platform: item.title || item.description || item.creator || 'Content',
             date: item.date,
-            status: item.status ? item.status.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'Unknown'
+            status: isItemPublished(item)
+              ? 'Published'
+              : (item.status ? item.status.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'Unknown')
           }));
         setRecentActivity(recent);
 

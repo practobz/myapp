@@ -198,6 +198,13 @@ function SchedulePostModal({
     }));
   };
 
+  // Helper to detect video URLs
+  const isVideoUrl = (url) => {
+    if (!url) return false;
+    const ext = url.split('.').pop().toLowerCase();
+    return ['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv', 'flv', 'wmv'].includes(ext);
+  };
+
   // Common validation function for both schedule and post now
   const validatePostData = (isScheduled = true) => {
     if (!scheduleFormData.caption) {
@@ -257,6 +264,19 @@ function SchedulePostModal({
     if (isScheduled && (!scheduleFormData.scheduledDate || !scheduleFormData.scheduledTime)) {
       alert('Please select a date and time for scheduling');
       return false;
+    }
+
+    // Prevent scheduling for video posts on Facebook/Instagram
+    if (isScheduled) {
+      for (const platform of scheduleFormData.platforms) {
+        if ((platform === 'facebook' || platform === 'instagram') && scheduleFormData.selectedImages.length > 0) {
+          const isVideo = isVideoUrl(scheduleFormData.selectedImages[0]?.url);
+          if (isVideo) {
+            alert('Scheduled video posts are not supported for Facebook or Instagram. Please use "Post Now" for video content.');
+            return false;
+          }
+        }
+      }
     }
 
     return true;
@@ -352,6 +372,8 @@ function SchedulePostModal({
         Object.assign(postData, {
           linkedinAccountId: selectedAccount.platformUserId,
           linkedinAccessToken: selectedAccount.accessToken,
+          // Add media URLs for LinkedIn
+          mediaUrls: scheduleFormData.selectedImages.map(item => item.url)
         });
       }
 
@@ -430,42 +452,6 @@ function SchedulePostModal({
     }
   };
 
-  // Helper: Upload image to LinkedIn and get asset URN
-  const uploadLinkedInImage = async (imageUrl, linkedinToken) => {
-    try {
-      // If imageUrl is a file object, upload as FormData
-      if (typeof imageUrl !== 'string' && imageUrl instanceof File) {
-        const formData = new FormData();
-        formData.append('image', imageUrl);
-        formData.append('linkedin_token', linkedinToken);
-
-        const imageResponse = await fetch(`${process.env.REACT_APP_API_URL}/linkedin/upload-image`, {
-          method: 'POST',
-          body: formData
-        });
-        if (!imageResponse.ok) throw new Error('LinkedIn image upload failed');
-        const imageData = await imageResponse.json();
-        return imageData.asset;
-      } else if (typeof imageUrl === 'string') {
-        // Upload from URL
-        const imageResponse = await fetch(`${process.env.REACT_APP_API_URL}/linkedin/upload-image-from-url`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            imageUrl,
-            linkedin_token: linkedinToken
-          })
-        });
-        if (!imageResponse.ok) throw new Error('LinkedIn image upload from URL failed');
-        const imageData = await imageResponse.json();
-        return imageData.asset;
-      }
-    } catch (err) {
-      console.warn('LinkedIn image upload error:', err);
-      return null;
-    }
-  };
-
   const handlePostNow = async () => {
     if (!validatePostData(false)) return;
 
@@ -475,48 +461,33 @@ function SchedulePostModal({
       const results = [];
       const errors = [];
 
-      // Post to each platform immediately
       for (const postData of postsData) {
         try {
-          // LinkedIn image upload logic
-          if (postData.platform === 'linkedin' && postData.imageUrls && postData.imageUrls.length > 0) {
-            // Only support one image for LinkedIn post
-            const selectedAccount = getCustomerSocialAccounts(selectedContent.customerId)
-              .find(acc => acc._id === postData.accountId);
-            const linkedinToken = selectedAccount?.accessToken;
-            let asset = null;
-            // Try to upload the first image (either file or URL)
-            asset = await uploadLinkedInImage(postData.imageUrls[0], linkedinToken);
-            if (asset) {
-              postData.imageAsset = asset;
-            }
-          }
+          // Remove LinkedIn media upload logic
+          // if (postData.platform === 'linkedin' && postData.imageUrls && postData.imageUrls.length > 0) {
+          //   const selectedAccount = getCustomerSocialAccounts(selectedContent.customerId)
+          //     .find(acc => acc._id === postData.accountId);
+          //   const linkedinToken = selectedAccount?.accessToken;
+          //   try {
+          //     const assetObj = await uploadLinkedInMedia(postData.imageUrls[0], linkedinToken);
+          //     if (assetObj && assetObj.asset) {
+          //       postData.mediaAsset = assetObj.asset;
+          //       postData.mediaType = assetObj.type === 'video' ? 'VIDEO' : 'IMAGE';
+          //     }
+          //   } catch (mediaError) {
+          //     console.error('❌ LinkedIn media upload failed:', mediaError.message);
+          //   }
+          // }
 
-          const endpoint = postData.platform === 'linkedin'
-            ? `${process.env.REACT_APP_API_URL}/linkedin/post`
-            : `${process.env.REACT_APP_API_URL}/api/immediate-posts`;
-
-          const payload = postData.platform === 'linkedin'
-            ? {
-                text: postData.caption,
-                linkedin_token: getCustomerSocialAccounts(selectedContent.customerId)
-                  .find(acc => acc._id === postData.accountId)?.accessToken,
-                ...(postData.imageAsset && { imageAsset: postData.imageAsset })
-              }
-            : postData;
-
-          const response = await fetch(endpoint, {
+          // Use /api/immediate-posts for all platforms
+          const response = await fetch(`${process.env.REACT_APP_API_URL}/api/immediate-posts`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(postData)
           });
-
           const result = await response.json();
-          
           if (response.ok) {
-            let successMsg = `✅ ${postData.platform}: Posted successfully`;
-            if (result.linkedinPostId) successMsg += ` (ID: ${result.linkedinPostId})`;
-            results.push(successMsg);
+            results.push(`✅ ${postData.platform}: Posted successfully`);
           } else {
             errors.push(`❌ ${postData.platform}: ${result.error || 'Failed to post'}`);
           }
@@ -546,7 +517,7 @@ function SchedulePostModal({
       console.error('Post now error:', error);
       alert(`Failed to publish posts: ${error.message}`);
     } finally {
-      setIsPostingNow(false);
+      setIsPostingNow(false); // Ensure loader always stops
     }
   };
 
@@ -870,6 +841,15 @@ function SchedulePostModal({
                     <span className="font-medium text-gray-900">LinkedIn</span>
                     {!hasAccountsForPlatform(selectedContent?.customerId, 'linkedin') && (
                       <div className="text-xs text-orange-600 mt-1">No account connected</div>
+                    )}
+                    {/* Add Connected indicator for LinkedIn */}
+                    {hasAccountsForPlatform(selectedContent?.customerId, 'linkedin') && (
+                      <div className="flex items-center mt-1">
+                        <span className="text-xs text-green-700 font-semibold flex items-center">
+                          <Check className="h-4 w-4 text-green-600 mr-1" />
+                          Connected
+                        </span>
+                      </div>
                     )}
                   </div>
                   {scheduleFormData.platforms.includes('linkedin') && (

@@ -498,13 +498,12 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
   const disconnectAccount = async (accountId) => {
     setLoading(true);
     try {
-      // Fix: Use correct API base URL
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/customer-social-accounts/${accountId}`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/customer-social-links/${accountId}`, {
         method: 'DELETE'
       });
 
       const result = await response.json();
-      if (result.success) {
+      if (result.success || result.error === 'not_found' || result.reason === 'deleted') {
         setSuccess('Account disconnected successfully');
         await fetchExistingConnections();
         if (onConnectionSuccess) onConnectionSuccess();
@@ -682,17 +681,26 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
                     {account.pages && (
                       <p className="text-xs text-gray-500">{account.pages.length} page(s) connected</p>
                     )}
+                    {/* Token expired warning (basic checking) */}
+                    {account.accessToken && account.accessToken.length < 40 && (
+                      <span className="text-xs text-orange-600 font-medium">
+                        Token expired or invalid. Please disconnect and reconnect.
+                      </span>
+                    )}
                   </div>
                 </div>
                 <button
                   onClick={() => disconnectAccount(account._id)}
                   className="text-red-600 hover:text-red-800 p-1 rounded hover:bg-red-50 transition-all duration-200"
-                  title="Disconnect account"
+                  title="Disconnect account (enables re-connect)"
                 >
                   <X className="h-4 w-4" />
                 </button>
               </div>
             ))}
+          </div>
+          <div className="text-xs text-gray-600 mt-2">
+            If your access token has expired or posting fails, please <b>Disconnect</b> and then <b>Reconnect</b> your account.
           </div>
         </div>
       )}

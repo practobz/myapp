@@ -303,7 +303,7 @@ const [showFacebookPosts, setShowFacebookPosts] = useState({});
         setFbError({ message: 'Facebook login failed or was cancelled' });
       }
     }, {
-      scope: 'pages_show_list,pages_read_engagement,pages_manage_metadata,email,public_profile',
+      scope: 'pages_show_list,pages_read_engagement,pages_manage_posts,pages_manage_metadata,email,public_profile', // <-- ADDED pages_manage_posts
       return_scopes: true,
       auth_type: 'rerequest'
     });
@@ -1072,6 +1072,7 @@ const [showFacebookPosts, setShowFacebookPosts] = useState({});
     );
   };
 
+  // Add a warning for scheduled video posts
   const renderPageDetails = (page) => (
     <div key={page.id} className="border rounded-lg p-6 mb-4 bg-white shadow-sm">
       <div className="flex items-start space-x-4">
@@ -1257,7 +1258,6 @@ const [showFacebookPosts, setShowFacebookPosts] = useState({});
       if (response.status === 'connected') {
         // Only call logout if user is actually logged in
         window.FB.logout(() => {
-          clearAllAccountData();
         });
       } else {
         // User is not logged in to Facebook, just clear local data

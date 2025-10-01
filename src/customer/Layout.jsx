@@ -27,7 +27,7 @@ function Layout({ children }) {
   const handleLogout = async () => {
     setIsUserMenuOpen(false);
     await logout?.();
-    navigate('/customer/login');
+    navigate('/customer/welcome');
   };
 
   // Show back arrow on all pages except /customer
@@ -58,7 +58,15 @@ function Layout({ children }) {
                   <ArrowLeft className="h-5 w-5" />
                 </button>
               )}
-              <Logo size="medium" />
+              {/* Make Logo clickable */}
+              <button
+                onClick={() => navigate('/customer')}
+                className="focus:outline-none"
+                aria-label="Go to Dashboard"
+                style={{ background: 'none', border: 'none', padding: 0, margin: 0 }}
+              >
+                <Logo size="medium" />
+              </button>
               <div className="ml-6">
                 <h1 className="text-xl font-bold text-gray-900">Customer Portal</h1>
                 <p className="text-sm text-gray-500">Manage your subscription and settings</p>

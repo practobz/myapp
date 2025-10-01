@@ -347,11 +347,9 @@ function App() {
                   </CustomerLayout>
                 </ProtectedRoutePortal>
               } />
-              {/* Make Customer Welcome route public */}
+              {/* Make Customer Welcome route public and remove CustomerLayout */}
               <Route path="/customer/welcome" element={
-                <CustomerLayout>
-                  <CustomerWelcome />
-                </CustomerLayout>
+                <CustomerWelcome />
               } />
                <Route path="/admin/schedule-post-modal" element={
                 <ProtectedRoutePortal role="admin">

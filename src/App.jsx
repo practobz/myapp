@@ -44,7 +44,7 @@ import IntegratedPostAnalytics from './components/IntegratedPostAnalytics';
 import PostAnalytics from './components/PostAnalytics';
 import CustomerValueDashboard from './components/CustomerValueDashboard';
 import SocialAnalyticsDashboard from './customer/Integration/SocialAnalyticsDashboard';
-
+import CustomerWelcome from './customer/auth/CustomerWelcome';
 // Integration imports
 import FacebookIntegration from './customer/Integration/FacebookIntegration';
 import InstagramIntegration from './customer/Integration/InstagramIntegration';
@@ -64,7 +64,7 @@ import { useAuth } from './admin/contexts/AuthContext';
 import AIImageGenerator from './components/AIImageGenerator';
 import TimePeriodChart from './components/TimeperiodChart';
 import WhatsAppIntegration from './components/WhatsAppIntegration';
-import CustomerWelcome from './customer/auth/CustomerWelcome';
+
 // --- ProtectedRoute for all portals ---
 function ProtectedRoutePortal({ children, role }) {
   const { currentUser } = useAuth();

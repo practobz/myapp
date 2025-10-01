@@ -64,7 +64,7 @@ import { useAuth } from './admin/contexts/AuthContext';
 import AIImageGenerator from './components/AIImageGenerator';
 import TimePeriodChart from './components/TimeperiodChart';
 import WhatsAppIntegration from './components/WhatsAppIntegration';
-
+import CustomerWelcome from './customer/auth/CustomerWelcome';
 // --- ProtectedRoute for all portals ---
 function ProtectedRoutePortal({ children, role }) {
   const { currentUser } = useAuth();
@@ -256,6 +256,9 @@ function App() {
               } />
 
               {/* Customer Portal (protected) */}
+              <Route path="/customer/welcome" element={
+  <CustomerWelcome />
+} />
               <Route path="/customer" element={
                 <ProtectedRoutePortal role="customer">
                   <CustomerLayout>

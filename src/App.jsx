@@ -63,7 +63,6 @@ import Settings from './content-creators/Settings';
 import { useAuth } from './admin/contexts/AuthContext';
 import AIImageGenerator from './components/AIImageGenerator';
 import TimePeriodChart from './components/TimeperiodChart';
-// import WhatsAppIntegration from './components/WhatsAppIntegration';
 import CustomerWelcome from './customer/auth/CustomerWelcome';
 
 // --- ProtectedRoute for all portals ---
@@ -384,14 +383,6 @@ function App() {
                   <LinkedInIntegration />
                 </ProtectedRoutePortal>
               } />
-              {/* Remove WhatsAppIntegration route for customer */}
-              {/* <Route path="/customer/whatsapp-integration" element={
-                <ProtectedRoutePortal role="customer">
-                  <CustomerLayout>
-                    <WhatsAppIntegration />
-                  </CustomerLayout>
-                </ProtectedRoutePortal>
-              } /> */}
 
               {/* Content Creator Portal (protected) */}
               <Route path="/content-creator" element={
@@ -436,12 +427,6 @@ function App() {
                   <AIImageGenerator />
                 </ProtectedRoutePortal>
               } />
-              {/* Remove WhatsAppIntegration route for content creator */}
-              {/* <Route path="/content-creator/whatsapp-integration" element={
-                <ProtectedRoutePortal role="content_creator">
-                  <WhatsAppIntegration />
-                </ProtectedRoutePortal>
-              } /> */}
 
               {/* Default route */}
               <Route path="/" element={<Navigate to="/login" replace />} />

@@ -347,6 +347,14 @@ function App() {
                   </CustomerLayout>
                 </ProtectedRoutePortal>
               } />
+              {/* Add Customer Welcome route */}
+              <Route path="/customer/welcome" element={
+                <ProtectedRoutePortal role="customer">
+                  <CustomerLayout>
+                    <CustomerWelcome />
+                  </CustomerLayout>
+                </ProtectedRoutePortal>
+              } />
                <Route path="/admin/schedule-post-modal" element={
                 <ProtectedRoutePortal role="admin">
                   <SchedulePostModal />

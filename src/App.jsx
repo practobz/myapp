@@ -45,6 +45,7 @@ import PostAnalytics from './components/PostAnalytics';
 import CustomerValueDashboard from './components/CustomerValueDashboard';
 import SocialAnalyticsDashboard from './customer/Integration/SocialAnalyticsDashboard';
 import CustomerWelcome from './customer/auth/CustomerWelcome';
+
 // Integration imports
 import FacebookIntegration from './customer/Integration/FacebookIntegration';
 import InstagramIntegration from './customer/Integration/InstagramIntegration';
@@ -256,9 +257,6 @@ function App() {
               } />
 
               {/* Customer Portal (protected) */}
-              <Route path="/customer/welcome" element={
-  <CustomerWelcome />
-} />
               <Route path="/customer" element={
                 <ProtectedRoutePortal role="customer">
                   <CustomerLayout>

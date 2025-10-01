@@ -63,7 +63,7 @@ import Settings from './content-creators/Settings';
 import { useAuth } from './admin/contexts/AuthContext';
 import AIImageGenerator from './components/AIImageGenerator';
 import TimePeriodChart from './components/TimeperiodChart';
-import CustomerWelcome from './customer/auth/CustomerWelcome';
+import WhatsAppIntegration from './components/WhatsAppIntegration';
 
 // --- ProtectedRoute for all portals ---
 function ProtectedRoutePortal({ children, role }) {
@@ -256,11 +256,6 @@ function App() {
               } />
 
               {/* Customer Portal (protected) */}
-              {/* Customer Portal (protected) */}
-              <Route path="/customer/welcome" element={
-  <CustomerWelcome />
-} />
-
               <Route path="/customer" element={
                 <ProtectedRoutePortal role="customer">
                   <CustomerLayout>
@@ -383,6 +378,13 @@ function App() {
                   <LinkedInIntegration />
                 </ProtectedRoutePortal>
               } />
+              <Route path="/customer/whatsapp-integration" element={
+                <ProtectedRoutePortal role="customer">
+                  <CustomerLayout>
+                    <WhatsAppIntegration />
+                  </CustomerLayout>
+                </ProtectedRoutePortal>
+              } />
 
               {/* Content Creator Portal (protected) */}
               <Route path="/content-creator" element={
@@ -425,6 +427,11 @@ function App() {
               <Route path="/content-creator/ai-image-generator" element={
                 <ProtectedRoutePortal role="content_creator">
                   <AIImageGenerator />
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/content-creator/whatsapp-integration" element={
+                <ProtectedRoutePortal role="content_creator">
+                  <WhatsAppIntegration />
                 </ProtectedRoutePortal>
               } />
 

@@ -14,7 +14,9 @@ import InstagramIntegration from './Integration/InstagramIntegration';
 import YouTubeIntegration from './Integration/YouTubeIntegration';
 import TwitterIntegration from './Integration/TwitterIntegration';
 import LinkedInIntegration from './Integration/LinkedInIntegration';
-// Remove WhatsAppIntegration import
+import WhatsAppIntegration from '../components/WhatsAppIntegration';
+import CustomerSocialMediaLinks from '../components/CustomerSocialMediaLinks';
+import { getUserData } from '../utils/sessionUtils'; // Add this import if not present
 
 // Enhanced platform configuration with better styling
 const platformIcons = {
@@ -22,8 +24,8 @@ const platformIcons = {
   facebook: <Facebook className="h-6 w-6" />,
   linkedin: <Linkedin className="h-6 w-6" />,
   youtube: <Youtube className="h-6 w-6" />,
-  twitter: <Twitter className="h-6 w-6" />
-  // Remove whatsapp icon
+  twitter: <Twitter className="h-6 w-6" />,
+  whatsapp: <MessageCircle className="h-6 w-6" />
 };
 
 const platforms = [
@@ -81,8 +83,18 @@ const platforms = [
     bgColor: 'bg-blue-50',
     textColor: 'text-blue-500',
     features: ['Tweet Management', 'Real Analytics', 'Audience Insights', 'Engagement Metrics']
+  },
+  { 
+    key: 'whatsapp', 
+    label: 'WhatsApp Business', 
+    description: 'Send notifications and updates to customers via WhatsApp',
+    route: '/customer/integration/whatsapp',
+    icon: platformIcons.whatsapp,
+    color: 'from-green-500 to-emerald-600',
+    bgColor: 'bg-green-50',
+    textColor: 'text-green-600',
+    features: ['Customer Notifications', 'Content Alerts', 'Business Templates', 'Automated Messages']
   }
-  // Remove whatsapp platform object
 ];
 
 function Settings() {
@@ -105,8 +117,8 @@ function Settings() {
     instagram: false,
     youtube: false,
     linkedin: false,
-    twitter: false
-    // Remove whatsapp status
+    twitter: false,
+    whatsapp: false
   });
 
   // Handle URL-based navigation
@@ -154,8 +166,8 @@ function Settings() {
         instagram: apiStatus.instagram === undefined ? igConnected : apiStatus.instagram,
         youtube: apiStatus.youtube === undefined ? ytConnected : apiStatus.youtube,
         twitter: apiStatus.twitter === undefined ? twConnected : apiStatus.twitter,
-        linkedin: apiStatus.linkedin === undefined ? liConnected : apiStatus.linkedin // <-- Fix here
-        // Remove whatsapp status update
+        linkedin: apiStatus.linkedin === undefined ? liConnected : apiStatus.linkedin, // <-- Fix here
+        whatsapp: apiStatus.whatsapp === undefined ? false : apiStatus.whatsapp
       }));
     } catch (err) {
       console.error('Error fetching integration status:', err);
@@ -468,7 +480,46 @@ function Settings() {
                 onConnectionStatusChange={status => handleConnectionStatusChange('twitter', status)}
               />
             )}
-            {/* Remove WhatsAppIntegration rendering */}
+            {activeIntegration === 'whatsapp' && (
+              <div>
+                {/* Debug info to show what data we have */}
+                <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <h4 className="text-sm font-medium text-blue-900 mb-2">Customer Data Debug</h4>
+                  <div className="text-xs text-blue-800 space-y-1">
+                    <div><strong>Name:</strong> {customerData?.name || 'Not loaded'}</div>
+                    <div><strong>Email:</strong> {customerData?.email || 'Not loaded'}</div>
+                    <div><strong>Mobile:</strong> {customerData?.mobile || 'Not loaded'}</div>
+                    <div><strong>Customer ID:</strong> {currentUser?._id || 'Not loaded'}</div>
+                    <div><strong>Mobile Type:</strong> {typeof customerData?.mobile}</div>
+                    <div><strong>Mobile Length:</strong> {customerData?.mobile?.length || 0}</div>
+                    <div><strong>Raw Customer Data:</strong> {JSON.stringify(customerData, null, 2)}</div>
+                  </div>
+                </div>
+                
+                <WhatsAppIntegration 
+                  contentDetails={{
+                    id: 'test-content-id',
+                    creatorId: currentUser?._id || '',
+                    creatorName: customerData?.name || currentUser?.name || 'Test Creator',
+                    title: 'Test Content Notification',
+                    contentType: 'Instagram Post',
+                    customerId: currentUser?._id || '',
+                    customerEmail: customerData?.email || currentUser?.email || '',
+                    customerPhone: customerData?.mobile || currentUser?.mobile || null
+                  }}
+                  onNotificationSent={(data) => {
+                    console.log('WhatsApp notification sent:', data);
+                    // Update connection status if successful
+                    if (data.success) {
+                      setConnectionStatus(prev => ({
+                        ...prev,
+                        whatsapp: true
+                      }));
+                    }
+                  }}
+                />
+              </div>
+            )}
           </div>
         </div>
       </div>

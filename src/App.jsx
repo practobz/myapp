@@ -222,13 +222,6 @@ function App() {
                   <LinkedInIntegration />
                 </ProtectedRoutePortal>
               } />
-              <Route path="/customer/whatsapp-integration" element={
-                <ProtectedRoutePortal role="customer">
-                  <CustomerLayout>
-                    <WhatsAppIntegration />
-                  </CustomerLayout>
-                </ProtectedRoutePortal>
-              } />
 
               {/* Content Creator Portal (protected) */}
               <Route path="/content-creator" element={
@@ -281,6 +274,7 @@ function App() {
 }
 
 export default App;
+       
               
           
 

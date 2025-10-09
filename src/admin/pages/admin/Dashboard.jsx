@@ -232,6 +232,15 @@ function Dashboard() {
               <Send className="h-6 w-6 mr-3" />
               <span className="font-semibold">Scheduled Posts</span>
             </button>
+
+            <button 
+              onClick={() => navigate('/admin/qr-generator')}
+              className="w-full flex items-center justify-center p-6 bg-gradient-to-r from-cyan-600 to-blue-400 text-white rounded-xl hover:from-cyan-700 hover:to-blue-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
+            >
+              {/* You can use a QR icon if you have one, or use BarChart3 as placeholder */}
+              <BarChart3 className="h-6 w-6 mr-3" />
+              <span className="font-semibold">Generate QR Codes</span>
+            </button>
           </div>
         </div>
       </div>

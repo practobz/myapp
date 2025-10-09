@@ -18,18 +18,36 @@ export default function Configure() {
   const platform = searchParams.get('platform');
   const autoConnect = searchParams.get('autoConnect');
 
+  // Environment detection and API base URL configuration
+  const getApiBaseUrl = () => {
+    // Check if we're in development
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      return 'http://localhost:8080'; // Your local backend
+    }
+    
+    // Production - replace with your Cloud Run backend URL
+    return process.env.REACT_APP_API_URL || 'https://your-backend-service.run.app';
+  };
+
+  const getCurrentFrontendUrl = () => {
+    // Get the current frontend URL (works for both localhost and production bucket)
+    return `${window.location.protocol}//${window.location.host}`;
+  };
+
   // Enhanced function to check for existing connected accounts with detailed info
   const checkConnectedAccounts = async (customerId, platform) => {
     try {
       setCheckingAccounts(true);
       setStatus('Checking for existing accounts...');
       
+      const apiBaseUrl = getApiBaseUrl();
+      
       // Check multiple endpoints for account data
       const endpoints = [
-        `/api/customer/${customerId}/accounts/${platform}`,
-        `/api/customer/${customerId}/${platform}/profile`,
-        `/api/${platform}/accounts/${customerId}`,
-        `/api/integrations/${platform}/${customerId}`
+        `${apiBaseUrl}/api/customer/${customerId}/accounts/${platform}`,
+        `${apiBaseUrl}/api/customer/${customerId}/${platform}/profile`,
+        `${apiBaseUrl}/api/${platform}/accounts/${customerId}`,
+        `${apiBaseUrl}/api/integrations/${platform}/${customerId}`
       ];
 
       let accounts = [];
@@ -38,7 +56,15 @@ export default function Configure() {
       // Try each endpoint until we find account data
       for (const endpoint of endpoints) {
         try {
-          const response = await fetch(endpoint);
+          const response = await fetch(endpoint, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              // Add any auth headers if needed
+            },
+            credentials: 'include' // Include cookies for authentication
+          });
+          
           if (response.ok) {
             const data = await response.json();
             console.log(`Account data from ${endpoint}:`, data);
@@ -88,6 +114,7 @@ export default function Configure() {
   // Fetch detailed account information for display
   const fetchAccountDetails = async (accounts, platform, customerId) => {
     const details = {};
+    const apiBaseUrl = getApiBaseUrl();
     
     for (const account of accounts) {
       try {
@@ -95,15 +122,22 @@ export default function Configure() {
         
         // Try different endpoints for account details
         const detailEndpoints = [
-          `/api/${platform}/profile/${accountId}`,
-          `/api/${platform}/stats/${accountId}`,
-          `/api/customer/${customerId}/${platform}/${accountId}/details`,
-          `/api/integrations/${platform}/${customerId}/${accountId}`
+          `${apiBaseUrl}/api/${platform}/profile/${accountId}`,
+          `${apiBaseUrl}/api/${platform}/stats/${accountId}`,
+          `${apiBaseUrl}/api/customer/${customerId}/${platform}/${accountId}/details`,
+          `${apiBaseUrl}/api/integrations/${platform}/${customerId}/${accountId}`
         ];
 
         for (const endpoint of detailEndpoints) {
           try {
-            const response = await fetch(endpoint);
+            const response = await fetch(endpoint, {
+              method: 'GET',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              credentials: 'include'
+            });
+            
             if (response.ok) {
               const data = await response.json();
               details[accountId] = {
@@ -146,6 +180,12 @@ export default function Configure() {
 
   useEffect(() => {
     console.log('Configure component loaded with:', { customerId, platform, autoConnect });
+    console.log('Current environment:', {
+      hostname: window.location.hostname,
+      isLocalhost: window.location.hostname === 'localhost',
+      apiBaseUrl: getApiBaseUrl(),
+      frontendUrl: getCurrentFrontendUrl()
+    });
     console.log('Full URL search params:', window.location.search);
     console.log('All search params:', Object.fromEntries(searchParams.entries()));
     
@@ -593,7 +633,10 @@ export default function Configure() {
             <p><strong>Customer ID:</strong> {customerId || 'Not provided'}</p>
             <p><strong>Platform:</strong> {platform || 'Not provided'}</p>
             <p><strong>Auto Connect:</strong> {autoConnect || 'No'}</p>
-            <p><strong>URL:</strong> {window.location.href}</p>
+            <p><strong>Current URL:</strong> {window.location.href}</p>
+            <p><strong>Environment:</strong> {window.location.hostname === 'localhost' ? 'Development' : 'Production'}</p>
+            <p><strong>API Base:</strong> {getApiBaseUrl()}</p>
+            <p><strong>Frontend:</strong> {getCurrentFrontendUrl()}</p>
           </div>
           
           <div className="flex gap-2">
@@ -639,6 +682,8 @@ export default function Configure() {
             <p className="truncate">{customerId}</p>
             <p><strong>Platform:</strong></p>
             <p>{getPlatformName(platform)}</p>
+            <p><strong>Environment:</strong></p>
+            <p>{window.location.hostname === 'localhost' ? 'Dev' : 'Prod'}</p>
             {autoConnect && (
               <>
                 <p><strong>Auto Connect:</strong></p>
@@ -674,13 +719,13 @@ export default function Configure() {
         </div>
         
         {/* Debug info for development */}
-        {process.env.NODE_ENV === 'development' && (
-          <div className="mt-4 p-2 bg-yellow-50 rounded text-xs text-left">
-            <p><strong>Debug Info:</strong></p>
-            <p>URL: {window.location.href}</p>
-            <p>Params: {JSON.stringify(Object.fromEntries(searchParams.entries()))}</p>
-          </div>
-        )}
+        <div className="mt-4 p-2 bg-yellow-50 rounded text-xs text-left">
+          <p><strong>Debug Info:</strong></p>
+          <p>Current URL: {window.location.href}</p>
+          <p>Frontend Base: {getCurrentFrontendUrl()}</p>
+          <p>API Base: {getApiBaseUrl()}</p>
+          <p>Params: {JSON.stringify(Object.fromEntries(searchParams.entries()))}</p>
+        </div>
       </div>
     </div>
   );

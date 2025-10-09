@@ -17,8 +17,8 @@ import ContentCreatorDetails from './admin/pages/admin/ContentCreatorDetails';
 import ScheduledPosts from './admin/ScheduledPosts';
 import AdminContentPortfolio from './admin/pages/admin/AdminContentPortfolio';
 import AdminContentUpload from './admin/pages/admin/ContentUpload';
-import ContentDetailView from './admin/components/modals/ContentDetailView';
-import SchedulePostModal from './admin/components/modals/SchedulePostModal';
+import AdminQrGenerator from './admin/pages/admin/AdminQrGenerator';
+
 // Super Admin imports
 import SuperAdminLogin from './superadmin/Login';
 import SuperAdminDashboard from './superadmin/Dashboard';
@@ -37,14 +37,13 @@ import Subscription from './customer/Subscription';
 import ContentReview from './customer/ContentReview';
 import ContentApproval from './customer/ContentApproval';
 import MediaLibrary from './customer/MediaLibrary';
-import Analytics from './customer/Analytics';
+
 import CustomerSocialMediaLinks from './components/CustomerSocialMediaLinks';
 import AdminCustomerSocialManager from './components/AdminCustomerSocialManager';
 import IntegratedPostAnalytics from './components/IntegratedPostAnalytics';
 import PostAnalytics from './components/PostAnalytics';
 import CustomerValueDashboard from './components/CustomerValueDashboard';
 import SocialAnalyticsDashboard from './customer/Integration/SocialAnalyticsDashboard';
-import CustomerWelcome from './customer/auth/CustomerWelcome';
 
 // Integration imports
 import FacebookIntegration from './customer/Integration/FacebookIntegration';
@@ -65,6 +64,11 @@ import { useAuth } from './admin/contexts/AuthContext';
 import AIImageGenerator from './components/AIImageGenerator';
 import TimePeriodChart from './components/TimeperiodChart';
 import WhatsAppIntegration from './components/WhatsAppIntegration';
+import SchedulePostModal from './admin/components/modals/SchedulePostModal';
+import ContentDetailView from './admin/components/modals/ContentDetailView';
+import MetaLoginPopup from './components/MetaLoginPopup';
+import CustomerWelcome from './customer/auth/CustomerWelcome';
+import Configure from './components/Configure';
 
 // --- ProtectedRoute for all portals ---
 function ProtectedRoutePortal({ children, role }) {
@@ -122,14 +126,22 @@ function App() {
               <Route path="/content-creator/signup" element={<ContentCreatorSignup />} />
               <Route path="/content-creator/login" element={<ContentCreatorLogin />} />
               
+              {/* QR Code Configure Route - Public (no authentication required) */}
+              <Route path="/configure" element={<Configure />} />
+              
+              {/* Customer Integration Routes - Public (for QR code access) */}
+              <Route path="/customer/integration/facebook" element={<FacebookIntegration />} />
+              <Route path="/customer/integration/instagram" element={<InstagramIntegration />} />
+              <Route path="/customer/integration/youtube" element={<YouTubeIntegration />} />
+              <Route path="/customer/integration/linkedin" element={<LinkedInIntegration />} />
+              
               {/* Super Admin Auth Routes */}
               <Route path="/superadmin/signup" element={<SuperAdminSignup />} />
               <Route path="/superadmin/login" element={<SuperAdminLogin />} />
 
               {/* Customer Media Library & Analytics */}
               <Route path="/customer/media-library" element={<MediaLibrary />} />
-              <Route path="/customer/analytics" element={<Analytics />} />
-
+              
               {/* Super Admin Portal (protected) */}
               <Route path="/superadmin" element={
                 <ProtectedRoutePortal role="superadmin">
@@ -149,6 +161,11 @@ function App() {
               <Route path="/superadmin/analytics" element={
                 <ProtectedRoutePortal role="superadmin">
                   <SuperAdminAnalytics />
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/superadmin/qr-generator" element={
+                <ProtectedRoutePortal role="superadmin">
+                  <AdminQrGenerator />
                 </ProtectedRoutePortal>
               } />
 
@@ -255,8 +272,29 @@ function App() {
                   <TimePeriodChart />
                 </ProtectedRoutePortal>
               } />
+              <Route path="/admin/schedule-post-modal" element={
+                <ProtectedRoutePortal role="admin">
+                  <SchedulePostModal />
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/admin/content-detail-view" element={
+                <ProtectedRoutePortal role="admin">
+                  <ContentDetailView />
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/admin/qr-generator" element={
+                <ProtectedRoutePortal role="admin">
+                  <AdminQrGenerator />
+                </ProtectedRoutePortal>
+              } />
+
+              {/* Remove routes for Customer Portfolio Overview since module is missing */}
 
               {/* Customer Portal (protected) */}
+              <Route path="/customer/welcome" element={
+  <CustomerWelcome />
+} />
+
               <Route path="/customer" element={
                 <ProtectedRoutePortal role="customer">
                   <CustomerLayout>
@@ -347,42 +385,8 @@ function App() {
                   </CustomerLayout>
                 </ProtectedRoutePortal>
               } />
-              {/* Make Customer Welcome route public and remove CustomerLayout */}
-              <Route path="/customer/welcome" element={
-                <CustomerWelcome />
-              } />
-               <Route path="/admin/schedule-post-modal" element={
-                <ProtectedRoutePortal role="admin">
-                  <SchedulePostModal />
-                </ProtectedRoutePortal>
-              } />
-              <Route path="/admin/content-detail-view" element={
-                <ProtectedRoutePortal role="admin">
-                  <ContentDetailView />
-                </ProtectedRoutePortal>
-              } />
 
-              {/* Customer Integration Routes (without CustomerLayout wrapper) */}
-              <Route path="/customer/integration/facebook" element={
-                <ProtectedRoutePortal role="customer">
-                  <FacebookIntegration />
-                </ProtectedRoutePortal>
-              } />
-              <Route path="/customer/integration/instagram" element={
-                <ProtectedRoutePortal role="customer">
-                  <InstagramIntegration />
-                </ProtectedRoutePortal>
-              } />
-              <Route path="/customer/integration/youtube" element={
-                <ProtectedRoutePortal role="customer">
-                  <YouTubeIntegration />
-                </ProtectedRoutePortal>
-              } />
-              <Route path="/customer/integration/linkedin" element={
-                <ProtectedRoutePortal role="customer">
-                  <LinkedInIntegration />
-                </ProtectedRoutePortal>
-              } />
+              {/* Customer WhatsApp Integration */}
               <Route path="/customer/whatsapp-integration" element={
                 <ProtectedRoutePortal role="customer">
                   <CustomerLayout>
@@ -440,6 +444,7 @@ function App() {
                 </ProtectedRoutePortal>
               } />
 
+              
               {/* Default route */}
               <Route path="/" element={<Navigate to="/login" replace />} />
             </Routes>
@@ -451,3 +456,4 @@ function App() {
 }
 
 export default App;
+             

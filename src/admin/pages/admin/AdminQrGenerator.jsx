@@ -20,8 +20,8 @@ const PLATFORMS = [
   { key: 'yt', label: 'YouTube', icon: Youtube, color: 'bg-red-600 hover:bg-red-700' }
 ];
 
-// ✅ Use environment variable for backend API base URL
-const API_BASE = process.env.REACT_APP_API_URL;
+// ✅ Hardcoded backend API base URL
+const API_BASE = "https://my-backend-593529385135.asia-south1.run.app";
 
 export default function AdminQrGenerator() {
   const [customers, setCustomers] = useState([]);

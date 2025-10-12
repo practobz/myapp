@@ -17,14 +17,20 @@ export default function AdminQrGenerator() {
   const [activeCustomer, setActiveCustomer] = useState(null);
 
   useEffect(() => {
-    fetch('/api/customers')
-      .then(res => res.json())
+    fetch(`${process.env.REACT_APP_API_URL}/api/customers`)
+      .then(res => {
+        if (!res.ok) {
+          throw new Error(`HTTP error! status: ${res.status}`);
+        }
+        return res.json();
+      })
       .then(data => {
         setCustomers(data.customers || []);
         setFetchingCustomers(false);
       })
-      .catch(() => {
-        setError('Failed to load customers');
+      .catch((err) => {
+        console.error('Failed to fetch customers:', err);
+        setError(`Failed to load customers: ${err.message}`);
         setFetchingCustomers(false);
       });
   }, []);
@@ -53,7 +59,7 @@ export default function AdminQrGenerator() {
 
       console.log(`🔒 Generating QR for customer: ${customerId} (${customerName}) - Platform: ${platform}`);
 
-      const res = await fetch('/api/generate-qr', {
+      const res = await fetch(`${process.env.REACT_APP_API_URL}/api/generate-qr`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json'

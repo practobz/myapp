@@ -17,14 +17,26 @@ export default function AdminQrGenerator() {
   const [activeCustomer, setActiveCustomer] = useState(null);
 
   useEffect(() => {
-    fetch('/api/customers')
-      .then(res => res.json())
+    // Use relative path to ensure it goes to local server
+    fetch('/api/customers', {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      }
+    })
+      .then(res => {
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        }
+        return res.json();
+      })
       .then(data => {
         setCustomers(data.customers || []);
         setFetchingCustomers(false);
       })
-      .catch(() => {
-        setError('Failed to load customers');
+      .catch((err) => {
+        console.error('Failed to fetch customers:', err);
+        setError(`Failed to load customers: ${err.message}`);
         setFetchingCustomers(false);
       });
   }, []);

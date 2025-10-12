@@ -32,12 +32,35 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
 
   // Helper: Get current customerId (same logic as storeCustomerSocialAccount)
   const getCustomerId = () => {
+    let customerId = null;
+    
+    // 🔥 PRIORITY 1: Check URL parameters first (for QR code links)
+    const urlParams = new URLSearchParams(window.location.search);
+    const hashParams = new URLSearchParams(window.location.hash.split('?')[1] || '');
+    
+    // Check both regular URL params and hash params (for React Router)
+    customerId = urlParams.get('customerId') || hashParams.get('customerId');
+    
+    if (customerId) {
+      console.log('✅ Found customer ID in URL for LinkedIn:', customerId);
+      return customerId;
+    }
+    
+    // 🔥 PRIORITY 2: Check localStorage as fallback
     const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
-    let customerId = currentUser.userId || currentUser.id || currentUser._id || currentUser.customer_id;
+    customerId = currentUser.userId || currentUser.id || currentUser._id || currentUser.customer_id;
+    
     if (!customerId) {
       const authUser = JSON.parse(localStorage.getItem('user') || '{}');
       customerId = authUser.userId || authUser.id || authUser._id || authUser.customer_id;
     }
+    
+    if (customerId) {
+      console.log('✅ Found customer ID in localStorage for LinkedIn:', customerId);
+    } else {
+      console.warn('❌ No customer ID found in URL or localStorage for LinkedIn');
+    }
+    
     return customerId;
   };
 
@@ -60,7 +83,20 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
   // Load accounts from backend on mount
   useEffect(() => {
     const customerId = getCustomerId();
-    if (!customerId) return;
+    
+    // 🔥 NEW: Log the customer ID detection for debugging
+    console.log('🆔 Detected Customer ID for LinkedIn:', {
+      customerId,
+      urlParams: new URLSearchParams(window.location.search).get('customerId'),
+      hashParams: new URLSearchParams(window.location.hash.split('?')[1] || '').get('customerId'),
+      localStorage: JSON.parse(localStorage.getItem('currentUser') || '{}'),
+      fullUrl: window.location.href
+    });
+    
+    if (!customerId) {
+      console.warn('❌ No customer ID available for LinkedIn backend fetch');
+      return;
+    }
 
     // Fetch from backend
     const fetchFromBackend = async () => {
@@ -68,12 +104,14 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
         const res = await fetch(`${process.env.REACT_APP_API_URL}/api/customer-social-links/${customerId}`);
         const result = await res.json();
         if (result.success && Array.isArray(result.accounts)) {
-          // Only keep LinkedIn accounts
-          const linkedinAccounts = result.accounts.filter(acc => acc.platform === 'linkedin');
+          // Only keep LinkedIn accounts for this customer
+          const linkedinAccounts = result.accounts.filter(
+            acc => acc.platform === 'linkedin' && acc.customerId === customerId
+          );
           const normalized = normalizeAccounts(linkedinAccounts);
           setConnectedAccounts(normalized);
           setUserData('connected_linkedin_accounts', normalized);
-          setUserData('linkedin_connected_accounts', normalized); // <-- Add this line
+          setUserData('linkedin_connected_accounts', normalized);
 
           // Select account logic
           const savedSelectedId = getUserData('selected_linkedin_account');
@@ -89,11 +127,13 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
         const savedAccounts = getUserData('connected_linkedin_accounts');
         const savedSelectedId = getUserData('selected_linkedin_account');
         if (savedAccounts) {
-          // Only keep LinkedIn accounts
-          const linkedinAccounts = savedAccounts.filter(acc => acc.platform === 'linkedin');
+          // Only keep LinkedIn accounts for this customer
+          const linkedinAccounts = savedAccounts.filter(
+            acc => acc.platform === 'linkedin' && acc.customerId === customerId
+          );
           const normalized = normalizeAccounts(linkedinAccounts);
           setConnectedAccounts(normalized);
-          setUserData('linkedin_connected_accounts', normalized); // <-- Add this line
+          setUserData('linkedin_connected_accounts', normalized);
           if (savedSelectedId && normalized.find(acc => acc.id === savedSelectedId)) {
             setSelectedAccountId(savedSelectedId);
           } else if (normalized.length > 0) {
@@ -104,7 +144,7 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
     };
 
     fetchFromBackend();
-  }, []);
+  }, []); // 🔥 IMPORTANT: Keep dependency array empty to run only on mount
 
   // Start LinkedIn OAuth in popup
   const handleLinkedInConnect = () => {
@@ -223,33 +263,26 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
   // Store customer social account for admin access
   const storeCustomerSocialAccount = async (account) => {
     try {
-      // Get current user/customer ID from auth context or localStorage
-      let customerId = null;
-      
-      // Try multiple ways to get customer ID (similar to contentRoutes.js pattern)
-      const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
-      customerId = currentUser.userId || currentUser.id || currentUser._id || currentUser.customer_id;
-      
-      // If still no customer ID, try getting from other possible sources
-      if (!customerId) {
-        const authUser = JSON.parse(localStorage.getItem('user') || '{}');
-        customerId = authUser.userId || authUser.id || authUser._id || authUser.customer_id;
-      }
+      // 🔥 CRITICAL FIX: Use the correct customer ID detection
+      const customerId = getCustomerId();
       
       // Log what we found for debugging
-      console.log('🔍 LinkedIn Customer ID search:', {
-        currentUser,
+      console.log('🔍 LinkedIn Customer ID search for social account storage:', {
         customerId,
-        found: !!customerId
+        found: !!customerId,
+        urlCustomerId: new URLSearchParams(window.location.search).get('customerId') || 
+                       new URLSearchParams(window.location.hash.split('?')[1] || '').get('customerId'),
+        localStorageUser: JSON.parse(localStorage.getItem('currentUser') || '{}')
       });
       
       if (!customerId) {
-        console.warn('No customer ID found, cannot store LinkedIn social account');
+        console.error('❌ No customer ID found for LinkedIn, cannot store social account');
+        alert('Error: No customer ID found. Please make sure you accessed this page through the proper configuration link.');
         return;
       }
 
       const accountData = {
-        customerId: customerId,
+        customerId: customerId, // 🔥 Use the correctly detected customer ID
         platform: 'linkedin',
         platformUserId: account.id,
         name: account.profile.name,
@@ -260,7 +293,11 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
         connectedAt: account.connectedAt
       };
 
-      console.log('📤 Sending LinkedIn account data:', { customerId, platform: 'linkedin', platformUserId: account.id });
+      console.log('📤 Sending LinkedIn account data with customer ID:', { 
+        customerId, 
+        platform: 'linkedin', 
+        platformUserId: account.id 
+      });
 
       const response = await fetch(`${process.env.REACT_APP_API_URL}/api/customer-social-links`, {
         method: 'POST',
@@ -270,7 +307,7 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
       
       const result = await response.json();
       if (result.success) {
-        console.log('✅ Stored LinkedIn customer social account for admin access');
+        console.log('✅ Stored LinkedIn customer social account for admin access with customer ID:', customerId);
       } else {
         console.warn('Failed to store LinkedIn customer social account:', result.error);
       }

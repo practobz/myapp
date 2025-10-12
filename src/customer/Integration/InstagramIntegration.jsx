@@ -92,12 +92,34 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
 
   function getCurrentCustomerId() {
     let customerId = null;
+    
+    // 🔥 PRIORITY 1: Check URL parameters first (for QR code links)
+    const urlParams = new URLSearchParams(window.location.search);
+    const hashParams = new URLSearchParams(window.location.hash.split('?')[1] || '');
+    
+    // Check both regular URL params and hash params (for React Router)
+    customerId = urlParams.get('customerId') || hashParams.get('customerId');
+    
+    if (customerId) {
+      console.log('✅ Found customer ID in URL for Instagram:', customerId);
+      return customerId;
+    }
+    
+    // 🔥 PRIORITY 2: Check localStorage as fallback
     const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
     customerId = currentUser.userId || currentUser.id || currentUser._id || currentUser.customer_id;
+    
     if (!customerId) {
       const authUser = JSON.parse(localStorage.getItem('user') || '{}');
       customerId = authUser.userId || authUser.id || authUser._id || authUser.customer_id;
     }
+    
+    if (customerId) {
+      console.log('✅ Found customer ID in localStorage for Instagram:', customerId);
+    } else {
+      console.warn('❌ No customer ID found in URL or localStorage for Instagram');
+    }
+    
     return customerId;
   }
 
@@ -113,17 +135,30 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
       'instagram_active_account_id'
     ]);
 
+    const customerId = getCurrentCustomerId();
+    
+    // 🔥 NEW: Log the customer ID detection for debugging
+    console.log('🆔 Detected Customer ID for Instagram:', {
+      customerId,
+      urlParams: new URLSearchParams(window.location.search).get('customerId'),
+      hashParams: new URLSearchParams(window.location.hash.split('?')[1] || '').get('customerId'),
+      localStorage: JSON.parse(localStorage.getItem('currentUser') || '{}'),
+      fullUrl: window.location.href
+    });
+
     // NEW: Fetch from backend first
     const fetchConnectedAccountsFromBackend = async () => {
-      const customerId = getCurrentCustomerId();
-      if (!customerId) return null;
+      if (!customerId) {
+        console.warn('❌ No customer ID available for Instagram backend fetch');
+        return null;
+      }
       try {
         const res = await fetch(`${process.env.REACT_APP_API_URL}/api/customer-social-links/${customerId}`);
         const data = await res.json();
         if (data.success && Array.isArray(data.accounts)) {
-          // Only Instagram accounts
+          // Only Instagram accounts for this customer
           return data.accounts
-            .filter(acc => acc.platform === 'instagram')
+            .filter(acc => acc.platform === 'instagram' && acc.customerId === customerId)
             .map(acc => ({
               id: acc.platformUserId,
               pageId: acc.facebookPageId,
@@ -200,38 +235,45 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
       const savedAccounts = getUserData('instagram_connected_accounts') || getUserData('connected_instagram_accounts');
       const savedActiveId = getUserData('instagram_active_account_id') || getUserData('selected_instagram_account');
       
+      // Only keep Instagram accounts for this customer
+      const instagramAccounts = Array.isArray(savedAccounts)
+        ? savedAccounts.filter(
+            acc => acc.platform === 'instagram' && acc.customerId === customerId
+          )
+        : savedAccounts; // Keep all if no customer filter available in legacy format
+    
       console.log('📦 Instagram storage check on mount:', {
         savedAccounts: savedAccounts ? savedAccounts.length : 0,
         savedActiveId,
         accountsData: savedAccounts
       });
       
-      if (savedAccounts && Array.isArray(savedAccounts) && savedAccounts.length > 0) {
-        console.log('✅ Setting Instagram accounts from storage:', savedAccounts);
-        setConnectedAccounts(savedAccounts);
+      if (instagramAccounts && Array.isArray(instagramAccounts) && instagramAccounts.length > 0) {
+        console.log('✅ Setting Instagram accounts from storage:', instagramAccounts);
+        setConnectedAccounts(instagramAccounts);
         setIsSignedIn(true); // Set signed in state
         
-        if (savedActiveId && savedAccounts.some(acc => acc.id === savedActiveId)) {
+        if (savedActiveId && instagramAccounts.some(acc => acc.id === savedActiveId)) {
           setActiveAccountId(savedActiveId);
           setSelectedAccountId(savedActiveId); // Backward compatibility
-          const activeAcc = savedAccounts.find(acc => acc.id === savedActiveId);
+          const activeAcc = instagramAccounts.find(acc => acc.id === savedActiveId);
           setActiveAccount(activeAcc);
           setUserAccessToken(activeAcc.userAccessToken || activeAcc.accessToken);
           console.log('✅ Set active Instagram account:', activeAcc?.profile?.username);
-        } else if (savedAccounts.length > 0) {
+        } else if (instagramAccounts.length > 0) {
           // Set first account as active if no valid active account
-          setActiveAccountId(savedAccounts[0].id);
-          setSelectedAccountId(savedAccounts[0].id); // Backward compatibility
-          setActiveAccount(savedAccounts[0]);
-          setUserAccessToken(savedAccounts[0].userAccessToken || savedAccounts[0].accessToken);
-          setUserData('instagram_active_account_id', savedAccounts[0].id);
-          console.log('✅ Set first Instagram account as active:', savedAccounts[0].profile?.username);
+          setActiveAccountId(instagramAccounts[0].id);
+          setSelectedAccountId(instagramAccounts[0].id); // Backward compatibility
+          setActiveAccount(instagramAccounts[0]);
+          setUserAccessToken(instagramAccounts[0].userAccessToken || instagramAccounts[0].accessToken);
+          setUserData('instagram_active_account_id', instagramAccounts[0].id);
+          console.log('✅ Set first Instagram account as active:', instagramAccounts[0].profile?.username);
         }
       } else {
         console.log('ℹ️ No connected Instagram accounts found in storage');
       }
     })();
-  }, []);
+  }, []); // 🔥 IMPORTANT: Keep dependency array empty to run only on mount
 
   useEffect(() => {
     if (window.FB) {
@@ -709,28 +751,21 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
 
   const storeCustomerSocialAccount = async (account) => {
     try {
-      // Get current user/customer ID from auth context or localStorage
-      let customerId = null;
-      
-      // Try multiple ways to get customer ID (similar to contentRoutes.js pattern)
-      const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
-      customerId = currentUser.userId || currentUser.id || currentUser._id || currentUser.customer_id;
-      
-      // If still no customer ID, try getting from other possible sources
-      if (!customerId) {
-        const authUser = JSON.parse(localStorage.getItem('user') || '{}');
-        customerId = authUser.userId || authUser.id || authUser._id || authUser.customer_id;
-      }
+      // 🔥 CRITICAL FIX: Use the correct customer ID detection
+      const customerId = getCurrentCustomerId();
       
       // Log what we found for debugging
-      console.log('🔍 Instagram Customer ID search:', {
-        currentUser,
+      console.log('🔍 Instagram Customer ID search for social account storage:', {
         customerId,
-        found: !!customerId
+        found: !!customerId,
+        urlCustomerId: new URLSearchParams(window.location.search).get('customerId') || 
+                       new URLSearchParams(window.location.hash.split('?')[1] || '').get('customerId'),
+        localStorageUser: JSON.parse(localStorage.getItem('currentUser') || '{}')
       });
       
       if (!customerId) {
-        console.warn('No customer ID found, cannot store Instagram social account');
+        console.error('❌ No customer ID found for Instagram, cannot store social account');
+        alert('Error: No customer ID found. Please make sure you accessed this page through the proper configuration link.');
         return;
       }
 
@@ -778,7 +813,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
 
       // Store the account data with INSTAGRAM platform for scheduling
       const accountData = {
-        customerId: customerId,
+        customerId: customerId, // 🔥 Use the correctly detected customer ID
         platform: 'instagram',
         platformUserId: account.id,
         facebookUserId: userId,
@@ -857,8 +892,9 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
         accountData.tokenStatus = 'missing_user_id';
       }
 
-      // ✅ Log comprehensive token validation status
+      // ✅ Log comprehensive token validation status with customer ID
       console.log('🔑 Instagram Token Validation Summary:', {
+        customerId,
         hasUserToken,
         hasPageToken,
         hasUserId,
@@ -881,7 +917,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
 
       const result = await response.json();
       if (result.success) {
-        console.log('✅ Stored Instagram account for scheduling with platform: instagram');
+        console.log('✅ Stored Instagram account for scheduling with customer ID:', customerId);
       } else {
         console.warn('Failed to store Instagram account:', result.error);
         alert(`Warning: Failed to store account data - ${result.error}. You may need to reconnect later.`);
@@ -1800,7 +1836,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
                 <Instagram className="h-8 w-8 text-pink-600" />
               </div>
               <h3 className="text-xl font-semibold text-gray-900 mb-2">Connect Instagram Business Accounts</h3>
-              <p className="text-gray-600 mb-6 max-w-md mx-auto">
+              <p className="text-gray-600 mb-6 max-w-md mxauto">
                 Connect multiple Instagram Business accounts through Facebook. Manage all your accounts from one dashboard with historical data tracking!
               </p>
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 max-w-md mx-auto">

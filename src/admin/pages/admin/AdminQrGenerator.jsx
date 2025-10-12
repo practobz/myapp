@@ -1,27 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import {
-  QrCode,
-  Facebook,
-  Instagram,
-  Linkedin,
-  Youtube,
-  Download,
-  ExternalLink,
-  AlertCircle,
-  Loader2,
-  User
-} from 'lucide-react';
+import { QrCode, Facebook, Instagram, Linkedin, Youtube, Download, ExternalLink, AlertCircle, Loader2, User } from 'lucide-react';
 
-// Define supported platforms
 const PLATFORMS = [
   { key: 'fb', label: 'Facebook', icon: Facebook, color: 'bg-blue-600 hover:bg-blue-700' },
   { key: 'insta', label: 'Instagram', icon: Instagram, color: 'bg-pink-600 hover:bg-pink-700' },
   { key: 'linkedin', label: 'LinkedIn', icon: Linkedin, color: 'bg-blue-700 hover:bg-blue-800' },
   { key: 'yt', label: 'YouTube', icon: Youtube, color: 'bg-red-600 hover:bg-red-700' }
 ];
-
-// ✅ Use environment variable for backend API base URL
-const API_BASE = process.env.REACT_APP_API_URL;
 
 export default function AdminQrGenerator() {
   const [customers, setCustomers] = useState([]);
@@ -31,9 +16,8 @@ export default function AdminQrGenerator() {
   const [error, setError] = useState('');
   const [activeCustomer, setActiveCustomer] = useState(null);
 
-  // ✅ Fetch customers from backend
   useEffect(() => {
-    fetch(`${API_BASE}/api/customers`)
+    fetch('/api/customers')
       .then(res => res.json())
       .then(data => {
         setCustomers(data.customers || []);
@@ -45,7 +29,6 @@ export default function AdminQrGenerator() {
       });
   }, []);
 
-  // ✅ Generate QR code
   const handleGenerateQr = async (customerId, customerName, platform) => {
     setLoading(true);
     setError('');
@@ -53,30 +36,64 @@ export default function AdminQrGenerator() {
     setActiveCustomer({ id: customerId, name: customerName });
 
     try {
-      const res = await fetch(`${API_BASE}/api/generate-qr`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ customerId, platform })
-      });
+      // SECURITY: Validate customer ID format
+      if (!customerId || typeof customerId !== 'string' || customerId.length < 5) {
+        setError('Invalid customer ID format');
+        setLoading(false);
+        return;
+      }
 
+      // SECURITY: Validate platform
+      const validPlatforms = ['fb', 'insta', 'linkedin', 'yt'];
+      if (!validPlatforms.includes(platform)) {
+        setError('Invalid platform specified');
+        setLoading(false);
+        return;
+      }
+
+      console.log(`🔒 Generating QR for customer: ${customerId} (${customerName}) - Platform: ${platform}`);
+
+      const res = await fetch('/api/generate-qr', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-Admin-Request': 'true', // Mark as admin request
+          'X-Customer-ID': customerId, // Add customer validation header
+          'X-Platform': platform
+        },
+        body: JSON.stringify({ 
+          customerId, 
+          platform,
+          customerName, // Include customer name for validation
+          source: 'admin-qr-generator' // Mark source
+        })
+      });
       const data = await res.json();
 
       if (res.ok) {
-        setQrResult({ ...data, platform, customerName });
+        // VALIDATION: Ensure the response includes the correct customer ID
+        if (data.customerId !== customerId) {
+          setError('QR generation security validation failed');
+          setLoading(false);
+          return;
+        }
+
+        console.log(`✅ QR generated successfully for customer: ${customerId}`);
+        setQrResult({ ...data, platform, customerName, customerId });
         setError('');
       } else {
         setError(data.error || 'Failed to generate QR code');
       }
     } catch (err) {
+      console.error('QR generation error:', err);
       setError('Network error occurred. Please try again.');
     }
-
     setLoading(false);
   };
 
-  // ✅ Download QR code as image
   const downloadQrCode = () => {
     if (!qrResult.qrDataUrl) return;
+
     const link = document.createElement('a');
     link.href = qrResult.qrDataUrl;
     link.download = `${qrResult.customerName}-${qrResult.platform}-qr.png`;
@@ -85,7 +102,6 @@ export default function AdminQrGenerator() {
     document.body.removeChild(link);
   };
 
-  // ✅ JSX Layout
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -145,6 +161,7 @@ export default function AdminQrGenerator() {
                         <div className="flex-1 min-w-0">
                           <h3 className="font-semibold text-slate-900 truncate">{customer.name}</h3>
                           <p className="text-sm text-slate-600 truncate mt-0.5">{customer.email}</p>
+                          <p className="text-xs text-slate-500 mt-1">ID: {customer._id}</p>
                         </div>
 
                         <div className="flex flex-wrap gap-2 justify-end">
@@ -156,7 +173,7 @@ export default function AdminQrGenerator() {
                                 onClick={() => handleGenerateQr(customer._id, customer.name, platform.key)}
                                 disabled={loading}
                                 className={`${platform.color} text-white px-3 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md`}
-                                title={`Generate ${platform.label} QR`}
+                                title={`Generate ${platform.label} QR for ${customer.name}`}
                               >
                                 <Icon className="w-4 h-4" />
                                 <span className="hidden sm:inline">{platform.label}</span>
@@ -179,6 +196,7 @@ export default function AdminQrGenerator() {
                 <h2 className="text-lg font-semibold text-slate-900">Generated QR Code</h2>
               </div>
 
+
               <div className="p-6">
                 {loading ? (
                   <div className="text-center py-12">
@@ -200,6 +218,7 @@ export default function AdminQrGenerator() {
                       <div className="bg-slate-50 rounded-lg p-4">
                         <p className="text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">Customer</p>
                         <p className="text-sm font-semibold text-slate-900">{qrResult.customerName}</p>
+                        <p className="text-xs text-slate-500 mt-1">ID: {qrResult.customerId}</p>
                       </div>
 
                       <div className="bg-slate-50 rounded-lg p-4">

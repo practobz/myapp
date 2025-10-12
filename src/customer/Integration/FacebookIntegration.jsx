@@ -12,12 +12,34 @@ const FACEBOOK_APP_ID = '4416243821942660';
 
 function getCurrentCustomerId() {
   let customerId = null;
+  
+  // 🔥 PRIORITY 1: Check URL parameters first (for QR code links)
+  const urlParams = new URLSearchParams(window.location.search);
+  const hashParams = new URLSearchParams(window.location.hash.split('?')[1] || '');
+  
+  // Check both regular URL params and hash params (for React Router)
+  customerId = urlParams.get('customerId') || hashParams.get('customerId');
+  
+  if (customerId) {
+    console.log('✅ Found customer ID in URL:', customerId);
+    return customerId;
+  }
+  
+  // 🔥 PRIORITY 2: Check localStorage as fallback
   const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
   customerId = currentUser.userId || currentUser.id || currentUser._id || currentUser.customer_id;
+  
   if (!customerId) {
     const authUser = JSON.parse(localStorage.getItem('user') || '{}');
     customerId = authUser.userId || authUser.id || authUser._id || authUser.customer_id;
   }
+  
+  if (customerId) {
+    console.log('✅ Found customer ID in localStorage:', customerId);
+  } else {
+    console.warn('❌ No customer ID found in URL or localStorage');
+  }
+  
   return customerId;
 }
 
@@ -70,10 +92,22 @@ function FacebookIntegration() {
     ]);
 
     const customerId = getCurrentCustomerId();
+    
+    // 🔥 NEW: Log the customer ID detection for debugging
+    console.log('🆔 Detected Customer ID:', {
+      customerId,
+      urlParams: new URLSearchParams(window.location.search).get('customerId'),
+      hashParams: new URLSearchParams(window.location.hash.split('?')[1] || '').get('customerId'),
+      localStorage: JSON.parse(localStorage.getItem('currentUser') || '{}'),
+      fullUrl: window.location.href
+    });
 
     // NEW: Try to fetch from backend first
     const fetchConnectedAccountsFromBackend = async () => {
-      if (!customerId) return null;
+      if (!customerId) {
+        console.warn('❌ No customer ID available for backend fetch');
+        return null;
+      }
       try {
         const res = await fetch(`${process.env.REACT_APP_API_URL}/api/customer-social-links/${customerId}`);
         const data = await res.json();
@@ -1134,28 +1168,21 @@ function FacebookIntegration() {
   // Store customer social account for admin access
   const storeCustomerSocialAccount = async (page) => {
     try {
-      // Get current user/customer ID from auth context or localStorage
-      let customerId = null;
-      
-      // Try multiple ways to get customer ID (similar to contentRoutes.js pattern)
-      const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
-      customerId = currentUser.userId || currentUser.id || currentUser._id || currentUser.customer_id;
-      
-      // If still no customer ID, try getting from other possible sources
-      if (!customerId) {
-        const authUser = JSON.parse(localStorage.getItem('user') || '{}');
-        customerId = authUser.userId || authUser.id || authUser._id || authUser.customer_id;
-      }
+      // 🔥 CRITICAL FIX: Use the correct customer ID detection
+      const customerId = getCurrentCustomerId();
       
       // Log what we found for debugging
-      console.log('🔍 Customer ID search:', {
-        currentUser,
+      console.log('🔍 Customer ID search for social account storage:', {
         customerId,
-        found: !!customerId
+        found: !!customerId,
+        urlCustomerId: new URLSearchParams(window.location.search).get('customerId') || 
+                       new URLSearchParams(window.location.hash.split('?')[1] || '').get('customerId'),
+        localStorageUser: JSON.parse(localStorage.getItem('currentUser') || '{}')
       });
       
       if (!customerId) {
-        console.warn('No customer ID found, cannot store social account');
+        console.error('❌ No customer ID found, cannot store social account');
+        alert('Error: No customer ID found. Please make sure you accessed this page through the proper configuration link.');
         return;
       }
 
@@ -1166,7 +1193,7 @@ function FacebookIntegration() {
       }
 
       const accountData = {
-        customerId: customerId,
+        customerId: customerId, // 🔥 Use the correctly detected customer ID
         platform: 'facebook',
         platformUserId: activeAccount.id,
         name: activeAccount.name,
@@ -1215,8 +1242,9 @@ function FacebookIntegration() {
         accountData.tokenStatus = 'invalid_page_token';
       }
 
-      // ✅ Log token validation status
+      // ✅ Log token validation status with customer ID
       console.log('🔑 Token Validation Summary:', {
+        customerId,
         hasUserToken,
         hasPageToken,
         userTokenLength: accountData.accessToken?.length || 0,
@@ -1233,7 +1261,7 @@ function FacebookIntegration() {
       
       const result = await response.json();
       if (result.success) {
-        console.log('✅ Stored customer social account for admin access');
+        console.log('✅ Stored customer social account for admin access with customer ID:', customerId);
       } else {
         console.warn('Failed to store customer social account:', result.error);
       }

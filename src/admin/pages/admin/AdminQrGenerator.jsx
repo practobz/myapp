@@ -17,7 +17,7 @@ export default function AdminQrGenerator() {
   const [activeCustomer, setActiveCustomer] = useState(null);
 
   useEffect(() => {
-    fetch('/api/customers')
+    fetch(`${process.env.REACT_APP_API_URL}/api/customers`)
       .then(res => res.json())
       .then(data => {
         setCustomers(data.customers || []);
@@ -53,7 +53,7 @@ export default function AdminQrGenerator() {
 
       console.log(`🔒 Generating QR for customer: ${customerId} (${customerName}) - Platform: ${platform}`);
 
-      const res = await fetch('/api/generate-qr', {
+      const res = await fetch(`${process.env.REACT_APP_API_URL}/api/generate-qr`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',

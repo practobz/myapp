@@ -18,44 +18,18 @@ export default function Configure() {
   const platform = searchParams.get('platform');
   const autoConnect = searchParams.get('autoConnect');
 
-  // Environment detection and API base URL configuration
-  const getApiBaseUrl = () => {
-    // Check if we're in development
-    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-      return 'http://localhost:8080'; // Your local backend
-    }
-    
-    // Production - replace with your Cloud Run backend URL
-    return process.env.REACT_APP_API_URL || 'https://your-backend-service.run.app';
-  };
-
-  const getCurrentFrontendUrl = () => {
-    // Get the current frontend URL (works for both localhost and production bucket)
-    return `${window.location.protocol}//${window.location.host}`;
-  };
-
   // Enhanced function to check for existing connected accounts with detailed info
   const checkConnectedAccounts = async (customerId, platform) => {
     try {
       setCheckingAccounts(true);
       setStatus('Checking for existing accounts...');
       
-      // Validate customerId before making requests
-      if (!customerId || customerId.trim() === '') {
-        console.error('Invalid customerId provided:', customerId);
-        throw new Error('Invalid customer ID');
-      }
-
-      console.log('Making API requests with customerId:', customerId);
-      
-      const apiBaseUrl = getApiBaseUrl();
-      
       // Check multiple endpoints for account data
       const endpoints = [
-        `${apiBaseUrl}/api/customer/${customerId}/accounts/${platform}`,
-        `${apiBaseUrl}/api/customer/${customerId}/${platform}/profile`,
-        `${apiBaseUrl}/api/${platform}/accounts/${customerId}`,
-        `${apiBaseUrl}/api/integrations/${platform}/${customerId}`
+        `/api/customer/${customerId}/accounts/${platform}`,
+        `/api/customer/${customerId}/${platform}/profile`,
+        `/api/${platform}/accounts/${customerId}`,
+        `/api/integrations/${platform}/${customerId}`
       ];
 
       let accounts = [];
@@ -64,27 +38,10 @@ export default function Configure() {
       // Try each endpoint until we find account data
       for (const endpoint of endpoints) {
         try {
-          console.log(`Attempting to fetch from: ${endpoint}`);
-          const response = await fetch(endpoint, {
-            method: 'GET',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Customer-Id': customerId, // Explicitly send customerId in header
-              // Add any auth headers if needed
-            },
-            credentials: 'include' // Include cookies for authentication
-          });
-          
+          const response = await fetch(endpoint);
           if (response.ok) {
             const data = await response.json();
             console.log(`Account data from ${endpoint}:`, data);
-            console.log(`Response includes customerId check:`, data.customerId === customerId);
-            
-            // Validate that the returned data is for the correct customer
-            if (data.customerId && data.customerId !== customerId) {
-              console.warn(`Data returned for different customer. Expected: ${customerId}, Got: ${data.customerId}`);
-              continue;
-            }
             
             // Handle different response formats
             if (Array.isArray(data)) {
@@ -100,8 +57,6 @@ export default function Configure() {
               accountData = await fetchAccountDetails(accounts, platform, customerId);
               break;
             }
-          } else {
-            console.log(`HTTP ${response.status} from ${endpoint}:`, await response.text());
           }
         } catch (error) {
           console.log(`Failed to fetch from ${endpoint}:`, error);
@@ -117,7 +72,7 @@ export default function Configure() {
         console.log('Account details:', accountData);
         return accounts;
       } else {
-        console.log('No existing accounts found for customerId:', customerId);
+        console.log('No existing accounts found');
         setHasCheckedAccounts(true);
         return [];
       }
@@ -133,7 +88,6 @@ export default function Configure() {
   // Fetch detailed account information for display
   const fetchAccountDetails = async (accounts, platform, customerId) => {
     const details = {};
-    const apiBaseUrl = getApiBaseUrl();
     
     for (const account of accounts) {
       try {
@@ -141,37 +95,20 @@ export default function Configure() {
         
         // Try different endpoints for account details
         const detailEndpoints = [
-          `${apiBaseUrl}/api/${platform}/profile/${accountId}?customerId=${customerId}`,
-          `${apiBaseUrl}/api/${platform}/stats/${accountId}?customerId=${customerId}`,
-          `${apiBaseUrl}/api/customer/${customerId}/${platform}/${accountId}/details`,
-          `${apiBaseUrl}/api/integrations/${platform}/${customerId}/${accountId}`
+          `/api/${platform}/profile/${accountId}`,
+          `/api/${platform}/stats/${accountId}`,
+          `/api/customer/${customerId}/${platform}/${accountId}/details`,
+          `/api/integrations/${platform}/${customerId}/${accountId}`
         ];
 
         for (const endpoint of detailEndpoints) {
           try {
-            console.log(`Fetching account details from: ${endpoint}`);
-            const response = await fetch(endpoint, {
-              method: 'GET',
-              headers: {
-                'Content-Type': 'application/json',
-                'X-Customer-Id': customerId, // Explicitly send customerId in header
-              },
-              credentials: 'include'
-            });
-            
+            const response = await fetch(endpoint);
             if (response.ok) {
               const data = await response.json();
-              
-              // Validate customer ID in response
-              if (data.customerId && data.customerId !== customerId) {
-                console.warn(`Account details for wrong customer. Expected: ${customerId}, Got: ${data.customerId}`);
-                continue;
-              }
-              
               details[accountId] = {
                 ...account,
                 ...data,
-                customerId: customerId, // Ensure customerId is set
                 followers: data.followers_count || data.followers || account.followers || 0,
                 following: data.following_count || data.following || account.following || 0,
                 posts: data.posts_count || data.posts || data.media_count || account.posts || 0,
@@ -193,7 +130,6 @@ export default function Configure() {
         if (!details[accountId]) {
           details[accountId] = {
             ...account,
-            customerId: customerId, // Ensure customerId is set
             followers: account.followers || 0,
             following: account.following || 0,
             posts: account.posts || 0,
@@ -210,34 +146,15 @@ export default function Configure() {
 
   useEffect(() => {
     console.log('Configure component loaded with:', { customerId, platform, autoConnect });
-    console.log('Current environment:', {
-      hostname: window.location.hostname,
-      isLocalhost: window.location.hostname === 'localhost',
-      apiBaseUrl: getApiBaseUrl(),
-      frontendUrl: getCurrentFrontendUrl()
-    });
     console.log('Full URL search params:', window.location.search);
     console.log('All search params:', Object.fromEntries(searchParams.entries()));
     
-    // Enhanced validation with better error messages
-    if (!customerId || customerId.trim() === '') {
-      console.error('Missing or empty customer ID:', customerId);
-      setError('Missing or invalid customer ID parameter. Please check your QR code or link.');
+    if (!customerId || !platform) {
+      console.error('Missing parameters:', { customerId, platform });
+      setError('Missing customer ID or platform parameter');
       setLoading(false);
       return;
     }
-
-    if (!platform || platform.trim() === '') {
-      console.error('Missing or empty platform:', platform);
-      setError('Missing or invalid platform parameter. Please check your QR code or link.');
-      setLoading(false);
-      return;
-    }
-
-    // Log the exact customerId being used
-    console.log('Using customerId for API calls:', customerId);
-    console.log('CustomerId type:', typeof customerId);
-    console.log('CustomerId length:', customerId.length);
 
     setStatus('Validating parameters...');
     
@@ -283,20 +200,11 @@ export default function Configure() {
         setStatus(`Redirecting to ${getPlatformName(platform)} integration...`);
         
         console.log('Redirecting to:', redirectUrl);
-        console.log('Redirect URL includes customerId:', redirectUrl.includes(customerId));
-        console.log('QR customerId being passed:', customerId);
         
         // Shorter delay for better UX, but still visible
         setTimeout(() => {
           console.log('Executing navigation to:', redirectUrl);
-          navigate(redirectUrl, { 
-            replace: true,
-            state: { 
-              qrCustomerId: customerId,
-              fromQrCode: true,
-              platform: platform
-            }
-          });
+          navigate(redirectUrl, { replace: true });
         }, 2000);
       } else {
         setError('Unsupported platform');
@@ -336,17 +244,7 @@ export default function Configure() {
       
       const redirectUrl = `${route}?${params.toString()}`;
       console.log('Manual redirect to:', redirectUrl);
-      console.log('Passing customerId to integration:', customerId);
-      
-      // Pass customerId in navigation state as well
-      navigate(redirectUrl, { 
-        replace: true,
-        state: { 
-          qrCustomerId: customerId,
-          fromQrCode: true,
-          platform: platform
-        }
-      });
+      navigate(redirectUrl, { replace: true });
     }
   };
 
@@ -354,17 +252,12 @@ export default function Configure() {
     setStatus(`Using existing ${getPlatformName(platform)} account...`);
     setLoading(true);
     
-    // Make sure we pass the customerId when using existing account
-    console.log('Using existing account with customerId:', customerId);
-    console.log('Account details:', account);
-    
     // Here you would typically make an API call to use the existing account
     // For now, we'll simulate it and redirect to dashboard
     setTimeout(() => {
       navigate('/customer/dashboard', { 
         state: { 
-          message: `Successfully connected using existing ${getPlatformName(platform)} account: ${account.name}`,
-          customerId: customerId
+          message: `Successfully connected using existing ${getPlatformName(platform)} account: ${account.name}` 
         }
       });
     }, 1500);
@@ -389,17 +282,7 @@ export default function Configure() {
       
       const redirectUrl = `${route}?${params.toString()}`;
       console.log('Connect new account redirect to:', redirectUrl);
-      console.log('Passing customerId to integration:', customerId);
-      
-      // Pass customerId in navigation state as well
-      navigate(redirectUrl, { 
-        replace: true,
-        state: { 
-          qrCustomerId: customerId,
-          fromQrCode: true,
-          platform: platform
-        }
-      });
+      navigate(redirectUrl, { replace: true });
     }
   };
 
@@ -710,12 +593,7 @@ export default function Configure() {
             <p><strong>Customer ID:</strong> {customerId || 'Not provided'}</p>
             <p><strong>Platform:</strong> {platform || 'Not provided'}</p>
             <p><strong>Auto Connect:</strong> {autoConnect || 'No'}</p>
-            <p><strong>Customer ID Type:</strong> {typeof customerId}</p>
-            <p><strong>Customer ID Length:</strong> {customerId ? customerId.length : 'N/A'}</p>
-            <p><strong>Current URL:</strong> {window.location.href}</p>
-            <p><strong>Environment:</strong> {window.location.hostname === 'localhost' ? 'Development' : 'Production'}</p>
-            <p><strong>API Base:</strong> {getApiBaseUrl()}</p>
-            <p><strong>Frontend:</strong> {getCurrentFrontendUrl()}</p>
+            <p><strong>URL:</strong> {window.location.href}</p>
           </div>
           
           <div className="flex gap-2">
@@ -761,8 +639,6 @@ export default function Configure() {
             <p className="truncate">{customerId}</p>
             <p><strong>Platform:</strong></p>
             <p>{getPlatformName(platform)}</p>
-            <p><strong>Environment:</strong></p>
-            <p>{window.location.hostname === 'localhost' ? 'Dev' : 'Prod'}</p>
             {autoConnect && (
               <>
                 <p><strong>Auto Connect:</strong></p>
@@ -798,15 +674,13 @@ export default function Configure() {
         </div>
         
         {/* Debug info for development */}
-        <div className="mt-4 p-2 bg-yellow-50 rounded text-xs text-left">
-          <p><strong>Debug Info:</strong></p>
-          <p>Customer ID: {customerId} (Type: {typeof customerId}, Length: {customerId ? customerId.length : 'N/A'})</p>
-          <p>Platform: {platform}</p>
-          <p>Current URL: {window.location.href}</p>
-          <p>Frontend Base: {getCurrentFrontendUrl()}</p>
-          <p>API Base: {getApiBaseUrl()}</p>
-          <p>Params: {JSON.stringify(Object.fromEntries(searchParams.entries()))}</p>
-        </div>
+        {process.env.NODE_ENV === 'development' && (
+          <div className="mt-4 p-2 bg-yellow-50 rounded text-xs text-left">
+            <p><strong>Debug Info:</strong></p>
+            <p>URL: {window.location.href}</p>
+            <p>Params: {JSON.stringify(Object.fromEntries(searchParams.entries()))}</p>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -25,8 +25,8 @@ export default function Configure() {
       return 'http://localhost:8080'; // Your local backend
     }
     
-    // Production - use environment variable from .env
-    return process.env.REACT_APP_API_URL;
+    // Production - replace with your Cloud Run backend URL
+    return process.env.REACT_APP_API_URL || 'https://your-backend-service.run.app';
   };
 
   const getCurrentFrontendUrl = () => {

@@ -381,6 +381,14 @@ const SuperAdminDashboard = () => {
   };
 
   const handleCustomerSelect = (customerId) => {
+    const assignedAdmin = getAdminForCustomer(customerId);
+    // If assigned to another admin and not the currently selected admin, ignore
+    if (assignedAdmin && assignedAdmin._id !== selectedAdmin) {
+      // optionally show notification
+      showNotification(`Customer already assigned to ${assignedAdmin.name || assignedAdmin.email}`, 'error');
+      return;
+    }
+
     setSelectedCustomers(prev => 
       prev.includes(customerId) 
         ? prev.filter(id => id !== customerId)
@@ -388,16 +396,27 @@ const SuperAdminDashboard = () => {
     );
   };
 
+  // Helper: find admin who currently has a customer
+  const getAdminForCustomer = (customerId) => {
+    const admin = admins.find(a => (a.assignedCustomers || []).includes(customerId));
+    return admin || null;
+  };
+
   const handleSelectAll = () => {
     const filteredCustomers = customers.filter(customer =>
-      customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      customer.email.toLowerCase().includes(searchTerm.toLowerCase())
+      (customer.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (customer.email || '').toLowerCase().includes(searchTerm.toLowerCase())
     );
-    
-    if (selectedCustomers.length === filteredCustomers.length) {
+
+    const selectable = filteredCustomers.filter(c => {
+      const assignedAdmin = getAdminForCustomer(c._id);
+      return !(assignedAdmin && assignedAdmin._id !== selectedAdmin);
+    });
+
+    if (selectedCustomers.length === selectable.length && selectable.length > 0) {
       setSelectedCustomers([]);
     } else {
-      setSelectedCustomers(filteredCustomers.map(c => c._id));
+      setSelectedCustomers(selectable.map(c => c._id));
     }
   };
 
@@ -412,10 +431,13 @@ const SuperAdminDashboard = () => {
     try {
       const result = await apiService.assignCustomers(selectedAdmin, selectedCustomers);
       showNotification(`Successfully assigned ${result.assignedCount || selectedCustomers.length} customers`, 'success');
+
+      // Refresh both customers and admins immediately so UI updates reflect removal from other admins
+      await Promise.all([ fetchCustomers(), fetchAdmins() ]);
+
+      // Clear selection after refresh
       setSelectedCustomers([]);
       setSelectedAdmin('');
-      // Refresh data after successful assignment
-      await fetchCustomers();
     } catch (error) {
       showNotification(error.message || 'Assignment failed', 'error');
     } finally {
@@ -587,7 +609,12 @@ const SuperAdminDashboard = () => {
                   onClick={handleSelectAll}
                   className="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors"
                 >
-                  {selectedCustomers.length === filteredCustomers.length ? 'Deselect All' : 'Select All'}
+                  {selectedCustomers.length === filteredCustomers.filter(c => {
+                      const assignedAdmin = getAdminForCustomer(c._id);
+                      return !(assignedAdmin && assignedAdmin._id !== selectedAdmin);
+                    }).length
+                      ? 'Deselect All'
+                      : 'Select All'}
                 </button>
               </div>
 
@@ -595,36 +622,49 @@ const SuperAdminDashboard = () => {
               <div className="max-h-96 overflow-y-auto">
                 <div className="p-4 space-y-2">
                   {filteredCustomers.length > 0 ? (
-                    filteredCustomers.map(customer => (
-                      <div
-                        key={customer._id}
-                        className={`flex items-center p-4 rounded-lg border transition-all cursor-pointer hover:shadow-md ${
-                          selectedCustomers.includes(customer._id)
-                            ? 'bg-blue-50 border-blue-300 shadow-sm'
-                            : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
-                        }`}
-                        onClick={() => handleCustomerSelect(customer._id)}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedCustomers.includes(customer._id)}
-                          onChange={() => handleCustomerSelect(customer._id)}
-                          className="mr-4 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                        />
-                        <div className="flex items-center space-x-3 flex-1">
-                          <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-                            <User className="text-white" size={16} />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <h3 className="font-semibold text-gray-900 truncate">{customer.name}</h3>
-                            <div className="flex items-center space-x-1 text-gray-500">
-                              <Mail size={12} />
-                              <span className="text-sm truncate">{customer.email}</span>
+                    filteredCustomers.map(customer => {
+                      const assignedAdmin = getAdminForCustomer(customer._id);
+                      const disabled = assignedAdmin && assignedAdmin._id !== selectedAdmin;
+                      return (
+                        <div
+                          key={customer._id}
+                          className={`flex items-center p-4 rounded-lg border transition-all cursor-pointer hover:shadow-md ${
+                            selectedCustomers.includes(customer._id)
+                              ? 'bg-blue-50 border-blue-300 shadow-sm'
+                              : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                          }`}
+                          onClick={() => handleCustomerSelect(customer._id)}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedCustomers.includes(customer._id)}
+                            onChange={() => handleCustomerSelect(customer._id)}
+                            disabled={disabled}
+                            className="mr-4 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded disabled:opacity-50"
+                          />
+                          <div className="flex items-center space-x-3 flex-1">
+                            <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                              <User className="text-white" size={16} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-semibold text-gray-900 truncate">{customer.name}</h3>
+                              <div className="flex items-center space-x-1 text-gray-500">
+                                <Mail size={12} />
+                                <span className="text-sm truncate">{customer.email}</span>
+                              </div>
                             </div>
                           </div>
+
+                          {assignedAdmin ? (
+                            <div className="ml-4 text-sm">
+                              <span className={`px-2 py-1 rounded-full text-xs ${assignedAdmin._id === selectedAdmin ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                                {assignedAdmin._id === selectedAdmin ? 'Assigned to selected admin' : `Assigned to ${assignedAdmin.name || assignedAdmin.email?.split('@')[0] || assignedAdmin.email}`}
+                              </span>
+                            </div>
+                          ) : null}
                         </div>
-                      </div>
-                    ))
+                      )
+                    })
                   ) : (
                     <div className="p-8 text-center">
                       <User className="mx-auto text-gray-400 mb-4" size={48} />

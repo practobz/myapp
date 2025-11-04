@@ -6,7 +6,17 @@ const RUNTIME_ENV = (typeof window !== 'undefined' && (window.__REACT_APP_API_UR
 
 // ✅ Fallback to a known backend when running from static hosts (e.g. storage.googleapis.com) or when no env is provided.
 const FALLBACK_BACKEND = process.env.REACT_APP_API_URL || 'https://my-backend-593529385135.asia-south1.run.app';
-const API_BASE = String(RUNTIME_ENV || FALLBACK_BACKEND).replace(/\/$/, '');
+
+// Use let so we can override at runtime when served from static storage
+let API_BASE = String(RUNTIME_ENV || FALLBACK_BACKEND).replace(/\/$/, '');
+
+// Runtime override: when loaded from storage.googleapis.com (static hosting) force the backend fallback.
+// This prevents relative fetches resolving to the static host and producing 404s like:
+// GET https://airspark.storage.googleapis.com/api/customers 404 (Not Found)
+if (typeof window !== 'undefined' && window.location && window.location.host && window.location.host.includes('storage.googleapis.com')) {
+  console.warn('Detected static storage host — overriding API_BASE to fallback backend:', FALLBACK_BACKEND);
+  API_BASE = FALLBACK_BACKEND;
+}
 
 const buildUrl = (path) => {
   if (!path) return API_BASE || '';

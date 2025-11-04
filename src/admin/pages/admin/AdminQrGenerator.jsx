@@ -1,8 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { QrCode, Facebook, Instagram, Linkedin, Youtube, Download, ExternalLink, AlertCircle, Loader2, User, Clock, AlertTriangle, Search, Filter, CheckCircle, X, BarChart3, Users } from 'lucide-react';
 
-{ /* Add: normalize API base from env */ }
-const API_BASE = (process.env.REACT_APP_API_URL || '').replace(/\/$/, '');
+// Resolve API base at runtime (checks window-injected values first, then build-time env)
+const RUNTIME_ENV = (typeof window !== 'undefined' && (window.__REACT_APP_API_URL__ || window._env_?.REACT_APP_API_URL || window.__env__?.REACT_APP_API_URL)) || process.env.REACT_APP_API_URL || '';
+const API_BASE = String(RUNTIME_ENV || '').replace(/\/$/, '');
+const buildUrl = (path) => {
+  if (!path) return API_BASE || '';
+  // ensure path begins with /
+  const p = path.startsWith('/') ? path : `/${path}`;
+  return API_BASE ? `${API_BASE}${p}` : p;
+};
+// Helpful debug info when troubleshooting 404 to storage.googleapis.com
+if (typeof window !== 'undefined') {
+  console.info('API_BASE resolved to:', API_BASE || '(empty — using relative paths)');
+}
 
 const PLATFORMS = [
   { key: 'fb', label: 'Facebook', icon: Facebook, color: 'bg-blue-600 hover:bg-blue-700', lightColor: 'bg-blue-50 text-blue-700' },
@@ -25,7 +36,7 @@ export default function AdminQrGenerator() {
   const [successMessage, setSuccessMessage] = useState('');
 
   useEffect(() => {
-    fetch(`${API_BASE || ''}/api/customers`)
+    fetch(buildUrl('/api/customers'))
       .then(res => res.json())
       .then(data => {
         setCustomers(data.customers || []);
@@ -107,7 +118,7 @@ export default function AdminQrGenerator() {
 
       console.log(`🔒 Generating QR for customer: ${customerId} (${customerName}) - Platform: ${platform}`);
 
-      const res = await fetch(`${API_BASE || ''}/api/generate-qr`, {
+      const res = await fetch(buildUrl('/api/generate-qr'), {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Facebook, BarChart3,Settings, Eye, Calendar, Trash2, TrendingUp, Plus, Users, UserCheck
+  Facebook, BarChart3, Trash2, TrendingUp, Plus, Users, UserCheck, ExternalLink, Loader2, Calendar, RefreshCw
 } from 'lucide-react';
 import TrendChart from '../../components/TrendChart';
 import TimePeriodChart from '../../components/TimeperiodChart';
@@ -9,39 +9,6 @@ import { getUserData, setUserData, removeUserData, migrateToUserSpecificStorage 
 
 // Your Facebook App ID
 const FACEBOOK_APP_ID = '4416243821942660';
-
-function getCurrentCustomerId() {
-  let customerId = null;
-  
-  // 🔥 PRIORITY 1: Check URL parameters first (for QR code links)
-  const urlParams = new URLSearchParams(window.location.search);
-  const hashParams = new URLSearchParams(window.location.hash.split('?')[1] || '');
-  
-  // Check both regular URL params and hash params (for React Router)
-  customerId = urlParams.get('customerId') || hashParams.get('customerId');
-  
-  if (customerId) {
-    console.log('✅ Found customer ID in URL:', customerId);
-    return customerId;
-  }
-  
-  // 🔥 PRIORITY 2: Check localStorage as fallback
-  const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
-  customerId = currentUser.userId || currentUser.id || currentUser._id || currentUser.customer_id;
-  
-  if (!customerId) {
-    const authUser = JSON.parse(localStorage.getItem('user') || '{}');
-    customerId = authUser.userId || authUser.id || authUser._id || authUser.customer_id;
-  }
-  
-  if (customerId) {
-    console.log('✅ Found customer ID in localStorage:', customerId);
-  } else {
-    console.warn('❌ No customer ID found in URL or localStorage');
-  }
-  
-  return customerId;
-}
 
 function FacebookIntegration() {
   // Multi-account state
@@ -60,12 +27,20 @@ function FacebookIntegration() {
   const [analyticsData, setAnalyticsData] = useState({});
   const [loadingAnalytics, setLoadingAnalytics] = useState({});
   const [timePeriods, setTimePeriods] = useState({});
-  const [showFacebookPosts, setShowFacebookPosts] = useState({});
-  const [showHistoricalCharts, setShowHistoricalCharts] = useState({});
 
-  // Confirmation states
-  const [confirmDisconnectId, setConfirmDisconnectId] = useState(null);
-  const [confirmDisconnectAll, setConfirmDisconnectAll] = useState(false);
+  // Post upload modal state
+  const [showPostModal, setShowPostModal] = useState(false);
+  const [postTarget, setPostTarget] = useState(null);
+  const [postMessage, setPostMessage] = useState('');
+  const [postImageUrl, setPostImageUrl] = useState('');
+  const [uploadingPost, setUploadingPost] = useState(false);
+  const [uploadResult, setUploadResult] = useState(null);
+
+  // Show/Hide Facebook posts state
+  const [showFacebookPosts, setShowFacebookPosts] = useState({});
+
+  // Historical charts toggle state
+  const [showHistoricalCharts, setShowHistoricalCharts] = useState({});
 
   // Time period options
   const TIME_PERIOD_OPTIONS = [
@@ -86,98 +61,41 @@ function FacebookIntegration() {
   // Load connected accounts from localStorage on component mount
   useEffect(() => {
     console.log('🔍 Component mounted, loading accounts from storage...');
+    
+    // First, migrate any existing data to user-specific storage
     migrateToUserSpecificStorage([
       'fb_connected_accounts',
       'fb_active_account_id'
     ]);
 
-    const customerId = getCurrentCustomerId();
+    const savedAccounts = getUserData('fb_connected_accounts');
+    const savedActiveId = getUserData('fb_active_account_id');
     
-    // 🔥 NEW: Log the customer ID detection for debugging
-    console.log('🆔 Detected Customer ID:', {
-      customerId,
-      urlParams: new URLSearchParams(window.location.search).get('customerId'),
-      hashParams: new URLSearchParams(window.location.hash.split('?')[1] || '').get('customerId'),
-      localStorage: JSON.parse(localStorage.getItem('currentUser') || '{}'),
-      fullUrl: window.location.href
+    console.log('📦 Storage check on mount:', {
+      savedAccounts: savedAccounts ? savedAccounts.length : 0,
+      savedActiveId,
+      accountsData: savedAccounts
     });
-
-    // NEW: Try to fetch from backend first
-    const fetchConnectedAccountsFromBackend = async () => {
-      if (!customerId) {
-        console.warn('❌ No customer ID available for backend fetch');
-        return null;
+    
+    if (savedAccounts && Array.isArray(savedAccounts) && savedAccounts.length > 0) {
+      console.log('✅ Setting accounts from storage:', savedAccounts);
+      setConnectedAccounts(savedAccounts);
+      
+      if (savedActiveId && savedAccounts.some(acc => acc.id === savedActiveId)) {
+        setActiveAccountId(savedActiveId);
+        const activeAcc = savedAccounts.find(acc => acc.id === savedActiveId);
+        setActiveAccount(activeAcc);
+        console.log('✅ Set active account:', activeAcc?.name);
+      } else if (savedAccounts.length > 0) {
+        // Set first account as active if no valid active account
+        setActiveAccountId(savedAccounts[0].id);
+        setActiveAccount(savedAccounts[0]);
+        setUserData('fb_active_account_id', savedAccounts[0].id);
+        console.log('✅ Set first account as active:', savedAccounts[0].name);
       }
-      try {
-        const res = await fetch(`${process.env.REACT_APP_API_URL}/api/customer-social-links/${customerId}`);
-        const data = await res.json();
-        if (data.success && Array.isArray(data.accounts)) {
-          // Only keep Facebook accounts for this customer
-          const facebookAccounts = data.accounts.filter(
-            acc => acc.platform === 'facebook' && acc.customerId === customerId
-          );
-          return facebookAccounts.map(acc => ({
-            id: acc.platformUserId,
-            name: acc.name,
-            email: acc.email,
-            picture: acc.profilePicture ? { data: { url: acc.profilePicture } } : null,
-            accessToken: acc.accessToken,
-            connectedAt: acc.connectedAt,
-            tokenExpiresAt: acc.tokenExpiresAt,
-            // Add any other fields as needed
-          }));
-        }
-      } catch (err) {
-        console.warn('Failed to fetch accounts from backend:', err);
-      }
-      return null;
-    };
-
-    (async () => {
-      // NEW: Try to fetch from backend first
-      const backendAccounts = await fetchConnectedAccountsFromBackend();
-      if (backendAccounts && backendAccounts.length > 0) {
-        setConnectedAccounts(backendAccounts);
-        setUserData('fb_connected_accounts', backendAccounts); // Sync to localStorage
-        setActiveAccountId(backendAccounts[0].id);
-        setActiveAccount(backendAccounts[0]);
-        setUserData('fb_active_account_id', backendAccounts[0].id);
-        return;
-      }
-
-      // Fallback to localStorage if backend empty
-      const savedAccounts = getUserData('fb_connected_accounts');
-      const savedActiveId = getUserData('fb_active_account_id');
-      // Only keep Facebook accounts for this customer
-      const facebookAccounts = Array.isArray(savedAccounts)
-        ? savedAccounts.filter(
-            acc => acc.platform === 'facebook' && acc.customerId === customerId
-          )
-        : [];
-
-      console.log('📦 Storage check on mount:', {
-        savedAccounts: savedAccounts ? savedAccounts.length : 0,
-        savedActiveId,
-        accountsData: savedAccounts
-      });
-
-      if (facebookAccounts.length > 0) {
-        setConnectedAccounts(facebookAccounts);
-        if (savedActiveId && facebookAccounts.some(acc => acc.id === savedActiveId)) {
-          setActiveAccountId(savedActiveId);
-          const activeAcc = facebookAccounts.find(acc => acc.id === savedActiveId);
-          setActiveAccount(activeAcc);
-          console.log('✅ Set active account:', activeAcc?.name);
-        } else if (facebookAccounts.length > 0) {
-          setActiveAccountId(facebookAccounts[0].id);
-          setActiveAccount(facebookAccounts[0]);
-          setUserData('fb_active_account_id', facebookAccounts[0].id);
-          console.log('✅ Set first account as active:', facebookAccounts[0].name);
-        }
-      } else {
-        console.log('ℹ️ No connected accounts found in storage');
-      }
-    })();
+    } else {
+      console.log('ℹ️ No connected accounts found in storage');
+    }
   }, []);
 
   // Load Facebook SDK
@@ -337,7 +255,7 @@ function FacebookIntegration() {
         setFbError({ message: 'Facebook login failed or was cancelled' });
       }
     }, {
-      scope: 'pages_show_list,pages_read_engagement,pages_manage_posts,pages_manage_metadata,email,public_profile', // <-- ADDED pages_manage_posts
+      scope: 'pages_show_list,pages_read_engagement,pages_manage_metadata,instagram_basic,email,public_profile',
       return_scopes: true,
       auth_type: 'rerequest'
     });
@@ -525,7 +443,7 @@ function FacebookIntegration() {
     console.log('🔍 Fetching pages...');
     
     window.FB.api('/me/accounts', {
-      fields: 'id,name,access_token,category,about,fan_count,link,picture,username,website,phone,verification_status,tasks',
+      fields: 'id,name,access_token,category,about,fan_count,link,picture,username,website,phone,verification_status',
       access_token: activeAccount.accessToken
     }, function(response) {
       if (!response || response.error) {
@@ -650,6 +568,35 @@ function FacebookIntegration() {
     return result;
   };
 
+  const generateInstagramPostAnalytics = (posts, days = 30) => {
+    const endDate = new Date();
+    const result = {
+      likes: [],
+      comments: [],
+      posts: []
+    };
+
+    for (let i = days - 1; i >= 0; i--) {
+      const date = subDays(endDate, i);
+      const dateStr = format(date, 'yyyy-MM-dd');
+      
+      const dayPosts = posts.filter(post => {
+        const postDate = new Date(post.timestamp);
+        return format(postDate, 'yyyy-MM-dd') === dateStr;
+      });
+
+      const dayLikes = dayPosts.reduce((sum, post) => sum + (post.like_count || 0), 0);
+      const dayComments = dayPosts.reduce((sum, post) => sum + (post.comments_count || 0), 0);
+      const postCount = dayPosts.length;
+
+      result.likes.push({ date: dateStr, value: dayLikes });
+      result.comments.push({ date: dateStr, value: dayComments });
+      result.posts.push({ date: dateStr, value: postCount });
+    }
+
+    return result;
+  };
+
   const fetchPostBasedAnalytics = (pageId, pageAccessToken, days = 30) => {
     if (!isFacebookApiReady()) {
       setLoadingAnalytics(prev => ({ ...prev, [pageId]: false }));
@@ -727,6 +674,34 @@ function FacebookIntegration() {
     }
 
     return result;
+  };
+
+  const fetchPageAnalyticsWithDbFirst = async (pageId, pageAccessToken, days = 30) => {
+    setLoadingAnalytics(prev => ({ ...prev, [pageId]: true }));
+    
+    setTimePeriods(prev => ({ ...prev, [pageId]: days }));
+    
+    try {
+      const loadedFromDb = await fetchStoredAnalytics(pageId);
+      
+      if (loadedFromDb) {
+        console.log('📊 Using stored analytics data');
+        setLoadingAnalytics(prev => ({ ...prev, [pageId]: false }));
+        return;
+      }
+      
+      console.log('🔄 No stored data found, fetching live analytics...');
+      await fetchPageAnalyticsLive(pageId, pageAccessToken, days);
+      
+    } catch (error) {
+      console.error('Analytics fetch error:', error);
+      setLoadingAnalytics(prev => ({ ...prev, [pageId]: false }));
+    }
+  };
+
+  const fetchPageAnalyticsLive = async (pageId, pageAccessToken, days = 30) => {
+    console.log('📡 Fetching live analytics from Facebook APIs...');
+    fetchPostBasedAnalytics(pageId, pageAccessToken, days);
   };
 
   const renderAnalytics = (pageId) => {
@@ -1028,18 +1003,87 @@ function FacebookIntegration() {
     );
   };
 
-  // Remove post upload modal state and logic
-  // const [showPostModal, setShowPostModal] = useState(false);
-  // const [postTarget, setPostTarget] = useState(null);
-  // const [postMessage, setPostMessage] = useState('');
-  // const [postImageUrl, setPostImageUrl] = useState('');
-  // const [uploadingPost, setUploadingPost] = useState(false);
-  // const [uploadResult, setUploadResult] = useState(null);
+  const renderPostModal = () => {
+    if (!showPostModal || !postTarget) return null;
+    const { type, page } = postTarget;
 
-  // Remove renderPostModal function
-  // const renderPostModal = () => { ... }
+    const handleFileChange = async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      setUploadResult({
+        success: false,
+        error: 'Instagram requires a public image URL. Please upload your image to a public host (e.g. imgur, Cloudinary, S3) and paste the URL below.'
+      });
+      setPostImageUrl('');
+    };
 
-  // Remove "Create FB Post", "Smart Analytics", "Live API Call" buttons from renderPageDetails
+    return (
+      <div className="fixed inset-0 z-50 bg-black bg-opacity-30 flex items-center justify-center">
+        <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md relative">
+          <button
+            className="absolute top-2 right-2 text-gray-400 hover:text-gray-700"
+            onClick={() => {
+              setShowPostModal(false);
+              setPostMessage('');
+              setPostImageUrl('');
+              setUploadResult(null);
+            }}
+          >✕</button>
+          <h4 className="font-bold mb-4">
+            {type === 'facebook' ? 'Create Facebook Post' : 'Create Instagram Post'}
+          </h4>
+          <div className="space-y-3">
+            <textarea
+              className="w-full border rounded p-2"
+              rows={3}
+              placeholder="Write your post message..."
+              value={postMessage}
+              onChange={e => setPostMessage(e.target.value)}
+            />
+            <input
+              className="w-full border rounded p-2"
+              type="file"
+              accept="image/*"
+              onChange={handleFileChange}
+            />
+            {postImageUrl && (
+              <img src={postImageUrl} alt="Preview" className="w-full h-32 object-contain rounded border" />
+            )}
+            <input
+              className="w-full border rounded p-2"
+              type="text"
+              placeholder="Image URL (publicly accessible, optional for FB, required for IG)"
+              value={postImageUrl}
+              onChange={e => setPostImageUrl(e.target.value)}
+            />
+            <div className="text-xs text-gray-500">
+              {type === 'instagram'
+                ? 'Instagram requires a public image URL. Upload your image to a public host (e.g. imgur, Cloudinary, S3) and paste the URL above.'
+                : 'Image is optional for Facebook posts.'}
+            </div>
+            <button
+              className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:opacity-50 mt-2"
+              disabled={uploadingPost || (!postMessage && !postImageUrl)}
+              onClick={() => {
+                if (type === 'facebook') uploadFacebookPost(page);
+                else if (type === 'instagram') uploadInstagramPost(page, instagramId);
+              }}
+            >
+              {uploadingPost ? 'Posting...' : 'Post'}
+            </button>
+            {uploadResult && (
+              <div className={`mt-2 text-sm ${uploadResult.success ? 'text-green-600' : 'text-red-600'}`}>
+                {uploadResult.success
+                  ? `✅ Post uploaded! ID: ${uploadResult.id}`
+                  : `❌ Error: ${uploadResult.error}`}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderPageDetails = (page) => (
     <div key={page.id} className="border rounded-lg p-6 mb-4 bg-white shadow-sm">
       <div className="flex items-start space-x-4">
@@ -1095,6 +1139,20 @@ function FacebookIntegration() {
 
           <div className="flex flex-wrap gap-2">
             <button
+              className="bg-blue-700 text-white px-4 py-2 rounded text-sm hover:bg-blue-800 flex items-center space-x-2"
+              onClick={() => {
+                setPostTarget({ type: 'facebook', page });
+                setShowPostModal(true);
+                setPostMessage('');
+                setPostImageUrl('');
+                setUploadResult(null);
+              }}
+              disabled={!isFacebookApiReady()}
+            >
+              <Facebook className="h-4 w-4" />
+              <span>Create FB Post</span>
+            </button>
+            <button
               onClick={() => fetchPageInsights(page.id, page.access_token)}
               disabled={loadingInsights[page.id] || !isFacebookApiReady()}
               className="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600 disabled:opacity-50 flex items-center space-x-2"
@@ -1102,6 +1160,25 @@ function FacebookIntegration() {
               <BarChart3 className="h-4 w-4" />
               <span>{loadingInsights[page.id] ? 'Loading...' : 'Get Insights'}</span>
             </button>
+            
+            <button
+              onClick={() => fetchPageAnalyticsWithDbFirst(page.id, page.access_token, undefined, timePeriods[page.id] || 30)}
+              disabled={loadingAnalytics[page.id] || !isFacebookApiReady()}
+              className="bg-purple-500 text-white px-4 py-2 rounded text-sm hover:bg-purple-600 disabled:opacity-50 flex items-center space-x-2"
+            >
+              <TrendingUp className="h-4 w-4" />
+              <span>{loadingAnalytics[page.id] ? 'Loading...' : 'Smart Analytics'}</span>
+            </button>
+            
+            <button
+              onClick={() => fetchPageAnalyticsLive(page.id, page.access_token, undefined, timePeriods[page.id] || 30)}
+              disabled={loadingAnalytics[page.id] || !isFacebookApiReady()}
+              className="bg-orange-500 text-white px-4 py-2 rounded text-sm hover:bg-orange-600 disabled:opacity-50 flex items-center space-x-2"
+            >
+              <span>📡</span>
+              <span>{loadingAnalytics[page.id] ? 'Loading...' : 'Live API Call'}</span>
+            </button>
+
             <button
               onClick={() => fetchPagePosts(page.id, page.access_token)}
               disabled={loadingPosts[page.id] || !isFacebookApiReady()}
@@ -1136,7 +1213,65 @@ function FacebookIntegration() {
     }
   };
 
-  
+  // Remove account
+  const removeAccount = (accountId) => {
+    const updatedAccounts = connectedAccounts.filter(acc => acc.id !== accountId);
+    setConnectedAccounts(updatedAccounts);
+    saveAccountsToStorage(updatedAccounts);
+    
+    if (activeAccountId === accountId) {
+      if (updatedAccounts.length > 0) {
+        // Switch to first remaining account
+        switchAccount(updatedAccounts[0].id);
+      } else {
+        // No accounts left
+        setActiveAccountId(null);
+        setActiveAccount(null);
+        setFbPages([]);
+        setPageInsights({});
+        setPagePosts({});
+        setAnalyticsData({});
+        removeUserData('fb_active_account_id');
+      }
+    }
+  };
+
+  // Logout all accounts
+  const fbLogoutAll = () => {
+    if (!isFacebookApiReady()) {
+      // Just clear local state if FB API is not available
+      clearAllAccountData();
+      return;
+    }
+
+    // Check if we have a valid Facebook session before calling logout
+    window.FB.getLoginStatus((response) => {
+      if (response.status === 'connected') {
+        // Only call logout if user is actually logged in
+        window.FB.logout(() => {
+          clearAllAccountData();
+        });
+      } else {
+        // User is not logged in to Facebook, just clear local data
+        clearAllAccountData();
+      }
+    });
+  };
+
+  // Helper function to clear all account data
+  const clearAllAccountData = () => {
+    setConnectedAccounts([]);
+    setActiveAccountId(null);
+    setActiveAccount(null);
+    setFbPages([]);
+    setPageInsights({});
+    setPagePosts({});
+    setAnalyticsData({});
+    removeUserData('fb_connected_accounts');
+    removeUserData('fb_active_account_id');
+  };
+
+  // Store connected page information
   const storeConnectedPage = async (page) => {
     try {
       // First store the page data
@@ -1168,21 +1303,28 @@ function FacebookIntegration() {
   // Store customer social account for admin access
   const storeCustomerSocialAccount = async (page) => {
     try {
-      // 🔥 CRITICAL FIX: Use the correct customer ID detection
-      const customerId = getCurrentCustomerId();
+      // Get current user/customer ID from auth context or localStorage
+      let customerId = null;
+      
+      // Try multiple ways to get customer ID (similar to contentRoutes.js pattern)
+      const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
+      customerId = currentUser.userId || currentUser.id || currentUser._id || currentUser.customer_id;
+      
+      // If still no customer ID, try getting from other possible sources
+      if (!customerId) {
+        const authUser = JSON.parse(localStorage.getItem('user') || '{}');
+        customerId = authUser.userId || authUser.id || authUser._id || authUser.customer_id;
+      }
       
       // Log what we found for debugging
-      console.log('🔍 Customer ID search for social account storage:', {
+      console.log('🔍 Customer ID search:', {
+        currentUser,
         customerId,
-        found: !!customerId,
-        urlCustomerId: new URLSearchParams(window.location.search).get('customerId') || 
-                       new URLSearchParams(window.location.hash.split('?')[1] || '').get('customerId'),
-        localStorageUser: JSON.parse(localStorage.getItem('currentUser') || '{}')
+        found: !!customerId
       });
       
       if (!customerId) {
-        console.error('❌ No customer ID found, cannot store social account');
-        alert('Error: No customer ID found. Please make sure you accessed this page through the proper configuration link.');
+        console.warn('No customer ID found, cannot store social account');
         return;
       }
 
@@ -1193,7 +1335,7 @@ function FacebookIntegration() {
       }
 
       const accountData = {
-        customerId: customerId, // 🔥 Use the correctly detected customer ID
+        customerId: customerId,
         platform: 'facebook',
         platformUserId: activeAccount.id,
         name: activeAccount.name,
@@ -1242,9 +1384,8 @@ function FacebookIntegration() {
         accountData.tokenStatus = 'invalid_page_token';
       }
 
-      // ✅ Log token validation status with customer ID
+      // ✅ Log token validation status
       console.log('🔑 Token Validation Summary:', {
-        customerId,
         hasUserToken,
         hasPageToken,
         userTokenLength: accountData.accessToken?.length || 0,
@@ -1261,7 +1402,7 @@ function FacebookIntegration() {
       
       const result = await response.json();
       if (result.success) {
-        console.log('✅ Stored customer social account for admin access with customer ID:', customerId);
+        console.log('✅ Stored customer social account for admin access');
       } else {
         console.warn('Failed to store customer social account:', result.error);
       }
@@ -1322,8 +1463,6 @@ function FacebookIntegration() {
           // Fallback to re-fetching pages normally
           fetchFbPages();
           alert('✅ Tokens refreshed successfully!');
-       
-
         }
       } else {
         alert('❌ Failed to refresh session. Please try reconnecting your Facebook account.');
@@ -1385,11 +1524,12 @@ function FacebookIntegration() {
     );
   };
 
-  // Render account selector with token status
+  // --- Facebook Account Selector UI (like Instagram) ---
   const renderAccountSelector = () => {
+    if (connectedAccounts.length <= 1) return null;
     return (
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-4">
+      <div className="mb-4">
+        <div className="flex items-center justify-between mb-2">
           <h4 className="font-medium text-gray-700 flex items-center">
             <Users className="h-5 w-5 mr-2" />
             Connected Facebook Accounts ({connectedAccounts.length})
@@ -1398,454 +1538,91 @@ function FacebookIntegration() {
             <button
               onClick={refreshPageTokens}
               disabled={!fbSdkLoaded || !isFacebookApiReady() || !activeAccount}
-              className="bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 text-sm"
+              className="bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center space-x-2 text-sm"
             >
               <span>🔄</span>
               <span>Refresh Tokens</span>
             </button>
-            <button
-              onClick={fbLogin}
-              disabled={!fbSdkLoaded || !isFacebookApiReady()}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 text-sm"
-            >
-              <Plus className="h-4 w-4" />
-              <span>Add Account</span>
-            </button>
           </div>
         </div>
-        
-        {connectedAccounts.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {connectedAccounts.map((account) => {
-              const expired = isTokenExpired(account);
-              
-              return (
-                <div
-                  key={account.id}
-                  className={`border rounded-lg p-4 transition-all cursor-pointer ${
-                    activeAccountId === account.id
-                      ? 'border-blue-500 bg-blue-50 shadow-md'
-                      : 'border-gray-200 bg-white hover:border-gray-300'
-                  } ${expired ? 'border-orange-300 bg-orange-50' : ''}`}
-                  onClick={() => switchAccount(account.id)}
-                >
-                  <div className="flex items-center space-x-3">
-                    {account.picture?.data?.url ? (
-                      <img
-                        src={account.picture.data.url}
-                        alt={account.name}
-                        className="w-12 h-12 rounded-full"
-                      />
-                    ) : (
-                      <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                        <Facebook className="h-6 w-6 text-blue-600" />
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center space-x-2">
-                        <h5 className="font-medium text-gray-900 truncate">{account.name}</h5>
-                        {activeAccountId === account.id && (
-                          <UserCheck className="h-4 w-4 text-blue-600" />
-                        )}
-                        {expired && (
-                          <span className="text-xs bg-orange-200 text-orange-800 px-2 py-1 rounded">
-                            Expired
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-sm text-gray-600 truncate">{account.email}</p>
-                      <p className="text-xs text-gray-500">
-                        Connected {new Date(account.connectedAt).toLocaleDateString()}
-                      </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {connectedAccounts.map((account) => {
+            const expired = isTokenExpired(account);
+            return (
+              <div
+                key={account.id}
+                className={`border rounded-lg p-4 transition-all cursor-pointer ${
+                  activeAccountId === account.id
+                    ? 'border-blue-500 bg-blue-50 shadow-md'
+                    : 'border-gray-200 bg-white hover:border-gray-300'
+                } ${expired ? 'border-orange-300 bg-orange-50' : ''}`}
+                onClick={() => switchAccount(account.id)}
+              >
+                <div className="flex items-center space-x-3">
+                  {account.picture && (
+                    <img
+                      src={account.picture.data.url}
+                      alt={account.name}
+                      className="w-12 h-12 rounded-full"
+                    />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center space-x-2">
+                      <h5 className="font-medium text-gray-900 truncate">{account.name}</h5>
+                      {activeAccountId === account.id && (
+                        <UserCheck className="h-4 w-4 text-blue-600" />
+                      )}
+                      {expired && (
+                        <span className="text-xs bg-orange-200 text-orange-800 px-2 py-1 rounded">
+                          Expired
+                        </span>
+                      )}
                     </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setConfirmDisconnectId(account.id);
-                      }}
-                      className="p-1 text-gray-400 hover:text-red-600 transition-colors"
-                      title="Remove account"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    <p className="text-sm text-gray-600 truncate">{account.email}</p>
+                    <p className="text-xs text-gray-500">
+                      Connected {new Date(account.connectedAt).toLocaleDateString()}
+                    </p>
+                    {account.tokenExpiresAt && (
+                      <p className="text-xs text-gray-500">
+                        Token expires: {new Date(account.tokenExpiresAt).toLocaleDateString()}
+                      </p>
+                    )}
                   </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeAccount(account.id);
+                    }}
+                    className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                    title="Remove account"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
                 </div>
-              );
-            })}
+              </div>
+            );
+          })}
+        </div>
+        {activeAccount && (
+          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <h6 className="font-medium text-blue-800 mb-2">🔑 Token Management</h6>
+            <div className="text-sm text-blue-700 space-y-1">
+              <p>📝 <strong>Active Account:</strong> {activeAccount.name}</p>
+              <p>🔄 <strong>Auto-Refresh:</strong> Tokens are automatically refreshed when needed</p>
+              <p>⏰ <strong>Session Management:</strong> Only expires when you manually disconnect</p>
+              <p>🔗 <strong>Manual Actions:</strong> Use "Refresh Tokens" if you encounter issues</p>
+              <p>✅ <strong>Permissions:</strong> pages_read_engagement, pages_manage_metadata</p>
+              {activeAccount.tokenExpiresAt && (
+                <p>⏳ <strong>Token Expires:</strong> {new Date(activeAccount.tokenExpiresAt).toLocaleString()}</p>
+              )}
+            </div>
           </div>
         )}
       </div>
     );
   };
 
-  // Render followers timeline chart (optional, similar to Instagram)
-  const renderFollowersTrendChart = (pageId) => {
-    // Placeholder for future follower timeline data
-    return null;
-  };
-
-  // Main connected state UI (similar to Instagram)
-  const renderConnectedState = () => (
-    <div className="space-y-6">
-      {/* Show account selector if multiple accounts */}
-      {connectedAccounts.length > 1 && renderAccountSelector()}
-
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-1 bg-green-100 px-3 py-1 rounded-full">
-            <span className="text-sm font-medium text-green-700">
-              {connectedAccounts.length} Account{connectedAccounts.length !== 1 ? 's' : ''} Connected
-            </span>
-          </div>
-          {activeAccount && (
-            <div className="flex items-center space-x-2">
-              {activeAccount.picture?.data?.url ? (
-                <img
-                  src={activeAccount.picture.data.url}
-                  alt="Profile"
-                  className="w-6 h-6 rounded-full"
-                />
-              ) : (
-                <Facebook className="h-4 w-4 text-blue-600" />
-              )}
-              <span className="text-sm font-medium text-gray-700">
-                {activeAccount.name}
-              </span>
-            </div>
-          )}
-        </div>
-        <div className="flex items-center space-x-2">
-          <button
-            onClick={fbLogin}
-            disabled={!fbSdkLoaded || !isFacebookApiReady()}
-            className="flex items-center space-x-2 px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors disabled:opacity-50"
-          >
-            <Plus className="h-4 w-4" />
-            <span>Add Account</span>
-          </button>
-          <button
-            onClick={() => setConfirmDisconnectAll(true)}
-            className="flex items-center space-x-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-          >
-            <Trash2 className="h-4 w-4" />
-            <span>Disconnect All</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Show error if any */}
-      {fbError && renderError()}
-
-      {/* Show active account details */}
-      {activeAccount && (
-        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-6">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center space-x-4">
-              {activeAccount.picture?.data?.url ? (
-                <img
-                  src={activeAccount.picture.data.url}
-                  alt="Facebook profile"
-                  className="w-20 h-20 rounded-full border-4 border-blue-200"
-                />
-              ) : (
-                <div className="w-20 h-20 bg-gradient-to-br from-blue-400 to-indigo-600 rounded-full flex items-center justify-center">
-                  <Facebook className="h-10 w-10 text-white" />
-                </div>
-              )}
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900">{activeAccount.name}</h2>
-                <p className="text-sm text-gray-600">{activeAccount.email}</p>
-              </div>
-            </div>
-            <div className="flex space-x-2">
-              <button
-                onClick={refreshPageTokens}
-                disabled={!fbSdkLoaded || !isFacebookApiReady() || !activeAccount}
-                className="flex items-center space-x-2 px-3 py-2 bg-white border border-blue-200 text-blue-700 rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-50 text-sm"
-              >
-                <Settings className="h-4 w-4" />
-                <span>Refresh</span>
-              </button>
-              <button
-                onClick={() => setConfirmDisconnectId(activeAccount.id)}
-                className="flex items-center space-x-2 px-3 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors text-sm"
-              >
-                <Trash2 className="h-4 w-4" />
-                <span>Disconnect</span>
-              </button>
-            </div>
-          </div>
-          
-          <div className="grid grid-cols-3 gap-6 text-center mb-6">
-            <div className="bg-white rounded-xl p-4 shadow-sm">
-              <div className="text-2xl font-bold text-blue-600">
-                {fbPages.length}
-              </div>
-              <div className="text-sm text-gray-600 font-medium">Pages</div>
-            </div>
-            <div className="bg-white rounded-xl p-4 shadow-sm">
-              <div className="text-2xl font-bold text-blue-600">
-                {activeAccount.email || 'N/A'}
-              </div>
-              <div className="text-sm text-gray-600 font-medium">Email</div>
-            </div>
-            <div className="bg-white rounded-xl p-4 shadow-sm">
-              <div className="text-2xl font-bold text-blue-600">
-                {activeAccount.connectedAt ? new Date(activeAccount.connectedAt).toLocaleDateString() : 'N/A'}
-              </div>
-              <div className="text-sm text-gray-600 font-medium">Connected</div>
-            </div>
-          </div>
-
-          {/* Historical Charts Toggle */}
-          <div className="mb-6">
-            <div className="flex items-center justify-between bg-white rounded-lg border border-gray-200 p-4">
-              <div className="flex items-center space-x-3">
-                <Calendar className="h-5 w-5 text-blue-600" />
-                <div>
-                  <h4 className="font-medium text-gray-900">Historical Analytics</h4>
-                  <p className="text-sm text-gray-600">View long-term trends and growth patterns</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowHistoricalCharts(prev => ({
-                  ...prev,
-                  [activeAccount.id]: !prev[activeAccount.id]
-                }))}
-                className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm"
-              >
-                <Calendar className="h-4 w-4" />
-                <span>
-                  {showHistoricalCharts[activeAccount.id] ? 'Hide' : 'Show'} Historical Data
-                </span>
-              </button>
-            </div>
-          </div>
-
-          {/* Show Historical Charts */}
-          {showHistoricalCharts[activeAccount.id] && (
-            <TimePeriodChart
-              platform="facebook"
-              accountId={activeAccount.id}
-              title="Facebook Historical Analytics"
-              defaultMetric="engagement"
-            />
-          )}
-
-          {/* Render followers timeline chart if available */}
-          {renderFollowersTrendChart(activeAccount.id)}
-        </div>
-      )}
-
-      {/* Show pages for active account */}
-      {activeAccount && (
-        <div>
-          <h4 className="font-medium mb-3">Pages for {activeAccount.name}:</h4>
-          {fbPages.length === 0 ? (
-            <div className="text-center py-12 text-gray-500">
-              <Facebook className="h-12 w-12 mx-auto mb-3 opacity-50" />
-              <p>No pages found or you don't manage any pages.</p>
-              <p className="text-sm">Make sure you're an admin or editor of at least one Facebook page.</p>
-              <button
-                onClick={fetchFbPages}
-                disabled={!isFacebookApiReady()}
-                className="mt-3 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50 text-sm"
-              >
-                🔄 Retry Loading Pages
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {fbPages.map(page => renderPageDetails(page))}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-
-
-  // Remove account (with confirmation)
-  const removeAccount = async (accountId, skipConfirm = false) => {
-    if (!skipConfirm) {
-      setConfirmDisconnectId(accountId);
-      return;
-    }
-    const updatedAccounts = connectedAccounts.filter(acc => acc.id !== accountId);
-    setConnectedAccounts(updatedAccounts);
-    saveAccountsToStorage(updatedAccounts);
-
-    setFbError(null);
-
-    const customerId = getCurrentCustomerId();
-    if (customerId) {
-      try {
-        const res = await fetch(`${process.env.REACT_APP_API_URL}/api/customer-social-links/${customerId}`);
-        const data = await res.json();
-        if (data.success && Array.isArray(data.accounts)) {
-          const backendAcc = data.accounts.find(acc => acc.platformUserId === accountId);
-          if (backendAcc && backendAcc._id) {
-            await fetch(`${process.env.REACT_APP_API_URL}/api/customer-social-links/${backendAcc._id}`, {
-              method: 'DELETE'
-            });
-          }
-        }
-      } catch (err) {
-        console.warn('Failed to remove account from backend:', err);
-      }
-    }
-
-    if (activeAccountId === accountId) {
-      if (updatedAccounts.length > 0) {
-        switchAccount(updatedAccounts[0].id);
-      } else {
-        setActiveAccountId(null);
-        setActiveAccount(null);
-        setFbPages([]);
-        setPageInsights({});
-        setPagePosts({});
-        setAnalyticsData({});
-        removeUserData('fb_active_account_id');
-        setFbError(null);
-      }
-    }
-    setConfirmDisconnectId(null); // Close modal after action
-  };
-
-  // Logout all accounts (with confirmation)
-  const fbLogoutAll = (skipConfirm = false) => {
-    if (!skipConfirm) {
-      setConfirmDisconnectAll(true);
-      return;
-    }
-    if (!isFacebookApiReady()) {
-      clearAllAccountData();
-      setConfirmDisconnectAll(false);
-      return;
-    }
-    window.FB.getLoginStatus((response) => {
-      if (response.status === 'connected') {
-        window.FB.logout(() => {
-          clearAllAccountData();
-          setConfirmDisconnectAll(false);
-        });
-      } else {
-        clearAllAccountData();
-        setConfirmDisconnectAll(false);
-      }
-    });
-  };
-
-  // Add this helper function inside the component
-  const clearAllAccountData = () => {
-    setConnectedAccounts([]);
-    setActiveAccountId(null);
-    setActiveAccount(null);
-    setFbPages([]);
-    setPageInsights({});
-    setPagePosts({});
-    setAnalyticsData({});
-    removeUserData('fb_connected_accounts');
-    removeUserData('fb_active_account_id');
-    setFbError(null);
-  };
-
-  // Confirmation Modal Component
-  const renderConfirmModal = () => {
-    if (confirmDisconnectId) {
-      const account = connectedAccounts.find(acc => acc.id === confirmDisconnectId);
-      return (
-        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg p-6 max-w-sm w-full">
-            <h3 className="text-lg font-bold mb-2">Disconnect Account</h3>
-            <p className="mb-4">
-              Are you sure you want to disconnect <span className="font-semibold">{account?.name}</span>?
-              This will remove the account completely.
-            </p>
-            <div className="flex justify-end space-x-2">
-              <button
-                onClick={() => setConfirmDisconnectId(null)}
-                className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => removeAccount(confirmDisconnectId, true)}
-                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-              >
-                Disconnect
-              </button>
-            </div>
-          </div>
-        </div>
-      );
-    }
-    if (confirmDisconnectAll) {
-      return (
-        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg p-6 max-w-sm w-full">
-            <h3 className="text-lg font-bold mb-2">Disconnect All Accounts</h3>
-            <p className="mb-4">
-              Are you sure you want to disconnect <span className="font-semibold">{connectedAccounts.length}</span> account(s)? This will remove all Facebook accounts completely.
-            </p>
-            <div className="flex justify-end space-x-2">
-              <button
-                onClick={() => setConfirmDisconnectAll(false)}
-                className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => fbLogoutAll(true)}
-                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-              >
-                Disconnect All
-              </button>
-            </div>
-          </div>
-        </div>
-      );
-    }
-    return null;
-  };
-
-  // Add Facebook onboarding UI
-  const renderFacebookOnboarding = () => (
-    <div className="flex flex-col items-center justify-center py-16">
-      <div className="bg-white rounded-xl shadow-lg p-8 max-w-md w-full text-center">
-        <div className="flex justify-center mb-4">
-          <Facebook className="h-12 w-12 text-blue-600" />
-        </div>
-        <h2 className="text-2xl font-bold mb-2">Connect Facebook Business Accounts</h2>
-        <p className="text-gray-600 mb-6">
-          Connect multiple Facebook accounts and manage all your pages from one dashboard with historical data tracking!
-        </p>
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 text-left">
-          <div className="font-semibold mb-2 flex items-center">
-            <Settings className="h-4 w-4 mr-2 text-blue-600" />
-            Multi-Account Setup Guide
-          </div>
-          <ol className="list-decimal ml-5 text-sm text-blue-900 space-y-1">
-            <li>Convert your Facebook profile to a Business account (if needed)</li>
-            <li>Make sure you manage at least one Facebook Page</li>
-            <li>Click "Connect" below and log in to Facebook</li>
-            <li>Grant permissions to access your managed pages</li>
-            <li>Select which accounts/pages to connect and manage</li>
-            <li>Historical data will be captured automatically</li>
-          </ol>
-        </div>
-        <button
-          onClick={fbLogin}
-          disabled={!fbSdkLoaded || !isFacebookApiReady()}
-          className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold text-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center"
-        >
-          <Facebook className="h-5 w-5 mr-2" />
-          Connect Facebook Account
-        </button>
-      </div>
-    </div>
-  );
-
+  // --- Facebook Main UI (like Instagram) ---
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white shadow-sm border-b">
@@ -1858,26 +1635,186 @@ function FacebookIntegration() {
       </header>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="bg-white rounded-lg shadow-md p-6">
-          {!fbSdkLoaded ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                <p className="text-gray-600">Loading Facebook SDK...</p>
+          {/* Debug info (optional, can remove) */}
+          {/* ...existing code... */}
+          {renderError()}
+          {connectedAccounts.length === 0 ? (
+            <div className="text-center py-12">
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-2xl mb-4">
+                <Facebook className="h-8 w-8 text-blue-600" />
               </div>
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">Connect Facebook Accounts</h3>
+              <p className="text-gray-600 mb-6 max-w-md mx-auto">
+                Connect your Facebook accounts to manage your pages and access detailed analytics.
+              </p>
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 max-w-md mx-auto">
+                <h4 className="font-medium text-blue-800 mb-2">📱 Multi-Account Setup Guide</h4>
+                <div className="text-sm text-blue-700 text-left space-y-1">
+                  <p>1. Log in with your Facebook account</p>
+                  <p>2. Grant permissions to access your pages</p>
+                  <p>3. Select which accounts to connect and manage</p>
+                  <p>4. Historical data will be captured automatically</p>
+                </div>
+              </div>
+              <button
+                onClick={fbLogin}
+                disabled={!isFacebookApiReady()}
+                className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-8 py-3 rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 flex items-center space-x-3 mx-auto font-medium"
+              >
+                <Facebook className="h-5 w-5" />
+                <span>Connect Facebook Account</span>
+              </button>
             </div>
           ) : (
-            <>
-              {connectedAccounts.length === 0
-                ? renderFacebookOnboarding()
-                : (
-                  <>
-                    {renderConnectedState()}
-                    {renderConfirmModal()}
-                  </>
-                )
-              }
-            </>
+            <div className="space-y-6">
+              {/* Show account selector if multiple accounts */}
+              {connectedAccounts.length > 1 && renderAccountSelector()}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  <div className="flex items-center space-x-1 bg-green-100 px-3 py-1 rounded-full">
+                    <span className="text-green-600 font-bold">●</span>
+                    <span className="text-sm font-medium text-green-700">
+                      {connectedAccounts.length} Account{connectedAccounts.length !== 1 ? 's' : ''} Connected
+                    </span>
+                  </div>
+                  {activeAccount && (
+                    <div className="flex items-center space-x-2">
+                      {activeAccount.picture && (
+                        <img
+                          src={activeAccount.picture.data.url}
+                          alt="Profile"
+                          className="w-6 h-6 rounded-full"
+                        />
+                      )}
+                      <span className="text-sm font-medium text-gray-700">
+                        {activeAccount.name}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={refreshPageTokens}
+                    disabled={!fbSdkLoaded || !isFacebookApiReady() || !activeAccount}
+                    className="flex items-center space-x-2 px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors disabled:opacity-50"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    <span>Refresh Tokens</span>
+                  </button>
+                  <button
+                    onClick={fbLogin}
+                    disabled={!fbSdkLoaded || !isFacebookApiReady()}
+                    className="flex items-center space-x-2 px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors disabled:opacity-50"
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span>Add Account</span>
+                  </button>
+                  <button
+                    onClick={fbLogoutAll}
+                    className="flex items-center space-x-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                    <span>Disconnect All</span>
+                  </button>
+                </div>
+              </div>
+              {/* Active account details and pages */}
+              {activeAccount && (
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-6">
+                  <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center space-x-4">
+                      {activeAccount.picture && (
+                        <img
+                          src={activeAccount.picture.data.url}
+                          alt="Profile"
+                          className="w-20 h-20 rounded-full border-4 border-blue-200"
+                        />
+                      )}
+                      <div>
+                        <h2 className="text-2xl font-bold text-gray-900">{activeAccount.name}</h2>
+                        <p className="text-sm text-gray-600">{activeAccount.email}</p>
+                      </div>
+                    </div>
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={refreshPageTokens}
+                        disabled={!fbSdkLoaded || !isFacebookApiReady() || !activeAccount}
+                        className="flex items-center space-x-2 px-3 py-2 bg-white border border-blue-200 text-blue-700 rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-50 text-sm"
+                      >
+                        <RefreshCw className="h-4 w-4" />
+                        <span>Refresh</span>
+                      </button>
+                      <button
+                        onClick={fbLogoutAll}
+                        className="flex items-center space-x-2 px-3 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors text-sm"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                        <span>Disconnect</span>
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <h4 className="font-medium mb-3">Pages for {activeAccount.name}:</h4>
+                    {fbPages.length === 0 ? (
+                      <div className="text-center py-8 text-gray-500">
+                        <Facebook className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                        <p>No pages found or you don't manage any pages.</p>
+                        <p className="text-sm">Make sure you're an admin or editor of at least one Facebook page.</p>
+                        <button
+                          onClick={fetchFbPages}
+                          disabled={!isFacebookApiReady()}
+                          className="mt-3 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50 text-sm"
+                        >
+                          🔄 Retry Loading Pages
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {fbPages.map(page => (
+                          <div key={page.id}>
+                            {renderPageDetails(page)}
+                            {/* --- Historical Analytics Toggle and Chart --- */}
+                            <div className="mb-6">
+                              <div className="flex items-center justify-between bg-white rounded-lg border border-gray-200 p-4">
+                                <div className="flex items-center space-x-3">
+                                  <Calendar className="h-5 w-5 text-blue-600" />
+                                  <div>
+                                    <h4 className="font-medium text-gray-900">Historical Analytics</h4>
+                                    <p className="text-sm text-gray-600">View long-term trends and growth patterns</p>
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => setShowHistoricalCharts(prev => ({
+                                    ...prev,
+                                    [page.id]: !prev[page.id]
+                                  }))}
+                                  className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                                >
+                                  <Calendar className="h-4 w-4" />
+                                  <span>
+                                    {showHistoricalCharts[page.id] ? 'Hide' : 'Show'} Historical Data
+                                  </span>
+                                </button>
+                              </div>
+                            </div>
+                            {showHistoricalCharts[page.id] && (
+                              <TimePeriodChart
+                                platform="facebook"
+                                accountId={page.id}
+                                title="Facebook Historical Analytics"
+                                defaultMetric="followers"
+                              />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           )}
+          {renderPostModal()}
         </div>
       </div>
     </div>

@@ -46,7 +46,8 @@ function SchedulePostModal({
     platformSettings: {},
     scheduledDate: '',
     scheduledTime: '',
-    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    postType: 'feed' // added: 'feed' | 'story' | 'reel'
   });
   const [submitting, setSubmitting] = useState(false);
   const [isPostingNow, setIsPostingNow] = useState(false);
@@ -80,11 +81,27 @@ function SchedulePostModal({
         platformSettings: {},
         scheduledDate: '',
         scheduledTime: '',
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        postType: 'feed' // initialize
       });
     }
   }, [selectedContent, getCustomerSocialAccounts]);
 
+  // Listen for integration success messages (from Configure popup)
+  useEffect(() => {
+    const handler = (event) => {
+      if (event.origin !== window.location.origin) return;
+      const data = event.data || {};
+      if (data.type === 'SOCIAL_INTEGRATION_SUCCESS' && data.customerId === selectedContent?.customerId) {
+        // refresh local accounts when a new social integration completes
+        const refreshed = getCustomerSocialAccounts(selectedContent.customerId);
+        setLocalAccounts(refreshed);
+      }
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, [selectedContent, getCustomerSocialAccounts]);
+  
   // Use localAccounts instead of getCustomerSocialAccounts for UI
   const getAvailableAccountsForPlatform = (customerId, platform) => {
     return localAccounts.filter(account => account.platform === platform);
@@ -282,7 +299,7 @@ function SchedulePostModal({
     return true;
   };
 
-  // Create post data object for multiple platforms
+  // Create posts data object for multiple platforms
   const createPostsData = (isScheduled = true) => {
     const fullCaption = scheduleFormData.hashtags 
       ? `${scheduleFormData.caption}\n\n${scheduleFormData.hashtags}`
@@ -316,7 +333,8 @@ function SchedulePostModal({
         calendar_id: selectedContent.calendar_id || selectedContent.calendarId || '',
         calendar_name: selectedContent.calendar_name || selectedContent.calendarName || '',
         item_id: selectedContent.item_id || selectedContent.itemId || selectedContent.id || '',
-        item_name: selectedContent.item_name || selectedContent.itemName || selectedContent.title || ''
+        item_name: selectedContent.item_name || selectedContent.itemName || selectedContent.title || '',
+        postType: scheduleFormData.postType // added: include chosen post type
       };
 
       // Add scheduled time
@@ -1160,6 +1178,42 @@ function SchedulePostModal({
                     className="hidden"
                   />
                   <Image className="h-8 w-8 mx-auto mb-3 text-gray-400" />
+                  {/* Post type selector for Instagram (Feed / Story / Reel) */}
+                  <div className="flex items-center justify-center gap-3 mb-3">
+                    <label className="text-sm flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="postType"
+                        value="feed"
+                        checked={scheduleFormData.postType === 'feed'}
+                        onChange={() => setScheduleFormData(prev => ({ ...prev, postType: 'feed' }))}
+                        className="form-radio"
+                      />
+                      Feed
+                    </label>
+                    <label className="text-sm flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="postType"
+                        value="story"
+                        checked={scheduleFormData.postType === 'story'}
+                        onChange={() => setScheduleFormData(prev => ({ ...prev, postType: 'story' }))}
+                        className="form-radio"
+                      />
+                      Story
+                    </label>
+                    <label className="text-sm flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="postType"
+                        value="reel"
+                        checked={scheduleFormData.postType === 'reel'}
+                        onChange={() => setScheduleFormData(prev => ({ ...prev, postType: 'reel' }))}
+                        className="form-radio"
+                      />
+                      Reel
+                    </label>
+                  </div>
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}

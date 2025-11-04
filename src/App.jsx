@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 
 import { AuthProvider } from './admin/contexts/AuthContext';
@@ -69,6 +69,7 @@ import ContentDetailView from './admin/components/modals/ContentDetailView';
 import MetaLoginPopup from './components/MetaLoginPopup';
 import CustomerWelcome from './customer/auth/CustomerWelcome';
 import Configure from './components/Configure';
+import SocialIntegrations from './customer/Integration/SocialIntegrations';
 
 // --- ProtectedRoute for all portals ---
 function ProtectedRoutePortal({ children, role }) {
@@ -95,12 +96,99 @@ function ProtectedRoutePortal({ children, role }) {
   return children;
 }
 
+// Robust query parser: prefer explicit search params, fall back to hash query.
+const parseQuery = () => {
+  if (window.location.search && window.location.search.length > 1) {
+    try {
+      return new URLSearchParams(window.location.search);
+    } catch (e) { /* fall through */ }
+  }
+  const hash = window.location.hash || '';
+  const idx = hash.indexOf('?');
+  if (idx !== -1) {
+    try {
+      return new URLSearchParams(hash.substring(idx + 1));
+    } catch (e) { /* fall through */ }
+  }
+  return new URLSearchParams();
+};
+
+// NEW: Public wrapper to render SocialIntegrations without auth
+function SocialIntegrationsPublic() {
+  const [customer, setCustomer] = React.useState(null);
+  const [platform, setPlatform] = React.useState('');
+  const socialRef = React.useRef(null);
+
+  React.useEffect(() => {
+    const params = parseQuery();
+    const customerId = params.get('customerId') || params.get('id') || '';
+    const customerName = params.get('customerName') || params.get('name') || '';
+    const platformParam = params.get('platform') || params.get('p') || '';
+    if (customerId) {
+      setCustomer({ id: customerId, name: customerName || 'Customer' });
+    }
+    setPlatform(platformParam);
+  }, []);
+
+  if (!customer || !platform) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6">
+        <div className="max-w-xl w-full bg-white rounded-xl p-6 shadow text-center">
+          <h3 className="font-semibold text-slate-900">Missing parameters</h3>
+          <p className="text-sm text-slate-600 mt-2">This page expects customerId and platform in the URL query. Example: /#/customer/social-integrations?customerId=xxx&platform=facebook</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen flex items-start justify-center p-6">
+      <div className="w-full max-w-2xl bg-white rounded-xl p-6 shadow">
+        <SocialIntegrations
+          ref={socialRef}
+          platform={platform}
+          customer={customer}
+          compact={true}
+          onConnectionSuccess={() => {
+            // minimal success UX: redirect to home or close
+            window.location.href = '/';
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
 function App() {
   // State to hold integration data
   const [facebookPages, setFacebookPages] = useState([]);
   const [instagramAccount, setInstagramAccount] = useState(null);
   const [youtubeChannels, setYoutubeChannels] = useState([]);
   const [customerInfo, setCustomerInfo] = useState(null);
+
+  // If the QR was generated with search params but the hash points somewhere else
+  // (for example ".../configure?...# /login"), rewrite the hash to load /configure
+  // with the original query so Configure.jsx runs under HashRouter.
+  useEffect(() => {
+    try {
+      const search = window.location.search || '';
+      if (!search || search.length < 2) return;
+      const sp = new URLSearchParams(search);
+      const hasCustomer = sp.get('customerId');
+      const hasPlatform = sp.get('platform') || sp.get('p');
+      if (!hasCustomer || !hasPlatform) return;
+
+      const currentHash = (window.location.hash || '').replace(/^#/, '');
+      if (!currentHash.startsWith('/configure')) {
+        // preserve the exact search string (including any tokens) when building the new hash
+        const qs = sp.toString();
+        // set hash to route HashRouter understands: "/configure?{qs}"
+        window.location.hash = `/configure?${qs}`;
+      }
+    } catch (e) {
+      // ignore errors silently
+    }
+  }, []);
 
   return (
     <Router>
@@ -128,6 +216,10 @@ function App() {
               
               {/* QR Code Configure Route - Public (no authentication required) */}
               <Route path="/configure" element={<Configure />} />
+
+              {/* NEW: Public direct access to SocialIntegrations (no login required) */}
+              <Route path="/customer/social-integrations" element={<SocialIntegrationsPublic />} />
+              <Route path="/social-integrations" element={<SocialIntegrationsPublic />} />
               
               {/* Customer Integration Routes - Public (for QR code access) */}
               <Route path="/customer/integration/facebook" element={<FacebookIntegration />} />
@@ -171,6 +263,11 @@ function App() {
 
               {/* Admin Portal (protected) */}
               <Route path="/admin" element={
+                <ProtectedRoutePortal role="admin">
+                  <Dashboard />
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/admin/dashboard" element={
                 <ProtectedRoutePortal role="admin">
                   <Dashboard />
                 </ProtectedRoutePortal>
@@ -456,4 +553,3 @@ function App() {
 }
 
 export default App;
-             

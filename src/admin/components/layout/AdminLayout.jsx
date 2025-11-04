@@ -23,7 +23,12 @@ function AdminLayout({ children, title }) {
         <div className="px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center">
-              <Logo size="medium" />
+              <div 
+                onClick={() => navigate('/admin/dashboard')}
+                className="cursor-pointer"
+              >
+                <Logo size="medium" />
+              </div>
               <div className="ml-6">
                 <h1 className="text-xl font-bold text-gray-900">{title}</h1>
                 <p className="text-sm text-gray-500">Manage your content strategy</p>

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Upload, Image, X, Check, FileText, Calendar, Clock, Palette, Send, MapPin, Tag, MessageSquare, Play, Video } from 'lucide-react';
+import Logo from '../../components/layout/Logo'; // Add this import for watermark overlay
 
 // Helper to get creator email from localStorage
 function getCreatorEmail() {
@@ -21,6 +22,80 @@ function getCreatorEmail() {
   }
   return email;
 }
+
+// Helper to load watermark logo as base64
+const getLogoBase64 = () => {
+  return new Promise((resolve, reject) => {
+    const img = new window.Image();
+    img.crossOrigin = 'Anonymous';
+    img.src = '/logoAirspark.png';
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.onerror = reject;
+  });
+};
+
+// Helper to watermark image (improved visibility)
+const watermarkImage = async (file, logoBase64) => {
+  return new Promise((resolve, reject) => {
+    const img = new window.Image();
+    img.src = URL.createObjectURL(file);
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+
+      // Draw watermark logo at bottom-right, larger but subtle
+      const logoImg = new window.Image();
+      logoImg.src = logoBase64;
+      logoImg.onload = () => {
+        // Use 1/4th of image width for logo (slightly larger)
+        const logoW = canvas.width / 4;
+        const logoH = logoImg.height * (logoW / logoImg.width);
+        const padding = Math.max(logoW * 0.12, 12);
+
+        const x = canvas.width - logoW - padding;
+        const y = canvas.height - logoH - padding;
+
+        // Very faint backdrop for contrast (very low alpha -> not intrusive)
+        ctx.save();
+        ctx.globalAlpha = 0.06;
+        ctx.fillStyle = '#ffffff';
+        const r = Math.max(6, logoW * 0.05);
+        // draw rounded rect backdrop
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.arcTo(x + logoW, y, x + logoW, y + logoH, r);
+        ctx.arcTo(x + logoW, y + logoH, x, y + logoH, r);
+        ctx.arcTo(x, y + logoH, x, y, r);
+        ctx.arcTo(x, y, x + logoW, y, r);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+
+        // Draw logo with low opacity so it's subtle but readable on inspection
+        ctx.save();
+        ctx.globalAlpha = 0.35; // subtle but not too light/dark
+        ctx.drawImage(logoImg, x, y, logoW, logoH);
+        ctx.restore();
+
+        canvas.toBlob((blob) => {
+          resolve(blob);
+        }, file.type);
+      };
+      logoImg.onerror = reject;
+    };
+    img.onerror = reject;
+  });
+};
 
 function ContentUpload() {
   const navigate = useNavigate();
@@ -149,18 +224,21 @@ function ContentUpload() {
     }
   };
 
-  const handleFiles = (files) => {
-    Array.from(files).forEach(file => {
-      if (file.type.startsWith('image/') || file.type.startsWith('video/')) {
+  const handleFiles = async (files) => {
+    const logoBase64 = await getLogoBase64();
+    Array.from(files).forEach(async file => {
+      if (file.type.startsWith('image/')) {
+        // Watermark image
+        const watermarkedBlob = await watermarkImage(file, logoBase64);
         const reader = new FileReader();
         reader.onload = (e) => {
           const newFile = {
             id: Date.now() + Math.random(),
-            file: file,
+            file: new File([watermarkedBlob], file.name, { type: file.type }),
             preview: e.target.result,
             name: file.name,
-            size: file.size,
-            type: file.type.startsWith('image/') ? 'image' : 'video',
+            size: watermarkedBlob.size,
+            type: 'image',
             uploaded: false,
             uploading: false,
             publicUrl: null,
@@ -168,7 +246,23 @@ function ContentUpload() {
           };
           setUploadedFiles(prev => [...prev, newFile]);
         };
-        reader.readAsDataURL(file);
+        reader.readAsDataURL(watermarkedBlob);
+      } else if (file.type.startsWith('video/')) {
+        // No watermarking for video, just add for upload/preview
+        const preview = URL.createObjectURL(file);
+        const newFile = {
+          id: Date.now() + Math.random(),
+          file: file,
+          preview: preview,
+          name: file.name,
+          size: file.size,
+          type: 'video',
+          uploaded: false,
+          uploading: false,
+          publicUrl: null,
+          error: null
+        };
+        setUploadedFiles(prev => [...prev, newFile]);
       }
     });
   };

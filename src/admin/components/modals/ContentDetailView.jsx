@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Send, Image, FileText, MessageSquare, Calendar, ChevronLeft, ChevronRight,
-  Play, Video
+  Play, Video, Trash2 // <-- add Trash2
 } from 'lucide-react';
 
 function ContentDetailView({ 
@@ -14,8 +14,9 @@ function ContentDetailView({
   getPublishedPlatformsForContent,
   handleScheduleContent,
   isVideoUrl,
-  calendarName, // <-- add prop
-  itemName      // <-- add prop
+  calendarName,
+  itemName,
+  onDeleteVersion // <-- add prop
 }) {
   const [selectedVersionIndex, setSelectedVersionIndex] = useState(0);
   const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
@@ -405,47 +406,61 @@ function ContentDetailView({
                     minute: '2-digit'
                   });
                   return (
-                    <button
-                      key={version.id}
-                      onClick={() => {
-                        setSelectedVersionIndex(index);
-                        setSelectedMediaIndex(0);
-                      }}
-                      className={`w-full text-left px-6 py-4 flex flex-col border-l-4 transition-all duration-200 hover:bg-gray-50 ${
-                        selectedVersionIndex === index
-                          ? "bg-purple-50 border-l-purple-600"
-                          : "bg-white border-l-transparent"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="font-semibold text-gray-900 text-base">
-                          Version {version.versionNumber}
-                        </span>
-                        {selectedVersionIndex === index && (
-                          <span className="ml-2 text-xs font-medium text-purple-700 bg-purple-100 px-2 py-1 rounded-full">
-                            Current
+                    <div className="relative" key={version.id}>
+                      <button
+                        onClick={() => {
+                          setSelectedVersionIndex(index);
+                          setSelectedMediaIndex(0);
+                        }}
+                        className={`w-full text-left px-6 py-4 flex flex-col border-l-4 transition-all duration-200 hover:bg-gray-50 ${
+                          selectedVersionIndex === index
+                            ? "bg-purple-50 border-l-purple-600"
+                            : "bg-white border-l-transparent"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold text-gray-900 text-base">
+                            Version {version.versionNumber}
                           </span>
-                        )}
-                      </div>
-                      <div className="flex items-center mt-1 text-xs text-gray-500 gap-2">
-                        <span className="flex items-center">
-                          <Calendar className="h-3 w-3 mr-1" />
-                          {formattedDate}
-                        </span>
-                        {version.media && version.media.length > 0 && (
-                          <span className="flex items-center ml-2">
-                            <Image className="h-3 w-3 mr-1" />
-                            {version.media.length} media
+                          {selectedVersionIndex === index && (
+                            <span className="ml-2 text-xs font-medium text-purple-700 bg-purple-100 px-2 py-1 rounded-full">
+                              Current
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center mt-1 text-xs text-gray-500 gap-2">
+                          <span className="flex items-center">
+                            <Calendar className="h-3 w-3 mr-1" />
+                            {formattedDate}
                           </span>
-                        )}
-                        {version.comments && version.comments.length > 0 && (
-                          <span className="flex items-center ml-2">
-                            <MessageSquare className="h-3 w-3 mr-1" />
-                            {version.comments.length} comments
-                          </span>
-                        )}
-                      </div>
-                    </button>
+                          {version.media && version.media.length > 0 && (
+                            <span className="flex items-center ml-2">
+                              <Image className="h-3 w-3 mr-1" />
+                              {version.media.length} media
+                            </span>
+                          )}
+                          {version.comments && version.comments.length > 0 && (
+                            <span className="flex items-center ml-2">
+                              <MessageSquare className="h-3 w-3 mr-1" />
+                              {version.comments.length} comments
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                      {/* Delete icon for version */}
+                      <button
+                        className="absolute top-4 right-4 p-1 bg-white rounded-full shadow hover:bg-red-100 transition"
+                        title="Delete Version"
+                        onClick={() => {
+                          if (window.confirm('Are you sure you want to delete this version?')) {
+                            onDeleteVersion(version.id, selectedContent.id, selectedContent.customerId);
+                          }
+                        }}
+                        style={{ zIndex: 10 }}
+                      >
+                        <Trash2 className="h-4 w-4 text-red-500" />
+                      </button>
+                    </div>
                   );
                 })}
               </div>

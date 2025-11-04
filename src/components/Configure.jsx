@@ -1,684 +1,333 @@
-import React, { useEffect, useState } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Loader2, AlertCircle, ExternalLink, CheckCircle, User, Plus, RefreshCw, Users, FileText, Heart } from 'lucide-react';
+import React, { useEffect, useState, useRef } from 'react';
+import SocialIntegrations from '../customer/Integration/SocialIntegrations';
+import { ExternalLink, AlertCircle, CheckCircle, Clock } from 'lucide-react';
+
+const QR_EXPIRATION_TIME = 2 * 60 * 60 * 1000; // match backend (2 hours)
+
+// Robust query parser: prefer explicit search params, fall back to hash query.
+const parseQuery = () => {
+  // 1) If the URL contains search params (?a=1&b=2), use them
+  if (window.location.search && window.location.search.length > 1) {
+    try {
+      return new URLSearchParams(window.location.search);
+    } catch (e) { /* fall through */ }
+  }
+
+  // 2) Otherwise, check the hash fragment for query params (#/path?x=1)
+  const hash = window.location.hash || '';
+  const idx = hash.indexOf('?');
+  if (idx !== -1) {
+    try {
+      return new URLSearchParams(hash.substring(idx + 1));
+    } catch (e) { /* fall through */ }
+  }
+
+  // 3) Empty params if none found
+  return new URLSearchParams();
+};
 
 export default function Configure() {
-  const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [status, setStatus] = useState('Processing...');
-  const [connectedAccounts, setConnectedAccounts] = useState([]);
-  const [checkingAccounts, setCheckingAccounts] = useState(false);
-  const [showLoginPrompt, setShowLoginPrompt] = useState(false);
-  const [hasCheckedAccounts, setHasCheckedAccounts] = useState(false);
-  const [accountDetails, setAccountDetails] = useState({});
+  const [expired, setExpired] = useState(false);
+  const [customer, setCustomer] = useState(null);
+  const [platformKey, setPlatformKey] = useState('');
+  const [autoConnect, setAutoConnect] = useState(false);
+  const [timeRemaining, setTimeRemaining] = useState(null);
 
-  const customerId = searchParams.get('customerId');
-  const platform = searchParams.get('platform');
-  const autoConnect = searchParams.get('autoConnect');
+  // NEW: awaiting user gesture to allow opening popup
+  const [awaitingUserGesture, setAwaitingUserGesture] = useState(false);
 
-  // Enhanced function to check for existing connected accounts with detailed info
-  const checkConnectedAccounts = async (customerId, platform) => {
-    try {
-      setCheckingAccounts(true);
-      setStatus('Checking for existing accounts...');
-      
-      // Check multiple endpoints for account data
-      const endpoints = [
-        `/api/customer/${customerId}/accounts/${platform}`,
-        `/api/customer/${customerId}/${platform}/profile`,
-        `/api/${platform}/accounts/${customerId}`,
-        `/api/integrations/${platform}/${customerId}`
-      ];
-
-      let accounts = [];
-      let accountData = {};
-
-      // Try each endpoint until we find account data
-      for (const endpoint of endpoints) {
-        try {
-          const response = await fetch(endpoint);
-          if (response.ok) {
-            const data = await response.json();
-            console.log(`Account data from ${endpoint}:`, data);
-            
-            // Handle different response formats
-            if (Array.isArray(data)) {
-              accounts = data;
-            } else if (data.accounts) {
-              accounts = data.accounts;
-            } else if (data.profile || data.username || data.id) {
-              accounts = [data];
-            }
-
-            // If we found accounts, try to get detailed info
-            if (accounts.length > 0) {
-              accountData = await fetchAccountDetails(accounts, platform, customerId);
-              break;
-            }
-          }
-        } catch (error) {
-          console.log(`Failed to fetch from ${endpoint}:`, error);
-          continue;
-        }
-      }
-
-      if (accounts.length > 0) {
-        setConnectedAccounts(accounts);
-        setAccountDetails(accountData);
-        setHasCheckedAccounts(true);
-        console.log('Connected accounts found:', accounts);
-        console.log('Account details:', accountData);
-        return accounts;
-      } else {
-        console.log('No existing accounts found');
-        setHasCheckedAccounts(true);
-        return [];
-      }
-    } catch (error) {
-      console.error('Error checking connected accounts:', error);
-      setHasCheckedAccounts(true);
-      return [];
-    } finally {
-      setCheckingAccounts(false);
-    }
-  };
-
-  // Fetch detailed account information for display
-  const fetchAccountDetails = async (accounts, platform, customerId) => {
-    const details = {};
-    
-    for (const account of accounts) {
-      try {
-        const accountId = account.id || account.username || account.handle;
-        
-        // Try different endpoints for account details
-        const detailEndpoints = [
-          `/api/${platform}/profile/${accountId}`,
-          `/api/${platform}/stats/${accountId}`,
-          `/api/customer/${customerId}/${platform}/${accountId}/details`,
-          `/api/integrations/${platform}/${customerId}/${accountId}`
-        ];
-
-        for (const endpoint of detailEndpoints) {
-          try {
-            const response = await fetch(endpoint);
-            if (response.ok) {
-              const data = await response.json();
-              details[accountId] = {
-                ...account,
-                ...data,
-                followers: data.followers_count || data.followers || account.followers || 0,
-                following: data.following_count || data.following || account.following || 0,
-                posts: data.posts_count || data.posts || data.media_count || account.posts || 0,
-                likes: data.likes_count || data.likes || account.likes || 0,
-                profilePicture: data.profile_picture_url || data.avatar || data.picture || account.profilePicture,
-                bio: data.biography || data.bio || data.description || account.bio,
-                verified: data.is_verified || data.verified || account.verified || false,
-                businessAccount: data.is_business_account || data.business || account.business || false
-              };
-              break;
-            }
-          } catch (error) {
-            console.log(`Failed to fetch details from ${endpoint}:`, error);
-            continue;
-          }
-        }
-
-        // If no detailed info found, use basic account info
-        if (!details[accountId]) {
-          details[accountId] = {
-            ...account,
-            followers: account.followers || 0,
-            following: account.following || 0,
-            posts: account.posts || 0,
-            likes: account.likes || 0
-          };
-        }
-      } catch (error) {
-        console.error(`Error fetching details for account ${account.id}:`, error);
-      }
-    }
-
-    return details;
-  };
+  const socialRef = useRef(null);
 
   useEffect(() => {
-    console.log('Configure component loaded with:', { customerId, platform, autoConnect });
-    console.log('Full URL search params:', window.location.search);
-    console.log('All search params:', Object.fromEntries(searchParams.entries()));
-    
+    const params = parseQuery();
+    const customerId = params.get('customerId') || '';
+    const platform = params.get('platform') || '';
+    const auto = params.get('autoConnect') || params.get('auto') || '';
+    const timestamp = params.get('t');
+
     if (!customerId || !platform) {
-      console.error('Missing parameters:', { customerId, platform });
-      setError('Missing customer ID or platform parameter');
+      setError('Missing customerId or platform in URL.');
       setLoading(false);
       return;
     }
 
-    setStatus('Validating parameters...');
-    
-    // Validate platform
-    const validPlatforms = ['fb', 'insta', 'linkedin', 'yt'];
-    if (!validPlatforms.includes(platform)) {
-      setError(`Unsupported platform: ${platform}`);
-      setLoading(false);
-      return;
-    }
+    setPlatformKey(platform);
+    setAutoConnect(auto === '1' || auto === 'true');
 
-    // Check for existing connected accounts
-    const checkAndProceed = async () => {
-      const accounts = await checkConnectedAccounts(customerId, platform);
-      
-      if (accounts.length > 0) {
-        setStatus('Found existing accounts');
-        setLoading(false);
-        return;
-      }
+    // Use a local timer id and do NOT return early so fetchCustomer runs
+    let tId = null;
 
-      setStatus('Preparing integration redirect...');
-
-      // Redirect to appropriate integration page
-      const platformRoutes = {
-        'fb': '/customer/integration/facebook',
-        'insta': '/customer/integration/instagram',
-        'linkedin': '/customer/integration/linkedin',
-        'yt': '/customer/integration/youtube'
-      };
-
-      const route = platformRoutes[platform];
-      if (route) {
-        // Build redirect URL with all parameters
-        const params = new URLSearchParams();
-        params.set('customerId', customerId);
-        params.set('fromQr', 'true');
-        if (autoConnect) {
-          params.set('autoConnect', autoConnect);
+    if (timestamp) {
+      const linkGeneratedAt = parseInt(timestamp, 10);
+      if (!isNaN(linkGeneratedAt)) {
+        const now = Date.now();
+        const age = now - linkGeneratedAt;
+        if (age > QR_EXPIRATION_TIME) {
+          setExpired(true);
+          setLoading(false);
+          return;
         }
-        
-        const redirectUrl = `${route}?${params.toString()}`;
-        setStatus(`Redirecting to ${getPlatformName(platform)} integration...`);
-        
-        console.log('Redirecting to:', redirectUrl);
-        
-        // Shorter delay for better UX, but still visible
-        setTimeout(() => {
-          console.log('Executing navigation to:', redirectUrl);
-          navigate(redirectUrl, { replace: true });
-        }, 2000);
-      } else {
-        setError('Unsupported platform');
+
+        // start countdown
+        const updateRemaining = () => {
+          const rem = linkGeneratedAt + QR_EXPIRATION_TIME - Date.now();
+          if (rem <= 0) {
+            setTimeRemaining('Expired');
+            setExpired(true);
+            return;
+          }
+          const h = Math.floor(rem / (1000 * 60 * 60));
+          const m = Math.floor((rem % (1000 * 60 * 60)) / (1000 * 60));
+          const s = Math.floor((rem % (1000 * 60)) / 1000);
+          setTimeRemaining(`${h}h ${m}m ${s}s`);
+        };
+        updateRemaining();
+        tId = setInterval(updateRemaining, 1000);
+      }
+    }
+
+    // fetch customer info (try multiple endpoints with fallbacks)
+    const fetchCustomer = async () => {
+      try {
+        setLoading(true);
+        setError('');
+        const apiBase = process.env.REACT_APP_API_URL || '';
+
+        // helper to attempt a fetch and return parsed JSON or null
+        const tryFetchJson = async (url, opts = {}) => {
+          try {
+            const res = await fetch(url, opts);
+            if (!res.ok) {
+              // still try to parse error body for debugging
+              let txt;
+              try { txt = await res.text(); } catch (e) { txt = String(e); }
+              console.warn('Request failed', url, res.status, txt);
+              return { ok: false, status: res.status, bodyText: txt, json: null };
+            }
+            const json = await res.json();
+            return { ok: true, status: res.status, json };
+          } catch (err) {
+            // network error (connection refused, CORS, etc.)
+            console.warn('Network fetch error for', url, err.message);
+            return null;
+          }
+        };
+
+        // Try relative endpoint first (works when backend is proxied by frontend dev server)
+        const relativeById = `/api/customers/${encodeURIComponent(customerId)}`;
+        const attemptRelativeById = await tryFetchJson(relativeById);
+        if (attemptRelativeById && attemptRelativeById.ok) {
+          const fetched = attemptRelativeById.json.customer || attemptRelativeById.json;
+          setCustomer(fetched);
+          setLoading(false);
+          return;
+        }
+
+        // Try configured API base (if different origin)
+        if (apiBase) {
+          const remoteById = `${apiBase.replace(/\/$/, '')}/api/customers/${encodeURIComponent(customerId)}`;
+          const attemptRemoteById = await tryFetchJson(remoteById);
+          if (attemptRemoteById && attemptRemoteById.ok) {
+            const fetched = attemptRemoteById.json.customer || attemptRemoteById.json;
+            setCustomer(fetched);
+            setLoading(false);
+            return;
+          }
+        }
+
+        // Fallback: try listing endpoints (relative then remote)
+        const relativeList = `/api/customers`;
+        const attemptRelativeList = await tryFetchJson(relativeList);
+        if (attemptRelativeList && attemptRelativeList.ok) {
+          const list = attemptRelativeList.json.customers || attemptRelativeList.json;
+          const found = Array.isArray(list) ? list.find(c => String(c._id) === String(customerId) || String(c.id) === String(customerId)) : null;
+          if (found) {
+            setCustomer(found);
+            setLoading(false);
+            return;
+          }
+        }
+
+        if (apiBase) {
+          const remoteList = `${apiBase.replace(/\/$/, '')}/api/customers`;
+          const attemptRemoteList = await tryFetchJson(remoteList);
+          if (attemptRemoteList && attemptRemoteList.ok) {
+            const list = attemptRemoteList.json.customers || attemptRemoteList.json;
+            const found = Array.isArray(list) ? list.find(c => String(c._id) === String(customerId) || String(c.id) === String(customerId)) : null;
+            if (found) {
+              setCustomer(found);
+              setLoading(false);
+            
+              return;
+            }
+          }
+        }
+
+        setError('Customer not found. Please verify the QR was generated for an existing customer or that the API is reachable.');
+      } catch (err) {
+        setError('Network error while fetching customer.');
+      } finally {
         setLoading(false);
       }
     };
 
-    checkAndProceed();
-  }, [customerId, platform, autoConnect, navigate, searchParams]);
+    fetchCustomer();
 
-  const getPlatformName = (platform) => {
-    const names = {
-      'fb': 'Facebook',
-      'insta': 'Instagram',
-      'linkedin': 'LinkedIn',
-      'yt': 'YouTube'
+    // cleanup interval on unmount
+    return () => {
+      if (tId) clearInterval(tId);
     };
-    return names[platform] || platform;
-  };
+  }, []); // run once on mount
 
-  const handleManualRedirect = () => {
-    const platformRoutes = {
-      'fb': '/customer/integration/facebook',
-      'insta': '/customer/integration/instagram',
-      'linkedin': '/customer/integration/linkedin',
-      'yt': '/customer/integration/youtube'
-    };
-    
-    const route = platformRoutes[platform];
-    if (route) {
-      const params = new URLSearchParams();
-      params.set('customerId', customerId);
-      params.set('fromQr', 'true');
-      if (autoConnect) {
-        params.set('autoConnect', autoConnect);
-      }
-      
-      const redirectUrl = `${route}?${params.toString()}`;
-      console.log('Manual redirect to:', redirectUrl);
-      navigate(redirectUrl, { replace: true });
+  // REPLACE previous auto-trigger effect with user-gesture flow:
+  useEffect(() => {
+    // If autoConnect was requested, wait for customer & platform to be loaded,
+    // then show a prompt so the user can tap a button (real user gesture)
+    if (!autoConnect || !customer || !platformKey) return;
+
+    // show prompt that requires a tap (user gesture) to open auth popup
+    setAwaitingUserGesture(true);
+
+    // focus the button shortly after render so mobile users can tap faster
+    const t = setTimeout(() => {
+      const btn = document.getElementById('auto-connect-btn');
+      if (btn) btn.focus();
+    }, 300);
+
+    return () => clearTimeout(t);
+  }, [autoConnect, customer, platformKey]);
+
+  const mapPlatform = (key) => {
+    switch (key) {
+      case 'fb': return 'facebook';
+      case 'insta': return 'instagram';
+      case 'yt': return 'youtube';
+      case 'linkedin': return 'linkedin';
+      case 'twitter': return 'twitter';
+      default: return key; // allow full names as well
     }
   };
 
-  const handleUseExistingAccount = (account) => {
-    setStatus(`Using existing ${getPlatformName(platform)} account...`);
-    setLoading(true);
-    
-    // Here you would typically make an API call to use the existing account
-    // For now, we'll simulate it and redirect to dashboard
-    setTimeout(() => {
-      navigate('/customer/dashboard', { 
-        state: { 
-          message: `Successfully connected using existing ${getPlatformName(platform)} account: ${account.name}` 
-        }
-      });
-    }, 1500);
-  };
-
-  const handleConnectNewAccount = () => {
-    const platformRoutes = {
-      'fb': '/customer/integration/facebook',
-      'insta': '/customer/integration/instagram',
-      'linkedin': '/customer/integration/linkedin',
-      'yt': '/customer/integration/youtube'
-    };
-    
-    const route = platformRoutes[platform];
-    if (route) {
-      const params = new URLSearchParams();
-      params.set('customerId', customerId);
-      params.set('fromQr', 'true');
-      if (autoConnect) {
-        params.set('autoConnect', autoConnect);
-      }
-      
-      const redirectUrl = `${route}?${params.toString()}`;
-      console.log('Connect new account redirect to:', redirectUrl);
-      navigate(redirectUrl, { replace: true });
-    }
-  };
-
-  const handleLoginToPlatform = () => {
-    const platformUrls = {
-      'fb': 'https://www.facebook.com/login',
-      'insta': 'https://www.instagram.com/accounts/login/',
-      'linkedin': 'https://www.linkedin.com/login',
-      'yt': 'https://accounts.google.com/signin'
-    };
-
-    const loginUrl = platformUrls[platform];
-    if (loginUrl) {
-      // Open login in new tab and provide instructions
-      window.open(loginUrl, '_blank');
-      setStatus(`Please login to ${getPlatformName(platform)} in the new tab, then return here and refresh.`);
-    }
-  };
-
-  const handleRefreshAccounts = async () => {
-    setLoading(true);
-    setShowLoginPrompt(false);
-    setConnectedAccounts([]);
-    const accounts = await checkConnectedAccounts(customerId, platform);
-    
-    if (accounts.length === 0) {
-      setShowLoginPrompt(true);
-    }
-    setLoading(false);
-  };
-
-  // Show login prompt when accounts exist but user not logged in current browser
-  if (!loading && hasCheckedAccounts && (showLoginPrompt || (connectedAccounts.length > 0 && showLoginPrompt))) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-        <div className="max-w-md w-full bg-white rounded-lg shadow-md p-6">
-          <div className="text-center mb-6">
-            <User className="w-16 h-16 text-blue-500 mx-auto mb-3" />
-            <h1 className="text-xl font-semibold text-gray-900 mb-2">
-              {getPlatformName(platform)} Login Required
-            </h1>
-            <p className="text-gray-600">
-              {connectedAccounts.length > 0 
-                ? `You have ${connectedAccounts.length} connected account(s), but you need to login to ${getPlatformName(platform)} in this browser to access them.`
-                : `Please login to your ${getPlatformName(platform)} account to see existing connections or connect a new account.`
-              }
-            </p>
-          </div>
-
-          {connectedAccounts.length > 0 && (
-            <div className="bg-blue-50 rounded-lg p-4 mb-6">
-              <h3 className="font-medium text-blue-900 mb-2">Connected Accounts Found:</h3>
-              <div className="space-y-2">
-                {connectedAccounts.map((account, index) => (
-                  <div key={account.id || index} className="flex items-center gap-2 text-sm text-blue-800">
-                    <User className="w-4 h-4" />
-                    <span>{account.name || account.username}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="space-y-3 mb-6">
-            <button
-              onClick={handleLoginToPlatform}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
-            >
-              <ExternalLink className="w-4 h-4" />
-              Login to {getPlatformName(platform)}
-            </button>
-            
-            <button
-              onClick={handleRefreshAccounts}
-              className="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
-            >
-              <Loader2 className="w-4 h-4" />
-              Check Again After Login
-            </button>
-          </div>
-
-          <div className="border-t pt-4">
-            <p className="text-sm text-gray-600 mb-3">Or skip login and:</p>
-            <button
-              onClick={handleConnectNewAccount}
-              className="w-full bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center justify-center gap-2 mb-3"
-            >
-              <Plus className="w-4 h-4" />
-              Connect New Account
-            </button>
-          </div>
-
-          <div className="flex gap-2">
-            <button
-              onClick={() => navigate('/customer')}
-              className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 px-3 py-2 rounded text-sm transition-colors"
-            >
-              Dashboard
-            </button>
-            <button
-              onClick={() => navigate('/customer/login')}
-              className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 px-3 py-2 rounded text-sm transition-colors"
-            >
-              Login
-            </button>
-          </div>
-
-          {/* Instructions */}
-          <div className="mt-4 p-3 bg-yellow-50 rounded-lg text-xs text-yellow-800">
-            <p><strong>Instructions:</strong></p>
-            <ol className="list-decimal list-inside mt-1 space-y-1">
-              <li>Click "Login to {getPlatformName(platform)}" above</li>
-              <li>Login in the new tab that opens</li>
-              <li>Return to this tab</li>
-              <li>Click "Check Again After Login"</li>
-            </ol>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Enhanced account display component
-  const AccountCard = ({ account, index }) => {
-    const accountId = account.id || account.username || account.handle;
-    const details = accountDetails[accountId] || account;
-    
-    return (
-      <div className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-        <div className="flex items-start gap-4">
-          {/* Profile Picture */}
-          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center overflow-hidden flex-shrink-0">
-            {details.profilePicture ? (
-              <img
-                src={details.profilePicture}
-                alt={details.name || details.username}
-                className="w-full h-full object-cover"
-                onError={(e) => {
-                  e.target.style.display = 'none';
-                  e.target.nextSibling.style.display = 'flex';
-                }}
-              />
-            ) : null}
-            <User className="w-8 h-8 text-gray-400" style={{ display: details.profilePicture ? 'none' : 'flex' }} />
-          </div>
-
-          {/* Account Info */}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <h3 className="font-semibold text-gray-900 truncate">
-                {details.name || details.username || details.handle || 'Unknown Account'}
-              </h3>
-              {details.verified && (
-                <CheckCircle className="w-4 h-4 text-blue-500 flex-shrink-0" />
-              )}
-              {details.businessAccount && (
-                <span className="px-2 py-0.5 bg-blue-100 text-blue-800 text-xs rounded-full flex-shrink-0">
-                  Business
-                </span>
-              )}
-            </div>
-            
-            {(details.username || details.handle) && (
-              <p className="text-sm text-gray-600 mb-2">
-                @{details.username || details.handle}
-              </p>
-            )}
-
-            {details.bio && (
-              <p className="text-sm text-gray-700 mb-3 line-clamp-2">
-                {details.bio}
-              </p>
-            )}
-
-            {/* Stats */}
-            <div className="grid grid-cols-3 gap-4 mb-3">
-              <div className="text-center">
-                <div className="flex items-center justify-center gap-1 text-lg font-bold text-purple-600">
-                  <FileText className="w-4 h-4" />
-                  {details.posts || 0}
-                </div>
-                <div className="text-xs text-gray-500">Posts</div>
-              </div>
-              <div className="text-center">
-                <div className="flex items-center justify-center gap-1 text-lg font-bold text-red-600">
-                  <Users className="w-4 h-4" />
-                  {details.followers || 0}
-                </div>
-                <div className="text-xs text-gray-500">Followers</div>
-              </div>
-              <div className="text-center">
-                <div className="flex items-center justify-center gap-1 text-lg font-bold text-pink-600">
-                  <Heart className="w-4 h-4" />
-                  {details.likes || 0}
-                </div>
-                <div className="text-xs text-gray-500">Total Likes</div>
-              </div>
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex gap-2">
-              <button
-                onClick={() => handleUseExistingAccount(account)}
-                className="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-colors"
-              >
-                Use Account
-              </button>
-              <button
-                onClick={() => handleRefreshAccount(account)}
-                className="px-3 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 text-sm rounded-lg transition-colors"
-              >
-                <RefreshCw className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const handleRefreshAccount = async (account) => {
-    const accountId = account.id || account.username || account.handle;
-    setStatus(`Refreshing ${accountId} data...`);
-    
-    try {
-      const updatedDetails = await fetchAccountDetails([account], platform, customerId);
-      setAccountDetails(prev => ({ ...prev, ...updatedDetails }));
-      setStatus('Account data refreshed');
-    } catch (error) {
-      console.error('Error refreshing account:', error);
-      setStatus('Failed to refresh account data');
-    }
-  };
-
-  // Show connected accounts if any exist and user is logged in
-  if (!loading && connectedAccounts.length > 0 && !showLoginPrompt) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-        <div className="max-w-2xl w-full bg-white rounded-lg shadow-md p-6">
-          <div className="text-center mb-6">
-            <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-3" />
-            <h1 className="text-xl font-semibold text-gray-900 mb-2">
-              {getPlatformName(platform)} Integration
-            </h1>
-            <p className="text-gray-600">
-              {connectedAccounts.length} Account{connectedAccounts.length > 1 ? 's' : ''} Connected
-            </p>
-          </div>
-
-          <div className="space-y-4 mb-6">
-            {connectedAccounts.map((account, index) => (
-              <AccountCard 
-                key={account.id || account.username || index} 
-                account={account} 
-                index={index} 
-              />
-            ))}
-          </div>
-
-          <div className="flex gap-3 mb-4">
-            <button
-              onClick={handleConnectNewAccount}
-              className="flex-1 bg-gray-600 hover:bg-gray-700 text-white px-4 py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              Add Another Account
-            </button>
-            <button
-              onClick={handleRefreshAccounts}
-              className="px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center justify-center gap-2"
-            >
-              <RefreshCw className="w-4 h-4" />
-              Refresh
-            </button>
-          </div>
-
-          <div className="flex gap-2">
-            <button
-              onClick={() => navigate('/customer')}
-              className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 px-3 py-2 rounded text-sm transition-colors"
-            >
-              Go to Dashboard
-            </button>
-            <button
-              onClick={() => navigate('/customer/login')}
-              className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 px-3 py-2 rounded text-sm transition-colors"
-            >
-              Login
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const platform = mapPlatform(platformKey);
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-        <div className="max-w-md w-full bg-white rounded-lg shadow-md p-6">
-          <div className="flex items-center gap-3 mb-4">
-            <AlertCircle className="w-8 h-8 text-red-500" />
-            <h1 className="text-xl font-semibold text-gray-900">Configuration Error</h1>
-          </div>
-          <p className="text-gray-600 mb-4">{error}</p>
-          
-          {/* Debug information */}
-          <div className="bg-gray-50 rounded-lg p-3 text-sm text-gray-600 mb-4">
-            <p><strong>Customer ID:</strong> {customerId || 'Not provided'}</p>
-            <p><strong>Platform:</strong> {platform || 'Not provided'}</p>
-            <p><strong>Auto Connect:</strong> {autoConnect || 'No'}</p>
-            <p><strong>URL:</strong> {window.location.href}</p>
-          </div>
-          
-          <div className="flex gap-2">
-            <button
-              onClick={() => navigate('/customer/login')}
-              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
-            >
-              Go to Login
-            </button>
-            {customerId && platform && (
-              <button
-                onClick={handleManualRedirect}
-                className="flex-1 bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors"
-              >
-                Try Again
-              </button>
-            )}
+      <div className="min-h-screen flex items-center justify-center p-6">
+        <div className="max-w-xl w-full bg-white rounded-xl p-6 shadow">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-6 h-6 text-red-600" />
+            <div>
+              <h3 className="font-semibold text-red-900">Configuration error</h3>
+              <p className="text-sm text-red-700 mt-1">{error}</p>
+              <div className="mt-4">
+                <a href="/" className="text-blue-600 hover:underline flex items-center gap-2">
+                  <ExternalLink className="w-4 h-4" /> Go to main app
+                </a>
+              </div>
+            </div>
           </div>
         </div>
       </div>
     );
   }
 
-  return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-      <div className="max-w-md w-full bg-white rounded-lg shadow-md p-6 text-center">
-        <div className="mb-6">
-          <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-3" />
-          <h1 className="text-xl font-semibold text-gray-900 mb-2">QR Code Scanned Successfully!</h1>
-        </div>
-        
-        <div className="mb-6">
-          <Loader2 className="w-8 h-8 text-blue-600 animate-spin mx-auto mb-3" />
-          <p className="text-gray-600 font-medium">{status}</p>
-          {checkingAccounts && (
-            <p className="text-sm text-gray-500 mt-2">This may take a moment...</p>
-          )}
-        </div>
-        
-        <div className="bg-gray-50 rounded-lg p-4 text-sm text-gray-500 mb-6">
-          <div className="grid grid-cols-2 gap-2 text-left">
-            <p><strong>Customer:</strong></p>
-            <p className="truncate">{customerId}</p>
-            <p><strong>Platform:</strong></p>
-            <p>{getPlatformName(platform)}</p>
-            {autoConnect && (
-              <>
-                <p><strong>Auto Connect:</strong></p>
-                <p>Yes</p>
-              </>
-            )}
+  if (expired) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6">
+        <div className="max-w-xl w-full bg-white rounded-xl p-6 shadow">
+          <div className="flex items-start gap-3">
+            <Clock className="w-6 h-6 text-amber-600" />
+            <div>
+              <h3 className="font-semibold text-amber-900">QR Code Expired</h3>
+              <p className="text-sm text-amber-700 mt-1">This QR code has expired. For security reasons QR codes expire after a short time.</p>
+              <div className="mt-4 space-x-3">
+                <a href="/" className="text-blue-600 hover:underline flex items-center gap-2">
+                  <ExternalLink className="w-4 h-4" /> Go to main app
+                </a>
+                <a href="/#/admin/qr-generator" className="text-slate-700 hover:underline flex items-center gap-2">
+                  Open Admin QR Generator
+                </a>
+              </div>
+            </div>
           </div>
         </div>
-        
-        {/* Manual redirect button */}
-        <button
-          onClick={handleManualRedirect}
-          className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-lg transition-colors flex items-center justify-center gap-2 mb-4"
-        >
-          <ExternalLink className="w-4 h-4" />
-          Continue to {getPlatformName(platform)} Integration
-        </button>
-        
-        {/* Alternative actions */}
-        <div className="flex gap-2">
-          <button
-            onClick={() => navigate('/customer')}
-            className="flex-1 bg-gray-600 hover:bg-gray-700 text-white px-3 py-2 rounded text-sm transition-colors"
-          >
-            Go to Dashboard
-          </button>
-          <button
-            onClick={() => navigate('/customer/login')}
-            className="flex-1 bg-gray-600 hover:bg-gray-700 text-white px-3 py-2 rounded text-sm transition-colors"
-          >
-            Login
-          </button>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6">
+        <div className="text-center">
+          <div className="animate-pulse text-slate-400">Loading configuration...</div>
         </div>
-        
-        {/* Debug info for development */}
-        {process.env.NODE_ENV === 'development' && (
-          <div className="mt-4 p-2 bg-yellow-50 rounded text-xs text-left">
-            <p><strong>Debug Info:</strong></p>
-            <p>URL: {window.location.href}</p>
-            <p>Params: {JSON.stringify(Object.fromEntries(searchParams.entries()))}</p>
+      </div>
+    );
+  }
+
+  // final render (unchanged surrounding layout) but add overlay when awaitingUserGesture
+  return (
+    <div className="min-h-screen flex items-start justify-center p-6">
+      <div className="w-full max-w-2xl bg-white rounded-xl p-6 shadow">
+        <div className="mb-4">
+          <h2 className="text-xl font-bold">Configure {platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : 'Social'}</h2>
+          {timeRemaining && <p className="text-sm text-slate-600 mt-1">Link valid for: {timeRemaining}</p>}
+        </div>
+
+        {/* Social integrations widget */}
+        <SocialIntegrations
+          ref={socialRef}
+          platform={platform}
+          customer={customer}
+          compact={true}
+          onConnectionSuccess={() => {
+            // minimal success UX: show confirmation then redirect to app home
+            window.location.href = '/';
+          }}
+        />
+
+        {/* NEW: Overlay prompt for autoConnect requiring user gesture */}
+        {awaitingUserGesture && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-6">
+            <div className="bg-white rounded-xl p-6 max-w-md w-full text-center shadow-lg">
+              <h3 className="text-lg font-semibold mb-2">Continue to Connect {platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : ''}</h3>
+              <p className="text-sm text-slate-600 mb-4">
+                To complete authentication we need to open the {platform} sign-in window. Tap the button below to continue.
+                This must be initiated by a tap on most mobile browsers.
+              </p>
+
+              <button
+                id="auto-connect-btn"
+                onClick={() => {
+                  // hide the prompt and trigger connect inside user gesture
+                  setAwaitingUserGesture(false);
+                  setTimeout(() => {
+                    if (socialRef.current && typeof socialRef.current.triggerConnect === 'function') {
+                      socialRef.current.triggerConnect();
+                    } else {
+                      setError('Automatic trigger not available. Please press Connect in the widget.');
+                    }
+                  }, 100);
+                }}
+                className="px-6 py-3 rounded-lg bg-blue-600 text-white font-semibold"
+              >
+                Tap to Connect {platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : 'Account'}
+              </button>
+
+              <div className="mt-3 text-sm text-slate-500">
+                <button
+                  onClick={() => {
+                    setAwaitingUserGesture(false);
+                    setError('Auto-connect cancelled by user.');
+                  }}
+                  className="text-slate-600 hover:underline"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>

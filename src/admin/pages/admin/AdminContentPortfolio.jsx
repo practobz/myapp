@@ -244,7 +244,8 @@ function AdminContentPortfolio() {
         customerPortfolios.push({
           id: assignmentId,
           customerId: customerId,
-          title: baseItem.caption || 'Untitled Post',
+          // Remove default 'Untitled Post', just use caption or empty string
+          title: baseItem.caption || '',
           platform: baseItem.platform || 'Instagram',
           status: getLatestStatus(versions),
           createdDate: baseItem.created_at,
@@ -264,7 +265,8 @@ function AdminContentPortfolio() {
           })),
           totalVersions: versions.length,
           customerFeedback: getAllFeedback(versions),
-          calendarName: calendarName // <-- Attach calendar name
+          calendarName: calendarName, // <-- Attach calendar name
+          itemName: itemName         // <-- Attach item name
         });
       });
       portfolioData.push({
@@ -385,6 +387,93 @@ function AdminContentPortfolio() {
   const handleScheduleContent = (item) => {
     setSelectedContentForSchedule(item);
     setShowScheduleModal(true);
+  };
+
+  // Delete portfolio handler with confirmation
+  const handleDeletePortfolio = async (portfolioId, customerId) => {
+    if (!window.confirm('Are you sure you want to delete this portfolio?')) return;
+
+    // Call backend API to delete all versions for this assignment/portfolio
+    try {
+      await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions/assignment/${portfolioId}`, {
+        method: 'DELETE'
+      });
+    } catch (err) {
+      console.error('Failed to delete portfolio from backend', err);
+    }
+
+    // Remove from state
+    if (selectedCustomer && selectedCustomer.customerId === customerId) {
+      setSelectedCustomer(prev => ({
+        ...prev,
+        portfolios: prev.portfolios.filter(portfolio => portfolio.id !== portfolioId)
+      }));
+    }
+    setAllPortfolioItems(prevItems =>
+      prevItems.map(customerData =>
+        customerData.customerId === customerId
+          ? {
+              ...customerData,
+              portfolios: customerData.portfolios.filter(portfolio => portfolio.id !== portfolioId)
+            }
+          : customerData
+      )
+    );
+  };
+
+  // Delete a version from a portfolio
+  const handleDeleteVersion = async (versionId, portfolioId, customerId) => {
+    // Delete from backend
+    try {
+      await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions/${versionId}`, {
+        method: 'DELETE'
+      });
+    } catch (err) {
+      // Optionally show error to user
+      console.error('Failed to delete version from backend', err);
+    }
+
+    // Remove version from state
+    if (selectedCustomer && selectedCustomer.customerId === customerId) {
+      setSelectedCustomer(prev => ({
+        ...prev,
+        portfolios: prev.portfolios.map(portfolio =>
+          portfolio.id === portfolioId
+            ? {
+                ...portfolio,
+                versions: portfolio.versions.filter(v => v.id !== versionId),
+                totalVersions: portfolio.versions.filter(v => v.id !== versionId).length
+              }
+            : portfolio
+        )
+      }));
+    }
+    setAllPortfolioItems(prevItems =>
+      prevItems.map(customerData =>
+        customerData.customerId === customerId
+          ? {
+              ...customerData,
+              portfolios: customerData.portfolios.map(portfolio =>
+                portfolio.id === portfolioId
+                  ? {
+                      ...portfolio,
+                      versions: portfolio.versions.filter(v => v.id !== versionId),
+                      totalVersions: portfolio.versions.filter(v => v.id !== versionId).length
+                    }
+                  : portfolio
+              )
+            }
+          : customerData
+      )
+    );
+    // If viewing a single content, update selectedContent
+    if (selectedContent && selectedContent.id === portfolioId) {
+      setSelectedContent(prev => ({
+        ...prev,
+        versions: prev.versions.filter(v => v.id !== versionId),
+        totalVersions: prev.versions.filter(v => v.id !== versionId).length
+      }));
+    }
   };
 
   const formatDate = (dateString) => {
@@ -628,7 +717,6 @@ function AdminContentPortfolio() {
                     const customerName = customer ? customer.name : `Customer ${customerData.customerId}`;
                     const totalPortfolios = customerData.portfolios.length;
                     const publishedCount = customerData.portfolios.filter(p => isContentPublished(p.id)).length;
-                    const approvedCount = customerData.portfolios.filter(p => p.status === 'approved' && !isContentPublished(p.id)).length;
                     const pendingCount = customerData.portfolios.filter(p => p.status === 'under_review' && !isContentPublished(p.id)).length;
                     
                     return (
@@ -651,14 +739,10 @@ function AdminContentPortfolio() {
                             </div>
                           </div>
                           
-                          <div className="grid grid-cols-3 gap-4 mb-4">
+                          <div className="grid grid-cols-2 gap-4 mb-4">
                             <div className="text-center">
                               <div className="text-2xl font-bold text-blue-600">{totalPortfolios}</div>
                               <div className="text-xs text-gray-500">Total</div>
-                            </div>
-                            <div className="text-center">
-                              <div className="text-2xl font-bold text-green-600">{approvedCount}</div>
-                              <div className="text-xs text-gray-500">Approved</div>
                             </div>
                             <div className="text-center">
                               <div className="text-2xl font-bold text-yellow-600">{pendingCount}</div>
@@ -675,7 +759,10 @@ function AdminContentPortfolio() {
                                 <div className="flex flex-col min-w-0 flex-1">
                                   <div className="flex items-center space-x-2">
                                     <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></div>
-                                    <span className="text-sm font-medium truncate">{portfolio.title}</span>
+                                    {/* Only show title if it exists */}
+                                    {portfolio.title ? (
+                                      <span className="text-sm font-medium truncate">{portfolio.title}</span>
+                                    ) : null}
                                   </div>
                                   {/* --- Show calendar and item name --- */}
                                   {portfolio.calendarName && (
@@ -809,11 +896,22 @@ function AdminContentPortfolio() {
                               </span>
                             )}
                           </div>
+
+                          {/* Add delete icon in top right corner */}
+                          <button
+                            onClick={() => handleDeletePortfolio(item.id, selectedCustomer.customerId)}
+                            className="absolute top-4 right-4 z-10 p-2 bg-white rounded-full shadow hover:bg-red-100 transition"
+                            title="Delete Portfolio"
+                          >
+                            <Trash2 className="h-5 w-5 text-red-500" />
+                          </button>
                         </div>
 
                         {/* Content Details */}
                         <div className="p-6 flex-1 flex flex-col">
-                          <h3 className="font-bold text-lg text-gray-900 mb-2 line-clamp-2">{item.title}</h3>
+                          <h3 className="font-bold text-lg text-gray-900 mb-2 line-clamp-2">
+                            {item.title ? item.title : null}
+                          </h3>
                           {/* --- Show calendar and item name --- */}
                           {item.calendarName && (
                             <div className="text-xs text-gray-500 mb-1">Calendar: {item.calendarName}</div>
@@ -876,9 +974,9 @@ function AdminContentPortfolio() {
               getPublishedPlatformsForContent={getPublishedPlatformsForContent}
               handleScheduleContent={handleScheduleContent}
               isVideoUrl={isVideoUrl}
-              // --- Pass calendarName and itemName to detail view ---
               calendarName={selectedContent?.calendarName}
               itemName={selectedContent?.itemName}
+              onDeleteVersion={handleDeleteVersion} // <-- pass handler
             />
           )}
         </div>

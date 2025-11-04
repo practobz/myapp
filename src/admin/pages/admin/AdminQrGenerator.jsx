@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { QrCode, Facebook, Instagram, Linkedin, Youtube, Download, ExternalLink, AlertCircle, Loader2, User, Clock, AlertTriangle, Search, Filter, CheckCircle, X, BarChart3, Users } from 'lucide-react';
 
+{ /* Add: normalize API base from env */ }
+const API_BASE = (process.env.REACT_APP_API_URL || '').replace(/\/$/, '');
+
 const PLATFORMS = [
   { key: 'fb', label: 'Facebook', icon: Facebook, color: 'bg-blue-600 hover:bg-blue-700', lightColor: 'bg-blue-50 text-blue-700' },
   { key: 'insta', label: 'Instagram', icon: Instagram, color: 'bg-pink-600 hover:bg-pink-700', lightColor: 'bg-pink-50 text-pink-700' },
@@ -22,7 +25,7 @@ export default function AdminQrGenerator() {
   const [successMessage, setSuccessMessage] = useState('');
 
   useEffect(() => {
-    fetch('/api/customers')
+    fetch(`${API_BASE || ''}/api/customers`)
       .then(res => res.json())
       .then(data => {
         setCustomers(data.customers || []);
@@ -104,7 +107,7 @@ export default function AdminQrGenerator() {
 
       console.log(`🔒 Generating QR for customer: ${customerId} (${customerName}) - Platform: ${platform}`);
 
-      const res = await fetch('/api/generate-qr', {
+      const res = await fetch(`${API_BASE || ''}/api/generate-qr`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',

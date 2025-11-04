@@ -8,6 +8,22 @@ const PLATFORMS = [
   { key: 'yt', label: 'YouTube', icon: Youtube, color: 'bg-red-600 hover:bg-red-700', lightColor: 'bg-red-50 text-red-700' }
 ];
 
+// ✅ Environment-aware API base URL
+const getApiBaseUrl = () => {
+  // Use environment variable if available, otherwise detect from current domain
+  if (process.env.REACT_APP_API_URL) {
+    return process.env.REACT_APP_API_URL;
+  }
+  
+  // For production deployment, use the same origin as the frontend
+  if (process.env.NODE_ENV === 'production') {
+    return window.location.origin;
+  }
+  
+  // Fallback for development
+  return 'http://localhost:3001';
+};
+
 export default function AdminQrGenerator() {
   const [customers, setCustomers] = useState([]);
   const [filteredCustomers, setFilteredCustomers] = useState([]);
@@ -22,7 +38,8 @@ export default function AdminQrGenerator() {
   const [successMessage, setSuccessMessage] = useState('');
 
   useEffect(() => {
-    fetch('/api/customers')
+    const apiBaseUrl = getApiBaseUrl();
+    fetch(`${apiBaseUrl}/api/customers`)
       .then(res => res.json())
       .then(data => {
         setCustomers(data.customers || []);
@@ -104,7 +121,8 @@ export default function AdminQrGenerator() {
 
       console.log(`🔒 Generating QR for customer: ${customerId} (${customerName}) - Platform: ${platform}`);
 
-      const res = await fetch('/api/generate-qr', {
+      const apiBaseUrl = getApiBaseUrl();
+      const res = await fetch(`${apiBaseUrl}/api/generate-qr`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -131,21 +149,24 @@ export default function AdminQrGenerator() {
 
         console.log(`✅ QR generated successfully for customer: ${customerId}`);
         
-        // Normalize configUrl to frontend origin when backend returns a backend URL by mistake
+        // ✅ Normalize configUrl to work with both localhost and deployed environments
         let normalizedConfigUrl = data.configUrl || '';
-        try {
-          const parsed = new URL(normalizedConfigUrl);
-          // if host is a backend (localhost:3001) replace with current frontend origin
-          if (parsed.host && parsed.host.includes('3001')) {
-            parsed.host = window.location.host;
-            parsed.protocol = window.location.protocol;
-            normalizedConfigUrl = parsed.toString();
+        if (normalizedConfigUrl) {
+          try {
+            const parsed = new URL(normalizedConfigUrl);
+            // If the URL points to a different port (backend), update it to use current origin
+            if (parsed.port && parsed.port !== window.location.port) {
+              parsed.host = window.location.host;
+              parsed.protocol = window.location.protocol;
+              normalizedConfigUrl = parsed.toString();
+            }
+          } catch (e) {
+            // If URL parsing fails, keep the original
+            console.warn('Failed to parse configUrl:', e);
           }
-        } catch (e) {
-          // ignore parsing errors
         }
         
-        setQrResult({ ...data, configUrl: normalizedConfigUrl || data.configUrl, platform, customerName, customerId });
+        setQrResult({ ...data, configUrl: normalizedConfigUrl, platform, customerName, customerId });
         setQrExpiration('valid');
         setError('');
         setSuccessMessage(`QR code generated successfully for ${customerName}!`);

@@ -120,10 +120,7 @@ export default function AdminQrGenerator() {
       const res = await fetch(`${apiBaseUrl}/api/generate-qr`, {
         method: 'POST',
         headers: { 
-          'Content-Type': 'application/json',
-          'X-Admin-Request': 'true',
-          'X-Customer-ID': customerId,
-          'X-Platform': platform
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({ 
           customerId, 

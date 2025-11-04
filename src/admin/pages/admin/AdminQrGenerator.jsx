@@ -1,34 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { QrCode, Facebook, Instagram, Linkedin, Youtube, Download, ExternalLink, AlertCircle, Loader2, User, Clock, AlertTriangle, Search, Filter, CheckCircle, X, BarChart3, Users } from 'lucide-react';
 
-// Resolve API base at runtime (checks window-injected values first, then build-time env)
-const RUNTIME_ENV = (typeof window !== 'undefined' && (window.__REACT_APP_API_URL__ || window._env_?.REACT_APP_API_URL || window.__env__?.REACT_APP_API_URL)) || process.env.REACT_APP_API_URL || '';
-
-// ✅ Fallback to a known backend when running from static hosts (e.g. storage.googleapis.com) or when no env is provided.
-const FALLBACK_BACKEND = process.env.REACT_APP_API_URL || 'https://my-backend-593529385135.asia-south1.run.app';
-
-// Use let so we can override at runtime when served from static storage
-let API_BASE = String(RUNTIME_ENV || FALLBACK_BACKEND).replace(/\/$/, '');
-
-// Runtime override: when loaded from storage.googleapis.com (static hosting) force the backend fallback.
-// This prevents relative fetches resolving to the static host and producing 404s like:
-// GET https://airspark.storage.googleapis.com/api/customers 404 (Not Found)
-if (typeof window !== 'undefined' && window.location && window.location.host && window.location.host.includes('storage.googleapis.com')) {
-  console.warn('Detected static storage host — overriding API_BASE to fallback backend:', FALLBACK_BACKEND);
-  API_BASE = FALLBACK_BACKEND;
-}
-
-const buildUrl = (path) => {
-  if (!path) return API_BASE || '';
-  // ensure path begins with /
-  const p = path.startsWith('/') ? path : `/${path}`;
-  return API_BASE ? `${API_BASE}${p}` : p;
-};
-// Helpful debug info when troubleshooting 404 to storage.googleapis.com
-if (typeof window !== 'undefined') {
-  console.info('API_BASE resolved to:', API_BASE || '(empty — using relative paths)');
-}
-
 const PLATFORMS = [
   { key: 'fb', label: 'Facebook', icon: Facebook, color: 'bg-blue-600 hover:bg-blue-700', lightColor: 'bg-blue-50 text-blue-700' },
   { key: 'insta', label: 'Instagram', icon: Instagram, color: 'bg-pink-600 hover:bg-pink-700', lightColor: 'bg-pink-50 text-pink-700' },
@@ -50,7 +22,7 @@ export default function AdminQrGenerator() {
   const [successMessage, setSuccessMessage] = useState('');
 
   useEffect(() => {
-    fetch(buildUrl('/api/customers'))
+    fetch('/api/customers')
       .then(res => res.json())
       .then(data => {
         setCustomers(data.customers || []);
@@ -132,7 +104,7 @@ export default function AdminQrGenerator() {
 
       console.log(`🔒 Generating QR for customer: ${customerId} (${customerName}) - Platform: ${platform}`);
 
-      const res = await fetch(buildUrl('/api/generate-qr'), {
+      const res = await fetch('/api/generate-qr', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',

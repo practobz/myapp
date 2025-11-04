@@ -3,7 +3,11 @@ import { QrCode, Facebook, Instagram, Linkedin, Youtube, Download, ExternalLink,
 
 // Resolve API base at runtime (checks window-injected values first, then build-time env)
 const RUNTIME_ENV = (typeof window !== 'undefined' && (window.__REACT_APP_API_URL__ || window._env_?.REACT_APP_API_URL || window.__env__?.REACT_APP_API_URL)) || process.env.REACT_APP_API_URL || '';
-const API_BASE = String(RUNTIME_ENV || '').replace(/\/$/, '');
+
+// ✅ Fallback to a known backend when running from static hosts (e.g. storage.googleapis.com) or when no env is provided.
+const FALLBACK_BACKEND = process.env.REACT_APP_API_URL || 'https://my-backend-593529385135.asia-south1.run.app';
+const API_BASE = String(RUNTIME_ENV || FALLBACK_BACKEND).replace(/\/$/, '');
+
 const buildUrl = (path) => {
   if (!path) return API_BASE || '';
   // ensure path begins with /

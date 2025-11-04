@@ -141,20 +141,21 @@ export default function AdminQrGenerator() {
 
         console.log(`✅ QR generated successfully for customer: ${customerId}`);
         
-        // ✅ Normalize configUrl to work with both localhost and deployed environments
+        // ✅ Fix configUrl to use correct frontend domain
         let normalizedConfigUrl = data.configUrl || '';
         if (normalizedConfigUrl) {
           try {
             const parsed = new URL(normalizedConfigUrl);
-            // If the URL points to a different port (backend), update it to use current origin
-            if (parsed.port && parsed.port !== window.location.port) {
-              parsed.host = window.location.host;
-              parsed.protocol = window.location.protocol;
-              normalizedConfigUrl = parsed.toString();
-            }
+            
+            // Always use the current frontend's origin for the configUrl
+            // This handles both localhost (dev) and production domains
+            normalizedConfigUrl = `${window.location.origin}${parsed.pathname}${parsed.search}${parsed.hash}`;
+            
+            console.log(`🔗 Normalized configUrl: ${normalizedConfigUrl}`);
           } catch (e) {
-            // If URL parsing fails, keep the original
-            console.warn('Failed to parse configUrl:', e);
+            // If URL parsing fails, construct a fallback URL
+            console.warn('Failed to parse configUrl, creating fallback:', e);
+            normalizedConfigUrl = `${window.location.origin}/#/configure?customerid=${customerId}&platform=${platform}`;
           }
         }
         

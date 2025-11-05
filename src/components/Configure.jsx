@@ -199,6 +199,57 @@ export default function Configure() {
     return () => clearTimeout(t);
   }, [autoConnect, customer, platformKey]);
 
+  // ✅ Improved auto-connect handler
+  const handleAutoConnect = () => {
+    setAwaitingUserGesture(false);
+    
+    // Clear any existing errors
+    setError('');
+    
+    // Try multiple approaches to trigger connection
+    setTimeout(() => {
+      try {
+        // Method 1: Try the ref's triggerConnect method
+        if (socialRef.current && typeof socialRef.current.triggerConnect === 'function') {
+          console.log('🔗 Using ref triggerConnect method');
+          socialRef.current.triggerConnect();
+          return;
+        }
+
+        // Method 2: Try to find and click the connect button directly
+        const connectBtn = document.querySelector('button[disabled="false"]:not([id="auto-connect-btn"])');
+        if (connectBtn && connectBtn.textContent.includes('Connect')) {
+          console.log('🔗 Using direct button click');
+          connectBtn.click();
+          return;
+        }
+
+        // Method 3: Find platform-specific buttons
+        const platformButtons = {
+          'facebook': () => document.querySelector('button:has(.lucide-facebook)') || document.querySelector('button[class*="bg-blue-600"]'),
+          'instagram': () => document.querySelector('button:has(.lucide-instagram)') || document.querySelector('button[class*="from-pink-500"]'),
+          'youtube': () => document.querySelector('button:has(.lucide-youtube)') || document.querySelector('button[class*="bg-red-600"]'),
+          'linkedin': () => document.querySelector('button:has(.lucide-linkedin)') || document.querySelector('button[class*="bg-blue-700"]'),
+          'twitter': () => document.querySelector('button:has(.lucide-twitter)') || document.querySelector('button[class*="bg-blue-400"]')
+        };
+
+        const platformBtn = platformButtons[platform] && platformButtons[platform]();
+        if (platformBtn) {
+          console.log('🔗 Using platform-specific button click');
+          platformBtn.click();
+          return;
+        }
+
+        // Method 4: Fallback error
+        setError(`Auto-connect not available for ${platform}. Please click the Connect button manually.`);
+        
+      } catch (err) {
+        console.error('Auto-connect error:', err);
+        setError('Auto-connect failed. Please click the Connect button manually.');
+      }
+    }, 100);
+  };
+
   const mapPlatform = (key) => {
     switch (key) {
       case 'fb': return 'facebook';
@@ -300,18 +351,8 @@ export default function Configure() {
 
               <button
                 id="auto-connect-btn"
-                onClick={() => {
-                  // hide the prompt and trigger connect inside user gesture
-                  setAwaitingUserGesture(false);
-                  setTimeout(() => {
-                    if (socialRef.current && typeof socialRef.current.triggerConnect === 'function') {
-                      socialRef.current.triggerConnect();
-                    } else {
-                      setError('Automatic trigger not available. Please press Connect in the widget.');
-                    }
-                  }, 100);
-                }}
-                className="px-6 py-3 rounded-lg bg-blue-600 text-white font-semibold"
+                onClick={handleAutoConnect}
+                className="px-6 py-3 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 transition-colors"
               >
                 Tap to Connect {platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : 'Account'}
               </button>

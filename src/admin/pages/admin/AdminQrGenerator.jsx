@@ -161,9 +161,10 @@ export default function AdminQrGenerator() {
             // If URL parsing fails, construct a fallback URL
             console.warn('Failed to parse configUrl, creating fallback:', e);
             if (process.env.NODE_ENV === 'production') {
-              normalizedConfigUrl = `${window.location.origin}/index.html#/configure?customerid=${customerId}&platform=${platform}`;
+              // ✅ Fix: Use correct parameter name 'customerId' (capital I)
+              normalizedConfigUrl = `${window.location.origin}/index.html#/configure?customerId=${customerId}&platform=${platform}&source=admin-qr-generator&autoConnect=1&t=${Date.now()}`;
             } else {
-              normalizedConfigUrl = `${window.location.origin}/#/configure?customerid=${customerId}&platform=${platform}`;
+              normalizedConfigUrl = `${window.location.origin}/#/configure?customerId=${customerId}&platform=${platform}&source=admin-qr-generator&autoConnect=1&t=${Date.now()}`;
             }
           }
         }

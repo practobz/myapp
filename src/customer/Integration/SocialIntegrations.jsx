@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { 
   Facebook, 
   Instagram, 
@@ -16,7 +16,7 @@ import {
 // Facebook App ID (already correct)
 const FACEBOOK_APP_ID = '4416243821942660';
 
-const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, compact = false }) => {
+const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, compact = false }, ref) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -61,15 +61,56 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
     });
   };
 
+  // Helper to get a stable customerId (handles customer._id or customer.id)
+  const getCustomerId = (cust) => {
+    if (!cust) return '';
+    return cust.id || cust._id || cust.customerId || '';
+  };
+
+  // ✅ Fix API URL handling for production
   const fetchExistingConnections = async () => {
     try {
-      // Fix: Use correct API base URL
-      const response = await fetch(
-        `${process.env.REACT_APP_API_URL}/api/customer-social-links/${customer.id}`
-      );
-      const data = await response.json();
-      if (data.success && data.data) {
+      const customerId = getCustomerId(customer);
+      if (!customerId) {
+        console.warn('fetchExistingConnections: missing customer id');
+        return;
+      }
+
+      // ✅ Use production-aware API endpoints
+      const endpoints = [];
+      
+      // For production, use the hardcoded backend URL
+      if (process.env.NODE_ENV === 'production') {
+        endpoints.push(`https://my-backend-593529385135.asia-south1.run.app/api/customer-social-links/${customerId}`);
+      } else if (process.env.REACT_APP_API_URL) {
+        endpoints.push(`${process.env.REACT_APP_API_URL.replace(/\/$/, '')}/api/customer-social-links/${customerId}`);
+      }
+      
+      // Always try relative path as fallback
+      endpoints.push(`/api/customer-social-links/${customerId}`);
+
+      let data = null;
+      for (const url of endpoints) {
+        try {
+          const response = await fetch(url);
+          if (!response.ok) {
+            const text = await response.text().catch(() => '');
+            console.warn('fetchExistingConnections: non-ok response', url, response.status, text);
+            continue;
+          }
+          const json = await response.json();
+          data = json;
+          break;
+        } catch (err) {
+          console.warn('fetchExistingConnections: fetch error for', url, err.message);
+          continue;
+        }
+      }
+
+      if (data && data.success && data.data) {
         setConnectedAccounts(data.data.socialAccounts || []);
+      } else if (data && !data.success) {
+        console.warn('fetchExistingConnections: API returned error payload', data);
       }
     } catch (error) {
       console.error('Error fetching existing connections:', error);
@@ -471,16 +512,56 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
     }
   };
 
-  // Update saveAccountToDatabase to use correct endpoint
+  // Update saveAccountToDatabase to use correct endpoint and log detailed errors
   const saveAccountToDatabase = async (accountData) => {
     try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/customer-social-links`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(accountData)
-      });
+      const customerId = getCustomerId(customer) || accountData.customerId || '';
+      if (!customerId) {
+        throw new Error('Missing customerId for saving account');
+      }
 
-      const result = await response.json();
+      const endpoints = [];
+      
+      // For production, use the hardcoded backend URL
+      if (process.env.NODE_ENV === 'production') {
+        endpoints.push(`https://my-backend-593529385135.asia-south1.run.app/api/customer-social-links`);
+      } else if (process.env.REACT_APP_API_URL) {
+        endpoints.push(`${process.env.REACT_APP_API_URL.replace(/\/$/, '')}/api/customer-social-links`);
+      }
+      
+      // Always try relative path as fallback
+      endpoints.push('/api/customer-social-links');
+
+      let result = null;
+      for (const url of endpoints) {
+        try {
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...accountData, customerId })
+          });
+
+          const text = await response.text().catch(() => '');
+          let parsed;
+          try { parsed = text ? JSON.parse(text) : null; } catch (e) { parsed = null; }
+
+          if (!response.ok) {
+            console.error('saveAccountToDatabase: server returned non-ok', url, response.status, parsed || text);
+            continue;
+          }
+
+          result = parsed || {};
+          break;
+        } catch (err) {
+          console.warn('saveAccountToDatabase: request failed for', url, err.message);
+          continue;
+        }
+      }
+
+      if (!result) {
+        throw new Error('Failed to save account: no successful response from API endpoints');
+      }
+
       if (!result.success) {
         throw new Error(result.error || 'Failed to save account');
       }
@@ -495,27 +576,48 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
     }
   };
 
-  const disconnectAccount = async (accountId) => {
-    setLoading(true);
-    try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/customer-social-links/${accountId}`, {
-        method: 'DELETE'
-      });
-
-      const result = await response.json();
-      if (result.success || result.error === 'not_found' || result.reason === 'deleted') {
-        setSuccess('Account disconnected successfully');
-        await fetchExistingConnections();
-        if (onConnectionSuccess) onConnectionSuccess();
-      } else {
-        setError(result.error || 'Failed to disconnect account');
+  // ✅ Remove duplicate useImperativeHandle - keep only this one
+  useImperativeHandle(ref, () => ({
+    triggerConnect: () => {
+      console.log('🔗 triggerConnect called for platform:', platform);
+      
+      if (!platform) {
+        console.warn('triggerConnect: no platform specified');
+        return false;
       }
-    } catch (err) {
-      setError('Failed to disconnect account: ' + err.message);
-    } finally {
-      setLoading(false);
+
+      try {
+        switch (platform) {
+          case 'facebook':
+            console.log('🔗 Triggering Facebook connect');
+            handleFacebookConnect();
+            return true;
+          case 'instagram':
+            console.log('🔗 Triggering Instagram connect');
+            handleFacebookConnect(); // Instagram uses FB flow in this component
+            return true;
+          case 'youtube':
+            console.log('🔗 Triggering YouTube connect');
+            handleYouTubeConnect();
+            return true;
+          case 'linkedin':
+            console.log('🔗 Triggering LinkedIn connect');
+            handleLinkedInConnect();
+            return true;
+          case 'twitter':
+            console.log('🔗 Triggering Twitter connect');
+            handleTwitterConnect();
+            return true;
+          default:
+            console.warn('triggerConnect: unsupported platform:', platform);
+            return false;
+        }
+      } catch (e) {
+        console.error('triggerConnect error for platform', platform, e);
+        return false;
+      }
     }
-  };
+  }), [platform, loading, handleFacebookConnect, handleYouTubeConnect, handleLinkedInConnect, handleTwitterConnect]);
 
   const getConnectionButton = () => {
     const baseClasses = "flex items-center justify-center px-6 py-3 rounded-xl font-semibold transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed";
@@ -527,6 +629,7 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
             onClick={handleFacebookConnect}
             disabled={loading}
             className={`${baseClasses} bg-blue-600 text-white hover:bg-blue-700 shadow-lg hover:shadow-xl`}
+            data-platform="facebook"
           >
             {loading ? (
               <Loader2 className="h-5 w-5 animate-spin mr-2" />
@@ -543,6 +646,7 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
             onClick={handleFacebookConnect}
             disabled={loading}
             className={`${baseClasses} bg-gradient-to-r from-pink-500 to-purple-600 text-white hover:from-pink-600 hover:to-purple-700 shadow-lg hover:shadow-xl`}
+            data-platform="instagram"
           >
             {loading ? (
               <Loader2 className="h-5 w-5 animate-spin mr-2" />
@@ -559,6 +663,7 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
             onClick={handleYouTubeConnect}
             disabled={loading}
             className={`${baseClasses} bg-red-600 text-white hover:bg-red-700 shadow-lg hover:shadow-xl`}
+            data-platform="youtube"
           >
             {loading ? (
               <Loader2 className="h-5 w-5 animate-spin mr-2" />
@@ -575,6 +680,7 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
             onClick={handleLinkedInConnect}
             disabled={loading}
             className={`${baseClasses} bg-blue-700 text-white hover:bg-blue-800 shadow-lg hover:shadow-xl`}
+            data-platform="linkedin"
           >
             {loading ? (
               <Loader2 className="h-5 w-5 animate-spin mr-2" />
@@ -591,6 +697,7 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
             onClick={handleTwitterConnect}
             disabled={loading}
             className={`${baseClasses} bg-blue-400 text-white hover:bg-blue-500 shadow-lg hover:shadow-xl`}
+            data-platform="twitter"
           >
             {loading ? (
               <Loader2 className="h-5 w-5 animate-spin mr-2" />
@@ -824,4 +931,4 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
   );
 };
 
-export default SocialIntegrations;
+export default forwardRef(SocialIntegrations);

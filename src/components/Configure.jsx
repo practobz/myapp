@@ -93,14 +93,12 @@ export default function Configure() {
       try {
         setLoading(true);
         setError('');
-        const apiBase = process.env.REACT_APP_API_URL || '';
 
-        // helper to attempt a fetch and return parsed JSON or null
+        // ✅ Use production-aware API endpoints
         const tryFetchJson = async (url, opts = {}) => {
           try {
             const res = await fetch(url, opts);
             if (!res.ok) {
-              // still try to parse error body for debugging
               let txt;
               try { txt = await res.text(); } catch (e) { txt = String(e); }
               console.warn('Request failed', url, res.status, txt);
@@ -109,13 +107,24 @@ export default function Configure() {
             const json = await res.json();
             return { ok: true, status: res.status, json };
           } catch (err) {
-            // network error (connection refused, CORS, etc.)
             console.warn('Network fetch error for', url, err.message);
             return null;
           }
         };
 
-        // Try relative endpoint first (works when backend is proxied by frontend dev server)
+        // ✅ Try production backend first if in production
+        if (process.env.NODE_ENV === 'production') {
+          const productionById = `https://my-backend-593529385135.asia-south1.run.app/api/customers/${encodeURIComponent(customerId)}`;
+          const attemptProductionById = await tryFetchJson(productionById);
+          if (attemptProductionById && attemptProductionById.ok) {
+            const fetched = attemptProductionById.json.customer || attemptProductionById.json;
+            setCustomer(fetched);
+            setLoading(false);
+            return;
+          }
+        }
+
+        // Try relative endpoint (works when backend is proxied by frontend dev server)
         const relativeById = `/api/customers/${encodeURIComponent(customerId)}`;
         const attemptRelativeById = await tryFetchJson(relativeById);
         if (attemptRelativeById && attemptRelativeById.ok) {
@@ -126,6 +135,7 @@ export default function Configure() {
         }
 
         // Try configured API base (if different origin)
+        const apiBase = process.env.REACT_APP_API_URL;
         if (apiBase) {
           const remoteById = `${apiBase.replace(/\/$/, '')}/api/customers/${encodeURIComponent(customerId)}`;
           const attemptRemoteById = await tryFetchJson(remoteById);
@@ -137,29 +147,24 @@ export default function Configure() {
           }
         }
 
-        // Fallback: try listing endpoints (relative then remote)
-        const relativeList = `/api/customers`;
-        const attemptRelativeList = await tryFetchJson(relativeList);
-        if (attemptRelativeList && attemptRelativeList.ok) {
-          const list = attemptRelativeList.json.customers || attemptRelativeList.json;
-          const found = Array.isArray(list) ? list.find(c => String(c._id) === String(customerId) || String(c.id) === String(customerId)) : null;
-          if (found) {
-            setCustomer(found);
-            setLoading(false);
-            return;
-          }
+        // ✅ Fallback: try listing endpoints
+        const endpoints = [];
+        if (process.env.NODE_ENV === 'production') {
+          endpoints.push(`https://my-backend-593529385135.asia-south1.run.app/api/customers`);
+        }
+        endpoints.push(`/api/customers`);
+        if (apiBase) {
+          endpoints.push(`${apiBase.replace(/\/$/, '')}/api/customers`);
         }
 
-        if (apiBase) {
-          const remoteList = `${apiBase.replace(/\/$/, '')}/api/customers`;
-          const attemptRemoteList = await tryFetchJson(remoteList);
-          if (attemptRemoteList && attemptRemoteList.ok) {
-            const list = attemptRemoteList.json.customers || attemptRemoteList.json;
+        for (const listUrl of endpoints) {
+          const attemptList = await tryFetchJson(listUrl);
+          if (attemptList && attemptList.ok) {
+            const list = attemptList.json.customers || attemptList.json;
             const found = Array.isArray(list) ? list.find(c => String(c._id) === String(customerId) || String(c.id) === String(customerId)) : null;
             if (found) {
               setCustomer(found);
               setLoading(false);
-            
               return;
             }
           }

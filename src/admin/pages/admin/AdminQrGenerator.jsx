@@ -141,47 +141,40 @@ export default function AdminQrGenerator() {
 
         console.log(`✅ QR generated successfully for customer: ${customerId}`);
         
-        // ✅ Fix configUrl to use correct frontend domain and path
-        let normalizedConfigUrl = data.configUrl || '';
-        if (normalizedConfigUrl) {
-          try {
-            const parsed = new URL(normalizedConfigUrl);
-            
-            // ✅ FIXED: Always use current window location origin for QR URLs
-            // This ensures production URLs use production domain, not localhost
-            const currentOrigin = window.location.origin;
-            
-            if (process.env.NODE_ENV === 'production') {
-              // For production, construct URL with production domain
-              normalizedConfigUrl = `${currentOrigin}/index.html#/configure?customerId=${customerId}&platform=${platform}&t=${Date.now()}`;
-            } else {
-              // For development, use hash routing with localhost
-              normalizedConfigUrl = `${currentOrigin}/#/configure?customerId=${customerId}&platform=${platform}&t=${Date.now()}`;
-            }
-            
-            console.log(`🔗 Normalized configUrl: ${normalizedConfigUrl}`);
-          } catch (e) {
-            // If URL parsing fails, construct a fallback URL with current origin
-            console.warn('Failed to parse configUrl, creating fallback:', e);
-            const currentOrigin = window.location.origin;
-            
-            if (process.env.NODE_ENV === 'production') {
-              normalizedConfigUrl = `${currentOrigin}/index.html#/configure?customerId=${customerId}&platform=${platform}&t=${Date.now()}`;
-            } else {
-              normalizedConfigUrl = `${currentOrigin}/#/configure?customerId=${customerId}&platform=${platform}&t=${Date.now()}`;
-            }
-          }
+        // ✅ FIXED: Construct QR URL with correct domain based on environment
+        let qrCodeUrl = '';
+        
+        if (process.env.NODE_ENV === 'production') {
+          // ✅ For production, always use the production domain for QR codes
+          // This ensures QR codes work correctly when scanned from any device
+          qrCodeUrl = `https://airspark.storage.googleapis.com/index.html#/configure?customerId=${customerId}&platform=${platform}&source=admin-qr-generator&autoConnect=1&t=${Date.now()}`;
         } else {
-          // If no configUrl from backend, construct one using current origin
-          const currentOrigin = window.location.origin;
-          if (process.env.NODE_ENV === 'production') {
-            normalizedConfigUrl = `${currentOrigin}/index.html#/configure?customerId=${customerId}&platform=${platform}&t=${Date.now()}`;
-          } else {
-            normalizedConfigUrl = `${currentOrigin}/#/configure?customerId=${customerId}&platform=${platform}&t=${Date.now()}`;
-          }
+          // For development, use localhost
+          qrCodeUrl = `http://localhost:3000/#/configure?customerId=${customerId}&platform=${platform}&source=admin-qr-generator&autoConnect=1&t=${Date.now()}`;
+        }
+
+        // ✅ For "View Configuration" link, use current window origin (admin interface)
+        let viewConfigUrl = '';
+        const currentOrigin = window.location.origin;
+        
+        if (process.env.NODE_ENV === 'production') {
+          viewConfigUrl = `${currentOrigin}/index.html#/configure?customerId=${customerId}&platform=${platform}&t=${Date.now()}`;
+        } else {
+          viewConfigUrl = `${currentOrigin}/#/configure?customerId=${customerId}&platform=${platform}&t=${Date.now()}`;
         }
         
-        setQrResult({ ...data, configUrl: normalizedConfigUrl, platform, customerName, customerId });
+        console.log(`🔗 QR Code URL (for scanning): ${qrCodeUrl}`);
+        console.log(`🔗 View Config URL (for admin): ${viewConfigUrl}`);
+        
+        // Update the result with both URLs
+        setQrResult({ 
+          ...data, 
+          configUrl: viewConfigUrl, // For "View Configuration" button
+          qrCodeUrl: qrCodeUrl,     // URL that goes into the QR code
+          platform, 
+          customerName, 
+          customerId 
+        });
         setQrExpiration('valid');
         setError('');
         setSuccessMessage(`QR code generated successfully for ${customerName}!`);
@@ -208,7 +201,7 @@ export default function AdminQrGenerator() {
       
       // Set canvas size for professional output (A4-like ratio)
       const canvasWidth = 800;
-      const canvasHeight = 900; // Reduced height since we removed expiration section
+      const canvasHeight = 900;
       canvas.width = canvasWidth;
       canvas.height = canvasHeight;
 
@@ -352,10 +345,17 @@ export default function AdminQrGenerator() {
       ctx.fillText('Scan this QR code with your mobile device camera', canvasWidth / 2, footerY);
       ctx.fillText('to access your social media configuration', canvasWidth / 2, footerY + 20);
       
+      // Show the actual QR URL for debugging (small text)
+      if (qrResult.qrCodeUrl) {
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '10px Arial, sans-serif';
+        ctx.fillText(`QR URL: ${qrResult.qrCodeUrl}`, canvasWidth / 2, footerY + 45);
+      }
+      
       // Website/contact info
       ctx.fillStyle = '#94a3b8';
       ctx.font = '12px Arial, sans-serif';
-      ctx.fillText('www.airspark.com', canvasWidth / 2, footerY + 50);
+      ctx.fillText('www.airspark.com', canvasWidth / 2, footerY + 65);
 
       // Convert canvas to blob and download
       canvas.toBlob((blob) => {

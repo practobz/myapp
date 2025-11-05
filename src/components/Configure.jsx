@@ -42,13 +42,17 @@ export default function Configure() {
 
   useEffect(() => {
     const params = parseQuery();
-    const customerId = params.get('customerId') || '';
+    const customerId = params.get('customerId') || params.get('customerid') || ''; // Also check lowercase
     const platform = params.get('platform') || '';
     const auto = params.get('autoConnect') || params.get('auto') || '';
     const timestamp = params.get('t');
 
+    console.log('🔍 Configure URL params:', { customerId, platform, auto, timestamp });
+    console.log('🔍 Current URL:', window.location.href);
+    console.log('🔍 Origin:', window.location.origin);
+
     if (!customerId || !platform) {
-      setError('Missing customerId or platform in URL.');
+      setError(`Missing required parameters. CustomerId: ${customerId || 'missing'}, Platform: ${platform || 'missing'}`);
       setLoading(false);
       return;
     }
@@ -93,31 +97,45 @@ export default function Configure() {
       try {
         setLoading(true);
         setError('');
+        
+        // ✅ UPDATED: Better API base URL detection for production
+        let apiBase = process.env.REACT_APP_API_URL || '';
+        
+        // If no API URL configured and we're in production, use the production backend
+        if (!apiBase && process.env.NODE_ENV === 'production') {
+          apiBase = 'https://my-backend-593529385135.asia-south1.run.app';
+        }
+        
+        console.log('🔍 Using API base:', apiBase);
 
-        // ✅ Use production-aware API endpoints
+        // helper to attempt a fetch and return parsed JSON or null
         const tryFetchJson = async (url, opts = {}) => {
           try {
+            console.log('🔍 Trying fetch:', url);
             const res = await fetch(url, opts);
             if (!res.ok) {
+              // still try to parse error body for debugging
               let txt;
               try { txt = await res.text(); } catch (e) { txt = String(e); }
               console.warn('Request failed', url, res.status, txt);
               return { ok: false, status: res.status, bodyText: txt, json: null };
             }
             const json = await res.json();
+            console.log('✅ Fetch success:', url, json);
             return { ok: true, status: res.status, json };
           } catch (err) {
+            // network error (connection refused, CORS, etc.)
             console.warn('Network fetch error for', url, err.message);
             return null;
           }
         };
 
-        // ✅ Try production backend first if in production
-        if (process.env.NODE_ENV === 'production') {
-          const productionById = `https://my-backend-593529385135.asia-south1.run.app/api/customers/${encodeURIComponent(customerId)}`;
-          const attemptProductionById = await tryFetchJson(productionById);
-          if (attemptProductionById && attemptProductionById.ok) {
-            const fetched = attemptProductionById.json.customer || attemptProductionById.json;
+        // Try configured API base first (more reliable for production)
+        if (apiBase) {
+          const remoteById = `${apiBase.replace(/\/$/, '')}/api/customers/${encodeURIComponent(customerId)}`;
+          const attemptRemoteById = await tryFetchJson(remoteById);
+          if (attemptRemoteById && attemptRemoteById.ok) {
+            const fetched = attemptRemoteById.json.customer || attemptRemoteById.json;
             setCustomer(fetched);
             setLoading(false);
             return;
@@ -134,44 +152,37 @@ export default function Configure() {
           return;
         }
 
-        // Try configured API base (if different origin)
-        const apiBase = process.env.REACT_APP_API_URL;
-        if (apiBase) {
-          const remoteById = `${apiBase.replace(/\/$/, '')}/api/customers/${encodeURIComponent(customerId)}`;
-          const attemptRemoteById = await tryFetchJson(remoteById);
-          if (attemptRemoteById && attemptRemoteById.ok) {
-            const fetched = attemptRemoteById.json.customer || attemptRemoteById.json;
-            setCustomer(fetched);
+        // Fallback: try listing endpoints (relative then remote)
+        const relativeList = `/api/customers`;
+        const attemptRelativeList = await tryFetchJson(relativeList);
+        if (attemptRelativeList && attemptRelativeList.ok) {
+          const list = attemptRelativeList.json.customers || attemptRelativeList.json;
+          const found = Array.isArray(list) ? list.find(c => String(c._id) === String(customerId) || String(c.id) === String(customerId)) : null;
+          if (found) {
+            setCustomer(found);
             setLoading(false);
             return;
           }
         }
 
-        // ✅ Fallback: try listing endpoints
-        const endpoints = [];
-        if (process.env.NODE_ENV === 'production') {
-          endpoints.push(`https://my-backend-593529385135.asia-south1.run.app/api/customers`);
-        }
-        endpoints.push(`/api/customers`);
         if (apiBase) {
-          endpoints.push(`${apiBase.replace(/\/$/, '')}/api/customers`);
-        }
-
-        for (const listUrl of endpoints) {
-          const attemptList = await tryFetchJson(listUrl);
-          if (attemptList && attemptList.ok) {
-            const list = attemptList.json.customers || attemptList.json;
+          const remoteList = `${apiBase.replace(/\/$/, '')}/api/customers`;
+          const attemptRemoteList = await tryFetchJson(remoteList);
+          if (attemptRemoteList && attemptRemoteList.ok) {
+            const list = attemptRemoteList.json.customers || attemptRemoteList.json;
             const found = Array.isArray(list) ? list.find(c => String(c._id) === String(customerId) || String(c.id) === String(customerId)) : null;
             if (found) {
               setCustomer(found);
               setLoading(false);
+            
               return;
             }
           }
         }
 
-        setError('Customer not found. Please verify the QR was generated for an existing customer or that the API is reachable.');
+        setError(`Customer not found. CustomerId: ${customerId}. Please verify the QR was generated for an existing customer or that the API is reachable.`);
       } catch (err) {
+        console.error('🚫 Network error:', err);
         setError('Network error while fetching customer.');
       } finally {
         setLoading(false);
@@ -203,57 +214,6 @@ export default function Configure() {
 
     return () => clearTimeout(t);
   }, [autoConnect, customer, platformKey]);
-
-  // ✅ Improved auto-connect handler
-  const handleAutoConnect = () => {
-    setAwaitingUserGesture(false);
-    
-    // Clear any existing errors
-    setError('');
-    
-    // Try multiple approaches to trigger connection
-    setTimeout(() => {
-      try {
-        // Method 1: Try the ref's triggerConnect method
-        if (socialRef.current && typeof socialRef.current.triggerConnect === 'function') {
-          console.log('🔗 Using ref triggerConnect method');
-          socialRef.current.triggerConnect();
-          return;
-        }
-
-        // Method 2: Try to find and click the connect button directly
-        const connectBtn = document.querySelector('button[disabled="false"]:not([id="auto-connect-btn"])');
-        if (connectBtn && connectBtn.textContent.includes('Connect')) {
-          console.log('🔗 Using direct button click');
-          connectBtn.click();
-          return;
-        }
-
-        // Method 3: Find platform-specific buttons
-        const platformButtons = {
-          'facebook': () => document.querySelector('button:has(.lucide-facebook)') || document.querySelector('button[class*="bg-blue-600"]'),
-          'instagram': () => document.querySelector('button:has(.lucide-instagram)') || document.querySelector('button[class*="from-pink-500"]'),
-          'youtube': () => document.querySelector('button:has(.lucide-youtube)') || document.querySelector('button[class*="bg-red-600"]'),
-          'linkedin': () => document.querySelector('button:has(.lucide-linkedin)') || document.querySelector('button[class*="bg-blue-700"]'),
-          'twitter': () => document.querySelector('button:has(.lucide-twitter)') || document.querySelector('button[class*="bg-blue-400"]')
-        };
-
-        const platformBtn = platformButtons[platform] && platformButtons[platform]();
-        if (platformBtn) {
-          console.log('🔗 Using platform-specific button click');
-          platformBtn.click();
-          return;
-        }
-
-        // Method 4: Fallback error
-        setError(`Auto-connect not available for ${platform}. Please click the Connect button manually.`);
-        
-      } catch (err) {
-        console.error('Auto-connect error:', err);
-        setError('Auto-connect failed. Please click the Connect button manually.');
-      }
-    }, 100);
-  };
 
   const mapPlatform = (key) => {
     switch (key) {
@@ -356,8 +316,18 @@ export default function Configure() {
 
               <button
                 id="auto-connect-btn"
-                onClick={handleAutoConnect}
-                className="px-6 py-3 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 transition-colors"
+                onClick={() => {
+                  // hide the prompt and trigger connect inside user gesture
+                  setAwaitingUserGesture(false);
+                  setTimeout(() => {
+                    if (socialRef.current && typeof socialRef.current.triggerConnect === 'function') {
+                      socialRef.current.triggerConnect();
+                    } else {
+                      setError('Automatic trigger not available. Please press Connect in the widget.');
+                    }
+                  }, 100);
+                }}
+                className="px-6 py-3 rounded-lg bg-blue-600 text-white font-semibold"
               >
                 Tap to Connect {platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : 'Account'}
               </button>

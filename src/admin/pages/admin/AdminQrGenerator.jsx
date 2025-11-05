@@ -147,25 +147,37 @@ export default function AdminQrGenerator() {
           try {
             const parsed = new URL(normalizedConfigUrl);
             
-            // ✅ Handle production frontend path correctly
+            // ✅ FIXED: Always use current window location origin for QR URLs
+            // This ensures production URLs use production domain, not localhost
+            const currentOrigin = window.location.origin;
+            
             if (process.env.NODE_ENV === 'production') {
-              // For production, use the correct path with index.html
-              normalizedConfigUrl = `${window.location.origin}/index.html${parsed.hash || parsed.pathname + parsed.search}`;
+              // For production, construct URL with production domain
+              normalizedConfigUrl = `${currentOrigin}/index.html#/configure?customerId=${customerId}&platform=${platform}&t=${Date.now()}`;
             } else {
-              // For development, use current origin
-              normalizedConfigUrl = `${window.location.origin}${parsed.pathname}${parsed.search}${parsed.hash}`;
+              // For development, use hash routing with localhost
+              normalizedConfigUrl = `${currentOrigin}/#/configure?customerId=${customerId}&platform=${platform}&t=${Date.now()}`;
             }
             
             console.log(`🔗 Normalized configUrl: ${normalizedConfigUrl}`);
           } catch (e) {
-            // If URL parsing fails, construct a fallback URL
+            // If URL parsing fails, construct a fallback URL with current origin
             console.warn('Failed to parse configUrl, creating fallback:', e);
+            const currentOrigin = window.location.origin;
+            
             if (process.env.NODE_ENV === 'production') {
-              // ✅ Fix: Use correct parameter name 'customerId' (capital I)
-              normalizedConfigUrl = `${window.location.origin}/index.html#/configure?customerId=${customerId}&platform=${platform}&source=admin-qr-generator&autoConnect=1&t=${Date.now()}`;
+              normalizedConfigUrl = `${currentOrigin}/index.html#/configure?customerId=${customerId}&platform=${platform}&t=${Date.now()}`;
             } else {
-              normalizedConfigUrl = `${window.location.origin}/#/configure?customerId=${customerId}&platform=${platform}&source=admin-qr-generator&autoConnect=1&t=${Date.now()}`;
+              normalizedConfigUrl = `${currentOrigin}/#/configure?customerId=${customerId}&platform=${platform}&t=${Date.now()}`;
             }
+          }
+        } else {
+          // If no configUrl from backend, construct one using current origin
+          const currentOrigin = window.location.origin;
+          if (process.env.NODE_ENV === 'production') {
+            normalizedConfigUrl = `${currentOrigin}/index.html#/configure?customerId=${customerId}&platform=${platform}&t=${Date.now()}`;
+          } else {
+            normalizedConfigUrl = `${currentOrigin}/#/configure?customerId=${customerId}&platform=${platform}&t=${Date.now()}`;
           }
         }
         

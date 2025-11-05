@@ -1273,37 +1273,32 @@ function FacebookIntegration() {
 
   // Store connected page information
   const storeConnectedPage = async (page) => {
-	try {
-		// First store the page data
-		const response = await fetch(`${process.env.REACT_APP_API_URL}/api/connected-pages/store`, {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({
-				pageId: page.id,
-				pageName: page.name,
-				accessToken: page.access_token,
-				userId: activeAccount?.id || 'unknown',
-				accountName: activeAccount?.name || 'unknown'
-			})
-		});
-		
-		const result = await response.json().catch(() => null);
-		if (result && result.success) {
-			console.log('✅ Stored connected page:', page.name);
-		} else {
-			console.warn('⚠️ Connected page store returned non-success:', response.status, result);
-		}
+    try {
+      // First store the page data
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/connected-pages/store`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pageId: page.id,
+          pageName: page.name,
+          accessToken: page.access_token,
+          userId: activeAccount?.id || 'unknown',
+          accountName: activeAccount?.name || 'unknown'
+        })
+      });
+      
+      const result = await response.json();
+      if (result.success) {
+        console.log('✅ Stored connected page:', page.name);
+      }
 
-		// Store customer social account for admin access
-		const saved = await storeCustomerSocialAccount(page);
-		if (!saved) {
-			console.warn('⚠️ storeCustomerSocialAccount failed for page:', page.id, page.name);
-		}
-		
-	} catch (error) {
-		console.warn('Failed to store connected page:', error);
-	}
-};
+      // Store customer social account for admin access
+      await storeCustomerSocialAccount(page);
+      
+    } catch (error) {
+      console.warn('Failed to store connected page:', error);
+    }
+  };
 
   // Store customer social account for admin access
   const storeCustomerSocialAccount = async (page) => {
@@ -1330,13 +1325,13 @@ function FacebookIntegration() {
       
       if (!customerId) {
         console.warn('No customer ID found, cannot store social account');
-        return false;
+        return;
       }
 
-      // Warn if user token missing but continue (frontend should still try)
+      // ✅ CRITICAL FIX: Always store the current user access token
       if (!activeAccount?.accessToken) {
         console.error('❌ No user access token available - refresh will not work');
-        // avoid blocking UX with alert; just log
+        alert('Warning: User access token is missing. Token refresh may not work. Please reconnect if you experience issues.');
       }
 
       const accountData = {
@@ -1346,13 +1341,13 @@ function FacebookIntegration() {
         name: activeAccount.name,
         email: activeAccount.email,
         profilePicture: activeAccount.picture?.data?.url,
-        accessToken: activeAccount.accessToken,
-        userId: activeAccount.id,
+        accessToken: activeAccount.accessToken, // ✅ Store user access token for refresh
+        userId: activeAccount.id, // ✅ Store user ID for refresh operations
         pages: [
           {
             id: page.id,
             name: page.name,
-            accessToken: page.access_token,
+            accessToken: page.access_token, // ✅ Store page access token for posting
             category: page.category,
             fanCount: page.fan_count,
             permissions: ['pages_read_engagement'],
@@ -1361,29 +1356,35 @@ function FacebookIntegration() {
           }
         ],
         connectedAt: new Date().toISOString(),
+        // ✅ FORCE RESET - Explicitly set these to false/null
         needsReconnection: false,
         lastTokenValidation: new Date().toISOString(),
         refreshError: null,
         lastRefreshAttempt: null,
+        // ✅ Add validation timestamp to track when tokens were confirmed working
         lastSuccessfulValidation: new Date().toISOString(),
         tokenStatus: 'active'
       };
 
-      // Validation flags for logs
+      // ✅ VALIDATION: Only set error flags if tokens are actually missing
       const hasUserToken = !!accountData.accessToken;
       const hasPageToken = !!accountData.pages[0].accessToken;
 
       if (!hasUserToken) {
+        console.warn('⚠️ Missing user access token - refresh will not work');
         accountData.needsReconnection = true;
         accountData.refreshError = 'User access token not available during connection';
         accountData.tokenStatus = 'invalid_user_token';
       }
+
       if (!hasPageToken) {
+        console.warn('⚠️ Missing page access token - posting will not work');
         accountData.needsReconnection = true;
         accountData.refreshError = 'Page access token not available during connection';
         accountData.tokenStatus = 'invalid_page_token';
       }
 
+      // ✅ Log token validation status
       console.log('🔑 Token Validation Summary:', {
         hasUserToken,
         hasPageToken,
@@ -1393,69 +1394,21 @@ function FacebookIntegration() {
         tokenStatus: accountData.tokenStatus
       });
 
-      // Send to backend with robust error handling and a single retry on 5xx
-      const endpoint = `${process.env.REACT_APP_API_URL}/api/customer-social-links`;
-      let attempt = 0;
-      const maxAttempts = 2;
-
-      while (attempt < maxAttempts) {
-        attempt += 1;
-        let res;
-        try {
-          res = await fetch(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(accountData)
-          });
-        } catch (networkErr) {
-          console.warn(`Network error storing customer social account (attempt ${attempt}):`, networkErr);
-          // retry on network error if attempts remain
-          if (attempt < maxAttempts) {
-            await new Promise(r => setTimeout(r, 500));
-            continue;
-          }
-          return false;
-        }
-
-        // Try to parse JSON body safely
-        let body = null;
-        try {
-          // Some servers return non-json on 500; handle gracefully
-          body = await res.text();
-          try {
-            body = JSON.parse(body);
-          } catch (e) {
-            // keep as text if parse fails
-          }
-        } catch (e) {
-          body = null;
-        }
-
-        if (!res.ok) {
-          console.warn(`Failed to store customer social account (attempt ${attempt}) status=${res.status}`, body);
-          // retry once for server errors (5xx)
-          if (res.status >= 500 && attempt < maxAttempts) {
-            await new Promise(r => setTimeout(r, 600));
-            continue;
-          }
-          return false;
-        }
-
-        // success path: if parsed JSON indicates success
-        if (body && typeof body === 'object' && body.success) {
-          console.log('✅ Stored customer social account for admin access');
-          return true;
-        }
-
-        // If server returned 200 but body indicates failure
-        console.warn('Failed to store customer social account: unexpected response body', body);
-        return false;
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/customer-social-links`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(accountData)
+      });
+      
+      const result = await response.json();
+      if (result.success) {
+        console.log('✅ Stored customer social account for admin access');
+      } else {
+        console.warn('Failed to store customer social account:', result.error);
       }
-
-      return false;
+      
     } catch (error) {
-      console.warn('Failed to store customer social account (unexpected):', error);
-      return false;
+      console.warn('Failed to store customer social account:', error);
     }
   };
 

@@ -141,21 +141,30 @@ export default function AdminQrGenerator() {
 
         console.log(`✅ QR generated successfully for customer: ${customerId}`);
         
-        // ✅ Fix configUrl to use correct frontend domain
+        // ✅ Fix configUrl to use correct frontend domain and path
         let normalizedConfigUrl = data.configUrl || '';
         if (normalizedConfigUrl) {
           try {
             const parsed = new URL(normalizedConfigUrl);
             
-            // Always use the current frontend's origin for the configUrl
-            // This handles both localhost (dev) and production domains
-            normalizedConfigUrl = `${window.location.origin}${parsed.pathname}${parsed.search}${parsed.hash}`;
+            // ✅ Handle production frontend path correctly
+            if (process.env.NODE_ENV === 'production') {
+              // For production, use the correct path with index.html
+              normalizedConfigUrl = `${window.location.origin}/index.html${parsed.hash || parsed.pathname + parsed.search}`;
+            } else {
+              // For development, use current origin
+              normalizedConfigUrl = `${window.location.origin}${parsed.pathname}${parsed.search}${parsed.hash}`;
+            }
             
             console.log(`🔗 Normalized configUrl: ${normalizedConfigUrl}`);
           } catch (e) {
             // If URL parsing fails, construct a fallback URL
             console.warn('Failed to parse configUrl, creating fallback:', e);
-            normalizedConfigUrl = `${window.location.origin}/#/configure?customerid=${customerId}&platform=${platform}`;
+            if (process.env.NODE_ENV === 'production') {
+              normalizedConfigUrl = `${window.location.origin}/index.html#/configure?customerid=${customerId}&platform=${platform}`;
+            } else {
+              normalizedConfigUrl = `${window.location.origin}/#/configure?customerid=${customerId}&platform=${platform}`;
+            }
           }
         }
         

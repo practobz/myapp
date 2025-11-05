@@ -4,17 +4,6 @@ import { ExternalLink, AlertCircle, CheckCircle, Clock } from 'lucide-react';
 
 const QR_EXPIRATION_TIME = 2 * 60 * 60 * 1000; // match backend (2 hours)
 
-// ✅ Environment-aware API base URL (same as AdminQrGenerator)
-const getApiBaseUrl = () => {
-  // For production deployment, use the correct backend URL
-  if (process.env.NODE_ENV === 'production') {
-    return 'https://my-backend-593529385135.asia-south1.run.app';
-  }
-  
-  // For local development, use environment variable or fallback
-  return process.env.REACT_APP_API_URL || 'http://localhost:3001';
-};
-
 // Robust query parser: prefer explicit search params, fall back to hash query.
 const parseQuery = () => {
   // 1) If the URL contains search params (?a=1&b=2), use them
@@ -99,20 +88,19 @@ export default function Configure() {
       }
     }
 
-    // ✅ Updated fetch customer logic with better error handling
+    // fetch customer info (try multiple endpoints with fallbacks)
     const fetchCustomer = async () => {
       try {
         setLoading(true);
         setError('');
-        
-        // Use the same API base URL logic as AdminQrGenerator
-        const apiBase = getApiBaseUrl();
+        const apiBase = process.env.REACT_APP_API_URL || '';
 
         // helper to attempt a fetch and return parsed JSON or null
         const tryFetchJson = async (url, opts = {}) => {
           try {
             const res = await fetch(url, opts);
             if (!res.ok) {
+              // still try to parse error body for debugging
               let txt;
               try { txt = await res.text(); } catch (e) { txt = String(e); }
               console.warn('Request failed', url, res.status, txt);
@@ -121,57 +109,65 @@ export default function Configure() {
             const json = await res.json();
             return { ok: true, status: res.status, json };
           } catch (err) {
+            // network error (connection refused, CORS, etc.)
             console.warn('Network fetch error for', url, err.message);
             return null;
           }
         };
 
-        // ✅ Try production backend first (most likely to work in production)
-        const backendById = `${apiBase}/api/customers/${encodeURIComponent(customerId)}`;
-        console.log('🔍 Fetching customer from:', backendById);
-        
-        const attemptBackend = await tryFetchJson(backendById);
-        if (attemptBackend && attemptBackend.ok) {
-          const fetched = attemptBackend.json.customer || attemptBackend.json;
-          console.log('✅ Customer found via backend:', fetched);
+        // Try relative endpoint first (works when backend is proxied by frontend dev server)
+        const relativeById = `/api/customers/${encodeURIComponent(customerId)}`;
+        const attemptRelativeById = await tryFetchJson(relativeById);
+        if (attemptRelativeById && attemptRelativeById.ok) {
+          const fetched = attemptRelativeById.json.customer || attemptRelativeById.json;
           setCustomer(fetched);
           setLoading(false);
           return;
         }
 
-        // ✅ Fallback: try customers list endpoint
-        const backendList = `${apiBase}/api/customers`;
-        console.log('🔍 Fallback: trying customers list from:', backendList);
-        
-        const attemptList = await tryFetchJson(backendList);
-        if (attemptList && attemptList.ok) {
-          const list = attemptList.json.customers || attemptList.json;
-          const found = Array.isArray(list) ? list.find(c => String(c._id) === String(customerId) || String(c.id) === String(customerId)) : null;
-          if (found) {
-            console.log('✅ Customer found in list:', found);
-            setCustomer(found);
-            setLoading(false);
-            return;
-          }
-        }
-
-        // ✅ If in development, also try relative paths
-        if (process.env.NODE_ENV === 'development') {
-          const relativeById = `/api/customers/${encodeURIComponent(customerId)}`;
-          const attemptRelative = await tryFetchJson(relativeById);
-          if (attemptRelative && attemptRelative.ok) {
-            const fetched = attemptRelative.json.customer || attemptRelative.json;
+        // Try configured API base (if different origin)
+        if (apiBase) {
+          const remoteById = `${apiBase.replace(/\/$/, '')}/api/customers/${encodeURIComponent(customerId)}`;
+          const attemptRemoteById = await tryFetchJson(remoteById);
+          if (attemptRemoteById && attemptRemoteById.ok) {
+            const fetched = attemptRemoteById.json.customer || attemptRemoteById.json;
             setCustomer(fetched);
             setLoading(false);
             return;
           }
         }
 
-        console.error('❌ Customer not found in any endpoint');
-        setError(`Customer not found (ID: ${customerId}). Please verify the QR code was generated correctly.`);
+        // Fallback: try listing endpoints (relative then remote)
+        const relativeList = `/api/customers`;
+        const attemptRelativeList = await tryFetchJson(relativeList);
+        if (attemptRelativeList && attemptRelativeList.ok) {
+          const list = attemptRelativeList.json.customers || attemptRelativeList.json;
+          const found = Array.isArray(list) ? list.find(c => String(c._id) === String(customerId) || String(c.id) === String(customerId)) : null;
+          if (found) {
+            setCustomer(found);
+            setLoading(false);
+            return;
+          }
+        }
+
+        if (apiBase) {
+          const remoteList = `${apiBase.replace(/\/$/, '')}/api/customers`;
+          const attemptRemoteList = await tryFetchJson(remoteList);
+          if (attemptRemoteList && attemptRemoteList.ok) {
+            const list = attemptRemoteList.json.customers || attemptRemoteList.json;
+            const found = Array.isArray(list) ? list.find(c => String(c._id) === String(customerId) || String(c.id) === String(customerId)) : null;
+            if (found) {
+              setCustomer(found);
+              setLoading(false);
+            
+              return;
+            }
+          }
+        }
+
+        setError('Customer not found. Please verify the QR was generated for an existing customer or that the API is reachable.');
       } catch (err) {
-        console.error('❌ Network error:', err);
-        setError('Network error while fetching customer data. Please check your connection.');
+        setError('Network error while fetching customer.');
       } finally {
         setLoading(false);
       }
@@ -185,13 +181,16 @@ export default function Configure() {
     };
   }, []); // run once on mount
 
-  // ✅ Improved auto-connect flow with better error handling
+  // REPLACE previous auto-trigger effect with user-gesture flow:
   useEffect(() => {
+    // If autoConnect was requested, wait for customer & platform to be loaded,
+    // then show a prompt so the user can tap a button (real user gesture)
     if (!autoConnect || !customer || !platformKey) return;
 
-    console.log('🔄 Auto-connect requested for:', platformKey, 'customer:', customer.name);
+    // show prompt that requires a tap (user gesture) to open auth popup
     setAwaitingUserGesture(true);
 
+    // focus the button shortly after render so mobile users can tap faster
     const t = setTimeout(() => {
       const btn = document.getElementById('auto-connect-btn');
       if (btn) btn.focus();
@@ -275,7 +274,6 @@ export default function Configure() {
         <div className="mb-4">
           <h2 className="text-xl font-bold">Configure {platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : 'Social'}</h2>
           {timeRemaining && <p className="text-sm text-slate-600 mt-1">Link valid for: {timeRemaining}</p>}
-          {customer && <p className="text-sm text-slate-500 mt-1">Customer: {customer.name}</p>}
         </div>
 
         {/* Social integrations widget */}
@@ -285,7 +283,7 @@ export default function Configure() {
           customer={customer}
           compact={true}
           onConnectionSuccess={() => {
-            console.log('✅ Connection successful, redirecting...');
+            // minimal success UX: show confirmation then redirect to app home
             window.location.href = '/';
           }}
         />
@@ -303,19 +301,17 @@ export default function Configure() {
               <button
                 id="auto-connect-btn"
                 onClick={() => {
-                  console.log('🎯 User tapped auto-connect button');
+                  // hide the prompt and trigger connect inside user gesture
                   setAwaitingUserGesture(false);
                   setTimeout(() => {
                     if (socialRef.current && typeof socialRef.current.triggerConnect === 'function') {
-                      console.log('🚀 Triggering auto-connect...');
                       socialRef.current.triggerConnect();
                     } else {
-                      console.warn('❌ triggerConnect not available on socialRef');
-                      setError('Please use the Connect button in the integration panel below.');
+                      setError('Automatic trigger not available. Please press Connect in the widget.');
                     }
                   }, 100);
                 }}
-                className="px-6 py-3 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700"
+                className="px-6 py-3 rounded-lg bg-blue-600 text-white font-semibold"
               >
                 Tap to Connect {platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : 'Account'}
               </button>
@@ -323,12 +319,12 @@ export default function Configure() {
               <div className="mt-3 text-sm text-slate-500">
                 <button
                   onClick={() => {
-                    console.log('❌ Auto-connect cancelled by user');
                     setAwaitingUserGesture(false);
+                    setError('Auto-connect cancelled by user.');
                   }}
                   className="text-slate-600 hover:underline"
                 >
-                  Cancel and Connect Manually
+                  Cancel
                 </button>
               </div>
             </div>

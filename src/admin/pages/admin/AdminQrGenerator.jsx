@@ -155,12 +155,13 @@ export default function AdminQrGenerator() {
 
         // ✅ For "View Configuration" link, use current window origin (admin interface)
         let viewConfigUrl = '';
-        const currentOrigin = window.location.origin;
         
         if (process.env.NODE_ENV === 'production') {
-          viewConfigUrl = `${currentOrigin}/index.html#/configure?customerId=${customerId}&platform=${platform}&t=${Date.now()}`;
+          // For production admin interface, use the storage bucket URL
+          viewConfigUrl = `https://airspark.storage.googleapis.com/index.html#/configure?customerId=${customerId}&platform=${platform}&t=${Date.now()}`;
         } else {
-          viewConfigUrl = `${currentOrigin}/#/configure?customerId=${customerId}&platform=${platform}&t=${Date.now()}`;
+          // For development, use localhost
+          viewConfigUrl = `${window.location.origin}/#/configure?customerId=${customerId}&platform=${platform}&t=${Date.now()}`;
         }
         
         console.log(`🔗 QR Code URL (for scanning): ${qrCodeUrl}`);

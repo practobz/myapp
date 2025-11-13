@@ -67,7 +67,6 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
     return cust.id || cust._id || cust.customerId || '';
   };
 
-  // ✅ Fix API URL handling for production
   const fetchExistingConnections = async () => {
     try {
       const customerId = getCustomerId(customer);
@@ -76,17 +75,11 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
         return;
       }
 
-      // ✅ Use production-aware API endpoints
+      // Try configured backend first, then fallback to relative path
       const endpoints = [];
-      
-      // For production, use the hardcoded backend URL
-      if (process.env.NODE_ENV === 'production') {
-        endpoints.push(`https://my-backend-593529385135.asia-south1.run.app/api/customer-social-links/${customerId}`);
-      } else if (process.env.REACT_APP_API_URL) {
+      if (process.env.REACT_APP_API_URL) {
         endpoints.push(`${process.env.REACT_APP_API_URL.replace(/\/$/, '')}/api/customer-social-links/${customerId}`);
       }
-      
-      // Always try relative path as fallback
       endpoints.push(`/api/customer-social-links/${customerId}`);
 
       let data = null;
@@ -117,6 +110,130 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
     }
   };
 
+  // Add new function to request long-lived token
+  const requestLongLivedToken = async (shortLivedToken, userId) => {
+    try {
+      console.log('🔄 Requesting long-lived token via backend...');
+      
+      const endpoints = [];
+      if (process.env.REACT_APP_API_URL) {
+        endpoints.push(`${process.env.REACT_APP_API_URL.replace(/\/$/, '')}/api/facebook/exchange-token`);
+      }
+      endpoints.push('/api/facebook/exchange-token');
+
+      let data = null;
+      for (const url of endpoints) {
+        try {
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              shortLivedToken: shortLivedToken,
+              userId: userId
+            })
+          });
+          
+          if (!response.ok) {
+            console.warn('requestLongLivedToken: non-ok response', url, response.status);
+            continue;
+          }
+          
+          const json = await response.json();
+          data = json;
+          break;
+        } catch (err) {
+          console.warn('requestLongLivedToken: request failed for', url, err.message);
+          continue;
+        }
+      }
+      
+      if (data && data.success && data.longLivedToken) {
+        console.log('✅ Received long-lived token (expires in', data.expiresIn, 'seconds)');
+        
+        // Calculate expiration date (usually 60 days)
+        const expirationDate = data.expiresIn ? 
+          new Date(Date.now() + (data.expiresIn * 1000)).toISOString() : 
+          new Date(Date.now() + (60 * 24 * 60 * 60 * 1000)).toISOString(); // Default 60 days
+        
+        return {
+          token: data.longLivedToken,
+          expiresAt: expirationDate,
+          tokenType: 'long_lived'
+        };
+      } else {
+        console.warn('⚠️ Failed to get long-lived token:', data?.error || 'Unknown error');
+        return null;
+      }
+    } catch (error) {
+      console.warn('⚠️ Error requesting long-lived token:', error);
+      return null;
+    }
+  };
+
+
+  // Add function to get never-expiring page tokens
+  const requestNeverExpiringPageTokens = async (userAccessToken, userId, pages) => {
+    try {
+      console.log('🔄 Requesting never-expiring page tokens...');
+      
+      const endpoints = [];
+      if (process.env.REACT_APP_API_URL) {
+        endpoints.push(`${process.env.REACT_APP_API_URL.replace(/\/$/, '')}/api/facebook/page-tokens`);
+      }
+      endpoints.push('/api/facebook/page-tokens');
+
+      let data = null;
+      for (const url of endpoints) {
+        try {
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userAccessToken: userAccessToken,
+              userId: userId
+            })
+          });
+          
+          if (!response.ok) {
+            console.warn('requestNeverExpiringPageTokens: non-ok response', url, response.status);
+            continue;
+          }
+          
+          const json = await response.json();
+          data = json;
+          break;
+        } catch (err) {
+          console.warn('requestNeverExpiringPageTokens: request failed for', url, err.message);
+          continue;
+        }
+      }
+      
+      if (data && data.success && data.pages) {
+        console.log(`✅ Got never-expiring tokens for ${data.pages.length} pages`);
+        
+        // Update pages with never-expiring tokens
+        return pages.map(page => {
+          const updatedPage = data.pages.find(p => p.id === page.id);
+          if (updatedPage) {
+            return {
+              ...page,
+              accessToken: updatedPage.access_token,
+              tokenType: 'never_expiring_page_token',
+              tokenValidatedAt: new Date().toISOString()
+            };
+          }
+          return page;
+        });
+      } else {
+        console.warn('⚠️ Failed to get never-expiring page tokens:', data?.error || 'Unknown error');
+        return pages;
+      }
+    } catch (error) {
+      console.warn('⚠️ Error requesting never-expiring page tokens:', error);
+      return pages;
+    }
+  };
+
   const handleFacebookConnect = async () => {
     setLoading(true);
     setError('');
@@ -125,94 +242,196 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
     try {
       await loadFacebookSDK();
 
-      // Open Facebook login popup (like FacebookIntegration.jsx)
+      // Open Facebook login popup - use regular function, not async
       window.FB.login((response) => {
         if (response.status === 'connected') {
           const accessToken = response.authResponse.accessToken;
           const userId = response.authResponse.userID;
 
-          // Fetch user info
-          window.FB.api('/me', { fields: 'id,name,email', access_token: accessToken }, function(userResponse) {
-            if (!userResponse || userResponse.error) {
-              setError('Failed to fetch Facebook user info');
-              setLoading(false);
-              return;
-            }
+          console.log('✅ Facebook login successful, fetching user data...');
 
-            // Fetch pages
-            window.FB.api(`/${userId}/accounts`, {
-              fields: 'id,name,access_token,category,instagram_business_account{id,name,username,profile_picture_url}',
-              access_token: accessToken
-            }, function(pagesResponse) {
-              if (!pagesResponse || pagesResponse.error) {
-                setError('Failed to fetch Facebook pages: ' + (pagesResponse.error?.message || 'Unknown error'));
-                setLoading(false);
-                return;
-              }
-
-              // Prepare account data for saving
-              const accountData = {
-                customerId: customer.id,
-                platform: 'facebook',
-                platformUserId: userId,
-                name: userResponse.name,
-                email: userResponse.email,
-                profilePicture: userResponse.picture?.data?.url,
-                accessToken: accessToken,
-                pages: pagesResponse.data.map(page => ({
-                  id: page.id,
-                  name: page.name,
-                  category: page.category,
-                  accessToken: page.access_token,
-                  instagramBusinessAccount: page.instagram_business_account || null
-                })),
-                connectedAt: new Date().toISOString()
-              };
-
-              // Save to backend using correct endpoint
-              saveAccountToDatabase(accountData);
-
-              // If Instagram, also save Instagram-specific data
-              if (platform === 'instagram') {
-                const instagramPages = pagesResponse.data.filter(page => page.instagram_business_account);
-                if (instagramPages.length > 0) {
-                  const instagramAccountData = {
-                    customerId: customer.id,
-                    platform: 'instagram',
-                    platformUserId: userId,
-                    name: userResponse.name,
-                    email: userResponse.email,
-                    profilePicture: userResponse.picture?.data?.url,
-                    accessToken: accessToken,
-                    pages: instagramPages.map(page => ({
-                      id: page.id,
-                      name: page.name,
-                      category: page.category,
-                      accessToken: page.access_token,
-                      instagramBusinessAccount: page.instagram_business_account
-                    })),
-                    connectedAt: new Date().toISOString()
-                  };
-                  saveAccountToDatabase(instagramAccountData);
-                } else {
-                  setError('No Instagram Business accounts found. Please connect an Instagram Business account to your Facebook pages first.');
-                  setLoading(false);
-                  return;
-                }
-              }
-            });
-          });
+          // Call helper function to handle the async operations
+          handleFacebookLoginSuccess(accessToken, userId);
         } else {
           setError('Facebook login was cancelled');
           setLoading(false);
         }
       }, {
-        scope: 'pages_show_list,pages_read_engagement,pages_manage_posts,instagram_basic,instagram_content_publish,business_management',
+        scope: 'pages_show_list,pages_read_engagement,pages_manage_posts,pages_manage_metadata,instagram_basic,instagram_content_publish,business_management',
         return_scopes: true,
         auth_type: 'rerequest'
       });
     } catch (err) {
       setError('Failed to connect to Facebook: ' + err.message);
+      setLoading(false);
+    }
+  };
+
+  // New helper function to handle async operations after Facebook login
+  const handleFacebookLoginSuccess = async (accessToken, userId) => {
+    try {
+      // Fetch user info
+      window.FB.api('/me', { fields: 'id,name,email,picture', access_token: accessToken }, async function(userResponse) {
+        if (!userResponse || userResponse.error) {
+          setError('Failed to fetch Facebook user info');
+          setLoading(false);
+          return;
+        }
+
+        // Exchange for long-lived token
+        console.log('🔄 Exchanging for long-lived token...');
+        const longLivedResult = await requestLongLivedToken(accessToken, userId);
+        const finalUserToken = longLivedResult ? longLivedResult.token : accessToken;
+        const tokenExpiresAt = longLivedResult ? longLivedResult.expiresAt : null;
+
+        if (longLivedResult) {
+          console.log('✅ Using long-lived user token');
+        } else {
+          console.log('⚠️ Using short-lived user token (fallback)');
+        }
+
+        // Fetch pages
+        window.FB.api(`/${userId}/accounts`, {
+          fields: 'id,name,access_token,category,instagram_business_account{id,name,username,profile_picture_url}',
+          access_token: finalUserToken
+        }, async function(pagesResponse) {
+          if (!pagesResponse || pagesResponse.error) {
+            setError('Failed to fetch Facebook pages: ' + (pagesResponse.error?.message || 'Unknown error'));
+            setLoading(false);
+            return;
+          }
+
+          // Get never-expiring page tokens
+          console.log('🔄 Getting never-expiring page tokens...');
+          let updatedPages = pagesResponse.data.map(page => ({
+            id: page.id,
+            name: page.name,
+            category: page.category,
+            accessToken: page.access_token,
+            instagramBusinessAccount: page.instagram_business_account || null
+          }));
+
+          // Request never-expiring page tokens
+          updatedPages = await requestNeverExpiringPageTokens(finalUserToken, userId, updatedPages);
+
+          // Enhanced validation for Instagram accounts
+          if (platform === 'instagram') {
+            const instagramPages = updatedPages.filter(page => page.instagramBusinessAccount);
+            console.log('📊 Instagram validation:', {
+              totalPages: updatedPages.length,
+              instagramPages: instagramPages.length,
+              instagramAccounts: instagramPages.map(p => ({
+                pageId: p.id,
+                pageName: p.name,
+                instagramId: p.instagramBusinessAccount?.id,
+                instagramUsername: p.instagramBusinessAccount?.username,
+                hasPageToken: !!p.accessToken,
+                pageTokenLength: p.accessToken?.length
+              }))
+            });
+
+            if (instagramPages.length === 0) {
+              setError('No Instagram Business accounts found. Please connect an Instagram Business account to your Facebook pages first.');
+              setLoading(false);
+              return;
+            }
+
+            // Validate Instagram page tokens
+            for (const page of instagramPages) {
+              if (!page.accessToken) {
+                console.error('❌ Missing access token for Instagram page:', page.id, page.name);
+                setError(`Missing access token for page "${page.name}". Please try reconnecting.`);
+                setLoading(false);
+                return;
+              }
+              
+              if (!page.instagramBusinessAccount?.id) {
+                console.error('❌ Missing Instagram Business account ID for page:', page.id, page.name);
+                setError(`Invalid Instagram Business account for page "${page.name}". Please check your Instagram Business account connection.`);
+                setLoading(false);
+                return;
+              }
+            }
+          }
+
+          // Prepare account data for saving
+          const accountData = {
+            customerId: customer.id,
+            platform: 'facebook',
+            platformUserId: userId,
+            name: userResponse.name,
+            email: userResponse.email,
+            profilePicture: userResponse.picture?.data?.url,
+            accessToken: finalUserToken,
+            tokenType: longLivedResult ? 'long_lived' : 'short_lived',
+            tokenExpiresAt: tokenExpiresAt,
+            pages: updatedPages,
+            connectedAt: new Date().toISOString(),
+            needsReconnection: false,
+            lastTokenValidation: new Date().toISOString(),
+            tokenStatus: 'active'
+          };
+
+          console.log('💾 Saving Facebook account with enhanced validation...');
+
+          // Save to backend using correct endpoint
+          await saveAccountToDatabase(accountData);
+
+          // For Instagram, create a separate Instagram account entry but link to same Facebook pages
+          if (platform === 'instagram') {
+            const instagramPages = updatedPages.filter(page => page.instagramBusinessAccount);
+            
+            // Enhanced Instagram account data with validation metadata
+            const instagramAccountData = {
+              customerId: customer.id,
+              platform: 'instagram',
+              platformUserId: userId,
+              name: userResponse.name,
+              email: userResponse.email,
+              profilePicture: userResponse.picture?.data?.url,
+              accessToken: finalUserToken,
+              tokenType: longLivedResult ? 'long_lived' : 'short_lived',
+              tokenExpiresAt: tokenExpiresAt,
+              facebookAccountId: accountData.accountId,
+              pages: instagramPages.map(page => ({
+                ...page,
+                isLinkedToFacebook: true,
+                validationTimestamp: new Date().toISOString(),
+                // Add debugging info for troubleshooting
+                debugInfo: {
+                  pageTokenLength: page.accessToken?.length,
+                  instagramIdPresent: !!page.instagramBusinessAccount?.id,
+                  usernamePresent: !!page.instagramBusinessAccount?.username
+                }
+              })),
+              connectedAt: new Date().toISOString(),
+              needsReconnection: false,
+              lastTokenValidation: new Date().toISOString(),
+              tokenStatus: 'active',
+              connectionMetadata: {
+                connectedVia: 'facebook_business_integration',
+                validationLevel: 'enhanced',
+                tokenValidatedAt: new Date().toISOString()
+              }
+            };
+            
+            console.log('💾 Saving Instagram account with enhanced validation...');
+            console.log('📋 Instagram account summary:', {
+              platform: 'instagram',
+              pagesCount: instagramPages.length,
+              hasUserToken: !!instagramAccountData.accessToken,
+              userTokenLength: instagramAccountData.accessToken?.length,
+              tokenType: instagramAccountData.tokenType
+            });
+            
+            // Save Instagram account separately
+            await saveAccountToDatabase(instagramAccountData);
+          }
+        });
+      });
+    } catch (err) {
+      console.error('❌ handleFacebookLoginSuccess error:', err);
+      setError('Failed to process Facebook authentication: ' + err.message);
       setLoading(false);
     }
   };
@@ -512,7 +731,7 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
     }
   };
 
-  // Update saveAccountToDatabase to use correct endpoint and log detailed errors
+  // Update saveAccountToDatabase to handle enhanced token data
   const saveAccountToDatabase = async (accountData) => {
     try {
       const customerId = getCustomerId(customer) || accountData.customerId || '';
@@ -520,16 +739,40 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
         throw new Error('Missing customerId for saving account');
       }
 
+      // Validate token data before saving
+      const hasUserToken = !!accountData.accessToken;
+      const hasValidPages = accountData.pages && accountData.pages.length > 0;
+      const hasPageTokens = hasValidPages && accountData.pages.every(page => !!page.accessToken);
+
+      console.log('🔑 Token Validation Summary:', {
+        hasUserToken,
+        hasValidPages,
+        hasPageTokens,
+        userTokenLength: accountData.accessToken?.length || 0,
+        tokenType: accountData.tokenType,
+        tokenExpiresAt: accountData.tokenExpiresAt
+      });
+
+      // Update token status based on validation
+      if (!hasUserToken) {
+        accountData.needsReconnection = true;
+        accountData.tokenStatus = 'invalid_user_token';
+        accountData.refreshError = 'User access token not available during connection';
+      } else if (!hasPageTokens) {
+        accountData.needsReconnection = true;
+        accountData.tokenStatus = 'invalid_page_token';
+        accountData.refreshError = 'Page access tokens not available during connection';
+      } else {
+        accountData.needsReconnection = false;
+        accountData.tokenStatus = 'active';
+        accountData.refreshError = null;
+        accountData.lastSuccessfulValidation = new Date().toISOString();
+      }
+
       const endpoints = [];
-      
-      // For production, use the hardcoded backend URL
-      if (process.env.NODE_ENV === 'production') {
-        endpoints.push(`https://my-backend-593529385135.asia-south1.run.app/api/customer-social-links`);
-      } else if (process.env.REACT_APP_API_URL) {
+      if (process.env.REACT_APP_API_URL) {
         endpoints.push(`${process.env.REACT_APP_API_URL.replace(/\/$/, '')}/api/customer-social-links`);
       }
-      
-      // Always try relative path as fallback
       endpoints.push('/api/customer-social-links');
 
       let result = null;
@@ -566,7 +809,11 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
         throw new Error(result.error || 'Failed to save account');
       }
 
-      setSuccess('Successfully connected account');
+      const successMessage = accountData.tokenType === 'long_lived' 
+        ? 'Successfully connected account with long-lived tokens!' 
+        : 'Successfully connected account';
+      
+      setSuccess(successMessage);
       await fetchExistingConnections();
       if (onConnectionSuccess) onConnectionSuccess();
     } catch (err) {
@@ -576,48 +823,57 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
     }
   };
 
-  // ✅ Remove duplicate useImperativeHandle - keep only this one
-  useImperativeHandle(ref, () => ({
-    triggerConnect: () => {
-      console.log('🔗 triggerConnect called for platform:', platform);
-      
-      if (!platform) {
-        console.warn('triggerConnect: no platform specified');
-        return false;
+  const disconnectAccount = async (accountId) => {
+    setLoading(true);
+    try {
+      if (!accountId) throw new Error('Missing account id');
+
+      const endpoints = [];
+      if (process.env.REACT_APP_API_URL) {
+        endpoints.push(`${process.env.REACT_APP_API_URL.replace(/\/$/, '')}/api/customer-social-links/${accountId}`);
+      }
+      endpoints.push(`/api/customer-social-links/${accountId}`);
+
+      let success = false;
+      for (const url of endpoints) {
+        try {
+          const response = await fetch(url, { method: 'DELETE' });
+          const text = await response.text().catch(() => '');
+          let parsed;
+          try { parsed = text ? JSON.parse(text) : null; } catch (e) { parsed = null; }
+
+          if (!response.ok) {
+            console.warn('disconnectAccount: non-ok response', url, response.status, parsed || text);
+            continue;
+          }
+
+          const result = parsed || {};
+          if (result.success || result.error === 'not_found' || result.reason === 'deleted') {
+            success = true;
+            break;
+          } else {
+            console.warn('disconnectAccount: unexpected response body', result);
+            continue;
+          }
+        } catch (err) {
+          console.warn('disconnectAccount: request failed for', url, err.message);
+          continue;
+        }
       }
 
-      try {
-        switch (platform) {
-          case 'facebook':
-            console.log('🔗 Triggering Facebook connect');
-            handleFacebookConnect();
-            return true;
-          case 'instagram':
-            console.log('🔗 Triggering Instagram connect');
-            handleFacebookConnect(); // Instagram uses FB flow in this component
-            return true;
-          case 'youtube':
-            console.log('🔗 Triggering YouTube connect');
-            handleYouTubeConnect();
-            return true;
-          case 'linkedin':
-            console.log('🔗 Triggering LinkedIn connect');
-            handleLinkedInConnect();
-            return true;
-          case 'twitter':
-            console.log('🔗 Triggering Twitter connect');
-            handleTwitterConnect();
-            return true;
-          default:
-            console.warn('triggerConnect: unsupported platform:', platform);
-            return false;
-        }
-      } catch (e) {
-        console.error('triggerConnect error for platform', platform, e);
-        return false;
+      if (success) {
+        setSuccess('Account disconnected successfully');
+        await fetchExistingConnections();
+        if (onConnectionSuccess) onConnectionSuccess();
+      } else {
+        setError('Failed to disconnect account: no successful response from API');
       }
+    } catch (err) {
+      setError('Failed to disconnect account: ' + err.message);
+    } finally {
+      setLoading(false);
     }
-  }), [platform, loading, handleFacebookConnect, handleYouTubeConnect, handleLinkedInConnect, handleTwitterConnect]);
+  };
 
   const getConnectionButton = () => {
     const baseClasses = "flex items-center justify-center px-6 py-3 rounded-xl font-semibold transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed";
@@ -629,7 +885,6 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
             onClick={handleFacebookConnect}
             disabled={loading}
             className={`${baseClasses} bg-blue-600 text-white hover:bg-blue-700 shadow-lg hover:shadow-xl`}
-            data-platform="facebook"
           >
             {loading ? (
               <Loader2 className="h-5 w-5 animate-spin mr-2" />
@@ -646,7 +901,6 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
             onClick={handleFacebookConnect}
             disabled={loading}
             className={`${baseClasses} bg-gradient-to-r from-pink-500 to-purple-600 text-white hover:from-pink-600 hover:to-purple-700 shadow-lg hover:shadow-xl`}
-            data-platform="instagram"
           >
             {loading ? (
               <Loader2 className="h-5 w-5 animate-spin mr-2" />
@@ -663,7 +917,6 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
             onClick={handleYouTubeConnect}
             disabled={loading}
             className={`${baseClasses} bg-red-600 text-white hover:bg-red-700 shadow-lg hover:shadow-xl`}
-            data-platform="youtube"
           >
             {loading ? (
               <Loader2 className="h-5 w-5 animate-spin mr-2" />
@@ -680,7 +933,6 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
             onClick={handleLinkedInConnect}
             disabled={loading}
             className={`${baseClasses} bg-blue-700 text-white hover:bg-blue-800 shadow-lg hover:shadow-xl`}
-            data-platform="linkedin"
           >
             {loading ? (
               <Loader2 className="h-5 w-5 animate-spin mr-2" />
@@ -697,7 +949,6 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
             onClick={handleTwitterConnect}
             disabled={loading}
             className={`${baseClasses} bg-blue-400 text-white hover:bg-blue-500 shadow-lg hover:shadow-xl`}
-            data-platform="twitter"
           >
             {loading ? (
               <Loader2 className="h-5 w-5 animate-spin mr-2" />
@@ -731,6 +982,35 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
   const getCurrentPlatformAccounts = () => {
     return connectedAccounts.filter(account => account.platform === platform);
   };
+
+  // Expose triggerConnect to parent via ref
+  useImperativeHandle(ref, () => ({
+    triggerConnect: () => {
+      try {
+        switch (platform) {
+          case 'facebook':
+            handleFacebookConnect();
+            break;
+          case 'instagram':
+            handleFacebookConnect(); // Instagram uses FB flow in this component
+            break;
+          case 'youtube':
+            handleYouTubeConnect();
+            break;
+          case 'linkedin':
+            handleLinkedInConnect();
+            break;
+          case 'twitter':
+            handleTwitterConnect();
+            break;
+          default:
+            console.warn('No trigger available for platform:', platform);
+        }
+      } catch (e) {
+        console.error('triggerConnect error', e);
+      }
+    }
+  }));
 
   return (
     <div className="space-y-6">
@@ -778,36 +1058,59 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
           <h4 className="font-semibold text-blue-900 mb-3">Connected Accounts ({getCurrentPlatformAccounts().length})</h4>
           <div className="space-y-2">
-            {getCurrentPlatformAccounts().map((account, index) => (
-              <div key={account._id || index} className="flex items-center justify-between p-3 bg-white rounded-lg border border-blue-200">
-                <div className="flex items-center space-x-3">
-                  {getPlatformIcon()}
-                  <div>
-                    <p className="font-medium text-gray-900">{account.name}</p>
-                    <p className="text-sm text-gray-600">{account.email}</p>
-                    {account.pages && (
-                      <p className="text-xs text-gray-500">{account.pages.length} page(s) connected</p>
-                    )}
-                    {/* Token expired warning (basic checking) */}
-                    {account.accessToken && account.accessToken.length < 40 && (
-                      <span className="text-xs text-orange-600 font-medium">
-                        Token expired or invalid. Please disconnect and reconnect.
-                      </span>
-                    )}
+            {getCurrentPlatformAccounts().map((account, index) => {
+              const expired = isTokenExpired(account);
+              const isLongLived = account.tokenType === 'long_lived';
+              
+              return (
+                <div key={account._id || index} className="flex items-center justify-between p-3 bg-white rounded-lg border border-blue-200">
+                  <div className="flex items-center space-x-3">
+                    {getPlatformIcon()}
+                    <div>
+                      <div className="flex items-center space-x-2">
+                        <p className="font-medium text-gray-900">{account.name}</p>
+                        {isLongLived && (
+                          <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded font-medium">
+                            Long-lived
+                          </span>
+                        )}
+                        {expired && (
+                          <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded font-medium">
+                            Expired
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-600">{account.email}</p>
+                      {account.pages && (
+                        <p className="text-xs text-gray-500">{account.pages.length} page(s) connected</p>
+                      )}
+                      {account.tokenExpiresAt && (
+                        <p className="text-xs text-gray-500">
+                          Token expires: {new Date(account.tokenExpiresAt).toLocaleDateString()}
+                        </p>
+                      )}
+                      {account.tokenStatus && account.tokenStatus !== 'active' && (
+                        <span className="text-xs text-orange-600 font-medium">
+                          Status: {account.tokenStatus.replace(/_/g, ' ')}
+                        </span>
+                      )}
+                    </div>
                   </div>
+                  <button
+                    onClick={() => disconnectAccount(account._id)}
+                    className="text-red-600 hover:text-red-800 p-1 rounded hover:bg-red-50 transition-all duration-200"
+                    title="Disconnect account (enables re-connect)"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
                 </div>
-                <button
-                  onClick={() => disconnectAccount(account._id)}
-                  className="text-red-600 hover:text-red-800 p-1 rounded hover:bg-red-50 transition-all duration-200"
-                  title="Disconnect account (enables re-connect)"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            ))}
+              );
+            })}
           </div>
-          <div className="text-xs text-gray-600 mt-2">
-            If your access token has expired or posting fails, please <b>Disconnect</b> and then <b>Reconnect</b> your account.
+          <div className="text-xs text-gray-600 mt-2 space-y-1">
+            <div>✅ <b>Long-lived tokens:</b> Valid for ~60 days with automatic refresh capability</div>
+            <div>🔄 <b>Never-expiring page tokens:</b> Permanent access for posting to pages</div>
+            <div>⚠️ If your access token has expired or posting fails, please <b>Disconnect</b> and then <b>Reconnect</b> your account.</div>
           </div>
         </div>
       )}
@@ -825,6 +1128,10 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
               <li className="flex items-center space-x-2">
                 <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
                 <span>Ability to post and schedule content</span>
+              </li>
+              <li className="flex items-center space-x-2">
+                <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
+                <span>Post to Facebook Stories (if supported by page type)</span>
               </li>
               <li className="flex items-center space-x-2">
                 <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />

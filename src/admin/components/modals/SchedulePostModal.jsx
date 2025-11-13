@@ -253,6 +253,38 @@ function SchedulePostModal({
           alert('Instagram requires at least one image');
           return false;
         }
+        
+        // Facebook Stories validation
+        if (platform === 'facebook' && scheduleFormData.postType === 'story') {
+          if (scheduleFormData.selectedImages.length === 0) {
+            alert('Facebook Stories require at least one image or video');
+            return false;
+          }
+          if (isScheduled) {
+            alert('Facebook Stories cannot be scheduled far in advance. Please use "Post Now" for Stories.');
+            return false;
+          }
+          // Add format validation for Stories
+          const firstImage = scheduleFormData.selectedImages[0];
+          if (firstImage && firstImage.url) {
+            const isVideo = isVideoUrl(firstImage.url);
+            if (!isVideo) {
+              // Check image format for Stories
+              const imageExt = firstImage.url.split('.').pop().toLowerCase();
+              if (!['jpg', 'jpeg', 'png'].includes(imageExt)) {
+                alert('Facebook Stories only support JPG and PNG images. Please select a different image or convert the format.');
+                return false;
+              }
+            }
+          }
+          // Warning about Stories availability
+          const confirmStory = window.confirm(
+            'Facebook Stories may not be available for all page types. If Stories posting fails, the system will automatically fallback to a regular Facebook post. Continue?'
+          );
+          if (!confirmStory) {
+            return false;
+          }
+        }
       } else if (platform === 'youtube') {
         if (!settings.channelId) {
           alert('Please select a YouTube channel');
@@ -283,13 +315,14 @@ function SchedulePostModal({
       return false;
     }
 
-    // Prevent scheduling for video posts on Facebook/Instagram
+    // Prevent scheduling for video posts on Facebook/Instagram (except Stories)
     if (isScheduled) {
       for (const platform of scheduleFormData.platforms) {
         if ((platform === 'facebook' || platform === 'instagram') && scheduleFormData.selectedImages.length > 0) {
           const isVideo = isVideoUrl(scheduleFormData.selectedImages[0]?.url);
-          if (isVideo) {
-            alert('Scheduled video posts are not supported for Facebook or Instagram. Please use "Post Now" for video content.');
+          const isStory = scheduleFormData.postType === 'story';
+          if (isVideo && !isStory) {
+            alert('Scheduled video posts are not supported for Facebook or Instagram Feed. Please use "Post Now" for video content or post as Stories.');
             return false;
           }
         }
@@ -318,6 +351,18 @@ function SchedulePostModal({
         throw new Error(`Selected ${platform} account not found`);
       }
 
+      // FIXED: Skip Facebook post creation if Instagram is selected with the same Facebook account
+      // This prevents duplicate posts since Instagram uses Facebook's infrastructure
+      if (platform === 'facebook') {
+        const hasInstagramWithSamePage = scheduleFormData.platforms.includes('instagram') && 
+          scheduleFormData.platformSettings.instagram?.pageId === settings.pageId;
+        
+        if (hasInstagramWithSamePage) {
+          console.log('🔄 Skipping separate Facebook post creation - Instagram post will handle both platforms');
+          continue;
+        }
+      }
+
       let postData = {
         caption: fullCaption,
         status: isScheduled ? 'pending' : 'publishing',
@@ -334,7 +379,7 @@ function SchedulePostModal({
         calendar_name: selectedContent.calendar_name || selectedContent.calendarName || '',
         item_id: selectedContent.item_id || selectedContent.itemId || selectedContent.id || '',
         item_name: selectedContent.item_name || selectedContent.itemName || selectedContent.title || '',
-        postType: scheduleFormData.postType // added: include chosen post type
+        postType: scheduleFormData.postType
       };
 
       // Add scheduled time
@@ -368,6 +413,20 @@ function SchedulePostModal({
             : null,
         });
         
+        // FIXED: For Instagram, include Facebook posting info if both platforms are selected
+        if (platform === 'instagram') {
+          const hasFacebookSelected = scheduleFormData.platforms.includes('facebook');
+          const sameFacebookPage = hasFacebookSelected && 
+            scheduleFormData.platformSettings.facebook?.pageId === settings.pageId;
+          
+          if (sameFacebookPage) {
+            // This Instagram post will also post to Facebook
+            postData.alsoPostToFacebook = true;
+            postData.platforms = ['instagram', 'facebook']; // Track both platforms in one post
+            console.log('📸 Instagram post configured to also post to Facebook page:', selectedPage.name);
+          }
+        }
+        
         if (platform === 'instagram') {
           if (!selectedPage.instagramBusinessAccount?.id) {
             throw new Error('Selected page does not have an Instagram Business Account connected');
@@ -390,7 +449,6 @@ function SchedulePostModal({
         Object.assign(postData, {
           linkedinAccountId: selectedAccount.platformUserId,
           linkedinAccessToken: selectedAccount.accessToken,
-          // Add media URLs for LinkedIn
           mediaUrls: scheduleFormData.selectedImages.map(item => item.url)
         });
       }
@@ -1178,42 +1236,61 @@ function SchedulePostModal({
                     className="hidden"
                   />
                   <Image className="h-8 w-8 mx-auto mb-3 text-gray-400" />
-                  {/* Post type selector for Instagram (Feed / Story / Reel) */}
-                  <div className="flex items-center justify-center gap-3 mb-3">
-                    <label className="text-sm flex items-center gap-2">
-                      <input
-                        type="radio"
-                        name="postType"
-                        value="feed"
-                        checked={scheduleFormData.postType === 'feed'}
-                        onChange={() => setScheduleFormData(prev => ({ ...prev, postType: 'feed' }))}
-                        className="form-radio"
-                      />
-                      Feed
-                    </label>
-                    <label className="text-sm flex items-center gap-2">
-                      <input
-                        type="radio"
-                        name="postType"
-                        value="story"
-                        checked={scheduleFormData.postType === 'story'}
-                        onChange={() => setScheduleFormData(prev => ({ ...prev, postType: 'story' }))}
-                        className="form-radio"
-                      />
-                      Story
-                    </label>
-                    <label className="text-sm flex items-center gap-2">
-                      <input
-                        type="radio"
-                        name="postType"
-                        value="reel"
-                        checked={scheduleFormData.postType === 'reel'}
-                        onChange={() => setScheduleFormData(prev => ({ ...prev, postType: 'reel' }))}
-                        className="form-radio"
-                      />
-                      Reel
-                    </label>
-                  </div>
+                  {/* Post type selector for Instagram and Facebook (Feed / Story / Reel) */}
+                  {(scheduleFormData.platforms.includes('instagram') || scheduleFormData.platforms.includes('facebook')) && (
+                    <div className="flex items-center justify-center gap-3 mb-3">
+                      <label className="text-sm flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="postType"
+                          value="feed"
+                          checked={scheduleFormData.postType === 'feed'}
+                          onChange={() => setScheduleFormData(prev => ({ ...prev, postType: 'feed' }))}
+                          className="form-radio"
+                        />
+                        Feed
+                      </label>
+                      {scheduleFormData.platforms.includes('instagram') && (
+                        <>
+                          <label className="text-sm flex items-center gap-2">
+                            <input
+                              type="radio"
+                              name="postType"
+                              value="story"
+                              checked={scheduleFormData.postType === 'story'}
+                              onChange={() => setScheduleFormData(prev => ({ ...prev, postType: 'story' }))}
+                              className="form-radio"
+                            />
+                            Story
+                          </label>
+                          <label className="text-sm flex items-center gap-2">
+                            <input
+                              type="radio"
+                              name="postType"
+                              value="reel"
+                              checked={scheduleFormData.postType === 'reel'}
+                              onChange={() => setScheduleFormData(prev => ({ ...prev, postType: 'reel' }))}
+                              className="form-radio"
+                            />
+                            Reel
+                          </label>
+                        </>
+                      )}
+                      {scheduleFormData.platforms.includes('facebook') && (
+                        <label className="text-sm flex items-center gap-2">
+                          <input
+                            type="radio"
+                            name="postType"
+                            value="story"
+                            checked={scheduleFormData.postType === 'story'}
+                            onChange={() => setScheduleFormData(prev => ({ ...prev, postType: 'story' }))}
+                            className="form-radio"
+                          />
+                          FB Story
+                        </label>
+                      )}
+                    </div>
+                  )}
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}

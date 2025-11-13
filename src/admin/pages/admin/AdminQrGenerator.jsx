@@ -8,16 +8,11 @@ const PLATFORMS = [
   { key: 'yt', label: 'YouTube', icon: Youtube, color: 'bg-red-600 hover:bg-red-700', lightColor: 'bg-red-50 text-red-700' }
 ];
 
-// ✅ Fixed API base URL for deployment
-const getApiBaseUrl = () => {
-  // For production deployment, use the correct backend URL
-  if (process.env.NODE_ENV === 'production') {
-    return 'https://my-backend-593529385135.asia-south1.run.app';
-  }
-  
-  // For local development, use environment variable or fallback
-  return process.env.REACT_APP_API_URL || 'http://localhost:3001';
-};
+// ✅ Replace the complex getApiBaseUrl function with simple hardcoded URLs
+const API_BASE = "https://my-backend-593529385135.asia-south1.run.app";
+
+// ✅ Hardcoded frontend URL for QR codes (always use production)
+const FRONTEND_URL = "https://airspark.storage.googleapis.com/index.html";
 
 export default function AdminQrGenerator() {
   const [customers, setCustomers] = useState([]);
@@ -33,8 +28,7 @@ export default function AdminQrGenerator() {
   const [successMessage, setSuccessMessage] = useState('');
 
   useEffect(() => {
-    const apiBaseUrl = getApiBaseUrl();
-    fetch(`${apiBaseUrl}/api/customers`)
+    fetch(`${API_BASE}/api/customers`)
       .then(res => res.json())
       .then(data => {
         setCustomers(data.customers || []);
@@ -116,8 +110,7 @@ export default function AdminQrGenerator() {
 
       console.log(`🔒 Generating QR for customer: ${customerId} (${customerName}) - Platform: ${platform}`);
 
-      const apiBaseUrl = getApiBaseUrl();
-      const res = await fetch(`${apiBaseUrl}/api/generate-qr`, {
+      const res = await fetch(`${API_BASE}/api/generate-qr`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json'
@@ -141,28 +134,9 @@ export default function AdminQrGenerator() {
 
         console.log(`✅ QR generated successfully for customer: ${customerId}`);
         
-        // ✅ FIXED: Construct QR URL with correct domain based on environment
-        let qrCodeUrl = '';
-        
-        if (process.env.NODE_ENV === 'production') {
-          // ✅ For production, always use the production domain for QR codes
-          // This ensures QR codes work correctly when scanned from any device
-          qrCodeUrl = `https://airspark.storage.googleapis.com/index.html#/configure?customerId=${customerId}&platform=${platform}&source=admin-qr-generator&autoConnect=1&t=${Date.now()}`;
-        } else {
-          // For development, use localhost
-          qrCodeUrl = `http://localhost:3000/#/configure?customerId=${customerId}&platform=${platform}&source=admin-qr-generator&autoConnect=1&t=${Date.now()}`;
-        }
-
-        // ✅ For "View Configuration" link, use current window origin (admin interface)
-        let viewConfigUrl = '';
-        
-        if (process.env.NODE_ENV === 'production') {
-          // For production admin interface, use the storage bucket URL
-          viewConfigUrl = `https://airspark.storage.googleapis.com/index.html#/configure?customerId=${customerId}&platform=${platform}&t=${Date.now()}`;
-        } else {
-          // For development, use localhost
-          viewConfigUrl = `${window.location.origin}/#/configure?customerId=${customerId}&platform=${platform}&t=${Date.now()}`;
-        }
+        // ✅ FIXED: Always use production frontend URL for QR codes
+        const qrCodeUrl = `${FRONTEND_URL}#/configure?customerId=${customerId}&platform=${platform}&source=admin-qr-generator&autoConnect=1&t=${Date.now()}`;
+        const viewConfigUrl = `${FRONTEND_URL}#/configure?customerId=${customerId}&platform=${platform}&t=${Date.now()}`;
         
         console.log(`🔗 QR Code URL (for scanning): ${qrCodeUrl}`);
         console.log(`🔗 View Config URL (for admin): ${viewConfigUrl}`);

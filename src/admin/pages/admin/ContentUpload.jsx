@@ -97,6 +97,69 @@ const watermarkImage = async (file, logoBase64) => {
   });
 };
 
+const MAX_BASE64_SIZE = 5 * 1024 * 1024; // 5MB - threshold to switch to signed URL uploads
+
+const getSignedUrl = async (filename, contentType, size) => {
+  // Expect backend endpoint to return { url: "<signed-put-url>", publicUrl: "<public-access-url>" }
+  const res = await fetch(`${process.env.REACT_APP_API_URL}/api/gcs/get-signed-url`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename, contentType, size })
+  });
+  if (!res.ok) {
+    let errText = res.statusText;
+    try { const errJson = await res.json(); errText = errJson.error || errText; } catch (e) {}
+    throw new Error(`Failed to get signed URL: ${errText}`);
+  }
+  return res.json();
+};
+
+const uploadViaSignedUrl = (fileObj, signed) => {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', signed.url);
+    xhr.setRequestHeader('Content-Type', fileObj.file.type);
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) {
+        const pct = Math.round((e.loaded / e.total) * 100);
+        setUploadProgress(prev => ({ ...prev, [fileObj.id]: pct }));
+      }
+    };
+
+    xhr.onload = () => {
+      // Some providers return 200, some 201, treat 2xx as success
+      if (xhr.status >= 200 && xhr.status < 300) {
+        setUploadProgress(prev => {
+          const copy = { ...prev };
+          delete copy[fileObj.id];
+          return copy;
+        });
+        setUploadedFiles(prev =>
+          prev.map(f => f.id === fileObj.id ? { ...f, uploading: false, uploaded: true, publicUrl: signed.publicUrl, error: null } : f)
+        );
+        resolve({
+          url: signed.publicUrl,
+          type: fileObj.type,
+          name: fileObj.name,
+          size: fileObj.size,
+          originalName: fileObj.name
+        });
+      } else {
+        reject(new Error(`Signed upload failed with status ${xhr.status}`));
+      }
+    };
+
+    xhr.onerror = () => {
+      reject(new Error('Network error during signed upload'));
+    };
+
+    // Start upload
+    setUploadedFiles(prev => prev.map(f => f.id === fileObj.id ? { ...f, uploading: true, error: null } : f));
+    xhr.send(fileObj.file);
+  });
+};
+
 function ContentUpload() {
   const navigate = useNavigate();
   const { calendarId, itemIndex } = useParams();
@@ -248,14 +311,14 @@ function ContentUpload() {
         };
         reader.readAsDataURL(watermarkedBlob);
       } else if (file.type.startsWith('video/')) {
-        // No watermarking for video, just add for upload/preview
+        // Handle video files properly - no watermarking, just add original file
         const preview = URL.createObjectURL(file);
         const newFile = {
           id: Date.now() + Math.random(),
-          file: file,
+          file: file, // Use original file object directly
           preview: preview,
           name: file.name,
-          size: file.size,
+          size: file.size, // Use original file size
           type: 'video',
           uploaded: false,
           uploading: false,
@@ -284,61 +347,90 @@ function ContentUpload() {
     try {
       console.log(`📤 Starting upload for ${fileObj.name} (${formatFileSize(fileObj.size)})`);
       
-      // Update file status to uploading
-      setUploadedFiles(prev => 
-        prev.map(f => f.id === fileObj.id ? { ...f, uploading: true, error: null } : f)
-      );
+      if (!fileObj.file || !fileObj.file.size) {
+        throw new Error(`Invalid file: ${fileObj.name} has no content or is corrupted`);
+      }
 
-      // Convert file to base64
+      // If file is large, use signed URL upload instead of base64 POST
+      if (fileObj.file.size > MAX_BASE64_SIZE) {
+        console.log(`➡️ File exceeds ${MAX_BASE64_SIZE} bytes, requesting signed URL...`);
+        try {
+          const signed = await getSignedUrl(fileObj.name, fileObj.file.type, fileObj.file.size);
+          if (!signed || !signed.url || !signed.publicUrl) {
+            throw new Error('Signed URL response missing url/publicUrl');
+          }
+          // upload via signed url (XHR used for progress)
+          return await uploadViaSignedUrl(fileObj, signed);
+        } catch (signedErr) {
+          // If signed URL failed, provide clear guidance and fallback attempt to base64 (optional)
+          console.error('❌ Signed URL upload failed:', signedErr);
+          // If backend doesn't support signed urls, attempt base64 only for reasonably small files
+          if (fileObj.file.size <= MAX_BASE64_SIZE * 2) {
+            console.warn('Attempting base64 fallback for slightly larger file (may fail)...');
+            // proceed to base64 path below
+          } else {
+            throw new Error(`Signed URL upload failed: ${signedErr.message}. File too large for base64 fallback.`);
+          }
+        }
+      }
+
+      // Base64 path (kept for small files)
+      setUploadedFiles(prev => prev.map(f => f.id === fileObj.id ? { ...f, uploading: true, error: null } : f));
+
       const base64Data = await new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => {
           const result = reader.result;
-          // Remove the data URL prefix (e.g., "data:image/png;base64,")
+          if (!result || typeof result !== 'string') {
+            reject(new Error('Failed to read file as base64'));
+            return;
+          }
           const base64 = result.split(',')[1];
+          if (!base64 || base64.length === 0) {
+            reject(new Error('Base64 conversion resulted in empty data'));
+            return;
+          }
           resolve(base64);
         };
-        reader.onerror = reject;
+        reader.onerror = () => reject(new Error('FileReader error'));
         reader.readAsDataURL(fileObj.file);
       });
 
-      // Upload using base64 through backend API
+      // Validate payload
+      if (!base64Data) throw new Error('Empty base64 data');
+
+      const payload = {
+        filename: fileObj.name,
+        contentType: fileObj.file.type,
+        base64Data: base64Data
+      };
+
+      // Send to backend
       const uploadResponse = await fetch(`${process.env.REACT_APP_API_URL}/api/gcs/upload-base64`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          filename: fileObj.name,
-          contentType: fileObj.file.type,
-          base64Data: base64Data
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
       });
 
       if (!uploadResponse.ok) {
-        const errorData = await uploadResponse.json();
-        throw new Error(`Upload failed: ${errorData.error || uploadResponse.statusText}`);
+        // Give actionable error for CORS / 413
+        if (uploadResponse.status === 413) {
+          throw new Error('Server rejected the payload as too large (413). Use smaller files or enable signed uploads on the backend.');
+        }
+        // Try to parse server body for error message
+        let errText = uploadResponse.statusText;
+        try { const errJson = await uploadResponse.json(); errText = errJson.error || errText; } catch (e) {}
+        throw new Error(`Upload failed: ${errText}`);
       }
 
       const { publicUrl } = await uploadResponse.json();
+      if (!publicUrl) throw new Error('No public URL returned from upload');
 
-      if (!publicUrl) {
-        throw new Error('No public URL returned from upload');
-      }
-
-      console.log(`✅ Successfully uploaded ${fileObj.name} via base64`);
-
-      // Update file status to uploaded
-      setUploadedFiles(prev => 
-        prev.map(f => f.id === fileObj.id ? { 
-          ...f, 
-          uploading: false, 
-          uploaded: true, 
-          publicUrl: publicUrl,
-          error: null 
-        } : f)
+      setUploadedFiles(prev =>
+        prev.map(f => f.id === fileObj.id ? { ...f, uploading: false, uploaded: true, publicUrl: publicUrl, error: null } : f)
       );
 
+      console.log(`✅ Successfully uploaded ${fileObj.name} via base64`);
       return {
         url: publicUrl,
         type: fileObj.type,
@@ -346,20 +438,15 @@ function ContentUpload() {
         size: fileObj.file.size,
         originalName: fileObj.name
       };
-
     } catch (error) {
       console.error(`❌ Upload failed for ${fileObj.name}:`, error);
-      
-      // Update file status to error
-      setUploadedFiles(prev => 
-        prev.map(f => f.id === fileObj.id ? { 
-          ...f, 
-          uploading: false, 
-          uploaded: false, 
-          error: error.message 
-        } : f)
+      setUploadedFiles(prev =>
+        prev.map(f => f.id === fileObj.id ? { ...f, uploading: false, uploaded: false, error: error.message } : f)
       );
-
+      // Surface clearer guidance for CORS issues
+      if (error.message && /Failed to fetch|Network error/.test(error.message)) {
+        console.error('Possible CORS or network error. Ensure backend allows CORS from your front-end origin and that payload limits are configured.');
+      }
       throw error;
     }
   };

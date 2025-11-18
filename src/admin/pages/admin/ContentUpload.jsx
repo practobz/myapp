@@ -248,14 +248,14 @@ function ContentUpload() {
         };
         reader.readAsDataURL(watermarkedBlob);
       } else if (file.type.startsWith('video/')) {
-        // Handle video files properly - no watermarking, just add original file
+        // No watermarking for video, just add for upload/preview
         const preview = URL.createObjectURL(file);
         const newFile = {
           id: Date.now() + Math.random(),
-          file: file, // Use original file object directly
+          file: file,
           preview: preview,
           name: file.name,
-          size: file.size, // Use original file size
+          size: file.size,
           type: 'video',
           uploaded: false,
           uploading: false,
@@ -284,11 +284,6 @@ function ContentUpload() {
     try {
       console.log(`📤 Starting upload for ${fileObj.name} (${formatFileSize(fileObj.size)})`);
       
-      // Validate file object before proceeding
-      if (!fileObj.file || !fileObj.file.size || fileObj.file.size === 0) {
-        throw new Error(`Invalid file: ${fileObj.name} has no content or is corrupted`);
-      }
-
       // Update file status to uploading
       setUploadedFiles(prev => 
         prev.map(f => f.id === fileObj.id ? { ...f, uploading: true, error: null } : f)
@@ -299,35 +294,13 @@ function ContentUpload() {
         const reader = new FileReader();
         reader.onload = () => {
           const result = reader.result;
-          if (!result || typeof result !== 'string') {
-            reject(new Error('Failed to read file as base64'));
-            return;
-          }
           // Remove the data URL prefix (e.g., "data:image/png;base64,")
           const base64 = result.split(',')[1];
-          if (!base64 || base64.length === 0) {
-            reject(new Error('Base64 conversion resulted in empty data'));
-            return;
-          }
           resolve(base64);
         };
-        reader.onerror = () => reject(new Error('FileReader error'));
+        reader.onerror = reject;
         reader.readAsDataURL(fileObj.file);
       });
-
-      // Validate payload before sending
-      const payload = {
-        filename: fileObj.name,
-        contentType: fileObj.file.type,
-        base64Data: base64Data
-      };
-
-      // Additional validation
-      if (!payload.filename || !payload.contentType || !payload.base64Data) {
-        throw new Error(`Invalid payload: missing ${!payload.filename ? 'filename' : !payload.contentType ? 'contentType' : 'base64Data'}`);
-      }
-
-      console.log(`📤 Uploading ${fileObj.name} - Type: ${payload.contentType}, Size: ${formatFileSize(fileObj.file.size)}`);
 
       // Upload using base64 through backend API
       const uploadResponse = await fetch(`${process.env.REACT_APP_API_URL}/api/gcs/upload-base64`, {
@@ -335,7 +308,11 @@ function ContentUpload() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          filename: fileObj.name,
+          contentType: fileObj.file.type,
+          base64Data: base64Data
+        }),
       });
 
       if (!uploadResponse.ok) {

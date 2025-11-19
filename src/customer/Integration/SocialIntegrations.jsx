@@ -524,8 +524,12 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
     setSuccess('');
 
     try {
-      const clientId = '593529385135-snp35l6s9dtje8g8f1l1b3ajtp375cjr.apps.googleusercontent.com';
-      
+      // Use environment variable for YouTube client ID
+      const clientId = process.env.REACT_APP_YOUTUBE_CLIENT_ID;
+      if (!clientId) {
+        throw new Error('YouTube OAuth client ID is not configured. Please set REACT_APP_YOUTUBE_CLIENT_ID in your environment.');
+      }
+
       const redirectUri = `${window.location.origin}/integration/youtube/callback`;
       const scope = 'https://www.googleapis.com/auth/youtube https://www.googleapis.com/auth/youtube.upload';
       const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code&access_type=offline&prompt=consent`;

@@ -141,7 +141,7 @@ export default function AdminQrGenerator() {
         console.log(`🔗 QR Code URL (for scanning): ${qrCodeUrl}`);
         console.log(`🔗 View Config URL (for admin): ${viewConfigUrl}`);
         
-        // Update the result with both URLs
+        // Update the result with both URLs (always use production URL)
         setQrResult({ 
           ...data, 
           configUrl: viewConfigUrl, // For "View Configuration" button

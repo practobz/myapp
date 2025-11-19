@@ -301,14 +301,38 @@ function ContentUpload() {
           // upload via signed url (XHR used for progress)
           return await uploadViaSignedUrl(fileObj, signed);
         } catch (signedErr) {
-          // If signed URL failed, provide clear guidance and fallback attempt to base64 (optional)
-          console.error('❌ Signed URL upload failed:', signedErr);
+          // Improved: Detect CORS/network error and show actionable message
+          const isCORS = signedErr && (
+            /CORS|Network error|Failed to fetch|No 'Access-Control-Allow-Origin'/.test(signedErr.message)
+          );
+          if (isCORS) {
+            setUploadedFiles(prev =>
+              prev.map(f => f.id === fileObj.id
+                ? {
+                    ...f,
+                    uploading: false,
+                    uploaded: false,
+                    error:
+                      "Upload failed due to a network or CORS error with Google Cloud Storage. " +
+                      "This is usually a server configuration issue. Please contact support or try again later."
+                  }
+                : f
+              )
+            );
+            throw new Error(
+              "Signed URL upload failed due to a network or CORS error. " +
+              "Please contact support or try again later."
+            );
+          }
           // If backend doesn't support signed urls, attempt base64 only for reasonably small files
           if (fileObj.file.size <= MAX_BASE64_SIZE * 2) {
             console.warn('Attempting base64 fallback for slightly larger file (may fail)...');
             // proceed to base64 path below
           } else {
-            throw new Error(`Signed URL upload failed: ${signedErr.message}. File too large for base64 fallback.`);
+            throw new Error(
+              `Signed URL upload failed: ${signedErr.message}. ` +
+              "File too large for base64 fallback. Please contact support or try again later."
+            );
           }
         }
       }
@@ -435,11 +459,39 @@ function ContentUpload() {
             originalName: fileObj.name
           });
         } else {
+          // Improved: Show actionable error for CORS/network
+          setUploadedFiles(prev =>
+            prev.map(f => f.id === fileObj.id
+              ? {
+                  ...f,
+                  uploading: false,
+                  uploaded: false,
+                  error:
+                    "Upload failed (HTTP " + xhr.status + "). " +
+                    "If this is a CORS or network error, please contact support."
+                }
+              : f
+            )
+          );
           reject(new Error(`Signed upload failed with status ${xhr.status}`));
         }
       };
 
       xhr.onerror = () => {
+        // Improved: Show actionable error for CORS/network
+        setUploadedFiles(prev =>
+          prev.map(f => f.id === fileObj.id
+            ? {
+                ...f,
+                uploading: false,
+                uploaded: false,
+                error:
+                  "Upload failed due to a network or CORS error with Google Cloud Storage. " +
+                  "This is usually a server configuration issue. Please contact support or try again later."
+              }
+            : f
+          )
+        );
         reject(new Error('Network error during signed upload'));
       };
 

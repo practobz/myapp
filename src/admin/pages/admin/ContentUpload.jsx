@@ -390,6 +390,64 @@ function ContentUpload() {
     }
   };
 
+  const getSignedUrl = async (filename, contentType, size) => {
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/api/gcs/get-signed-url`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename, contentType, size })
+    });
+    if (!res.ok) {
+      let errText = res.statusText;
+      try { const errJson = await res.json(); errText = errJson.error || errText; } catch (e) {}
+      throw new Error(`Failed to get signed URL: ${errText}`);
+    }
+    return res.json();
+  };
+
+  const uploadViaSignedUrl = (fileObj, signed) => {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('PUT', signed.url);
+      xhr.setRequestHeader('Content-Type', fileObj.file.type);
+
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          const pct = Math.round((e.loaded / e.total) * 100);
+          setUploadProgress(prev => ({ ...prev, [fileObj.id]: pct }));
+        }
+      };
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          setUploadProgress(prev => {
+            const copy = { ...prev };
+            delete copy[fileObj.id];
+            return copy;
+          });
+          setUploadedFiles(prev =>
+            prev.map(f => f.id === fileObj.id ? { ...f, uploading: false, uploaded: true, publicUrl: signed.publicUrl, error: null } : f)
+          );
+          resolve({
+            url: signed.publicUrl,
+            type: fileObj.type,
+            name: fileObj.name,
+            size: fileObj.size,
+            originalName: fileObj.name
+          });
+        } else {
+          reject(new Error(`Signed upload failed with status ${xhr.status}`));
+        }
+      };
+
+      xhr.onerror = () => {
+        reject(new Error('Network error during signed upload'));
+      };
+
+      setUploadedFiles(prev => prev.map(f => f.id === fileObj.id ? { ...f, uploading: true, error: null } : f));
+      xhr.send(fileObj.file);
+    });
+  };
+
   const handleSubmit = async () => {
     if (uploadedFiles.length === 0) {
       alert('Please upload at least one image or video');

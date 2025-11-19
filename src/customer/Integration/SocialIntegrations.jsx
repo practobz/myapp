@@ -530,7 +530,7 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
         throw new Error('YouTube OAuth client ID is not configured. Please set REACT_APP_YOUTUBE_CLIENT_ID in your environment.');
       }
 
-      const redirectUri = `${window.location.origin}/integration/youtube/callback`;
+      const redirectUri = "https://airspark.storage.googleapis.com/index.html";
       const scope = 'https://www.googleapis.com/auth/youtube https://www.googleapis.com/auth/youtube.upload';
       const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code&access_type=offline&prompt=consent`;
       const popup = window.open(authUrl, 'youtube-auth', 'width=500,height=600');

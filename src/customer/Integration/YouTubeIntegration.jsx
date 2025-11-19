@@ -146,39 +146,6 @@ function YouTubeIntegration(props) {
     }
   };
 
-  function getCurrentCustomerId() {
-    let customerId = null;
-    
-    // 🔥 PRIORITY 1: Check URL parameters first (for QR code links)
-    const urlParams = new URLSearchParams(window.location.search);
-    const hashParams = new URLSearchParams(window.location.hash.split('?')[1] || '');
-    
-    // Check both regular URL params and hash params (for React Router)
-    customerId = urlParams.get('customerId') || hashParams.get('customerId');
-    
-    if (customerId) {
-      console.log('✅ Found customer ID in URL for YouTube:', customerId);
-      return customerId;
-    }
-    
-    // 🔥 PRIORITY 2: Check localStorage as fallback
-    const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
-    customerId = currentUser.userId || currentUser.id || currentUser._id || currentUser.customer_id;
-    
-    if (!customerId) {
-      const authUser = JSON.parse(localStorage.getItem('user') || '{}');
-      customerId = authUser.userId || authUser.id || authUser._id || authUser.customer_id;
-    }
-    
-    if (customerId) {
-      console.log('✅ Found customer ID in localStorage for YouTube:', customerId);
-    } else {
-      console.warn('❌ No customer ID found in URL or localStorage for YouTube');
-    }
-    
-    return customerId;
-  }
-
   // Load connected accounts from localStorage on component mount
   useEffect(() => {
     try {
@@ -188,107 +155,23 @@ function YouTubeIntegration(props) {
         'yt_active_account_id'
       ]);
 
-      const customerId = getCurrentCustomerId();
+      const savedAccounts = getUserData('yt_connected_accounts');
+      const savedActiveId = getUserData('yt_active_account_id');
       
-      // 🔥 NEW: Log the customer ID detection for debugging
-      console.log('🆔 Detected Customer ID for YouTube:', {
-        customerId,
-        urlParams: new URLSearchParams(window.location.search).get('customerId'),
-        hashParams: new URLSearchParams(window.location.hash.split('?')[1] || '').get('customerId'),
-        localStorage: JSON.parse(localStorage.getItem('currentUser') || '{}'),
-        fullUrl: window.location.href
-      });
-
-      // NEW: Try to fetch from backend first
-      const fetchConnectedAccountsFromBackend = async () => {
-        if (!customerId) {
-          console.warn('❌ No customer ID available for YouTube backend fetch');
-          return null;
-        }
-        try {
-          const res = await fetch(`${process.env.REACT_APP_API_URL}/api/customer-social-links/${customerId}`);
-          const data = await res.json();
-          if (data.success && Array.isArray(data.accounts)) {
-            // Only YouTube accounts for this customer
-            return data.accounts
-              .filter(acc => acc.platform === 'youtube' && acc.customerId === customerId)
-              .map(acc => ({
-                id: acc.platformUserId,
-                name: acc.name,
-                email: acc.email,
-                picture: acc.profilePicture ? { url: acc.profilePicture } : null,
-                accessToken: acc.accessToken,
-                refreshToken: acc.refreshToken,
-                connectedAt: acc.connectedAt,
-                tokenExpiresAt: acc.tokenExpiresAt,
-                channelInfo: acc.channels?.[0] ? {
-                  id: acc.channels[0].id,
-                  snippet: {
-                    title: acc.channels[0].name,
-                    description: acc.channels[0].description || '',
-                    thumbnails: {
-                      default: { url: acc.channels[0].thumbnail || '' }
-                    }
-                  },
-                  statistics: {
-                    subscriberCount: acc.channels[0].subscriberCount || '0',
-                    videoCount: acc.channels[0].videoCount || '0',
-                    viewCount: acc.channels[0].viewCount || '0'
-                  },
-                  contentDetails: {
-                    relatedPlaylists: {
-                      uploads: acc.channels[0].uploadsPlaylistId || ''
-                    }
-                  }
-                } : null
-              }));
-          }
-        } catch (err) {
-          console.warn('Failed to fetch YouTube accounts from backend:', err);
-        }
-        return null;
-      };
-
-      (async () => {
-        const backendAccounts = await fetchConnectedAccountsFromBackend();
-        if (backendAccounts && backendAccounts.length > 0) {
-          setConnectedAccounts(backendAccounts);
-          saveAccountsToStorage(backendAccounts);
-          setActiveAccountId(backendAccounts[0].id);
-          setActiveAccount(backendAccounts[0]);
-          setUserData('yt_active_account_id', backendAccounts[0].id);
-          if (backendAccounts[0].channelInfo) {
-            setChannelInfo(backendAccounts[0].channelInfo);
-          }
-          return;
-        }
-
-        // Fallback to localStorage if backend empty
-        const savedAccounts = getUserData('yt_connected_accounts');
-        const savedActiveId = getUserData('yt_active_account_id');
+      if (savedAccounts) {
+        setConnectedAccounts(savedAccounts);
         
-        // Only keep YouTube accounts for this customer
-        const youtubeAccounts = Array.isArray(savedAccounts)
-          ? savedAccounts.filter(
-              acc => acc.platform === 'youtube' && acc.customerId === customerId
-            )
-          : savedAccounts; // Keep all if no customer filter available in legacy format
-        
-        if (youtubeAccounts) {
-          setConnectedAccounts(youtubeAccounts);
-          
-          if (savedActiveId && youtubeAccounts.some(acc => acc.id === savedActiveId)) {
-            setActiveAccountId(savedActiveId);
-            const activeAcc = youtubeAccounts.find(acc => acc.id === savedActiveId);
-            setActiveAccount(activeAcc);
-          } else if (youtubeAccounts.length > 0) {
-            // Set first account as active if no valid active account
-            setActiveAccountId(youtubeAccounts[0].id);
-            setActiveAccount(youtubeAccounts[0]);
-            setUserData('yt_active_account_id', youtubeAccounts[0].id);
-          }
+        if (savedActiveId && savedAccounts.some(acc => acc.id === savedActiveId)) {
+          setActiveAccountId(savedActiveId);
+          const activeAcc = savedAccounts.find(acc => acc.id === savedActiveId);
+          setActiveAccount(activeAcc);
+        } else if (savedAccounts.length > 0) {
+          // Set first account as active if no valid active account
+          setActiveAccountId(savedAccounts[0].id);
+          setActiveAccount(savedAccounts[0]);
+          setUserData('yt_active_account_id', savedAccounts[0].id);
         }
-      })();
+      }
     } catch (error) {
       console.warn('Failed to load saved accounts:', error);
     }
@@ -649,21 +532,25 @@ function YouTubeIntegration(props) {
         return;
       }
 
-      // 🔥 CRITICAL FIX: Use the correct customer ID detection
-      const customerId = getCurrentCustomerId();
+      // Get current user/customer ID from auth context or localStorage
+      let customerId = null;
       
-      // Log what we found for debugging
-      console.log('🔍 YouTube Customer ID search for social account storage:', {
-        customerId,
-        found: !!customerId,
-        urlCustomerId: new URLSearchParams(window.location.search).get('customerId') || 
-                       new URLSearchParams(window.location.hash.split('?')[1] || '').get('customerId'),
-        localStorageUser: JSON.parse(localStorage.getItem('currentUser') || '{}')
-      });
+      try {
+        // Try multiple ways to get customer ID
+        const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
+        customerId = currentUser.userId || currentUser.id || currentUser._id || currentUser.customer_id;
+        
+        // If still no customer ID, try getting from other possible sources
+        if (!customerId) {
+          const authUser = JSON.parse(localStorage.getItem('user') || '{}');
+          customerId = authUser.userId || authUser.id || authUser._id || authUser.customer_id;
+        }
+      } catch (parseError) {
+        console.warn('Error parsing user data from localStorage:', parseError);
+      }
       
       if (!customerId) {
-        console.error('❌ No customer ID found for YouTube, cannot store social account');
-        alert('Error: No customer ID found. Please make sure you accessed this page through the proper configuration link.');
+        console.warn('No customer ID found, cannot store social account');
         return;
       }
 
@@ -693,7 +580,7 @@ function YouTubeIntegration(props) {
       const actualExpiry = storedExpiry ? parseInt(storedExpiry, 10) : tokenExpiresAt;
 
       const accountData = {
-        customerId: customerId, // 🔥 Use the correctly detected customer ID
+        customerId: customerId,
         platform: 'youtube',
         platformUserId: accountToUse.id,
         name: accountToUse.name,
@@ -742,7 +629,7 @@ function YouTubeIntegration(props) {
       
       const result = await response.json();
       if (result.success) {
-        console.log('✅ Stored customer YouTube account for admin access with customer ID:', customerId);
+        console.log('✅ Stored customer YouTube account for admin access');
         
         // Verify the stored data by fetching it back
         try {
@@ -778,11 +665,248 @@ function YouTubeIntegration(props) {
     }
   };
 
+  // Fetch channel data with improved error handling
+  const fetchChannelData = async (channel, account = null) => {
+    try {
+      const uploadsPlaylistId = channel.contentDetails.relatedPlaylists.uploads;
+      
+      // Store the connected channel - pass the account parameter
+      await storeConnectedChannel(channel, account);
+      
+      // Fetch videos
+      const videosResponse = await window.gapi.client.youtube.playlistItems.list({
+        part: 'snippet,contentDetails',
+        playlistId: uploadsPlaylistId,
+        maxResults: 50
+      });
+      const items = videosResponse.result.items || [];
+      setVideos(items);
+
+      // Get video details for shorts/videos count
+      const videoIds = items.map(item => item.snippet.resourceId.videoId).join(',');
+      if (videoIds) {
+        const detailsResp = await window.gapi.client.youtube.videos.list({
+          part: 'contentDetails,snippet',
+          id: videoIds
+        });
+        const details = detailsResp.result.items || [];
+        let shorts = 0, normalVideos = 0;
+        details.forEach(video => {
+          const duration = parseISO8601Duration(video.contentDetails.duration);
+          const isVertical = (video.snippet.thumbnails && video.snippet.thumbnails.default && video.snippet.thumbnails.default.height > video.snippet.thumbnails.default.width);
+          const isShort = (duration <= 60) && isVertical;
+          if (isShort) shorts++;
+          else normalVideos++;
+        });
+        setShortsCount(shorts);
+        setVideosCount(normalVideos);
+
+        // Store updated historical snapshot with video counts
+        storeHistoricalSnapshot(channel.id, channel.snippet.title, {
+          subscriberCount: channel.statistics?.subscriberCount,
+          videoCount: channel.statistics?.videoCount,
+          viewCount: channel.statistics?.viewCount,
+          totalViews: channel.statistics?.viewCount,
+          totalSubscribers: channel.statistics?.subscriberCount,
+          shortsCount: shorts,
+          videosCount: normalVideos
+        });
+      } else {
+        setShortsCount(0);
+        setVideosCount(0);
+      }
+    } catch (err) {
+      console.error('Error fetching channel data:', err);
+      // Don't set a blocking error for this, just log it
+      console.warn('Failed to fetch some channel data, continuing with available information');
+    }
+  };
+
+  // Handle sign in (add new account)
+  const handleSignIn = () => {
+    try {
+      if (tokenClient) {
+        tokenClient.requestAccessToken();
+      } else {
+        setSafeErrorState('Authentication service not ready. Please refresh the page and try again.');
+      }
+    } catch (error) {
+      console.error('Error during sign in:', error);
+      setSafeErrorState('Failed to start authentication process. Please refresh the page and try again.');
+    }
+  };
+
+  // Switch active account with error handling
+  const switchAccount = (accountId) => {
+    try {
+      const account = connectedAccounts.find(acc => acc.id === accountId);
+      if (account) {
+        setActiveAccountId(accountId);
+        setActiveAccount(account);
+        setUserData('yt_active_account_id', accountId);
+        
+        // Clear current data
+        setChannelInfo(null);
+        setVideos([]);
+        setAnalyticsData(null);
+        setShortsCount(0);
+        setVideosCount(0);
+        
+        // Set access token and fetch new data
+        const storedExpiry = getUserData(`yt_token_expiry_${accountId}`);
+        if (account.accessToken && storedExpiry && Date.now() < parseInt(storedExpiry, 10)) {
+          window.gapi.client.setToken({ access_token: account.accessToken });
+          setChannelInfo(account.channelInfo);
+          fetchChannelData(account.channelInfo);
+        }
+      }
+    } catch (error) {
+      console.error('Error switching account:', error);
+      setSafeErrorState('Failed to switch YouTube account. Please try again.');
+    }
+  };
+
+  // Remove account with error handling
+  const removeAccount = (accountId) => {
+    try {
+      const updatedAccounts = connectedAccounts.filter(acc => acc.id !== accountId);
+      setConnectedAccounts(updatedAccounts);
+      saveAccountsToStorage(updatedAccounts);
+      
+      // Clean up stored tokens with user-specific keys
+      removeUserData(`yt_access_token_${accountId}`);
+      removeUserData(`yt_token_expiry_${accountId}`);
+      
+      if (activeAccountId === accountId) {
+        if (updatedAccounts.length > 0) {
+          // Switch to first remaining account
+          switchAccount(updatedAccounts[0].id);
+        } else {
+          // No accounts left
+          setActiveAccountId(null);
+          setActiveAccount(null);
+          setChannelInfo(null);
+          setVideos([]);
+          setAnalyticsData(null);
+          setShortsCount(0);
+          setVideosCount(0);
+          removeUserData('yt_active_account_id');
+        }
+      }
+    } catch (error) {
+      console.error('Error removing account:', error);
+      setSafeErrorState('Failed to remove YouTube account. Please try again.');
+    }
+  };
+
+  // Sign out all accounts with error handling
+  const handleSignOutAll = () => {
+    try {
+      // Revoke all tokens
+      connectedAccounts.forEach(account => {
+        if (account.accessToken) {
+          try {
+            fetch(`https://oauth2.googleapis.com/revoke?token=${account.accessToken}`, {
+              method: 'POST',
+              headers: { 'Content-type': 'application/x-www-form-urlencoded' }
+            }).catch(err => console.warn('Failed to revoke token:', err));
+          } catch (err) {
+            console.warn('Error revoking token:', err);
+          }
+        }
+        removeUserData(`yt_access_token_${account.id}`);
+        removeUserData(`yt_token_expiry_${account.id}`);
+      });
+      
+      // Clear all state
+      setConnectedAccounts([]);
+      setActiveAccountId(null);
+      setActiveAccount(null);
+      setChannelInfo(null);
+      setVideos([]);
+      setAnalyticsData(null);
+      setShortsCount(0);
+      setVideosCount(0);
+      window.gapi.client.setToken('');
+      removeUserData('yt_connected_accounts');
+      removeUserData('yt_active_account_id');
+    } catch (error) {
+      console.error('Error signing out:', error);
+      setSafeErrorState('Failed to sign out completely. Some data may remain cached.');
+    }
+  };
+
+  // Add token refresh functionality with improved error handling
+  const refreshYouTubeToken = async (accountId) => {
+    const account = connectedAccounts.find(acc => acc.id === accountId);
+    if (!account || !account.refreshToken) {
+      console.warn('No refresh token available for account:', accountId);
+      return false;
+    }
+
+    try {
+      console.log('🔄 Refreshing YouTube access token...');
+      
+      // Use Google's token refresh endpoint
+      const response = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          client_id: CLIENT_ID,
+          refresh_token: account.refreshToken,
+          grant_type: 'refresh_token'
+        })
+      });
+
+      const tokenData = await response.json();
+      
+      if (response.ok && tokenData.access_token) {
+        console.log('✅ Successfully refreshed YouTube token');
+        
+        // Update the account with new token
+        const updatedAccount = {
+          ...account,
+          accessToken: tokenData.access_token,
+          connectedAt: new Date().toISOString()
+        };
+
+        const updatedAccounts = connectedAccounts.map(acc =>
+          acc.id === accountId ? updatedAccount : acc
+        );
+
+        setConnectedAccounts(updatedAccounts);
+        saveAccountsToStorage(updatedAccounts);
+
+        if (activeAccountId === accountId) {
+          setActiveAccount(updatedAccount);
+        }
+
+        // Store new token with expiry
+        const expiresIn = tokenData.expires_in || 3600;
+        setUserData(`yt_access_token_${accountId}`, tokenData.access_token);
+        setUserData(`yt_token_expiry_${accountId}`, (Date.now() + expiresIn * 1000).toString());
+
+        // Update the stored customer social account with new token
+        await updateStoredToken(accountId, tokenData.access_token, expiresIn);
+
+        return true;
+      } else {
+        console.error('❌ Failed to refresh YouTube token:', tokenData);
+        return false;
+      }
+    } catch (error) {
+      console.error('❌ Error refreshing YouTube token:', error);
+      return false;
+    }
+  };
+
   // Update stored token in database with error handling
   const updateStoredToken = async (accountId, newToken, expiresIn) => {
     try {
-      // 🔥 CRITICAL FIX: Use the correct customer ID detection
-      const customerId = getCurrentCustomerId();
+      const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
+      const customerId = currentUser.userId || currentUser.id || currentUser._id || currentUser.customer_id;
       
       if (!customerId) {
         console.warn('No customer ID found for token update');
@@ -2056,32 +2180,6 @@ function YouTubeIntegration(props) {
       </div>
     );
   });
-
-  // Auto-refresh token in the background before expiry
-  useEffect(() => {
-    if (!activeAccount || !activeAccount.refreshToken) return;
-
-    let intervalId = null;
-
-    const checkAndRefresh = async () => {
-      const storedExpiry = getUserData(`yt_token_expiry_${activeAccount.id}`);
-      if (storedExpiry) {
-        const expiresInMs = parseInt(storedExpiry, 10) - Date.now();
-        // If token expires in less than 5 minutes, refresh
-        if (expiresInMs < 5 * 60 * 1000) {
-          await refreshYouTubeToken(activeAccount.id);
-        }
-      }
-    };
-
-    intervalId = setInterval(checkAndRefresh, 2 * 60 * 1000);
-    // Run once on mount
-    checkAndRefresh();
-
-    return () => {
-      if (intervalId) clearInterval(intervalId);
-    };
-  }, [activeAccount, connectedAccounts]);
 }
 
 export default YouTubeIntegration;

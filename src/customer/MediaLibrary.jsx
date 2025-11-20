@@ -193,20 +193,20 @@ function MediaLibrary() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[#e6f2fb]">
       {/* Header */}
-      <header className="bg-white shadow-sm border-b">
+      <header className="bg-gradient-to-r from-[#0a2342] to-[#38bdf8] shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center h-16">
             <button
               onClick={() => navigate('/customer')}
-              className="mr-4 text-gray-600 hover:text-gray-900 transition-colors"
+              className="mr-4 text-[#bae6fd] hover:text-white transition-colors"
             >
               <ArrowLeft className="h-5 w-5" />
             </button>
             <div className="flex items-center">
               <Logo size="medium" />
-              <span className="ml-2 text-xl font-bold text-[#1a1f2e]">Media Library</span>
+              <span className="ml-2 text-xl font-bold text-white">Media Library</span>
             </div>
           </div>
         </div>
@@ -216,23 +216,23 @@ function MediaLibrary() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="space-y-6">
           {/* Controls */}
-          <div className="bg-white rounded-lg shadow-md p-6">
+          <div className="bg-white rounded-lg shadow-md p-6 border border-[#0a2342]/10">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
               <div className="flex items-center space-x-4">
                 <button
                   onClick={() => setShowUploadModal(true)}
-                  className="inline-flex items-center px-4 py-2 bg-[#1a1f2e] text-white rounded-md hover:bg-[#2d3546] transition-colors"
+                  className="inline-flex items-center px-4 py-2 bg-[#0a2342] text-white rounded-md hover:bg-[#38bdf8] transition-colors"
                 >
                   <Upload className="h-4 w-4 mr-2" />
                   Upload Media
                 </button>
                 
                 <div className="flex items-center space-x-2">
-                  <Filter className="h-5 w-5 text-gray-400" />
+                  <Filter className="h-5 w-5 text-[#0a2342]/60" />
                   <select
                     value={filterType}
                     onChange={(e) => setFilterType(e.target.value)}
-                    className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1a1f2e]"
+                    className="border border-[#bae6fd] rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0a2342]"
                   >
                     <option value="all">All Types</option>
                     <option value="image">Images</option>
@@ -245,26 +245,26 @@ function MediaLibrary() {
 
               <div className="flex items-center space-x-4">
                 <div className="relative">
-                  <Search className="h-5 w-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
+                  <Search className="h-5 w-5 text-[#0a2342]/40 absolute left-3 top-1/2 transform -translate-y-1/2" />
                   <input
                     type="text"
                     placeholder="Search by name or tags..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 pr-4 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#1a1f2e]"
+                    className="pl-10 pr-4 py-2 border border-[#bae6fd] rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#0a2342]"
                   />
                 </div>
 
                 <div className="flex items-center space-x-2">
                   <button
                     onClick={() => setViewMode('grid')}
-                    className={`p-2 rounded-md ${viewMode === 'grid' ? 'bg-[#1a1f2e] text-white' : 'bg-gray-100 text-gray-600'}`}
+                    className={`p-2 rounded-md ${viewMode === 'grid' ? 'bg-[#0a2342] text-white' : 'bg-[#bae6fd] text-[#0a2342]'}`}
                   >
                     <Grid className="h-4 w-4" />
                   </button>
                   <button
                     onClick={() => setViewMode('list')}
-                    className={`p-2 rounded-md ${viewMode === 'list' ? 'bg-[#1a1f2e] text-white' : 'bg-gray-100 text-gray-600'}`}
+                    className={`p-2 rounded-md ${viewMode === 'list' ? 'bg-[#0a2342] text-white' : 'bg-[#bae6fd] text-[#0a2342]'}`}
                   >
                     <List className="h-4 w-4" />
                   </button>
@@ -274,8 +274,8 @@ function MediaLibrary() {
           </div>
 
           {/* Media Grid/List */}
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h3 className="text-lg font-semibold mb-4">
+          <div className="bg-white rounded-lg shadow-md p-6 border border-[#0a2342]/10">
+            <h3 className="text-lg font-semibold mb-4 text-[#0a2342]">
               Media Files ({filteredItems.length})
             </h3>
             {loading && (
@@ -291,11 +291,11 @@ function MediaLibrary() {
                     {filteredItems.map((item) => (
                       <div
                         key={item._id}
-                        className="group relative bg-gray-50 rounded-lg p-3 hover:bg-gray-100 transition-colors cursor-pointer"
+                        className="group relative bg-[#e6f2fb] rounded-lg p-3 hover:bg-[#bae6fd] transition-colors cursor-pointer border border-[#0a2342]/10"
                         onClick={() => setSelectedMedia(item)}
                       >
                         {/* Thumbnail */}
-                        <div className="aspect-square bg-gray-200 rounded-lg mb-3 flex items-center justify-center overflow-hidden">
+                        <div className="aspect-square bg-[#bae6fd] rounded-lg mb-3 flex items-center justify-center overflow-hidden">
                           {item.type === 'image' && item.url ? (
                             <img
                               src={item.url}
@@ -341,9 +341,9 @@ function MediaLibrary() {
                               setEditingItem(item);
                               setShowTagModal(true);
                             }}
-                            className="p-1 bg-white rounded-full shadow-md hover:bg-gray-50"
+                            className="p-1 bg-white rounded-full shadow-md hover:bg-[#bae6fd]"
                           >
-                            <Tag className="h-3 w-3 text-gray-600" />
+                            <Tag className="h-3 w-3 text-[#0a2342]" />
                           </button>
                         </div>
                       </div>
@@ -354,7 +354,7 @@ function MediaLibrary() {
                     {filteredItems.map((item) => (
                       <div
                         key={item._id}
-                        className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+                        className="flex items-center justify-between p-4 bg-[#e6f2fb] rounded-lg hover:bg-[#bae6fd] transition-colors cursor-pointer border border-[#0a2342]/10"
                         onClick={() => setSelectedMedia(item)}
                       >
                         <div className="flex items-center space-x-4">
@@ -385,7 +385,7 @@ function MediaLibrary() {
                               setEditingItem(item);
                               setShowTagModal(true);
                             }}
-                            className="p-2 text-gray-400 hover:text-gray-600"
+                            className="p-2 text-[#0a2342]/60 hover:text-[#0a2342]"
                           >
                             <Edit3 className="h-4 w-4" />
                           </button>
@@ -394,7 +394,7 @@ function MediaLibrary() {
                               e.stopPropagation();
                               setSelectedMedia(item);
                             }}
-                            className="p-2 text-gray-400 hover:text-gray-600"
+                            className="p-2 text-[#0a2342]/60 hover:text-[#0a2342]"
                           >
                             <Eye className="h-4 w-4" />
                           </button>
@@ -406,11 +406,11 @@ function MediaLibrary() {
 
                 {filteredItems.length === 0 && (
                   <div className="text-center py-12">
-                    <Upload className="h-12 w-12 text-gray-400 mx-auto mb-3" />
-                    <p className="text-gray-500">No media files found.</p>
+                    <Upload className="h-12 w-12 text-[#0a2342]/30 mx-auto mb-3" />
+                    <p className="text-[#0a2342]/60">No media files found.</p>
                     <button
                       onClick={() => setShowUploadModal(true)}
-                      className="mt-2 text-[#1a1f2e] hover:text-[#2d3546]"
+                      className="mt-2 text-[#0a2342] hover:text-[#38bdf8]"
                     >
                       Upload your first file
                     </button>
@@ -425,13 +425,13 @@ function MediaLibrary() {
       {/* Upload Modal */}
       {showUploadModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg border border-[#0a2342]/10">
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold">Upload Media Files</h3>
+                <h3 className="text-lg font-semibold text-[#0a2342]">Upload Media Files</h3>
                 <button
                   onClick={() => setShowUploadModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
+                  className="text-[#0a2342]/40 hover:text-[#0a2342]"
                 >
                   <X className="h-5 w-5" />
                 </button>
@@ -439,7 +439,7 @@ function MediaLibrary() {
 
               <div
                 className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-                  dragActive ? 'border-[#1a1f2e] bg-blue-50' : 'border-gray-300'
+                  dragActive ? 'border-[#0a2342] bg-[#bae6fd]' : 'border-[#bae6fd]'
                 }`}
                 onDragEnter={handleDrag}
                 onDragLeave={handleDrag}
@@ -455,18 +455,18 @@ function MediaLibrary() {
                   className="hidden"
                 />
                 
-                <Upload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-lg font-medium text-gray-900 mb-2">
+                <Upload className="h-12 w-12 text-[#0a2342]/30 mx-auto mb-4" />
+                <p className="text-lg font-medium text-[#0a2342] mb-2">
                   Drag and drop files here
                 </p>
-                <p className="text-gray-500 mb-4">or</p>
+                <p className="text-[#0a2342]/60 mb-4">or</p>
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="inline-flex items-center px-4 py-2 bg-[#1a1f2e] text-white rounded-md hover:bg-[#2d3546] transition-colors"
+                  className="inline-flex items-center px-4 py-2 bg-[#0a2342] text-white rounded-md hover:bg-[#38bdf8] transition-colors"
                 >
                   Browse Files
                 </button>
-                <p className="text-sm text-gray-400 mt-4">
+                <p className="text-sm text-[#0a2342]/40 mt-4">
                   Supports: Images, Videos, SVG, PDF, Documents (Max 50MB per file)
                 </p>
               </div>
@@ -478,17 +478,17 @@ function MediaLibrary() {
       {/* Tag Modal */}
       {showTagModal && editingItem && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md border border-[#0a2342]/10">
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold">Manage Tags</h3>
+                <h3 className="text-lg font-semibold text-[#0a2342]">Manage Tags</h3>
                 <button
                   onClick={() => {
                     setShowTagModal(false);
                     setEditingItem(null);
                     setNewTags('');
                   }}
-                  className="text-gray-400 hover:text-gray-600"
+                  className="text-[#0a2342]/40 hover:text-[#0a2342]"
                 >
                   <X className="h-5 w-5" />
                 </button>
@@ -496,22 +496,22 @@ function MediaLibrary() {
 
               <div className="space-y-4">
                 <div>
-                  <p className="text-sm font-medium text-gray-700 mb-2">File: {editingItem.name}</p>
+                  <p className="text-sm font-medium text-[#0a2342] mb-2">File: {editingItem.name}</p>
                   
                   {/* Existing Tags */}
                   {editingItem.tags.length > 0 && (
                     <div className="mb-4">
-                      <p className="text-sm text-gray-600 mb-2">Current Tags:</p>
+                      <p className="text-sm text-[#0a2342]/60 mb-2">Current Tags:</p>
                       <div className="flex flex-wrap gap-2">
                         {editingItem.tags.map((tag) => (
                           <span
                             key={tag}
-                            className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-blue-100 text-blue-800"
+                            className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-[#bae6fd] text-[#0a2342]"
                           >
                             {tag}
                             <button
                               onClick={() => handleRemoveTag(editingItem._id, tag)}
-                              className="ml-2 text-blue-600 hover:text-blue-800"
+                              className="ml-2 text-[#0a2342] hover:text-[#38bdf8]"
                             >
                               <X className="h-3 w-3" />
                             </button>
@@ -523,7 +523,7 @@ function MediaLibrary() {
 
                   {/* Add New Tags */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-medium text-[#0a2342] mb-2">
                       Add Tags (comma-separated)
                     </label>
                     <input
@@ -531,7 +531,7 @@ function MediaLibrary() {
                       value={newTags}
                       onChange={(e) => setNewTags(e.target.value)}
                       placeholder="e.g., summer, campaign, hero"
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#1a1f2e]"
+                      className="w-full border border-[#bae6fd] rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#0a2342]"
                     />
                   </div>
                 </div>
@@ -543,13 +543,13 @@ function MediaLibrary() {
                       setEditingItem(null);
                       setNewTags('');
                     }}
-                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+                    className="px-4 py-2 text-[#0a2342] bg-[#bae6fd] rounded-md hover:bg-[#7dd3fc]"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleAddTags}
-                    className="px-4 py-2 bg-[#1a1f2e] text-white rounded-md hover:bg-[#2d3546]"
+                    className="px-4 py-2 bg-[#0a2342] text-white rounded-md hover:bg-[#38bdf8]"
                   >
                     Save Tags
                   </button>
@@ -563,11 +563,11 @@ function MediaLibrary() {
       {/* Media Viewer Modal */}
       {selectedMedia && (
         <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
-            <div className="flex items-center justify-between p-4 border-b">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden border border-[#0a2342]/10">
+            <div className="flex items-center justify-between p-4 border-b border-[#bae6fd]">
               <div>
-                <h3 className="text-lg font-semibold">{selectedMedia.name}</h3>
-                <p className="text-sm text-gray-500">{selectedMedia.size} • {selectedMedia.uploadDate}</p>
+                <h3 className="text-lg font-semibold text-[#0a2342]">{selectedMedia.name}</h3>
+                <p className="text-sm text-[#0a2342]/60">{selectedMedia.size} • {selectedMedia.uploadDate}</p>
               </div>
               <div className="flex items-center space-x-2">
                 <button
@@ -575,19 +575,19 @@ function MediaLibrary() {
                     setEditingItem(selectedMedia);
                     setShowTagModal(true);
                   }}
-                  className="p-2 text-gray-400 hover:text-gray-600"
+                  className="p-2 text-[#0a2342]/60 hover:text-[#0a2342]"
                 >
                   <Edit3 className="h-4 w-4" />
                 </button>
                 <button
                   onClick={() => handleDeleteItem(selectedMedia._id)}
-                  className="p-2 text-gray-400 hover:text-red-600"
+                  className="p-2 text-[#0a2342]/60 hover:text-red-600"
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
                 <button
                   onClick={() => setSelectedMedia(null)}
-                  className="p-2 text-gray-400 hover:text-gray-600"
+                  className="p-2 text-[#0a2342]/60 hover:text-[#0a2342]"
                 >
                   <X className="h-5 w-5" />
                 </button>
@@ -615,7 +615,7 @@ function MediaLibrary() {
                     </video>
                   )}
                   {selectedMedia.type === 'icon' && (
-                    <div className="flex items-center justify-center h-96 bg-gray-100 rounded-lg">
+                    <div className="flex items-center justify-center h-96 bg-[#bae6fd] rounded-lg">
                       <img
                         src={selectedMedia.url}
                         alt={selectedMedia.name}
@@ -624,11 +624,11 @@ function MediaLibrary() {
                     </div>
                   )}
                   {selectedMedia.type === 'document' && (
-                    <div className="flex items-center justify-center h-96 bg-gray-100 rounded-lg">
+                    <div className="flex items-center justify-center h-96 bg-[#bae6fd] rounded-lg">
                       <div className="text-center">
-                        <FileText className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                        <p className="text-gray-600">Document preview not available</p>
-                        <button className="mt-2 inline-flex items-center px-4 py-2 bg-[#1a1f2e] text-white rounded-md hover:bg-[#2d3546]">
+                        <FileText className="h-16 w-16 text-[#0a2342]/30 mx-auto mb-4" />
+                        <p className="text-[#0a2342]/60">Document preview not available</p>
+                        <button className="mt-2 inline-flex items-center px-4 py-2 bg-[#0a2342] text-white rounded-md hover:bg-[#38bdf8]">
                           <Download className="h-4 w-4 mr-2" />
                           Download
                         </button>
@@ -641,31 +641,31 @@ function MediaLibrary() {
                 <div className="lg:w-80">
                   <div className="space-y-4">
                     <div>
-                      <h4 className="font-medium text-gray-900 mb-2">File Details</h4>
+                      <h4 className="font-medium text-[#0a2342] mb-2">File Details</h4>
                       <div className="space-y-2 text-sm">
                         <div className="flex justify-between">
-                          <span className="text-gray-500">Type:</span>
-                          <span className="capitalize">{selectedMedia.type}</span>
+                          <span className="text-[#0a2342]/60">Type:</span>
+                          <span className="capitalize text-[#0a2342]">{selectedMedia.type}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-gray-500">Size:</span>
-                          <span>{selectedMedia.size}</span>
+                          <span className="text-[#0a2342]/60">Size:</span>
+                          <span className="text-[#0a2342]">{selectedMedia.size}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-gray-500">Uploaded:</span>
-                          <span>{selectedMedia.uploadDate}</span>
+                          <span className="text-[#0a2342]/60">Uploaded:</span>
+                          <span className="text-[#0a2342]">{selectedMedia.uploadDate}</span>
                         </div>
                       </div>
                     </div>
 
                     {selectedMedia.tags.length > 0 && (
                       <div>
-                        <h4 className="font-medium text-gray-900 mb-2">Tags</h4>
+                        <h4 className="font-medium text-[#0a2342] mb-2">Tags</h4>
                         <div className="flex flex-wrap gap-2">
                           {selectedMedia.tags.map((tag) => (
                             <span
                               key={tag}
-                              className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-blue-100 text-blue-800"
+                              className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-[#bae6fd] text-[#0a2342]"
                             >
                               {tag}
                             </span>
@@ -674,7 +674,7 @@ function MediaLibrary() {
                       </div>
                     )}
 
-                    <div className="pt-4 border-t">
+                    <div className="pt-4 border-t border-[#bae6fd]">
                       <button
                         onClick={() => {
                           // Handle download
@@ -683,7 +683,7 @@ function MediaLibrary() {
                           link.download = selectedMedia.name;
                           link.click();
                         }}
-                        className="w-full inline-flex items-center justify-center px-4 py-2 bg-[#1a1f2e] text-white rounded-md hover:bg-[#2d3546]"
+                        className="w-full inline-flex items-center justify-center px-4 py-2 bg-[#0a2342] text-white rounded-md hover:bg-[#38bdf8]"
                       >
                         <Download className="h-4 w-4 mr-2" />
                         Download

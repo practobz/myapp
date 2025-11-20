@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, MessageSquare, CheckCircle, Edit3, Trash2, Move, Bell, ChevronDown, LogOut, Settings, User, Calendar, Clock, Eye, Image, ChevronLeft, ChevronRight, Play, Video } from 'lucide-react';
+import { ArrowLeft, MessageSquare, CheckCircle, Edit3, Trash2, Move, Bell, ChevronDown, LogOut, Settings, User, Calendar, Clock, Eye, Image, ChevronLeft, ChevronRight, Play, Video, AlertCircle } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 function ContentReview() {
@@ -472,6 +472,27 @@ function ContentReview() {
     }
   };
 
+  // Improved published status detection logic (matches admin logic)
+  function isContentPublished(content) {
+    // Check main content status or publishedAt
+    if (
+      content.status === 'published' ||
+      content.published === true ||
+      !!content.publishedAt
+    ) return true;
+
+    // Check if any version is published
+    if (Array.isArray(content.versions)) {
+      return content.versions.some(
+        v =>
+          v.status === 'published' ||
+          v.published === true ||
+          !!v.publishedAt
+      );
+    }
+    return false;
+  }
+
   const getStatusColor = (status) => {
     switch (status) {
       case 'under_review':
@@ -480,6 +501,8 @@ function ContentReview() {
         return 'bg-green-100 text-green-800 border-green-200';
       case 'rejected':
         return 'bg-red-100 text-red-800 border-red-200';
+      case 'published':
+        return 'bg-blue-100 text-blue-800 border-blue-200';
       default:
         return 'bg-gray-100 text-gray-800 border-gray-200';
     }
@@ -488,10 +511,10 @@ function ContentReview() {
   // Handle loading state
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-[#e6f2fb] via-blue-50 to-indigo-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 font-medium">Loading content submissions...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#38bdf8] mx-auto mb-4"></div>
+          <p className="text-[#0a2342] font-medium">Loading content submissions...</p>
         </div>
       </div>
     );
@@ -500,13 +523,13 @@ function ContentReview() {
   // Handle error state
   if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-[#e6f2fb] via-blue-50 to-indigo-50 flex items-center justify-center">
         <div className="text-center">
           <div className="bg-red-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
             <AlertCircle className="h-8 w-8 text-red-600" />
           </div>
           <p className="text-red-600 font-medium mb-2">Error loading content</p>
-          <p className="text-gray-600 text-sm mb-4">{error}</p>
+          <p className="text-[#0a2342] text-sm mb-4">{error}</p>
           <Button onClick={fetchContentSubmissions} variant="primary">
             Retry
           </Button>
@@ -518,13 +541,13 @@ function ContentReview() {
   // Handle no content state
   if (contentItems.length === 0) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-[#e6f2fb] via-blue-50 to-indigo-50 flex items-center justify-center">
         <div className="text-center">
           <div className="bg-gray-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-            <MessageSquare className="h-8 w-8 text-gray-400" />
+            <MessageSquare className="h-8 w-8 text-[#38bdf8]" />
           </div>
-          <p className="text-gray-600 font-medium mb-2">No content submissions found</p>
-          <p className="text-gray-500 text-sm mb-4">
+          <p className="text-[#0a2342] font-medium mb-2">No content submissions found</p>
+          <p className="text-[#38bdf8] text-sm mb-4">
             {user ? `No content found for ${user.name || user.email}` : 'Please log in to view content'}
           </p>
           {!user && (
@@ -541,22 +564,20 @@ function ContentReview() {
   const currentMedia = currentVersion?.media?.[selectedMediaIndex];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-      
-
+    <div className="min-h-screen bg-gradient-to-br from-[#e6f2fb] via-blue-50 to-indigo-50">
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex flex-col xl:flex-row gap-8">
           {/* Left Sidebar - Content List */}
           <div className="w-full xl:w-96 flex-shrink-0">
-            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden">
-              <div className="px-6 py-4 border-b border-gray-200/50 bg-gradient-to-r from-blue-50 to-indigo-50">
-                <h3 className="text-lg font-bold text-gray-900 flex items-center">
-                  <MessageSquare className="h-5 w-5 text-blue-600 mr-2" />
+            <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border border-[#0a2342]/10 overflow-hidden">
+              <div className="px-6 py-4 border-b border-[#bae6fd] bg-gradient-to-r from-[#bae6fd] to-[#e6f2fb]">
+                <h3 className="text-lg font-bold text-[#0a2342] flex items-center">
+                  <MessageSquare className="h-5 w-5 text-[#38bdf8] mr-2" />
                   Content Items ({contentItems.length})
                 </h3>
                 {user && (
-                  <p className="text-sm text-gray-600 mt-1">
+                  <p className="text-sm text-[#38bdf8] mt-1">
                     Showing content for {user.name || user.email}
                   </p>
                 )}
@@ -584,8 +605,8 @@ function ContentReview() {
                         <p className="text-xs text-gray-600 mt-1 line-clamp-2">{item.description}</p>
                         <div className="flex items-center justify-between mt-2">
                           <div className="flex items-center space-x-2">
-                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${getStatusColor(item.status)}`}>
-                              {item.status.replace('_', ' ').toUpperCase()}
+                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${getStatusColor(isContentPublished(item) ? 'published' : item.status)}`}>
+                              {isContentPublished(item) ? 'PUBLISHED' : item.status.replace('_', ' ').toUpperCase()}
                             </span>
                             <span className="text-xs text-gray-500">{item.platform}</span>
                           </div>
@@ -609,10 +630,10 @@ function ContentReview() {
             </div>
 
             {/* Comments Panel */}
-            <div className="mt-6 bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden">
-              <div className="px-6 py-4 border-b border-gray-200/50 bg-gradient-to-r from-purple-50 to-pink-50">
-                <h3 className="text-lg font-bold text-gray-900 flex items-center">
-                  <MessageSquare className="h-5 w-5 text-purple-600 mr-2" />
+            <div className="mt-6 bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border border-[#0a2342]/10 overflow-hidden">
+              <div className="px-6 py-4 border-b border-[#bae6fd] bg-gradient-to-r from-[#bae6fd] to-[#e6f2fb]">
+                <h3 className="text-lg font-bold text-[#0a2342] flex items-center">
+                  <MessageSquare className="h-5 w-5 text-[#38bdf8] mr-2" />
                   Comments - Media {selectedMediaIndex + 1} ({commentsForCurrentMedia.length})
                 </h3>
               </div>
@@ -664,24 +685,24 @@ function ContentReview() {
 
           {/* Main Content Area */}
           <div className="flex-1 min-w-0">
-            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden">
+            <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border border-[#0a2342]/10 overflow-hidden">
               {/* Content Header */}
-              <div className="px-8 py-6 border-b border-gray-200/50 bg-gradient-to-r from-slate-50 to-blue-50">
+              <div className="px-8 py-6 border-b border-[#bae6fd] bg-gradient-to-r from-[#e6f2fb] to-[#bae6fd]">
                 <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
                   <div>
-                    <h2 className="text-2xl font-bold text-gray-900 mb-2">{selectedContent.title}</h2>
-                    <p className="text-gray-600">{selectedContent.description}</p>
+                    <h2 className="text-2xl font-bold text-[#0a2342] mb-2">{selectedContent.title}</h2>
+                    <p className="text-[#38bdf8]">{selectedContent.description}</p>
                     <div className="flex items-center mt-2 space-x-4">
-                      <span className="text-sm text-gray-500">By {selectedContent.createdBy}</span>
-                      <span className="text-sm text-gray-500">•</span>
-                      <span className="text-sm text-gray-500">{selectedContent.platform}</span>
+                      <span className="text-sm text-[#0a2342]">By {selectedContent.createdBy}</span>
+                      <span className="text-sm text-[#0a2342]">•</span>
+                      <span className="text-sm text-[#0a2342]">{selectedContent.platform}</span>
                     </div>
                   </div>
                   <div className="flex flex-col sm:flex-row gap-3">
-                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border ${getStatusColor(selectedContent.status)}`}>
-                      {selectedContent.status.replace('_', ' ').toUpperCase()}
+                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border ${getStatusColor(isContentPublished(selectedContent) ? 'published' : selectedContent.status)}`}>
+                      {isContentPublished(selectedContent) ? 'PUBLISHED' : selectedContent.status.replace('_', ' ').toUpperCase()}
                     </span>
-                    <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-purple-100 text-purple-800 border border-purple-200">
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-[#bae6fd] text-[#0a2342] border border-[#38bdf8]">
                       <Image className="h-4 w-4 mr-1" />
                       {selectedContent.totalVersions} Version{selectedContent.totalVersions !== 1 ? 's' : ''}
                     </span>
@@ -691,9 +712,9 @@ function ContentReview() {
 
               {/* Version Controls */}
               {selectedContent.totalVersions > 1 && (
-                <div className="px-8 py-4 border-b border-gray-200/50 bg-gradient-to-r from-indigo-50 to-purple-50">
+                <div className="px-8 py-4 border-b border-[#bae6fd] bg-gradient-to-r from-[#bae6fd] to-[#e6f2fb]">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-semibold text-gray-900">
+                    <h3 className="text-lg font-semibold text-[#0a2342]">
                       Version {currentVersion?.versionNumber} of {selectedContent.totalVersions}
                     </h3>
                     <div className="flex items-center space-x-2">
@@ -716,7 +737,7 @@ function ContentReview() {
                       </button>
                     </div>
                   </div>
-                  <div className="mt-2 text-sm text-gray-600">
+                  <div className="mt-2 text-sm text-[#38bdf8]">
                     Created: {formatDate(currentVersion?.createdAt)}
                   </div>
                 </div>

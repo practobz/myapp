@@ -126,145 +126,147 @@ function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[#e6f2fb]">
       {/* Header */}
     
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="space-y-8">
-          {/* Welcome Section */}
-          <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-lg shadow-lg p-8 text-white">
-            <h1 className="text-3xl font-bold mb-2">
-              Welcome{currentUser?.name ? `, ${currentUser.name}` : ''} to Aureum Solutions
-            </h1>
-            <p className="text-blue-100 text-lg">Track and manage your social media content effectively</p>
-          </div>
-
-          {/* Stats Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Total Posts */}
-            <div 
-              className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow cursor-pointer"
-              onClick={() => navigate('/customer/posts')}
-            >
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                    <LayoutGrid className="h-6 w-6 text-blue-600" />
-                  </div>
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Posts</p>
-                  <p className="text-3xl font-bold text-gray-900">{stats.totalPosts}</p>
-                </div>
-              </div>
+      <div className="flex justify-center min-h-screen">
+        <div className="w-full max-w-5xl px-2 sm:px-4 py-8">
+          <div className="space-y-8">
+            {/* Welcome Section */}
+            <div className="bg-gradient-to-r from-[#0a2342] to-[#38bdf8] rounded-lg shadow-lg p-8 text-white">
+              <h1 className="text-3xl font-bold mb-2">
+                Welcome{currentUser?.name ? `, ${currentUser.name}` : ''} to Aureum Solutions
+              </h1>
+              <p className="text-blue-100 text-lg">Track and manage your social media content effectively</p>
             </div>
 
-            {/* Content Calendars */}
-            <div 
-              className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow cursor-pointer"
-              onClick={() => navigate('/customer/calendar')}
-            >
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                    <CalendarIcon className="h-6 w-6 text-purple-600" />
-                  </div>
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Content Calendars</p>
-                  <p className="text-3xl font-bold text-gray-900">{stats.contentCalendars}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Published Content */}
-            <div 
-              className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow cursor-pointer"
-              onClick={() => navigate('/customer/posts')}
-            >
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                    <Send className="h-6 w-6 text-green-600" />
-                  </div>
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Published Content</p>
-                  <p className="text-3xl font-bold text-gray-900">{stats.publishedContent}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Bottom Section */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Recent Activity */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Recent Activity</h2>
-              <div className="space-y-3">
-                {recentActivity.length === 0 ? (
-                  <div className="text-gray-500 text-center py-8 text-sm">No recent activity found.</div>
-                ) : (
-                  recentActivity.map((activity) => (
-                    <div key={activity.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                      <div>
-                        <p className="font-medium text-gray-900 text-sm">{activity.platform}</p>
-                        <p className="text-xs text-gray-500">
-                          {activity.date ? format(new Date(activity.date), 'MMM dd, yyyy') : ''}
-                        </p>
-                      </div>
-                     
+            {/* Stats Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Total Posts */}
+              <div 
+                className="bg-white rounded-lg shadow-sm border border-[#0a2342]/10 p-6 hover:shadow-md transition-shadow cursor-pointer"
+                onClick={() => navigate('')}
+              >
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <div className="w-12 h-12 bg-[#bae6fd] rounded-lg flex items-center justify-center">
+                      <LayoutGrid className="h-6 w-6 text-[#0a2342]" />
                     </div>
-                  ))
-                )}
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-[#0a2342] uppercase tracking-wide">Total Posts</p>
+                    <p className="text-3xl font-bold text-[#0a2342]">{stats.totalPosts}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Content Calendars */}
+              <div 
+                className="bg-white rounded-lg shadow-sm border border-[#0a2342]/10 p-6 hover:shadow-md transition-shadow cursor-pointer"
+                onClick={() => navigate('/customer/calendar')}
+              >
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <div className="w-12 h-12 bg-[#7dd3fc] rounded-lg flex items-center justify-center">
+                      <CalendarIcon className="h-6 w-6 text-[#0a2342]" />
+                    </div>
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-[#0a2342] uppercase tracking-wide">Content Calendars</p>
+                    <p className="text-3xl font-bold text-[#0a2342]">{stats.contentCalendars}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Published Content */}
+              <div 
+                className="bg-white rounded-lg shadow-sm border border-[#0a2342]/10 p-6 hover:shadow-md transition-shadow cursor-pointer"
+                onClick={() => navigate('')}
+              >
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <div className="w-12 h-12 bg-[#38bdf8] rounded-lg flex items-center justify-center">
+                      <Send className="h-6 w-6 text-white" />
+                    </div>
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-[#0a2342] uppercase tracking-wide">Published Content</p>
+                    <p className="text-3xl font-bold text-[#0a2342]">{stats.publishedContent}</p>
+                  </div>
+                </div>
               </div>
             </div>
 
-            {/* Quick Actions */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
-              <div className="space-y-3">
-                <button 
-                  onClick={() => navigate('/customer/calendar')}
-                  className="w-full flex items-center p-3 text-left bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
-                >
-                  <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center mr-3">
-                    <CalendarIcon className="h-4 w-4 text-white" />
-                  </div>
-                  <span className="font-medium text-gray-900">View Content Calendar</span>
-                </button>
-                
-                <button 
-                  onClick={() => navigate('/customer/content-review')}
-                  className="w-full flex items-center p-3 text-left bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors"
-                >
-                  <div className="w-8 h-8 bg-purple-500 rounded-lg flex items-center justify-center mr-3">
-                    <MessageSquare className="h-4 w-4 text-white" />
-                  </div>
-                  <span className="font-medium text-gray-900">Review Content</span>
-                </button>
-                
-                <button 
-                  onClick={() => navigate('/customer/media-library')}
-                  className="w-full flex items-center p-3 text-left bg-green-50 hover:bg-green-100 rounded-lg transition-colors"
-                >
-                  <div className="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center mr-3">
-                    <ImageIcon className="h-4 w-4 text-white" />
-                  </div>
-                  <span className="font-medium text-gray-900">Manage Media Library</span>
-                </button>
+            {/* Bottom Section */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* Recent Activity */}
+              <div className="bg-white rounded-lg shadow-sm border border-[#0a2342]/10 p-6">
+                <h2 className="text-lg font-semibold text-[#0a2342] mb-4">Recent Activity</h2>
+                <div className="space-y-3">
+                  {recentActivity.length === 0 ? (
+                    <div className="text-[#0a2342]/60 text-center py-8 text-sm">No recent activity found.</div>
+                  ) : (
+                    recentActivity.map((activity) => (
+                      <div key={activity.id} className="flex items-center justify-between p-3 bg-[#e6f2fb] rounded-lg">
+                        <div>
+                          <p className="font-medium text-[#0a2342] text-sm">{activity.platform}</p>
+                          <p className="text-xs text-[#0a2342]/60">
+                            {activity.date ? format(new Date(activity.date), 'MMM dd, yyyy') : ''}
+                          </p>
+                        </div>
+                       
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
 
-                <button 
-                  onClick={() => navigate('/customer/social-analytics-dashboard')}
-                  className="w-full flex items-center p-3 text-left bg-orange-50 hover:bg-orange-100 rounded-lg transition-colors"
-                >
-                  <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center mr-3">
-                    <TrendingUp className="h-4 w-4 text-white" />
-                  </div>
-                  <span className="font-medium text-gray-900">Social ROI & Analytics Dashboard</span>
-                </button>
+              {/* Quick Actions */}
+              <div className="bg-white rounded-lg shadow-sm border border-[#0a2342]/10 p-6">
+                <h2 className="text-lg font-semibold text-[#0a2342] mb-4">Quick Actions</h2>
+                <div className="space-y-3">
+                  <button 
+                    onClick={() => navigate('/customer/calendar')}
+                    className="w-full flex items-center p-3 text-left bg-[#bae6fd] hover:bg-[#7dd3fc] rounded-lg transition-colors"
+                  >
+                    <div className="w-8 h-8 bg-[#0a2342] rounded-lg flex items-center justify-center mr-3">
+                      <CalendarIcon className="h-4 w-4 text-white" />
+                    </div>
+                    <span className="font-medium text-[#0a2342]">View Content Calendar</span>
+                  </button>
+                  
+                  <button 
+                    onClick={() => navigate('/customer/content-review')}
+                    className="w-full flex items-center p-3 text-left bg-[#7dd3fc] hover:bg-[#38bdf8] rounded-lg transition-colors"
+                  >
+                    <div className="w-8 h-8 bg-[#0a2342] rounded-lg flex items-center justify-center mr-3">
+                      <MessageSquare className="h-4 w-4 text-white" />
+                    </div>
+                    <span className="font-medium text-[#0a2342]">Review Content</span>
+                  </button>
+                  
+                  <button 
+                    onClick={() => navigate('/customer/media-library')}
+                    className="w-full flex items-center p-3 text-left bg-[#e0f2fe] hover:bg-[#bae6fd] rounded-lg transition-colors"
+                  >
+                    <div className="w-8 h-8 bg-[#0a2342] rounded-lg flex items-center justify-center mr-3">
+                      <ImageIcon className="h-4 w-4 text-white" />
+                    </div>
+                    <span className="font-medium text-[#0a2342]">Manage Media Library</span>
+                  </button>
+
+                  <button 
+                    onClick={() => navigate('/customer/social-analytics-dashboard')}
+                    className="w-full flex items-center p-3 text-left bg-[#0ea5e9]/10 hover:bg-[#38bdf8]/20 rounded-lg transition-colors"
+                  >
+                    <div className="w-8 h-8 bg-[#0a2342] rounded-lg flex items-center justify-center mr-3">
+                      <TrendingUp className="h-4 w-4 text-white" />
+                    </div>
+                    <span className="font-medium text-[#0a2342]">Social ROI & Analytics Dashboard</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>

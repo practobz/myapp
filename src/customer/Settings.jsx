@@ -249,20 +249,19 @@ function Settings() {
   const renderCustomerTab = () => (
     <div className="space-y-8">
       <div className="text-center">
-        <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl mb-4">
+        <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-[#0a2342] to-[#38bdf8] rounded-2xl mb-4">
           <User className="h-8 w-8 text-white" />
         </div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Customer Information</h2>
-        <p className="text-gray-600 max-w-2xl mx-auto">
+        <h2 className="text-2xl font-bold text-[#0a2342] mb-2">Customer Information</h2>
+        <p className="text-[#0a2342]/70 max-w-2xl mx-auto">
           Your account details are securely stored and managed. For any changes, please contact our support team.
         </p>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
-        <div className="bg-gradient-to-r from-blue-50 to-purple-50 px-6 py-4 border-b border-gray-100">
-          <h3 className="text-lg font-semibold text-gray-900">Account Details</h3>
+      <div className="bg-white rounded-2xl shadow-lg border border-[#0a2342]/10 overflow-hidden">
+        <div className="bg-gradient-to-r from-[#bae6fd] to-[#e0f2fe] px-6 py-4 border-b border-[#bae6fd]">
+          <h3 className="text-lg font-semibold text-[#0a2342]">Account Details</h3>
         </div>
-        
         <div className="p-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-6">
@@ -318,12 +317,12 @@ function Settings() {
                 </div>
               </div>
 
-              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4">
+              <div className="bg-gradient-to-r from-[#bae6fd] to-[#e0f2fe] border border-[#bae6fd] rounded-lg p-4">
                 <div className="flex items-start space-x-3">
-                  <Shield className="h-5 w-5 text-blue-600 mt-0.5" />
+                  <Shield className="h-5 w-5 text-[#0a2342] mt-0.5" />
                   <div>
-                    <p className="text-sm font-medium text-blue-900 mb-1">Secure Account</p>
-                    <p className="text-xs text-blue-700">
+                    <p className="text-sm font-medium text-[#0a2342] mb-1">Secure Account</p>
+                    <p className="text-xs text-[#0a2342]/70">
                       Your information is encrypted and protected. Contact support@auremsolutions.com for updates.
                     </p>
                   </div>
@@ -334,17 +333,17 @@ function Settings() {
         </div>
       </div>
 
-      <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-2xl p-6">
+      <div className="bg-gradient-to-r from-[#d1fae5] to-[#bae6fd] border border-[#7dd3fc] rounded-2xl p-6">
         <div className="flex items-center space-x-3 mb-3">
-          <Bell className="h-6 w-6 text-green-600" />
-          <h4 className="font-semibold text-green-900">Need to Update Information?</h4>
+          <Bell className="h-6 w-6 text-[#0a2342]" />
+          <h4 className="font-semibold text-[#0a2342]">Need to Update Information?</h4>
         </div>
-        <p className="text-sm text-green-800 mb-4">
+        <p className="text-sm text-[#0a2342]/80 mb-4">
           For security reasons, account information changes must be processed by our support team.
         </p>
         <button 
           onClick={() => window.open('mailto:support@auremsolutions.com', '_blank')}
-          className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+          className="bg-[#0a2342] text-white px-4 py-2 rounded-lg hover:bg-[#38bdf8] transition-colors text-sm font-medium"
         >
           Contact Support
         </button>
@@ -355,24 +354,22 @@ function Settings() {
   const renderIntegrationsOverview = () => (
     <div className="space-y-8">
       <div className="text-center">
-        <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-purple-500 to-pink-600 rounded-2xl mb-4">
+        <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-[#0a2342] to-[#38bdf8] rounded-2xl mb-4">
           <Globe className="h-8 w-8 text-white" />
         </div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Social Media Integrations</h2>
-        <p className="text-gray-600 max-w-2xl mx-auto">
+        <h2 className="text-2xl font-bold text-[#0a2342] mb-2">Social Media Integrations</h2>
+        <p className="text-[#0a2342]/70 max-w-2xl mx-auto">
           Connect your social media accounts to streamline content management and gain valuable insights.
         </p>
       </div>
-
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {platforms.map((platform) => (
           <div
             key={platform.key}
-            className="group bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer transform hover:-translate-y-1"
+            className="group bg-white rounded-2xl shadow-lg border border-[#0a2342]/10 overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer transform hover:-translate-y-1"
             onClick={() => handleIntegrationSelect(platform.key)}
           >
             <div className={`h-2 bg-gradient-to-r ${platform.color}`}></div>
-            
             <div className="p-6">
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center space-x-4">
@@ -380,31 +377,29 @@ function Settings() {
                     {platform.icon}
                   </div>
                   <div>
-                    <h3 className="text-xl font-semibold text-gray-900 group-hover:text-gray-700 transition-colors">
+                    <h3 className="text-xl font-semibold text-[#0a2342] group-hover:text-[#38bdf8] transition-colors">
                       {platform.label}
                     </h3>
-                    <p className="text-sm text-gray-600 mt-1">
+                    <p className="text-sm text-[#0a2342]/70 mt-1">
                       {platform.description}
                     </p>
                   </div>
                 </div>
-                <ExternalLink className="h-5 w-5 text-gray-400 group-hover:text-gray-600 transition-colors" />
+                <ExternalLink className="h-5 w-5 text-[#0a2342]/30 group-hover:text-[#38bdf8] transition-colors" />
               </div>
-
               <div className="mb-4">
-                <h4 className="text-sm font-medium text-gray-700 mb-2">Key Features:</h4>
+                <h4 className="text-sm font-medium text-[#0a2342] mb-2">Key Features:</h4>
                 <div className="flex flex-wrap gap-2">
                   {platform.features.map((feature, index) => (
                     <span 
                       key={index}
-                      className="px-2 py-1 bg-gray-100 text-gray-700 rounded-md text-xs font-medium"
+                      className="px-2 py-1 bg-[#e6f2fb] text-[#0a2342] rounded-md text-xs font-medium"
                     >
                       {feature}
                     </span>
                   ))}
                 </div>
               </div>
-
               <div className="flex items-center justify-between">
                 {renderConnectionStatus(platform.key)}
                 <button
@@ -434,14 +429,14 @@ function Settings() {
         <div className="flex items-center space-x-4">
           <button
             onClick={handleBackToIntegrations}
-            className="flex items-center space-x-2 text-gray-600 hover:text-gray-900 transition-colors"
+            className="flex items-center space-x-2 text-[#0a2342] hover:text-[#38bdf8] transition-colors"
           >
             <ArrowLeft className="h-5 w-5" />
             <span>Back to Integrations</span>
           </button>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+        <div className="bg-white rounded-2xl shadow-lg border border-[#0a2342]/10 overflow-hidden">
           <div className={`bg-gradient-to-r ${platform.color} px-6 py-4`}>
             <div className="flex items-center space-x-3">
               <div className="text-white">
@@ -483,9 +478,9 @@ function Settings() {
             {activeIntegration === 'whatsapp' && (
               <div>
                 {/* Debug info to show what data we have */}
-                <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                  <h4 className="text-sm font-medium text-blue-900 mb-2">Customer Data Debug</h4>
-                  <div className="text-xs text-blue-800 space-y-1">
+                <div className="mb-4 p-3 bg-[#bae6fd] rounded-lg border border-[#7dd3fc]">
+                  <h4 className="text-sm font-medium text-[#0a2342] mb-2">Customer Data Debug</h4>
+                  <div className="text-xs text-[#0a2342]/80 space-y-1">
                     <div><strong>Name:</strong> {customerData?.name || 'Not loaded'}</div>
                     <div><strong>Email:</strong> {customerData?.email || 'Not loaded'}</div>
                     <div><strong>Mobile:</strong> {customerData?.mobile || 'Not loaded'}</div>
@@ -534,37 +529,37 @@ function Settings() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+      <div className="min-h-screen bg-[#e6f2fb] flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading your settings...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#38bdf8] mx-auto mb-4"></div>
+          <p className="text-[#0a2342]/70">Loading your settings...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+    <div className="min-h-screen bg-[#e6f2fb]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {!activeIntegration ? (
           <div className="space-y-8">
             {/* Header */}
             <div className="text-center">
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">Account Settings</h1>
-              <p className="text-gray-600">Manage your account information and social media integrations</p>
+              <h1 className="text-3xl font-bold text-[#0a2342] mb-2">Account Settings</h1>
+              <p className="text-[#0a2342]/70">Manage your account information and social media integrations</p>
             </div>
 
             {/* Tab Navigation */}
-            <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
-              <div className="border-b border-gray-200">
+            <div className="bg-white rounded-2xl shadow-lg border border-[#0a2342]/10 overflow-hidden">
+              <div className="border-b border-[#bae6fd]">
                 <nav className="flex">
                   <button
                     type="button"
                     onClick={() => handleTabChange('customer')}
                     className={`flex-1 py-4 px-6 text-sm font-medium border-b-2 transition-all duration-200 ${
                       activeTab === 'customer'
-                        ? 'border-blue-600 text-blue-600 bg-blue-50'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50'
+                        ? 'border-[#38bdf8] text-[#0a2342] bg-[#bae6fd]'
+                        : 'border-transparent text-[#0a2342]/60 hover:text-[#0a2342] hover:border-[#bae6fd] hover:bg-[#e6f2fb]'
                     }`}
                   >
                     <div className="flex items-center justify-center space-x-2">
@@ -577,8 +572,8 @@ function Settings() {
                     onClick={() => handleTabChange('integrations')}
                     className={`flex-1 py-4 px-6 text-sm font-medium border-b-2 transition-all duration-200 ${
                       activeTab === 'integrations'
-                        ? 'border-blue-600 text-blue-600 bg-blue-50'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50'
+                        ? 'border-[#38bdf8] text-[#0a2342] bg-[#bae6fd]'
+                        : 'border-transparent text-[#0a2342]/60 hover:text-[#0a2342] hover:border-[#bae6fd] hover:bg-[#e6f2fb]'
                     }`}
                   >
                     <div className="flex items-center justify-center space-x-2">
@@ -588,7 +583,6 @@ function Settings() {
                   </button>
                 </nav>
               </div>
-
               <div className="p-8">
                 {activeTab === 'customer' && renderCustomerTab()}
                 {activeTab === 'integrations' && renderIntegrationsOverview()}

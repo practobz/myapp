@@ -58,6 +58,24 @@ function FacebookIntegration() {
     return window.FB && window.FB.api && typeof window.FB.api === 'function';
   };
 
+  // --- ADD: Helper to get current customer ID (copied from InstagramIntegration.jsx) ---
+  function getCurrentCustomerId() {
+    let customerId = null;
+    // Check URL params first
+    const urlParams = new URLSearchParams(window.location.search);
+    const hashParams = new URLSearchParams(window.location.hash.split('?')[1] || '');
+    customerId = urlParams.get('customerId') || hashParams.get('customerId');
+    if (customerId) return customerId;
+    // Fallback to localStorage
+    const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
+    customerId = currentUser.userId || currentUser.id || currentUser._id || currentUser.customer_id;
+    if (!customerId) {
+      const authUser = JSON.parse(localStorage.getItem('user') || '{}');
+      customerId = authUser.userId || authUser.id || authUser._id || authUser.customer_id;
+    }
+    return customerId;
+  }
+
   // Load connected accounts from localStorage on component mount
   useEffect(() => {
     console.log('🔍 Component mounted, loading accounts from storage...');
@@ -68,34 +86,105 @@ function FacebookIntegration() {
       'fb_active_account_id'
     ]);
 
-    const savedAccounts = getUserData('fb_connected_accounts');
-    const savedActiveId = getUserData('fb_active_account_id');
-    
-    console.log('📦 Storage check on mount:', {
-      savedAccounts: savedAccounts ? savedAccounts.length : 0,
-      savedActiveId,
-      accountsData: savedAccounts
-    });
-    
-    if (savedAccounts && Array.isArray(savedAccounts) && savedAccounts.length > 0) {
-      console.log('✅ Setting accounts from storage:', savedAccounts);
-      setConnectedAccounts(savedAccounts);
-      
-      if (savedActiveId && savedAccounts.some(acc => acc.id === savedActiveId)) {
-        setActiveAccountId(savedActiveId);
-        const activeAcc = savedAccounts.find(acc => acc.id === savedActiveId);
-        setActiveAccount(activeAcc);
-        console.log('✅ Set active account:', activeAcc?.name);
-      } else if (savedAccounts.length > 0) {
-        // Set first account as active if no valid active account
-        setActiveAccountId(savedAccounts[0].id);
-        setActiveAccount(savedAccounts[0]);
-        setUserData('fb_active_account_id', savedAccounts[0].id);
-        console.log('✅ Set first account as active:', savedAccounts[0].name);
+    // --- NEW: Try to fetch connected accounts from backend using customerId ---
+    const customerId = getCurrentCustomerId();
+
+    async function fetchConnectedAccountsFromBackend() {
+      if (!customerId) return null;
+      try {
+        const res = await fetch(`${process.env.REACT_APP_API_URL}/api/customer-social-links/${customerId}`);
+        const data = await res.json();
+        if (data.success && Array.isArray(data.accounts)) {
+          // Only Facebook accounts for this customer
+          return data.accounts
+            .filter(acc => acc.platform === 'facebook' && acc.customerId === customerId)
+            .map(acc => ({
+              id: acc.platformUserId,
+              name: acc.name,
+              email: acc.email,
+              picture: { data: { url: acc.profilePicture } },
+              accessToken: acc.accessToken,
+              connectedAt: acc.connectedAt,
+              tokenExpiresAt: acc.tokenExpiresAt || null,
+              tokenType: acc.tokenType,
+              pages: acc.pages || []
+            }));
+        }
+      } catch (err) {
+        // ignore
       }
-    } else {
-      console.log('ℹ️ No connected accounts found in storage');
+      return null;
     }
+
+    // --- NEW: Hydrate backend accounts with live data (profile/pages) ---
+    async function hydrateFacebookAccounts(accounts) {
+      if (!window.FB || !window.FB.api) return accounts;
+      return await Promise.all(accounts.map(acc =>
+        new Promise(resolve => {
+          // Fetch live profile
+          window.FB.api('/me', {
+            fields: 'id,name,email,picture',
+            access_token: acc.accessToken
+          }, function(profileResponse) {
+            // Fetch pages
+            window.FB.api('/me/accounts', {
+              fields: 'id,name,access_token,category,about,fan_count,link,picture,username,website,phone,verification_status',
+              access_token: acc.accessToken
+            }, function(pagesResponse) {
+              resolve({
+                ...acc,
+                name: profileResponse?.name || acc.name,
+                email: profileResponse?.email || acc.email,
+                picture: profileResponse?.picture || acc.picture,
+                pages: pagesResponse?.data || acc.pages
+              });
+            });
+          });
+        })
+      ));
+    }
+
+    // Helper: Deduplicate accounts by id
+    function dedupeAccounts(accounts) {
+      const seen = new Set();
+      return accounts.filter(acc => {
+        if (seen.has(acc.id)) return false;
+        seen.add(acc.id);
+        return true;
+      });
+    }
+
+    (async () => {
+      const backendAccounts = await fetchConnectedAccountsFromBackend();
+      if (backendAccounts && backendAccounts.length > 0) {
+        // Hydrate with live profile/pages
+        const hydratedAccounts = await hydrateFacebookAccounts(backendAccounts);
+        const deduped = dedupeAccounts(hydratedAccounts);
+        setConnectedAccounts(deduped);
+        setUserData('fb_connected_accounts', deduped);
+        setActiveAccountId(deduped[0].id);
+        setActiveAccount(deduped[0]);
+        setUserData('fb_active_account_id', deduped[0].id);
+        return;
+      }
+
+      // --- FALLBACK: Use localStorage if backend empty (legacy) ---
+      const savedAccounts = getUserData('fb_connected_accounts');
+      const savedActiveId = getUserData('fb_active_account_id');
+      if (savedAccounts && Array.isArray(savedAccounts) && savedAccounts.length > 0) {
+        const deduped = dedupeAccounts(savedAccounts);
+        setConnectedAccounts(deduped);
+        if (savedActiveId && deduped.some(acc => acc.id === savedActiveId)) {
+          setActiveAccountId(savedActiveId);
+          const activeAcc = deduped.find(acc => acc.id === savedActiveId);
+          setActiveAccount(activeAcc);
+        } else if (deduped.length > 0) {
+          setActiveAccountId(deduped[0].id);
+          setActiveAccount(deduped[0]);
+          setUserData('fb_active_account_id', deduped[0].id);
+        }
+      }
+    })();
   }, []);
 
   // Load Facebook SDK
@@ -1626,20 +1715,20 @@ function FacebookIntegration() {
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto px-2 sm:px-4 md:px-6 lg:px-8">
           <div className="flex items-center h-16">
             <Facebook className="h-8 w-8 text-blue-600" />
             <span className="ml-2 text-xl font-bold text-[#1a1f2e]">Facebook Integration</span>
           </div>
         </div>
       </header>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="bg-white rounded-lg shadow-md p-6">
+      <div className="max-w-7xl mx-auto px-2 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-8">
+        <div className="bg-white rounded-lg shadow-md p-2 sm:p-4 md:p-6">
           {/* Debug info (optional, can remove) */}
           {/* ...existing code... */}
           {renderError()}
           {connectedAccounts.length === 0 ? (
-            <div className="text-center py-12">
+            <div className="text-center py-8 sm:py-12">
               <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-2xl mb-4">
                 <Facebook className="h-8 w-8 text-blue-600" />
               </div>
@@ -1647,7 +1736,7 @@ function FacebookIntegration() {
               <p className="text-gray-600 mb-6 max-w-md mx-auto">
                 Connect your Facebook accounts to manage your pages and access detailed analytics.
               </p>
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 max-w-md mx-auto">
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 max-w-md mx-auto text-left">
                 <h4 className="font-medium text-blue-800 mb-2">📱 Multi-Account Setup Guide</h4>
                 <div className="text-sm text-blue-700 text-left space-y-1">
                   <p>1. Log in with your Facebook account</p>
@@ -1669,8 +1758,8 @@ function FacebookIntegration() {
             <div className="space-y-6">
               {/* Show account selector if multiple accounts */}
               {connectedAccounts.length > 1 && renderAccountSelector()}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-4 w-full">
                   <div className="flex items-center space-x-1 bg-green-100 px-3 py-1 rounded-full">
                     <span className="text-green-600 font-bold">●</span>
                     <span className="text-sm font-medium text-green-700">
@@ -1692,7 +1781,7 @@ function FacebookIntegration() {
                     </div>
                   )}
                 </div>
-                <div className="flex items-center space-x-2">
+                <div className="flex flex-wrap items-center space-x-2 mt-2 sm:mt-0">
                   <button
                     onClick={refreshPageTokens}
                     disabled={!fbSdkLoaded || !isFacebookApiReady() || !activeAccount}
@@ -1720,8 +1809,8 @@ function FacebookIntegration() {
               </div>
               {/* Active account details and pages */}
               {activeAccount && (
-                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-6">
-                  <div className="flex items-center justify-between mb-6">
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-2 sm:p-6">
+                  <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 gap-4">
                     <div className="flex items-center space-x-4">
                       {activeAccount.picture && (
                         <img
@@ -1735,7 +1824,7 @@ function FacebookIntegration() {
                         <p className="text-sm text-gray-600">{activeAccount.email}</p>
                       </div>
                     </div>
-                    <div className="flex space-x-2">
+                    <div className="flex flex-wrap space-x-2">
                       <button
                         onClick={refreshPageTokens}
                         disabled={!fbSdkLoaded || !isFacebookApiReady() || !activeAccount}
@@ -1772,10 +1861,12 @@ function FacebookIntegration() {
                       <div className="space-y-4">
                         {fbPages.map(page => (
                           <div key={page.id}>
-                            {renderPageDetails(page)}
+                            <div className="overflow-x-auto">
+                              {renderPageDetails(page)}
+                            </div>
                             {/* --- Historical Analytics Toggle and Chart --- */}
                             <div className="mb-6">
-                              <div className="flex items-center justify-between bg-white rounded-lg border border-gray-200 p-4">
+                              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-white rounded-lg border border-gray-200 p-4 gap-2">
                                 <div className="flex items-center space-x-3">
                                   <Calendar className="h-5 w-5 text-blue-600" />
                                   <div>
@@ -1798,12 +1889,14 @@ function FacebookIntegration() {
                               </div>
                             </div>
                             {showHistoricalCharts[page.id] && (
-                              <TimePeriodChart
-                                platform="facebook"
-                                accountId={page.id}
-                                title="Facebook Historical Analytics"
-                                defaultMetric="followers"
-                              />
+                              <div className="overflow-x-auto">
+                                <TimePeriodChart
+                                  platform="facebook"
+                                  accountId={page.id}
+                                  title="Facebook Historical Analytics"
+                                  defaultMetric="followers"
+                                />
+                              </div>
                             )}
                           </div>
                         ))}

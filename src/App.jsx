@@ -26,6 +26,9 @@ import SuperAdminSignup from './superadmin/Signup';
 import ViewAssignments from './superadmin/ViewAssignments';
 import SuperAdminAnalytics from './superadmin/Analytics';
 
+// Customer Integration: Instagram Ads
+import InstagramAdsIntegration from './customer/Integration/InstagramAdsIntegration';
+
 // Customer imports
 import CustomerDashboard from './customer/Dashboard';
 import ContentCalendar from './customer/ContentCalendar';

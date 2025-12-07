@@ -226,6 +226,8 @@ function App() {
               <Route path="/customer/integration/instagram" element={<InstagramIntegration />} />
               <Route path="/customer/integration/youtube" element={<YouTubeIntegration />} />
               <Route path="/customer/integration/linkedin" element={<LinkedInIntegration />} />
+              {/* Public route for Instagram Ads Integration */}
+              <Route path="/customer/integration/instagram-ads" element={<InstagramAdsIntegration />} />
               
               {/* Super Admin Auth Routes */}
               <Route path="/superadmin/signup" element={<SuperAdminSignup />} />
@@ -488,6 +490,15 @@ function App() {
                 <ProtectedRoutePortal role="customer">
                   <CustomerLayout>
                     <WhatsAppIntegration />
+                  </CustomerLayout>
+                </ProtectedRoutePortal>
+              } />
+
+              {/* Protected route for Instagram Ads Integration (Customer) */}
+              <Route path="/customer/instagram-ads-integration" element={
+                <ProtectedRoutePortal role="customer">
+                  <CustomerLayout>
+                    <InstagramAdsIntegration />
                   </CustomerLayout>
                 </ProtectedRoutePortal>
               } />

@@ -405,7 +405,7 @@ function InstagramCampaignCreator({
         xhr.onerror = () => reject(new Error('Upload failed'));
       });
 
-      const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3001';
+      const API_BASE_URL = process.env.REACT_APP_API_URL;
       xhr.open('POST', `${API_BASE_URL}/api/meta/upload-image`);
       xhr.send(formData);
 
@@ -582,7 +582,7 @@ function InstagramCampaignCreator({
         });
 
         try {
-          const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3001';
+          const API_BASE_URL = process.env.REACT_APP_API_URL;
           const adSetResponse = await fetch(`${API_BASE_URL}/api/meta/create-adset`, {
             method: 'POST',
             headers: {

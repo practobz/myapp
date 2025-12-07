@@ -697,7 +697,8 @@ export class MetaAdvertisingAPI {
         reject(new Error('Network error during upload'));
       };
 
-      xhr.open('POST', 'http://localhost:3001/api/meta/upload-image');
+      const API_BASE_URL = process.env.REACT_APP_API_URL;
+      xhr.open('POST', `${API_BASE_URL}/api/meta/upload-image`);
       xhr.send(formData);
     });
   }

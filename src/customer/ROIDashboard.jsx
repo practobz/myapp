@@ -63,8 +63,8 @@ const ROIDashboard = () => {
       const customerId = currentUser._id;
       console.log('🔍 Fetching analytics data for customer:', customerId);
       
-      // Use full URL to backend server
-      const backendUrl = 'http://localhost:3001';
+      // Use full URL to backend server from environment variable
+      const backendUrl = process.env.REACT_APP_API_URL;
       
       // First try to get historical data
       try {
@@ -224,7 +224,7 @@ const ROIDashboard = () => {
     // First, try to fetch historical data for each connected account
     try {
       console.log('🔗 Attempting to fetch historical data for connected accounts...');
-      const backendUrl = 'http://localhost:3001';
+      const backendUrl = process.env.REACT_APP_API_URL;
       const customerId = currentUser._id;
       
       for (const account of accounts) {
@@ -278,7 +278,7 @@ const ROIDashboard = () => {
     // First, try to fetch real-time metrics from our new API for accounts without historical data
     try {
       console.log('🔗 Attempting to fetch real-time social metrics...');
-      const backendUrl = 'http://localhost:3001';
+      const backendUrl = process.env.REACT_APP_API_URL;
       const customerId = currentUser._id;
       
       const metricsResponse = await fetch(`${backendUrl}/api/customer/social-metrics/${customerId}`, {

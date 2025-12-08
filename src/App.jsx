@@ -74,6 +74,9 @@ import CustomerWelcome from './customer/auth/CustomerWelcome';
 import Configure from './components/Configure';
 import SocialIntegrations from './customer/Integration/SocialIntegrations';
 
+// Import the new component
+import CustomerAnalytics from './customer/Analytics';
+
 // --- ProtectedRoute for all portals ---
 function ProtectedRoutePortal({ children, role }) {
   const { currentUser } = useAuth();
@@ -470,6 +473,14 @@ function App() {
                 <ProtectedRoutePortal role="customer">
                   <CustomerLayout>
                     <PostAnalytics />
+                  </CustomerLayout>
+                </ProtectedRoutePortal>
+              } />
+              {/* Add route for Customer Analytics */}
+              <Route path="/customer/analytics" element={
+                <ProtectedRoutePortal role="customer">
+                  <CustomerLayout>
+                    <CustomerAnalytics />
                   </CustomerLayout>
                 </ProtectedRoutePortal>
               } />

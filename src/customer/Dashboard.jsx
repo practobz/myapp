@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LayoutGrid, Calendar as CalendarIcon, TrendingUp, FileText, MessageSquare, Image as ImageIcon, Send } from 'lucide-react';
+import { LayoutGrid, Calendar as CalendarIcon, TrendingUp, FileText, MessageSquare, Image as ImageIcon, Send, BarChart3 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useAuth } from '../admin/contexts/AuthContext';
 
@@ -257,14 +257,19 @@ function Dashboard() {
                     <span className="font-medium text-[#0a2342]">Manage Media Library</span>
                   </button>
 
+                  
+
                   <button 
-                    onClick={() => navigate('/customer/social-analytics-dashboard')}
-                    className="w-full flex items-center p-3 text-left bg-[#0ea5e9]/10 hover:bg-[#38bdf8]/20 rounded-lg transition-colors"
+                    onClick={() => navigate('/customer/roi-dashboard')}
+                    className="w-full flex items-center p-3 text-left bg-gradient-to-r from-[#38bdf8]/20 to-[#0ea5e9]/20 hover:from-[#38bdf8]/30 hover:to-[#0ea5e9]/30 rounded-lg transition-all border border-[#38bdf8]/20"
                   >
-                    <div className="w-8 h-8 bg-[#0a2342] rounded-lg flex items-center justify-center mr-3">
-                      <TrendingUp className="h-4 w-4 text-white" />
+                    <div className="w-8 h-8 bg-gradient-to-r from-[#38bdf8] to-[#0ea5e9] rounded-lg flex items-center justify-center mr-3">
+                      <BarChart3 className="h-4 w-4 text-white" />
                     </div>
-                    <span className="font-medium text-[#0a2342]">Social ROI & Analytics Dashboard</span>
+                    <div className="flex flex-col">
+                      <span className="font-semibold text-[#0a2342]">ROI Analytics Dashboard</span>
+                      <span className="text-xs text-[#0a2342]/70">Comprehensive social media ROI tracking</span>
+                    </div>
                   </button>
                 </div>
               </div>

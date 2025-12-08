@@ -76,6 +76,7 @@ import SocialIntegrations from './customer/Integration/SocialIntegrations';
 
 // Import the new component
 import CustomerAnalytics from './customer/Analytics';
+import ROIDashboard from './customer/ROIDashboard';
 
 // --- ProtectedRoute for all portals ---
 function ProtectedRoutePortal({ children, role }) {
@@ -481,6 +482,14 @@ function App() {
                 <ProtectedRoutePortal role="customer">
                   <CustomerLayout>
                     <CustomerAnalytics />
+                  </CustomerLayout>
+                </ProtectedRoutePortal>
+              } />
+              {/* Add route for ROI Dashboard */}
+              <Route path="/customer/roi-dashboard" element={
+                <ProtectedRoutePortal role="customer">
+                  <CustomerLayout>
+                    <ROIDashboard />
                   </CustomerLayout>
                 </ProtectedRoutePortal>
               } />

@@ -1445,25 +1445,25 @@ const ROIDashboard = () => {
               <p className="text-gray-600 mb-4">View detailed analytics for individual posts by visiting the respective platform integration pages.</p>
               <div className="flex justify-center gap-4">
                 <button
-                  onClick={() => navigate('/customer/integrations/facebook')}
+                  onClick={() => navigate('/customer/integration/facebook')}
                   className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                 >
                   📘 Facebook Analytics
                 </button>
                 <button
-                  onClick={() => navigate('/customer/integrations/instagram')}
+                  onClick={() => navigate('/customer/integration/instagram')}
                   className="flex items-center gap-2 px-4 py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700"
                 >
                   📸 Instagram Analytics
                 </button>
                 <button
-                  onClick={() => navigate('/customer/integrations/youtube')}
+                  onClick={() => navigate('/customer/integration/youtube')}
                   className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
                 >
                   🎬 YouTube Analytics
                 </button>
                 <button
-                  onClick={() => navigate('/customer/integrations/linkedin')}
+                  onClick={() => navigate('/customer/integration/linkedin')}
                   className="flex items-center gap-2 px-4 py-2 bg-blue-700 text-white rounded-lg hover:bg-blue-800"
                 >
                   💼 LinkedIn Analytics

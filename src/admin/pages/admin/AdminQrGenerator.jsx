@@ -135,8 +135,8 @@ export default function AdminQrGenerator() {
         console.log(`✅ QR generated successfully for customer: ${customerId}`);
         
         // ✅ FIXED: Always use production frontend URL for QR codes
-        const qrCodeUrl = `${FRONTEND_URL}#/configure?customerId=${customerId}&platform=${platform}&source=admin-qr-generator&autoConnect=1&t=${Date.now()}`;
-        const viewConfigUrl = `${FRONTEND_URL}#/configure?customerId=${customerId}&platform=${platform}&t=${Date.now()}`;
+        const qrCodeUrl = `${FRONTEND_URL}#/configure?customerId=${customerId}&platform=${platform}&t=${Date.now()}`;
+        const viewConfigUrl = qrCodeUrl;
         
         console.log(`🔗 QR Code URL (for scanning): ${qrCodeUrl}`);
         console.log(`🔗 View Config URL (for admin): ${viewConfigUrl}`);

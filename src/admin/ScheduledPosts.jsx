@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, Facebook, Instagram, Image, Send, Eye, Edit, Trash2, CheckCircle, XCircle, Loader2, Plus, Filter, ArrowLeft, User, ChevronDown, ChevronRight, Users } from 'lucide-react';
+import { Calendar, Clock, Facebook, Instagram, Image, Send, Eye, Edit, Trash2, CheckCircle, XCircle, Loader2, Plus, Filter, ArrowLeft, User, ChevronDown, ChevronRight, Users, Video } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
 import AdminLayout from './components/layout/AdminLayout';
+import SocialActionManager from './components/SocialActionManager';
 
 function ScheduledPosts() {
   const navigate = useNavigate();
@@ -141,6 +142,13 @@ function ScheduledPosts() {
       console.error('Delete post error:', error);
       alert('Failed to delete post');
     }
+  };
+
+  // Handle post updates from SocialActionManager
+  const handlePostUpdate = (postId, updates) => {
+    setScheduledPosts(prev => prev.map(post => 
+      post._id === postId ? { ...post, ...updates } : post
+    ));
   };
 
   const getStatusColor = (status) => {
@@ -484,6 +492,13 @@ function ScheduledPosts() {
                                   <span className="text-sm font-medium text-gray-600">
                                     {post.pageName || post.channelName || 'Social Media Post'}
                                   </span>
+                                  {/* Carousel indicator */}
+                                  {((post.isCarousel || post.useCarouselService) && post.imageUrls?.length > 1) && (
+                                    <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-semibold rounded-full flex items-center space-x-1">
+                                      <span>🎠</span>
+                                      <span>{post.imageUrls.length} items</span>
+                                    </span>
+                                  )}
                                 </div>
                                 <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center space-x-1 ${getStatusColor(post.status)}`}>
                                   {getStatusIcon(post.status)}
@@ -491,8 +506,35 @@ function ScheduledPosts() {
                                 </span>
                               </div>
 
-                              {/* Show video or image */}
-                              {post.imageUrl && isVideoUrl(post.imageUrl) ? (
+                              {/* Media Preview - Show carousel if multiple images */}
+                              {post.imageUrls && post.imageUrls.length > 1 ? (
+                                <div className="mb-3">
+                                  <div className="grid grid-cols-3 gap-1">
+                                    {post.imageUrls.slice(0, 6).map((url, idx) => (
+                                      isVideoUrl(url) ? (
+                                        <div key={idx} className="relative h-20 bg-gray-800 rounded flex items-center justify-center">
+                                          <Video className="h-6 w-6 text-white" />
+                                          <span className="absolute top-1 left-1 bg-purple-600 text-white text-xs px-1 rounded">{idx + 1}</span>
+                                        </div>
+                                      ) : (
+                                        <div key={idx} className="relative">
+                                          <img
+                                            src={url}
+                                            alt={`Item ${idx + 1}`}
+                                            className="w-full h-20 object-cover rounded"
+                                          />
+                                          <span className="absolute top-1 left-1 bg-purple-600 text-white text-xs px-1 rounded">{idx + 1}</span>
+                                        </div>
+                                      )
+                                    ))}
+                                    {post.imageUrls.length > 6 && (
+                                      <div className="h-20 bg-gray-200 rounded flex items-center justify-center">
+                                        <span className="text-gray-600 text-sm font-semibold">+{post.imageUrls.length - 6}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              ) : post.imageUrl && isVideoUrl(post.imageUrl) ? (
                                 <video
                                   src={post.imageUrl}
                                   controls
@@ -529,7 +571,13 @@ function ScheduledPosts() {
                                 </div>
                               )}
 
-                              <div className="flex items-center justify-end">
+                              <div className="flex items-center justify-end space-x-2">
+                                {/* Social Media Actions */}
+                                <SocialActionManager 
+                                  post={post} 
+                                  onPostUpdate={handlePostUpdate} 
+                                />
+                                {/* Existing delete from system */}
                                 <button
                                   onClick={() => handleDeletePost(post._id)}
                                   className="text-red-600 hover:text-red-800 p-1"
@@ -556,7 +604,7 @@ function ScheduledPosts() {
                   <div
                     key={post._id}
                     className="bg-white rounded-lg shadow-sm border p-6 flex flex-col"
-                    style={{ height: '400px' }} // <-- static height for card
+                    style={{ height: '400px' }}
                   >
                     <div className="flex-1 flex flex-col overflow-y-auto" style={{ minHeight: 0 }}>
                       {/* --- Display calendar and item name at the top --- */}
@@ -578,6 +626,13 @@ function ScheduledPosts() {
                           <span className="text-sm font-medium text-gray-600">
                             {post.pageName || post.channelName || 'Social Media Post'}
                           </span>
+                          {/* Carousel indicator */}
+                          {((post.isCarousel || post.useCarouselService) && post.imageUrls?.length > 1) && (
+                            <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-semibold rounded-full flex items-center space-x-1">
+                              <span>🎠</span>
+                              <span>{post.imageUrls.length} items</span>
+                            </span>
+                          )}
                         </div>
                         <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center space-x-1 ${getStatusColor(post.status)}`}>
                           {getStatusIcon(post.status)}
@@ -619,8 +674,35 @@ function ScheduledPosts() {
                         </div>
                       )}
 
-                      {/* Show video or image */}
-                      {post.imageUrl && isVideoUrl(post.imageUrl) ? (
+                      {/* Media Preview - Show carousel if multiple images */}
+                      {post.imageUrls && post.imageUrls.length > 1 ? (
+                        <div className="mb-4">
+                          <div className="grid grid-cols-3 gap-1">
+                            {post.imageUrls.slice(0, 6).map((url, idx) => (
+                              isVideoUrl(url) ? (
+                                <div key={idx} className="relative h-24 bg-gray-800 rounded flex items-center justify-center">
+                                  <Video className="h-6 w-6 text-white" />
+                                  <span className="absolute top-1 left-1 bg-purple-600 text-white text-xs px-1 rounded">{idx + 1}</span>
+                                </div>
+                              ) : (
+                                <div key={idx} className="relative">
+                                  <img
+                                    src={url}
+                                    alt={`Item ${idx + 1}`}
+                                    className="w-full h-24 object-cover rounded"
+                                  />
+                                  <span className="absolute top-1 left-1 bg-purple-600 text-white text-xs px-1 rounded">{idx + 1}</span>
+                                </div>
+                              )
+                            ))}
+                            {post.imageUrls.length > 6 && (
+                              <div className="h-24 bg-gray-200 rounded flex items-center justify-center">
+                                <span className="text-gray-600 text-sm font-semibold">+{post.imageUrls.length - 6}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ) : post.imageUrl && isVideoUrl(post.imageUrl) ? (
                         <video
                           src={post.imageUrl}
                           controls
@@ -752,6 +834,12 @@ function ScheduledPosts() {
                       )}
 
                       <div className="flex items-center space-x-2 mt-2">
+                        {/* Social Media Actions */}
+                        <SocialActionManager 
+                          post={post} 
+                          onPostUpdate={handlePostUpdate} 
+                        />
+                        {/* Existing delete from system */}
                         <button
                           onClick={() => handleDeletePost(post._id)}
                           className="text-red-600 hover:text-red-800 p-1"

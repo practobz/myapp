@@ -702,18 +702,6 @@ function SchedulePostModal({
         throw new Error(`Selected ${platform} account not found`);
       }
 
-      // FIXED: Skip Facebook post creation if Instagram is selected with the same Facebook account
-      // This prevents duplicate posts since Instagram uses Facebook's infrastructure
-      if (platform === 'facebook') {
-        const hasInstagramWithSamePage = scheduleFormData.platforms.includes('instagram') && 
-          scheduleFormData.platformSettings.instagram?.pageId === settings.pageId;
-        
-        if (hasInstagramWithSamePage) {
-          console.log('🔄 Skipping separate Facebook post creation - Instagram post will handle both platforms');
-          continue;
-        }
-      }
-
       let postData = {
         caption: fullCaption,
         status: isScheduled ? 'pending' : 'publishing',
@@ -763,20 +751,6 @@ function SchedulePostModal({
             ? selectedPage.instagramBusinessAccount?.id
             : null,
         });
-        
-        // FIXED: For Instagram, include Facebook posting info if both platforms are selected
-        if (platform === 'instagram') {
-          const hasFacebookSelected = scheduleFormData.platforms.includes('facebook');
-          const sameFacebookPage = hasFacebookSelected && 
-            scheduleFormData.platformSettings.facebook?.pageId === settings.pageId;
-          
-          if (sameFacebookPage) {
-            // This Instagram post will also post to Facebook
-            postData.alsoPostToFacebook = true;
-            postData.platforms = ['instagram', 'facebook']; // Track both platforms in one post
-            console.log('📸 Instagram post configured to also post to Facebook page:', selectedPage.name);
-          }
-        }
         
         // Mark as carousel if multiple images
         if (scheduleFormData.selectedImages.length > 1) {

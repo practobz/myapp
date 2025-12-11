@@ -60,12 +60,27 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
       const result = await response.json();
       
       if (result.success) {
-        setChartData(result.data);
-        setLastUpdated(new Date().toISOString());
         console.log(`✅ Loaded historical data for ${platform}:${accountId}`, {
           period: selectedPeriod,
-          snapshots: result.snapshotsCount
+          snapshots: result.snapshotsCount,
+          dataKeys: Object.keys(result.data || {}),
+          likesData: result.data?.likes,
+          sampleSnapshot: result.data?.likes?.[0],
+          debugInfo: result.debug
         });
+        
+        // Additional validation
+        if (result.data?.likes) {
+          const likesWithValues = result.data.likes.filter(d => d.value > 0);
+          console.log(`📊 Likes analysis:`, {
+            totalDataPoints: result.data.likes.length,
+            pointsWithValues: likesWithValues.length,
+            values: likesWithValues.map(d => ({ date: d.date, value: d.value }))
+          });
+        }
+        
+        setChartData(result.data);
+        setLastUpdated(new Date().toISOString());
       } else {
         setError(result.error || 'Failed to fetch historical data');
       }
@@ -78,6 +93,8 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
   };
 
   const captureNewSnapshot = async () => {
+    setLoading(true);
+    
     try {
       const response = await fetch(`${process.env.REACT_APP_API_URL}/api/historical-data/capture`, {
         method: 'POST',
@@ -92,15 +109,21 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
       const result = await response.json();
       
       if (result.success) {
-        // Refresh the chart data
-        await fetchHistoricalData();
-        alert('✅ New snapshot captured successfully!');
+        // Show success message with details
+        alert(`✅ ${result.message}\n${result.note || ''}`);
+        
+        // Refresh the chart data after a short delay
+        setTimeout(() => {
+          fetchHistoricalData();
+        }, 1000);
       } else {
         alert(`❌ Failed to capture snapshot: ${result.error}`);
       }
     } catch (err) {
       console.error('Error capturing snapshot:', err);
-      alert('❌ Failed to capture snapshot');
+      alert('❌ Failed to capture snapshot: Network error');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -113,6 +136,23 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
       
       if (data.length === 0) return null;
 
+      // Calculate statistics for better display
+      const values = data.map(d => d.value || 0);
+      const maxValue = Math.max(...values);
+      const minValue = Math.min(...values);
+      const avgValue = values.reduce((a, b) => a + b, 0) / values.length;
+      const nonZeroCount = values.filter(v => v > 0).length;
+
+      console.log(`📊 [Chart Render] ${metricInfo?.label || metric}:`, {
+        dataPoints: data.length,
+        currentValue: data[data.length - 1]?.value,
+        maxValue,
+        minValue,
+        avgValue,
+        nonZeroCount,
+        sampleData: data.slice(-3)
+      });
+
       return (
         <div key={metric} className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
           <div className="flex items-center justify-between mb-4">
@@ -120,13 +160,20 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
               <h4 className="text-lg font-semibold text-gray-900">
                 {metricInfo?.label || metric}
               </h4>
-              <p className="text-sm text-gray-600">Last {selectedPeriod} days</p>
+              <p className="text-sm text-gray-600">
+                Last {selectedPeriod} days • {nonZeroCount} data points
+              </p>
             </div>
             <div className="text-right">
               <div className="text-2xl font-bold" style={{ color: metricInfo?.color }}>
                 {data[data.length - 1]?.value?.toLocaleString() || 0}
               </div>
               <div className="text-xs text-gray-500">Current</div>
+              {maxValue > 0 && (
+                <div className="text-xs text-gray-400 mt-1">
+                  Peak: {maxValue.toLocaleString()}
+                </div>
+              )}
             </div>
           </div>
           
@@ -373,6 +420,55 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
     );
   };
 
+  const debugStoredAccounts = async () => {
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/historical-data/debug-accounts`);
+      const result = await response.json();
+      
+      if (result.success) {
+        console.log('=== STORED SOCIAL ACCOUNTS DEBUG ===');
+        console.log(`Total accounts: ${result.totalAccounts}`);
+        console.log(`Facebook accounts: ${result.facebookAccounts.length}`);
+        
+        result.facebookAccounts.forEach(account => {
+          console.log(`\n📱 Facebook Account: ${account.name}`);
+          console.log(`  - Platform User ID: ${account.platformUserId}`);
+          console.log(`  - Has User Token: ${account.hasAccessToken} (${account.accessTokenLength} chars)`);
+          console.log(`  - Pages: ${account.pagesCount}`);
+          
+          account.pages.forEach(page => {
+            console.log(`    📄 Page: ${page.name} (ID: ${page.id})`);
+            console.log(`       - Has Token: ${page.hasAccessToken} (${page.accessTokenLength} chars)`);
+          });
+        });
+        
+        console.log(`\n🎯 Looking for page ID: ${accountId}`);
+        const matchingAccounts = result.facebookAccounts.filter(account =>
+          account.pages.some(page => page.id === accountId)
+        );
+        
+        if (matchingAccounts.length > 0) {
+          console.log(`✅ Found ${matchingAccounts.length} account(s) with this page!`);
+          matchingAccounts.forEach(account => {
+            const matchingPage = account.pages.find(page => page.id === accountId);
+            console.log(`  - Account: ${account.name}`);
+            console.log(`  - Page: ${matchingPage.name}`);
+            console.log(`  - Has Page Token: ${matchingPage.hasAccessToken}`);
+          });
+        } else {
+          console.log(`❌ No accounts found with page ID: ${accountId}`);
+        }
+        
+        alert(`Debug info logged to console. Found ${result.facebookAccounts.length} Facebook accounts with ${result.facebookAccounts.reduce((sum, acc) => sum + acc.pagesCount, 0)} total pages.`);
+      } else {
+        alert(`Debug failed: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Debug error:', error);
+      alert('Debug failed: Network error');
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Controls */}
@@ -390,6 +486,14 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
             </div>
           </div>
           <div className="flex items-center space-x-2">
+            <button
+              onClick={debugStoredAccounts}
+              className="bg-purple-600 text-white px-3 py-2 rounded-lg hover:bg-purple-700 flex items-center space-x-2 text-sm"
+              title="Debug stored social accounts"
+            >
+              <span>🔍</span>
+              <span>Debug Accounts</span>
+            </button>
             <button
               onClick={captureNewSnapshot}
               className="bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 flex items-center space-x-2 text-sm"
@@ -496,12 +600,47 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
             <Calendar className="h-5 w-5" />
             <span className="font-medium">Historical Data Error</span>
           </div>
-          <p className="text-red-700 text-sm">{error}</p>
+          <p className="text-red-700 text-sm mb-3">{error}</p>
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={fetchHistoricalData}
+              className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 text-sm"
+            >
+              Retry
+            </button>
+            <button
+              onClick={captureNewSnapshot}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm flex items-center space-x-2"
+              disabled={loading}
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              <span>Capture Data</span>
+            </button>
+          </div>
+          <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded text-yellow-800 text-sm">
+            <strong>Tip:</strong> If this is a new account, try capturing a snapshot first to establish baseline data.
+          </div>
+        </div>
+      )}
+
+      {/* No Data State */}
+      {!loading && !error && chartData && Object.keys(chartData).every(key => chartData[key].length === 0) && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 text-center">
+          <div className="flex items-center justify-center space-x-2 text-blue-800 mb-3">
+            <Calendar className="h-6 w-6" />
+            <span className="text-lg font-medium">No Historical Data Available</span>
+          </div>
+          <p className="text-blue-700 text-sm mb-4">
+            This {platform} account doesn't have any historical data yet. 
+            Start by capturing your first snapshot to begin tracking analytics over time.
+          </p>
           <button
-            onClick={fetchHistoricalData}
-            className="mt-3 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 text-sm"
+            onClick={captureNewSnapshot}
+            className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 flex items-center space-x-2 mx-auto"
+            disabled={loading}
           >
-            Retry
+            <RefreshCw className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} />
+            <span>Capture First Snapshot</span>
           </button>
         </div>
       )}

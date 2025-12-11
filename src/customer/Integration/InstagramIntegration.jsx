@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Instagram, TrendingUp, ExternalLink, CheckCircle, AlertCircle, Loader2, Users, Heart, MessageCircle, Eye, Plus, Settings, ChevronDown, ChevronRight, UserCheck, Trash2, Calendar, RefreshCw } from 'lucide-react';
+import { Instagram, TrendingUp,BarChart3, ExternalLink, CheckCircle, AlertCircle, Loader2, Users, Heart, MessageCircle, Eye, Plus, Settings, ChevronDown, ChevronRight, UserCheck, Trash2, Calendar, RefreshCw } from 'lucide-react';
 import TrendChart from '../../components/TrendChart';
 import TimePeriodChart from '../../components/TimeperiodChart';
 import { subDays, format } from 'date-fns';
@@ -52,6 +52,217 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
   const isFacebookApiReady = () => {
     return window.FB && window.FB.api && typeof window.FB.api === 'function';
   };
+
+  // Function to store current metrics as historical snapshot
+  // (Removed duplicate declaration of storeHistoricalSnapshot)
+
+  function getCurrentCustomerId() {
+    let customerId = null;
+    
+    // 🔥 PRIORITY 1: Check URL parameters first (for QR code links)
+    const urlParams = new URLSearchParams(window.location.search);
+    const hashParams = new URLSearchParams(window.location.hash.split('?')[1] || '');
+    
+    // Check both regular URL params and hash params (for React Router)
+    customerId = urlParams.get('customerId') || hashParams.get('customerId');
+    
+    if (customerId) {
+      console.log('✅ Found customer ID in URL for Instagram:', customerId);
+      return customerId;
+    }
+    
+    // 🔥 PRIORITY 2: Check localStorage as fallback
+    const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
+    customerId = currentUser.userId || currentUser.id || currentUser._id || currentUser.customer_id;
+    
+    if (!customerId) {
+      const authUser = JSON.parse(localStorage.getItem('user') || '{}');
+      customerId = authUser.userId || authUser.id || authUser._id || authUser.customer_id;
+    }
+    
+    if (customerId) {
+      console.log('✅ Found customer ID in localStorage for Instagram:', customerId);
+    } else {
+      console.warn('❌ No customer ID found in URL or localStorage for Instagram');
+    }
+    
+    return customerId;
+  }
+
+  // Load connected accounts from localStorage on component mount
+  useEffect(() => {
+    console.log('🔍 Instagram component mounted, loading accounts from backend...');
+    
+    // First, migrate any existing data to user-specific storage
+    migrateToUserSpecificStorage([
+      'connected_instagram_accounts',
+      'selected_instagram_account',
+      'instagram_connected_accounts',
+      'instagram_active_account_id'
+    ]);
+
+    const customerId = getCurrentCustomerId();
+    
+    // 🔥 NEW: Log the customer ID detection for debugging
+    console.log('🆔 Detected Customer ID for Instagram:', {
+      customerId,
+      urlParams: new URLSearchParams(window.location.search).get('customerId'),
+      hashParams: new URLSearchParams(window.location.hash.split('?')[1] || '').get('customerId'),
+      localStorage: JSON.parse(localStorage.getItem('currentUser') || '{}'),
+      fullUrl: window.location.href
+    });
+
+    // NEW: Fetch from backend first
+    const fetchConnectedAccountsFromBackend = async () => {
+      if (!customerId) {
+        console.warn('❌ No customer ID available for Instagram backend fetch');
+        return null;
+      }
+      try {
+        const res = await fetch(`${process.env.REACT_APP_API_URL}/api/customer-social-links/${customerId}`);
+        const data = await res.json();
+        if (data.success && Array.isArray(data.accounts)) {
+          // Only Instagram accounts for this customer
+          return data.accounts
+            .filter(acc => acc.platform === 'instagram' && acc.customerId === customerId)
+            .map(acc => ({
+              id: acc.platformUserId,
+              pageId: acc.facebookPageId,
+              pageName: acc.name,
+              profile: {
+                username: acc.username,
+                profile_picture_url: acc.profilePicture,
+                followers_count: acc.instagramData?.followersCount,
+                media_count: acc.instagramData?.mediaCount,
+                biography: acc.instagramData?.biography,
+                website: acc.instagramData?.website
+              },
+              media: [], // Optionally fetch media if needed
+              userAccessToken: acc.accessToken,
+              pageAccessToken: acc.pages?.[0]?.accessToken,
+              connected: true,
+              connectedAt: acc.connectedAt,
+              tokenExpiresAt: acc.tokenExpiresAt || null
+            }));
+        }
+      } catch (err) {
+        console.warn('Failed to fetch Instagram accounts from backend:', err);
+      }
+      return null;
+    };
+
+    // Helper to hydrate backend accounts with live profile/media
+    const hydrateInstagramAccounts = async (accounts) => {
+      if (!window.FB || !window.FB.api) return accounts;
+      const hydrated = await Promise.all(accounts.map(acc => {
+        return new Promise(resolve => {
+          // Fetch profile
+          window.FB.api(`/${acc.id}`, {
+            fields: 'id,username,media_count,profile_picture_url,biography,website,followers_count',
+            access_token: acc.pageAccessToken
+          }, function(profileResponse) {
+            // Fetch media
+            window.FB.api(`/${acc.id}/media`, {
+              fields: 'id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count',
+              limit: 12,
+              access_token: acc.pageAccessToken
+            }, function(mediaResponse) {
+              resolve({
+                ...acc,
+                profile: profileResponse && !profileResponse.error ? profileResponse : acc.profile,
+                media: mediaResponse && mediaResponse.data ? mediaResponse.data : []
+              });
+            });
+          });
+        });
+      }));
+      return hydrated;
+    };
+
+    (async () => {
+      const backendAccounts = await fetchConnectedAccountsFromBackend();
+      if (backendAccounts && backendAccounts.length > 0) {
+        // Hydrate with live profile/media
+        const hydratedAccounts = await hydrateInstagramAccounts(backendAccounts);
+        setConnectedAccounts(hydratedAccounts);
+        setIsSignedIn(true);
+        setUserData('instagram_connected_accounts', hydratedAccounts);
+        setUserData('connected_instagram_accounts', hydratedAccounts);
+        setActiveAccountId(hydratedAccounts[0].id);
+        setSelectedAccountId(hydratedAccounts[0].id);
+        setActiveAccount(hydratedAccounts[0]);
+        setUserAccessToken(hydratedAccounts[0].userAccessToken || hydratedAccounts[0].accessToken);
+        setUserData('instagram_active_account_id', hydratedAccounts[0].id);
+        setUserData('selected_instagram_account', hydratedAccounts[0].id);
+        return;
+      }
+
+      // Fallback to localStorage if backend empty
+      const savedAccounts = getUserData('instagram_connected_accounts') || getUserData('connected_instagram_accounts');
+      const savedActiveId = getUserData('instagram_active_account_id') || getUserData('selected_instagram_account');
+      
+      // Only keep Instagram accounts for this customer
+      const instagramAccounts = Array.isArray(savedAccounts)
+        ? savedAccounts.filter(
+            acc => acc.platform === 'instagram' && acc.customerId === customerId
+          )
+        : savedAccounts; // Keep all if no customer filter available in legacy format
+    
+      console.log('📦 Instagram storage check on mount:', {
+        savedAccounts: savedAccounts ? savedAccounts.length : 0,
+        savedActiveId,
+        accountsData: savedAccounts
+      });
+      
+      if (instagramAccounts && Array.isArray(instagramAccounts) && instagramAccounts.length > 0) {
+        console.log('✅ Setting Instagram accounts from storage:', instagramAccounts);
+        setConnectedAccounts(instagramAccounts);
+        setIsSignedIn(true); // Set signed in state
+        
+        if (savedActiveId && instagramAccounts.some(acc => acc.id === savedActiveId)) {
+          setActiveAccountId(savedActiveId);
+          setSelectedAccountId(savedActiveId); // Backward compatibility
+          const activeAcc = instagramAccounts.find(acc => acc.id === savedActiveId);
+          setActiveAccount(activeAcc);
+          setUserAccessToken(activeAcc.userAccessToken || activeAcc.accessToken);
+          console.log('✅ Set active Instagram account:', activeAcc?.profile?.username);
+        } else if (instagramAccounts.length > 0) {
+          // Set first account as active if no valid active account
+          setActiveAccountId(instagramAccounts[0].id);
+          setSelectedAccountId(instagramAccounts[0].id); // Backward compatibility
+          setActiveAccount(instagramAccounts[0]);
+          setUserAccessToken(instagramAccounts[0].userAccessToken || instagramAccounts[0].accessToken);
+          setUserData('instagram_active_account_id', instagramAccounts[0].id);
+          console.log('✅ Set first Instagram account as active:', instagramAccounts[0].profile?.username);
+        }
+      } else {
+        console.log('ℹ️ No connected Instagram accounts found in storage');
+      }
+    })();
+  }, []); // 🔥 IMPORTANT: Keep dependency array empty to run only on mount
+
+  useEffect(() => {
+    if (window.FB) {
+      setFbSdkLoaded(true);
+      // Check existing login status
+      window.FB.getLoginStatus(response => {
+        if (response.status === 'connected') {
+          setUserAccessToken(response.authResponse.accessToken);
+          if (connectedAccounts.length === 0) {
+            loadAvailableAccounts(response.authResponse.accessToken);
+          }
+        }
+      });
+    } else {
+      loadFacebookSDK();
+    }
+  }, []);
+
+  // Save accounts to localStorage with better error handling
+  // (Removed duplicate declaration of saveAccountsToStorage)
+
+  // Check if token is expired or about to expire (ENHANCED)
+  // (Duplicate declaration removed)
 
   // Function to store current metrics as historical snapshot
   const storeHistoricalSnapshot = async (accountId, accountName, metrics) => {
@@ -352,15 +563,30 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
     }(document, 'script', 'facebook-jssdk'));
   };
 
-  // Check if token is expired or about to expire
+  // Check if token is expired or about to expire (ENHANCED)
   const isTokenExpired = (account) => {
-    if (!account.tokenExpiresAt) return false;
+    if (!account.tokenExpiresAt) {
+      // If no expiry time, assume it might be expired after 1 hour
+      const oneHourAgo = new Date(Date.now() - (60 * 60 * 1000));
+      const connectedTime = new Date(account.connectedAt || Date.now());
+      return connectedTime < oneHourAgo;
+    }
     
     const expiryTime = new Date(account.tokenExpiresAt);
     const now = new Date();
-    const bufferTime = 5 * 60 * 1000; // 5 minutes buffer
+    const bufferTime = 30 * 60 * 1000; // 30 minutes buffer (increased from 5 minutes)
     
-    return (expiryTime.getTime() - now.getTime()) < bufferTime;
+    const isExpired = (expiryTime.getTime() - now.getTime()) < bufferTime;
+    
+    if (isExpired) {
+      console.warn('🕐 Instagram token will expire soon:', {
+        account: account.profile?.username,
+        expiresAt: expiryTime.toISOString(),
+        timeLeft: Math.round((expiryTime.getTime() - now.getTime()) / (60 * 1000)) + ' minutes'
+      });
+    }
+    
+    return isExpired;
   };
 
   // Handle API errors and token refresh
@@ -447,18 +673,31 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
 
     window.FB.login(response => {
       setLoading(false);
-      console.log('📨 Facebook login response:', response.status);
+      console.log('📨 Facebook login response for Instagram:', response.status);
       
       if (response.status === 'connected') {
         setIsSignedIn(true);
         setError(null);
         const accessToken = response.authResponse.accessToken;
+        const expiresIn = response.authResponse.expiresIn || (2 * 60 * 60); // Default 2 hours
+        
+        console.log('✅ Instagram Facebook login successful, token expires in:', Math.round(expiresIn / 60), 'minutes');
+        
         setUserAccessToken(accessToken);
         
-        // Request long-lived token
+        // 🔥 CRITICAL: Request long-lived token IMMEDIATELY
+        console.log('🔄 CRITICAL: Requesting long-lived token for Instagram immediately...');
         requestLongLivedToken(accessToken).then((longLivedToken) => {
           const finalToken = longLivedToken || accessToken;
           setUserAccessToken(finalToken);
+          
+          if (longLivedToken) {
+            console.log('✅ Using long-lived token for Instagram');
+          } else {
+            console.warn('⚠️ Using short-lived token for Instagram - will expire soon');
+            setError('Warning: Using short-lived token (expires in 1-2 hours). Long-lived token exchange failed.');
+          }
+          
           loadAvailableAccounts(finalToken);
         });
       } else {
@@ -480,7 +719,8 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          shortLivedToken: shortLivedToken
+          shortLivedToken: shortLivedToken,
+          clientId: FACEBOOK_APP_ID
         })
       });
       
@@ -488,13 +728,16 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
       
       if (data.success && data.longLivedToken) {
         console.log('✅ Received long-lived token for Instagram');
+        console.log('🕐 Token expires in:', Math.round(data.expiresIn / (24 * 60 * 60)), 'days');
         return data.longLivedToken;
       } else {
-        console.warn('⚠️ Failed to get long-lived token for Instagram:', data.error);
+        console.error('❌ Failed to get long-lived token for Instagram:', data.error);
+        setError('Warning: Using short-lived token (expires in 1-2 hours). Long-lived token exchange failed.');
         return null;
       }
     } catch (error) {
-      console.warn('⚠️ Error requesting long-lived token for Instagram:', error);
+      console.error('❌ Error requesting long-lived token for Instagram:', error);
+      setError('Warning: Using short-lived token. Network error during token exchange.');
       return null;
     }
   };
@@ -1086,10 +1329,23 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
   // --- SINGLE POST ANALYTICS LOGIC ---
   const fetchSinglePostAnalytics = (post) => {
     if (!post) return;
+    setSelectedPostId(post.id);
+    
+    // Create comprehensive analytics data similar to Facebook
     const analytics = {
-      likes: [{ date: post.timestamp, value: post.like_count || 0 }],
-      comments: [{ date: post.timestamp, value: post.comments_count || 0 }]
+      id: post.id,
+      caption: post.caption || 'No caption',
+      timestamp: post.timestamp,
+      permalink: post.permalink,
+      media_url: post.media_url,
+      thumbnail_url: post.thumbnail_url,
+      media_type: post.media_type,
+      likes_count: post.like_count || 0,
+      comments_count: post.comments_count || 0,
+      total_engagement: (post.like_count || 0) + (post.comments_count || 0),
+      engagement_rate: 0 // Will be calculated if we have follower count
     };
+    
     setSinglePostAnalytics(analytics);
   };
 
@@ -1160,32 +1416,197 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
 
   // Add UI for single post analytics
   const renderSinglePostAnalytics = () => {
-    if (!singlePostAnalytics) return null;
+    if (!selectedPostId || !singlePostAnalytics) return null;
+
     return (
-      <div className="mt-6">
-        <h5 className="font-medium text-gray-700 mb-2">Single Post Analytics</h5>
-        <div
-          className="grid grid-cols-1 md:grid-cols-2 gap-4"
-          style={{ minWidth: 300, minHeight: 200 }} // <-- Ensure chart container has size
-        >
-          {singlePostAnalytics.likes && (
-            <TrendChart
-              data={singlePostAnalytics.likes}
-              title="Likes"
-              color="#E4405F"
-              metric="value"
-              style={{ minHeight: 200 }}
-            />
-          )}
-          {singlePostAnalytics.comments && (
-            <TrendChart
-              data={singlePostAnalytics.comments}
-              title="Comments"
-              color="#C13584"
-              metric="value"
-              style={{ minHeight: 200 }}
-            />
-          )}
+      <div className="mt-6 bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+            <BarChart3 className="h-5 w-5 mr-2 text-pink-600" />
+            Post Analytics
+          </h3>
+          <button
+            onClick={() => {
+              setSelectedPostId(null);
+              setSinglePostAnalytics(null);
+            }}
+            className="text-gray-400 hover:text-gray-600"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="space-y-6">
+          {/* Post Preview */}
+          <div className="bg-pink-50 border border-pink-200 rounded-xl p-4">
+            <div className="flex items-start space-x-3">
+              {(singlePostAnalytics.thumbnail_url || singlePostAnalytics.media_url) && (
+                <img
+                  src={singlePostAnalytics.thumbnail_url || singlePostAnalytics.media_url}
+                  alt="Post media"
+                  className="w-20 h-20 object-cover rounded-lg"
+                />
+              )}
+              <div className="flex-1">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-pink-600 bg-pink-100 px-2 py-1 rounded font-medium">
+                    {singlePostAnalytics.media_type}
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    {new Date(singlePostAnalytics.timestamp).toLocaleDateString()}
+                  </span>
+                </div>
+                <p className="text-sm text-gray-800 mb-2">
+                  {singlePostAnalytics.caption?.length > 150 
+                    ? `${singlePostAnalytics.caption.substring(0, 150)}...` 
+                    : singlePostAnalytics.caption
+                  }
+                </p>
+                <div className="flex items-center justify-between text-xs text-gray-500">
+                  <span>Instagram Post</span>
+                  {singlePostAnalytics.permalink && (
+                    <a 
+                      href={singlePostAnalytics.permalink} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-pink-600 hover:text-pink-700"
+                    >
+                      View Post →
+                    </a>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Engagement Metrics Grid */}
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="bg-pink-50 border border-pink-200 rounded-xl p-4 text-center">
+              <div className="text-2xl font-bold text-pink-600">
+                {singlePostAnalytics.likes_count?.toLocaleString() || 0}
+              </div>
+              <div className="text-sm text-pink-700 font-medium flex items-center justify-center mt-1">
+                <span className="mr-1">❤️</span>
+                Likes
+              </div>
+            </div>
+
+            <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 text-center">
+              <div className="text-2xl font-bold text-purple-600">
+                {singlePostAnalytics.comments_count?.toLocaleString() || 0}
+              </div>
+              <div className="text-sm text-purple-700 font-medium flex items-center justify-center mt-1">
+                <span className="mr-1">💬</span>
+                Comments
+              </div>
+            </div>
+
+            <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 text-center col-span-2 lg:col-span-1">
+              <div className="text-2xl font-bold text-indigo-600">
+                {singlePostAnalytics.total_engagement?.toLocaleString() || 0}
+              </div>
+              <div className="text-sm text-indigo-700 font-medium flex items-center justify-center mt-1">
+                <TrendingUp className="h-3 w-3 mr-1" />
+                Total Engagement
+              </div>
+            </div>
+          </div>
+
+          {/* Engagement Breakdown Chart */}
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-6">
+            <h4 className="font-medium text-gray-900 mb-4 flex items-center">
+              <BarChart3 className="h-4 w-4 mr-2" />
+              Engagement Breakdown
+            </h4>
+            <div className="space-y-3">
+              {/* Likes Bar */}
+              <div>
+                <div className="flex items-center justify-between text-sm mb-1">
+                  <span className="font-medium text-gray-700">❤️ Likes</span>
+                  <span className="text-pink-600 font-semibold">
+                    {singlePostAnalytics.likes_count?.toLocaleString() || 0}
+                    {singlePostAnalytics.total_engagement > 0 && (
+                      <span className="text-gray-500 ml-1">
+                        ({((singlePostAnalytics.likes_count / singlePostAnalytics.total_engagement) * 100).toFixed(1)}%)
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div 
+                    className="bg-pink-500 h-2 rounded-full" 
+                    style={{ 
+                      width: singlePostAnalytics.total_engagement > 0 
+                        ? `${(singlePostAnalytics.likes_count / singlePostAnalytics.total_engagement) * 100}%` 
+                        : '0%' 
+                    }}
+                  ></div>
+                </div>
+              </div>
+
+              {/* Comments Bar */}
+              <div>
+                <div className="flex items-center justify-between text-sm mb-1">
+                  <span className="font-medium text-gray-700">💬 Comments</span>
+                  <span className="text-purple-600 font-semibold">
+                    {singlePostAnalytics.comments_count?.toLocaleString() || 0}
+                    {singlePostAnalytics.total_engagement > 0 && (
+                      <span className="text-gray-500 ml-1">
+                        ({((singlePostAnalytics.comments_count / singlePostAnalytics.total_engagement) * 100).toFixed(1)}%)
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div 
+                    className="bg-purple-500 h-2 rounded-full" 
+                    style={{ 
+                      width: singlePostAnalytics.total_engagement > 0 
+                        ? `${(singlePostAnalytics.comments_count / singlePostAnalytics.total_engagement) * 100}%` 
+                        : '0%' 
+                    }}
+                  ></div>
+                </div>
+              </div>
+            </div>
+
+            {/* Performance Insights */}
+            <div className="mt-6 p-4 bg-pink-50 border border-pink-200 rounded-lg">
+              <h5 className="font-medium text-pink-800 mb-2">📊 Performance Insights</h5>
+              <div className="text-sm text-pink-700 space-y-1">
+                <p>
+                  <strong>Engagement Rate:</strong> {singlePostAnalytics.total_engagement > 0 ? 'Good engagement' : 'Low engagement'} 
+                  {singlePostAnalytics.total_engagement > 50 && ' - High performing post! 🔥'}
+                </p>
+                <p>
+                  <strong>Most Popular:</strong> {
+                    singlePostAnalytics.likes_count >= singlePostAnalytics.comments_count ? 'Likes' : 'Comments'
+                  }
+                </p>
+                <p>
+                  <strong>Content Type:</strong> {
+                    singlePostAnalytics.media_type === 'VIDEO' ? 'Video content' :
+                    singlePostAnalytics.media_type === 'IMAGE' ? 'Image content' :
+                    singlePostAnalytics.media_type === 'CAROUSEL_ALBUM' ? 'Carousel content' :
+                    'Mixed content'
+                  } - {
+                    singlePostAnalytics.media_type === 'VIDEO' ? 'Video posts typically get higher engagement!' :
+                    singlePostAnalytics.media_type === 'CAROUSEL_ALBUM' ? 'Carousel posts often perform well!' :
+                    'Great visual content!'
+                  }
+                </p>
+                <p>
+                  <strong>Engagement Quality:</strong> {
+                    singlePostAnalytics.total_engagement > 0 ?
+                      (singlePostAnalytics.comments_count / singlePostAnalytics.total_engagement > 0.3 ? 
+                        'High-quality engagement (lots of comments)' : 
+                        'Standard engagement pattern') :
+                      'Consider using more engaging content'
+                  }
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -1313,10 +1734,19 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
         <p className="text-red-700 mb-4">{error}</p>
         
         {isTokenError && (
-          <div className="space-y-2">
-            <p className="text-sm text-red-700">
-              Your Facebook session has expired. You can try refreshing the tokens or reconnect your account.
-            </p>
+          <div className="bg-yellow-50 border border-yellow-200 rounded p-3 mb-3">
+            <h5 className="font-medium text-yellow-800 text-sm mb-1">Why does this happen?</h5>
+            <ul className="text-xs text-yellow-700 space-y-1">
+              <li>• Facebook tokens expire after 1-2 hours by default</li>
+              <li>• Long-lived tokens last 60 days but need proper exchange</li>
+              <li>• App permissions may have been revoked</li>
+              <li>• Network issues during token refresh</li>
+            </ul>
+          </div>
+        )}
+        
+        <div className="space-y-2">
+          {isTokenError && (
             <div className="flex space-x-2">
               <button
                 onClick={refreshAccountTokens}
@@ -1326,15 +1756,19 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
                 🔄 Refresh Tokens
               </button>
               <button
-                onClick={handleSignIn}
+                onClick={() => {
+                  setError(null);
+                  handleSignIn(); // Re-login to get fresh tokens
+                }}
                 disabled={loading}
-                className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 disabled:opacity-50"
+                className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 disabled:opacity-50 flex items-center space-x-2"
               >
-                🔗 Reconnect Account
+                <Instagram className="h-4 w-4" />
+                <span>Reconnect Instagram</span>
               </button>
             </div>
-          </div>
-        )}
+          )}
+        </div>
         
         <div className="flex space-x-3 mt-4">
           <button
@@ -1467,8 +1901,8 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
 
       {/* Show active account details */}
       {activeAccount && (
-        <div className="bg-gradient-to-br from-pink-50 to-purple-50 border border-pink-200 rounded-2xl p-6">
-          <div className="flex items-center justify-between mb-6">
+        <div className="bg-gradient-to-br from-pink-50 to-purple-50 border border-pink-200 rounded-2xl p-2 sm:p-6">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 gap-4">
             <div className="flex items-center space-x-4">
               {activeAccount.profile?.profile_picture_url ? (
                 <img
@@ -1489,7 +1923,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
                 )}
               </div>
             </div>
-            <div className="flex space-x-2">
+            <div className="flex flex-wrap space-x-2">
               <button
                 onClick={() => refreshAccountData(activeAccount.id)}
                 disabled={loading}
@@ -1521,7 +1955,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
             </div>
           </div>
           
-          <div className="grid grid-cols-3 gap-6 text-center mb-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 sm:gap-6 text-center mb-6">
             <div className="bg-white rounded-xl p-4 shadow-sm">
               <div className="text-2xl font-bold text-pink-600">
                 {activeAccount.profile?.media_count?.toLocaleString() || activeAccount.media?.length || 0}
@@ -1544,7 +1978,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
 
           {/* Historical Charts Toggle */}
           <div className="mb-6">
-            <div className="flex items-center justify-between bg-white rounded-lg border border-gray-200 p-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-white rounded-lg border border-gray-200 p-4 gap-2">
               <div className="flex items-center space-x-3">
                 <Calendar className="h-5 w-5 text-pink-600" />
                 <div>
@@ -1569,16 +2003,20 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
 
           {/* Show Historical Charts */}
           {showHistoricalCharts[activeAccount.id] && (
-            <TimePeriodChart
-              platform="instagram"
-              accountId={activeAccount.id}
-              title="Instagram Historical Analytics"
-              defaultMetric="followers"
-            />
+            <div className="overflow-x-auto">
+              <TimePeriodChart
+                platform="instagram"
+                accountId={activeAccount.id}
+                title="Instagram Historical Analytics"
+                defaultMetric="followers"
+              />
+            </div>
           )}
 
           {/* Render followers timeline chart */}
-          {renderFollowersTrendChart(activeAccount.id)}
+          <div className="overflow-x-auto">
+            {renderFollowersTrendChart(activeAccount.id)}
+          </div>
         </div>
       )}
 
@@ -1601,11 +2039,11 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
 
       {/* Show recent posts for active account */}
       {activeAccount && (
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-2 sm:p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">
             Recent Posts ({activeAccount.media?.length || 0})
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
             {activeAccount.media && activeAccount.media.length > 0 ? activeAccount.media.map(media => (
               <div key={media.id} className="bg-gray-50 rounded-xl overflow-hidden hover:shadow-md transition-shadow">
                 <div className="aspect-square relative">
@@ -1752,15 +2190,15 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
     return (
       <div className="min-h-screen bg-gray-50">
         <header className="bg-white shadow-sm border-b">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="max-w-7xl mx-auto px-2 sm:px-4 md:px-6 lg:px-8">
             <div className="flex items-center h-16">
               <Instagram className="h-8 w-8 text-pink-600" />
               <span className="ml-2 text-xl font-bold text-[#1a1f2e]">Instagram Integration</span>
             </div>
           </div>
         </header>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="bg-white rounded-lg shadow-md p-6">
+        <div className="max-w-7xl mx-auto px-2 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-8">
+          <div className="bg-white rounded-lg shadow-md p-2 sm:p-4 md:p-6">
             <div className="flex items-center justify-center py-12">
               <div className="text-center">
                 <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-pink-600" />
@@ -1776,16 +2214,15 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto px-2 sm:px-4 md:px-6 lg:px-8">
           <div className="flex items-center h-16">
             <Instagram className="h-8 w-8 text-pink-600" />
             <span className="ml-2 text-xl font-bold text-[#1a1f2e]">Instagram Integration</span>
           </div>
         </div>
       </header>
-      
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="bg-white rounded-lg shadow-md p-6">
+      <div className="max-w-7xl mx-auto px-2 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-8">
+        <div className="bg-white rounded-lg shadow-md p-2 sm:p-4 md:p-6">
           {loading && (
             <div className="flex items-center justify-center py-12">
               <div className="text-center">

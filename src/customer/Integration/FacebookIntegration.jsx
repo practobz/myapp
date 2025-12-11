@@ -2,9 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Facebook, BarChart3, Trash2, TrendingUp, Plus, Users, UserCheck, ExternalLink, Loader2, Calendar, RefreshCw
 } from 'lucide-react';
-import TrendChart from '../../components/TrendChart';
 import TimePeriodChart from '../../components/TimeperiodChart';
-import { subDays, format } from 'date-fns';
 import { getUserData, setUserData, removeUserData, migrateToUserSpecificStorage } from '../../utils/sessionUtils';
 
 // Your Facebook App ID
@@ -24,9 +22,6 @@ function FacebookIntegration() {
   const [pagePosts, setPagePosts] = useState({});
   const [loadingInsights, setLoadingInsights] = useState({});
   const [loadingPosts, setLoadingPosts] = useState({});
-  const [analyticsData, setAnalyticsData] = useState({});
-  const [loadingAnalytics, setLoadingAnalytics] = useState({});
-  const [timePeriods, setTimePeriods] = useState({});
 
   // Post upload modal state
   const [showPostModal, setShowPostModal] = useState(false);
@@ -42,16 +37,9 @@ function FacebookIntegration() {
   // Historical charts toggle state
   const [showHistoricalCharts, setShowHistoricalCharts] = useState({});
 
-  // Time period options
-  const TIME_PERIOD_OPTIONS = [
-    { value: 7, label: 'Last 7 days' },
-    { value: 15, label: 'Last 15 days' },
-    { value: 30, label: 'Last 30 days' },
-    { value: 60, label: 'Last 60 days' },
-    { value: 90, label: 'Last 3 months' },
-    { value: 180, label: 'Last 6 months' },
-    { value: 365, label: 'Last 1 year' }
-  ];
+  // Post-level analytics state (similar to Instagram)
+  const [selectedPostId, setSelectedPostId] = useState(null);
+  const [singlePostAnalytics, setSinglePostAnalytics] = useState(null);
 
   // Helper function to check if Facebook API is ready
   const isFacebookApiReady = () => {
@@ -344,7 +332,7 @@ function FacebookIntegration() {
         setFbError({ message: 'Facebook login failed or was cancelled' });
       }
     }, {
-      scope: 'pages_show_list,pages_read_engagement,pages_manage_metadata,instagram_basic,email,public_profile',
+      scope: 'pages_show_list,pages_read_engagement,pages_read_user_content,pages_manage_metadata,instagram_basic,email,public_profile',
       return_scopes: true,
       auth_type: 'rerequest'
     });
@@ -601,331 +589,260 @@ function FacebookIntegration() {
     );
   };
 
-  const fetchStoredAnalytics = async (pageId) => {
-    try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/analytics/${pageId}`);
-      const result = await response.json();
-      
-      if (result.success && result.data.length > 0) {
-        const latestAnalytics = result.data[0];
-        console.log('✅ Loaded analytics from database:', latestAnalytics.createdAt);
-        
-        setAnalyticsData(prev => ({
-          ...prev,
-          [pageId]: latestAnalytics.analytics
-        }));
-        
-        setTimePeriods(prev => ({ ...prev, [pageId]: latestAnalytics.timePeriod }));
-        
-        return true;
-      }
-      return false;
-    } catch (error) {
-      console.warn('Failed to fetch stored analytics:', error);
-      return false;
-    }
-  };
-
-  const fetchPageAnalytics = (pageId, pageAccessToken, days = 30) => {
-    setLoadingAnalytics(prev => ({ ...prev, [pageId]: true }));
+  // --- SINGLE POST ANALYTICS LOGIC (similar to Instagram) ---
+  const fetchSinglePostAnalytics = (post) => {
+    if (!post) return;
+    setSelectedPostId(post.id);
     
-    setTimePeriods(prev => ({ ...prev, [pageId]: days }));
-    
-    console.log('Using post-based analytics (Facebook Insights API not available for this app type)');
-    fetchPostBasedAnalytics(pageId, pageAccessToken, days);
-  };
-
-  const processAnalyticsData = (insightsData, days = 30) => {
-    const endDate = new Date();
-    const result = {
-      engagement: [],
-      likes: [],
-      comments: [],
-      shares: []
+    // Create comprehensive analytics data for Facebook post
+    const analytics = {
+      id: post.id,
+      message: post.message || 'No message',
+      story: post.story || null,
+      created_time: post.created_time,
+      permalink_url: post.permalink_url,
+      full_picture: post.full_picture,
+      likes_count: post.likes?.summary?.total_count || 0,
+      comments_count: post.comments?.summary?.total_count || 0,
+      shares_count: post.shares?.count || 0,
+      reactions_count: post.reactions?.summary?.total_count || 0,
+      total_engagement: (post.likes?.summary?.total_count || 0) + 
+                       (post.comments?.summary?.total_count || 0) + 
+                       (post.shares?.count || 0) + 
+                       (post.reactions?.summary?.total_count || 0),
+      engagement_rate: 0 // Will be calculated if we have follower count
     };
-
-    for (let i = days - 1; i >= 0; i--) {
-      const date = subDays(endDate, i);
-      const dateStr = format(date, 'yyyy-MM-dd');
-      
-      result.engagement.push({ date: dateStr, value: 0 });
-      result.likes.push({ date: dateStr, value: 0 });
-      result.comments.push({ date: dateStr, value: 0 });
-      result.shares.push({ date: dateStr, value: 0 });
-    }
-
-    return result;
-  };
-
-  const generateInstagramPostAnalytics = (posts, days = 30) => {
-    const endDate = new Date();
-    const result = {
-      likes: [],
-      comments: [],
-      posts: []
-    };
-
-    for (let i = days - 1; i >= 0; i--) {
-      const date = subDays(endDate, i);
-      const dateStr = format(date, 'yyyy-MM-dd');
-      
-      const dayPosts = posts.filter(post => {
-        const postDate = new Date(post.timestamp);
-        return format(postDate, 'yyyy-MM-dd') === dateStr;
-      });
-
-      const dayLikes = dayPosts.reduce((sum, post) => sum + (post.like_count || 0), 0);
-      const dayComments = dayPosts.reduce((sum, post) => sum + (post.comments_count || 0), 0);
-      const postCount = dayPosts.length;
-
-      result.likes.push({ date: dateStr, value: dayLikes });
-      result.comments.push({ date: dateStr, value: dayComments });
-      result.posts.push({ date: dateStr, value: postCount });
-    }
-
-    return result;
-  };
-
-  const fetchPostBasedAnalytics = (pageId, pageAccessToken, days = 30) => {
-    if (!isFacebookApiReady()) {
-      setLoadingAnalytics(prev => ({ ...prev, [pageId]: false }));
-      setFbError({ message: 'Facebook API is not ready' });
-      return;
-    }
-
-    const postsLimit = Math.min(500, Math.max(50, days * 3));
     
-    window.FB.api(
-      `/${pageId}/posts`,
-      {
-        fields: 'id,message,created_time,likes.summary(true),comments.summary(true),shares,reactions.summary(true),full_picture',
-        limit: postsLimit,
-        access_token: pageAccessToken
-      },
-      function(response) {
-        if (!response || response.error) {
-          console.error('Posts fetch error for analytics:', response.error);
-          setLoadingAnalytics(prev => ({ ...prev, [pageId]: false }));
-          return;
-        }
-
-        const posts = response.data;
-        const analyticsData = generatePostBasedAnalytics(posts, days);
-        
-        setAnalyticsData(prev => ({
-          ...prev,
-          [pageId]: { facebook: analyticsData }
-        }));
-        setLoadingAnalytics(prev => ({ ...prev, [pageId]: false }));
-        
-        fetch(`${process.env.REACT_APP_API_URL}/api/analytics/store`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            pageId,
-            platform: 'facebook',
-            analytics: analyticsData,
-            timePeriod: days
-          })
-        }).catch(err => console.warn('Failed to store analytics:', err));
-      }
-    );
+    setSinglePostAnalytics(analytics);
   };
 
-  const generatePostBasedAnalytics = (posts, days = 30) => {
-    const endDate = new Date();
-    const result = {
-      engagement: [],
-      likes: [],
-      comments: [],
-      shares: []
-    };
-
-    for (let i = days - 1; i >= 0; i--) {
-      const date = subDays(endDate, i);
-      const dateStr = format(date, 'yyyy-MM-dd');
-      
-      const dayPosts = posts.filter(post => {
-        const postDate = new Date(post.created_time);
-        return format(postDate, 'yyyy-MM-dd') === dateStr;
-      });
-
-      const dayLikes = dayPosts.reduce((sum, post) => sum + (post.likes?.summary?.total_count || 0), 0);
-      const dayComments = dayPosts.reduce((sum, post) => sum + (post.comments?.summary?.total_count || 0), 0);
-      const dayShares = dayPosts.reduce((sum, post) => sum + (post.shares?.count || 0), 0);
-      const dayReactions = dayPosts.reduce((sum, post) => sum + (post.reactions?.summary?.total_count || 0), 0);
-      const dayEngagement = dayLikes + dayComments + dayShares + dayReactions;
-
-      result.engagement.push({ date: dateStr, value: dayEngagement });
-      result.likes.push({ date: dateStr, value: dayLikes });
-      result.comments.push({ date: dateStr, value: dayComments });
-      result.shares.push({ date: dateStr, value: dayShares });
-    }
-
-    return result;
-  };
-
-  const fetchPageAnalyticsWithDbFirst = async (pageId, pageAccessToken, days = 30) => {
-    setLoadingAnalytics(prev => ({ ...prev, [pageId]: true }));
-    
-    setTimePeriods(prev => ({ ...prev, [pageId]: days }));
-    
-    try {
-      const loadedFromDb = await fetchStoredAnalytics(pageId);
-      
-      if (loadedFromDb) {
-        console.log('📊 Using stored analytics data');
-        setLoadingAnalytics(prev => ({ ...prev, [pageId]: false }));
-        return;
-      }
-      
-      console.log('🔄 No stored data found, fetching live analytics...');
-      await fetchPageAnalyticsLive(pageId, pageAccessToken, days);
-      
-    } catch (error) {
-      console.error('Analytics fetch error:', error);
-      setLoadingAnalytics(prev => ({ ...prev, [pageId]: false }));
-    }
-  };
-
-  const fetchPageAnalyticsLive = async (pageId, pageAccessToken, days = 30) => {
-    console.log('📡 Fetching live analytics from Facebook APIs...');
-    fetchPostBasedAnalytics(pageId, pageAccessToken, days);
-  };
-
-  const renderAnalytics = (pageId) => {
-    const analytics = analyticsData[pageId];
-    const selectedPeriod = timePeriods[pageId] || 30;
-    
-    if (!analytics) return null;
+  // Add UI for single post analytics (similar to Instagram)
+  const renderSinglePostAnalytics = () => {
+    if (!selectedPostId || !singlePostAnalytics) return null;
 
     return (
-      <div className="mt-6 space-y-6">
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <h5 className="font-medium text-gray-700 flex items-center">
-            <TrendingUp className="h-5 w-5 mr-2" />
-            Real-Time Analytics & Trends
-          </h5>
-          
-          <div className="flex items-center space-x-3">
-            <label htmlFor={`time-period-${pageId}`} className="text-sm font-medium text-gray-600">
-              Time Period:
-            </label>
-            <select
-              id={`time-period-${pageId}`}
-              value={selectedPeriod}
-              onChange={(e) => {
-                const days = parseInt(e.target.value);
-                const page = fbPages.find(p => p.id === pageId);
-                if (page) {
-                  fetchPageAnalyticsWithDbFirst(pageId, page.access_token, days);
-                }
-              }}
-              className="border border-gray-300 rounded-md px-3 py-1 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              {TIME_PERIOD_OPTIONS.map(option => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            
-            <div className="text-xs text-gray-500 bg-blue-50 px-2 py-1 rounded">
-              🗄️ DB + Live Data
-            </div>
-          </div>
-        </div>
-        
-        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-          {analytics.facebook?.engagement && (
-            <TrendChart
-              data={analytics.facebook.engagement}
-              title="Facebook Daily Engagement"
-              color="#1877F2"
-              metric="value"
-            />
-          )}
-          
-          {analytics.facebook?.likes && (
-            <TrendChart
-              data={analytics.facebook.likes}
-              title="Facebook Daily Likes"
-              color="#42A5F5"
-              metric="value"
-            />
-          )}
-          
-          {analytics.facebook?.comments && (
-            <TrendChart
-              data={analytics.facebook.comments}
-              title="Facebook Daily Comments"
-              color="#1565C0"
-              metric="value"
-            />
-          )}
-          
-          {analytics.facebook?.shares && (
-            <TrendChart
-              data={analytics.facebook.shares}
-              title="Facebook Daily Shares"
-              color="#0D47A1"
-              metric="value"
-            />
-          )}
+      <div className="mt-6 bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+            <BarChart3 className="h-5 w-5 mr-2 text-blue-600" />
+            Facebook Post Analytics
+          </h3>
+          <button
+            onClick={() => {
+              setSelectedPostId(null);
+              setSinglePostAnalytics(null);
+            }}
+            className="text-gray-400 hover:text-gray-600"
+          >
+            ✕
+          </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
-          {analytics.facebook && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-blue-600 font-medium">Facebook Engagement</p>
-                  <p className="text-2xl font-bold text-blue-800">
-                    {analytics.facebook.engagement?.reduce((sum, item) => sum + item.value, 0)?.toLocaleString() || 0}
-                  </p>
-                  <p className="text-xs text-blue-500">Last {selectedPeriod} days total</p>
+        <div className="space-y-6">
+          {/* Post Preview */}
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+            <div className="flex items-start space-x-3">
+              {singlePostAnalytics.full_picture && (
+                <img
+                  src={singlePostAnalytics.full_picture}
+                  alt="Post media"
+                  className="w-20 h-20 object-cover rounded-lg"
+                />
+              )}
+              <div className="flex-1">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded font-medium">
+                    Facebook Post
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    {new Date(singlePostAnalytics.created_time).toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </span>
                 </div>
-                <Facebook className="h-8 w-8 text-blue-600" />
+                {singlePostAnalytics.message && (
+                  <p className="text-sm text-gray-800 mb-2">
+                    {singlePostAnalytics.message.length > 150 
+                      ? `${singlePostAnalytics.message.substring(0, 150)}...` 
+                      : singlePostAnalytics.message
+                    }
+                  </p>
+                )}
+                {singlePostAnalytics.story && !singlePostAnalytics.message && (
+                  <p className="text-sm text-gray-600 mb-2 italic">
+                    {singlePostAnalytics.story}
+                  </p>
+                )}
+                <div className="flex items-center justify-between text-xs text-gray-500">
+                  <span>Facebook Post</span>
+                  {singlePostAnalytics.permalink_url && (
+                    <a 
+                      href={singlePostAnalytics.permalink_url} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:text-blue-700"
+                    >
+                      View on Facebook →
+                    </a>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
-
-          <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-green-600 font-medium">Total Comments</p>
-                <p className="text-2xl font-bold text-green-800">
-                  {(analytics.facebook?.comments || []).reduce((sum, item) => sum + item.value, 0)?.toLocaleString() || 0}
-                </p>
-                <p className="text-xs text-green-500">All platforms</p>
-              </div>
-              <BarChart3 className="h-8 w-8 text-green-600" />
             </div>
           </div>
 
-          <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-purple-600 font-medium">Avg Daily Activity</p>
-                <p className="text-2xl font-bold text-purple-800">
-                  {Math.round((analytics.facebook?.engagement || []).reduce((sum, item) => sum + item.value, 0) / selectedPeriod)?.toLocaleString() || 0}
-                </p>
-                <p className="text-xs text-purple-500">Per day average</p>
+          {/* Engagement Metrics Grid */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center">
+              <div className="text-2xl font-bold text-blue-600">
+                {singlePostAnalytics.likes_count?.toLocaleString() || 0}
               </div>
-              <TrendingUp className="h-8 w-8 text-purple-600" />
+              <div className="text-sm text-blue-700 font-medium flex items-center justify-center mt-1">
+                <span className="mr-1">👍</span>
+                Likes
+              </div>
+            </div>
+
+            <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
+              <div className="text-2xl font-bold text-green-600">
+                {singlePostAnalytics.comments_count?.toLocaleString() || 0}
+              </div>
+              <div className="text-sm text-green-700 font-medium flex items-center justify-center mt-1">
+                <span className="mr-1">💬</span>
+                Comments
+              </div>
+            </div>
+
+            <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 text-center">
+              <div className="text-2xl font-bold text-purple-600">
+                {singlePostAnalytics.shares_count?.toLocaleString() || 0}
+              </div>
+              <div className="text-sm text-purple-700 font-medium flex items-center justify-center mt-1">
+                <span className="mr-1">🔄</span>
+                Shares
+              </div>
+            </div>
+
+            <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 text-center">
+              <div className="text-2xl font-bold text-orange-600">
+                {singlePostAnalytics.reactions_count?.toLocaleString() || 0}
+              </div>
+              <div className="text-sm text-orange-700 font-medium flex items-center justify-center mt-1">
+                <span className="mr-1">😍</span>
+                Reactions
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <h6 className="font-medium text-blue-800 mb-2">📊 Smart Analytics Loading</h6>
-          <div className="text-sm text-blue-700 space-y-1">
-            <p>🗄️ <strong>Database First:</strong> Loads stored analytics instantly when available</p>
-            <p>📡 <strong>Live Fallback:</strong> Fetches from Facebook APIs only when needed</p>
-            <p>⚡ <strong>Fast Loading:</strong> Stored data loads immediately, no API delays</p>
-            <p>🔄 <strong>Auto-Store:</strong> New data is automatically saved for future quick access</p>
-            <p>📈 <strong>Period:</strong> Showing data for the last {selectedPeriod} days</p>
-            <p>💡 <strong>Tip:</strong> Background scripts can collect analytics daily for instant loading</p>
+          {/* Total Engagement */}
+          <div className="bg-gradient-to-br from-indigo-50 to-purple-50 border border-indigo-200 rounded-xl p-6 text-center">
+            <div className="text-3xl font-bold text-indigo-600 mb-2">
+              {singlePostAnalytics.total_engagement?.toLocaleString() || 0}
+            </div>
+            <div className="text-lg text-indigo-700 font-medium flex items-center justify-center">
+              <TrendingUp className="h-4 w-4 mr-2" />
+              Total Engagement
+            </div>
+            <div className="text-sm text-indigo-600 mt-2">
+              Likes + Comments + Shares + Reactions
+            </div>
+          </div>
+
+          {/* Engagement Breakdown Visual */}
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-6">
+            <h4 className="font-medium text-gray-900 mb-4 flex items-center">
+              <BarChart3 className="h-4 w-4 mr-2" />
+              Engagement Breakdown
+            </h4>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600 flex items-center">
+                  <span className="w-3 h-3 bg-blue-500 rounded-full mr-2"></span>
+                  Likes
+                </span>
+                <div className="flex items-center space-x-2">
+                  <div className="w-32 bg-gray-200 rounded-full h-2">
+                    <div 
+                      className="bg-blue-500 h-2 rounded-full" 
+                      style={{ 
+                        width: `${singlePostAnalytics.total_engagement > 0 
+                          ? (singlePostAnalytics.likes_count / singlePostAnalytics.total_engagement) * 100 
+                          : 0}%` 
+                      }}
+                    ></div>
+                  </div>
+                  <span className="text-sm font-medium text-gray-900 min-w-[3rem] text-right">
+                    {((singlePostAnalytics.likes_count / Math.max(singlePostAnalytics.total_engagement, 1)) * 100).toFixed(1)}%
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600 flex items-center">
+                  <span className="w-3 h-3 bg-green-500 rounded-full mr-2"></span>
+                  Comments
+                </span>
+                <div className="flex items-center space-x-2">
+                  <div className="w-32 bg-gray-200 rounded-full h-2">
+                    <div 
+                      className="bg-green-500 h-2 rounded-full" 
+                      style={{ 
+                        width: `${singlePostAnalytics.total_engagement > 0 
+                          ? (singlePostAnalytics.comments_count / singlePostAnalytics.total_engagement) * 100 
+                          : 0}%` 
+                      }}
+                    ></div>
+                  </div>
+                  <span className="text-sm font-medium text-gray-900 min-w-[3rem] text-right">
+                    {((singlePostAnalytics.comments_count / Math.max(singlePostAnalytics.total_engagement, 1)) * 100).toFixed(1)}%
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600 flex items-center">
+                  <span className="w-3 h-3 bg-purple-500 rounded-full mr-2"></span>
+                  Shares
+                </span>
+                <div className="flex items-center space-x-2">
+                  <div className="w-32 bg-gray-200 rounded-full h-2">
+                    <div 
+                      className="bg-purple-500 h-2 rounded-full" 
+                      style={{ 
+                        width: `${singlePostAnalytics.total_engagement > 0 
+                          ? (singlePostAnalytics.shares_count / singlePostAnalytics.total_engagement) * 100 
+                          : 0}%` 
+                      }}
+                    ></div>
+                  </div>
+                  <span className="text-sm font-medium text-gray-900 min-w-[3rem] text-right">
+                    {((singlePostAnalytics.shares_count / Math.max(singlePostAnalytics.total_engagement, 1)) * 100).toFixed(1)}%
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600 flex items-center">
+                  <span className="w-3 h-3 bg-orange-500 rounded-full mr-2"></span>
+                  Reactions
+                </span>
+                <div className="flex items-center space-x-2">
+                  <div className="w-32 bg-gray-200 rounded-full h-2">
+                    <div 
+                      className="bg-orange-500 h-2 rounded-full" 
+                      style={{ 
+                        width: `${singlePostAnalytics.total_engagement > 0 
+                          ? (singlePostAnalytics.reactions_count / singlePostAnalytics.total_engagement) * 100 
+                          : 0}%` 
+                      }}
+                    ></div>
+                  </div>
+                  <span className="text-sm font-medium text-gray-900 min-w-[3rem] text-right">
+                    {((singlePostAnalytics.reactions_count / Math.max(singlePostAnalytics.total_engagement, 1)) * 100).toFixed(1)}%
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -943,7 +860,7 @@ function FacebookIntegration() {
     window.FB.api(
       `/${pageId}/posts`,
       {
-        fields: 'id,message,created_time,permalink_url',
+        fields: 'id,message,created_time,permalink_url,full_picture,likes.summary(true),comments.summary(true),shares,reactions.summary(true)',
         limit: 10,
         access_token: pageAccessToken
       },
@@ -1071,16 +988,27 @@ function FacebookIntegration() {
                         </span>
                       </div>
                       
-                      {post.permalink_url && (
-                        <a 
-                          href={post.permalink_url} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                      <div className="flex items-center space-x-2">
+                        <button
+                          className="text-xs text-purple-600 hover:text-purple-800 font-medium px-2 py-1 bg-purple-50 rounded"
+                          onClick={() => {
+                            setSelectedPostId(post.id);
+                            fetchSinglePostAnalytics(post);
+                          }}
                         >
-                          View on Facebook →
-                        </a>
-                      )}
+                          📊 Analytics
+                        </button>
+                        {post.permalink_url && (
+                          <a 
+                            href={post.permalink_url} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                          >
+                            View on Facebook →
+                          </a>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1249,24 +1177,6 @@ function FacebookIntegration() {
               <BarChart3 className="h-4 w-4" />
               <span>{loadingInsights[page.id] ? 'Loading...' : 'Get Insights'}</span>
             </button>
-            
-            <button
-              onClick={() => fetchPageAnalyticsWithDbFirst(page.id, page.access_token, undefined, timePeriods[page.id] || 30)}
-              disabled={loadingAnalytics[page.id] || !isFacebookApiReady()}
-              className="bg-purple-500 text-white px-4 py-2 rounded text-sm hover:bg-purple-600 disabled:opacity-50 flex items-center space-x-2"
-            >
-              <TrendingUp className="h-4 w-4" />
-              <span>{loadingAnalytics[page.id] ? 'Loading...' : 'Smart Analytics'}</span>
-            </button>
-            
-            <button
-              onClick={() => fetchPageAnalyticsLive(page.id, page.access_token, undefined, timePeriods[page.id] || 30)}
-              disabled={loadingAnalytics[page.id] || !isFacebookApiReady()}
-              className="bg-orange-500 text-white px-4 py-2 rounded text-sm hover:bg-orange-600 disabled:opacity-50 flex items-center space-x-2"
-            >
-              <span>📡</span>
-              <span>{loadingAnalytics[page.id] ? 'Loading...' : 'Live API Call'}</span>
-            </button>
 
             <button
               onClick={() => fetchPagePosts(page.id, page.access_token)}
@@ -1279,7 +1189,6 @@ function FacebookIntegration() {
           </div>
 
           {renderPageInsights(page.id)}
-          {renderAnalytics(page.id)}
           {renderPagePosts(page.id)}
         </div>
       </div>
@@ -1303,33 +1212,85 @@ function FacebookIntegration() {
   };
 
   // Remove account
-  const removeAccount = (accountId) => {
-    const updatedAccounts = connectedAccounts.filter(acc => acc.id !== accountId);
-    setConnectedAccounts(updatedAccounts);
-    saveAccountsToStorage(updatedAccounts);
-    
-    if (activeAccountId === accountId) {
-      if (updatedAccounts.length > 0) {
-        // Switch to first remaining account
-        switchAccount(updatedAccounts[0].id);
-      } else {
-        // No accounts left
-        setActiveAccountId(null);
-        setActiveAccount(null);
-        setFbPages([]);
-        setPageInsights({});
-        setPagePosts({});
-        setAnalyticsData({});
-        removeUserData('fb_active_account_id');
+  const removeAccount = async (accountId) => {
+    try {
+      // Find the account to get its backend data
+      const accountToRemove = connectedAccounts.find(acc => acc.id === accountId);
+      
+      if (accountToRemove) {
+        // Delete from backend database
+        const customerId = getCurrentCustomerId();
+        if (customerId) {
+          console.log('🗑️ Deleting account from backend:', {
+            accountId,
+            customerId,
+            platform: 'facebook'
+          });
+          
+          try {
+            // Find the backend document for this social account
+            const getResponse = await fetch(`${process.env.REACT_APP_API_URL}/api/customer-social-links/${customerId}`);
+            const getData = await getResponse.json();
+            
+            if (getData.success && getData.accounts) {
+              const backendAccount = getData.accounts.find(acc => 
+                acc.platform === 'facebook' && acc.platformUserId === accountId
+              );
+              
+              if (backendAccount && backendAccount._id) {
+                const deleteResponse = await fetch(`${process.env.REACT_APP_API_URL}/api/customer-social-links/${backendAccount._id}`, {
+                  method: 'DELETE'
+                });
+                
+                const deleteResult = await deleteResponse.json();
+                if (deleteResult.success) {
+                  console.log('✅ Account deleted from backend successfully');
+                } else {
+                  console.warn('⚠️ Failed to delete account from backend:', deleteResult.error);
+                }
+              }
+            }
+          } catch (backendError) {
+            console.warn('⚠️ Error deleting from backend (continuing with local removal):', backendError);
+          }
+        }
       }
+      
+      // Remove from local state
+      const updatedAccounts = connectedAccounts.filter(acc => acc.id !== accountId);
+      setConnectedAccounts(updatedAccounts);
+      saveAccountsToStorage(updatedAccounts);
+      
+      if (activeAccountId === accountId) {
+        if (updatedAccounts.length > 0) {
+          // Switch to first remaining account
+          switchAccount(updatedAccounts[0].id);
+        } else {
+          // No accounts left
+          setActiveAccountId(null);
+          setActiveAccount(null);
+          setFbPages([]);
+          setPageInsights({});
+          setPagePosts({});
+          setAnalyticsData({});
+          removeUserData('fb_active_account_id');
+        }
+      }
+      
+      // Show success message
+      alert('✅ Facebook account disconnected successfully!');
+      
+    } catch (error) {
+      console.error('❌ Error removing account:', error);
+      alert('❌ Failed to disconnect account. Please try again.');
     }
   };
 
   // Logout all accounts
-  const fbLogoutAll = () => {
+  const fbLogoutAll = async () => {
     if (!isFacebookApiReady()) {
       // Just clear local state if FB API is not available
-      clearAllAccountData();
+      await clearAllAccountData();
       return;
     }
 
@@ -1338,17 +1299,64 @@ function FacebookIntegration() {
       if (response.status === 'connected') {
         // Only call logout if user is actually logged in
         window.FB.logout(() => {
-          clearAllAccountData();
+          clearAllAccountData().catch(error => {
+            console.error('Error clearing account data after logout:', error);
+          });
         });
       } else {
         // User is not logged in to Facebook, just clear local data
-        clearAllAccountData();
+        clearAllAccountData().catch(error => {
+          console.error('Error clearing account data:', error);
+        });
       }
     });
   };
 
   // Helper function to clear all account data
-  const clearAllAccountData = () => {
+  const clearAllAccountData = async () => {
+    try {
+      // Delete all Facebook accounts from backend
+      const customerId = getCurrentCustomerId();
+      if (customerId && connectedAccounts.length > 0) {
+        console.log('🗑️ Deleting all Facebook accounts from backend for customer:', customerId);
+        
+        try {
+          // Get all backend accounts for this customer
+          const getResponse = await fetch(`${process.env.REACT_APP_API_URL}/api/customer-social-links/${customerId}`);
+          const getData = await getResponse.json();
+          
+          if (getData.success && getData.accounts) {
+            // Delete all Facebook accounts
+            const facebookAccounts = getData.accounts.filter(acc => acc.platform === 'facebook');
+            
+            for (const account of facebookAccounts) {
+              if (account._id) {
+                try {
+                  const deleteResponse = await fetch(`${process.env.REACT_APP_API_URL}/api/customer-social-links/${account._id}`, {
+                    method: 'DELETE'
+                  });
+                  
+                  const deleteResult = await deleteResponse.json();
+                  if (deleteResult.success) {
+                    console.log('✅ Deleted Facebook account from backend:', account.name);
+                  } else {
+                    console.warn('⚠️ Failed to delete account from backend:', deleteResult.error);
+                  }
+                } catch (deleteError) {
+                  console.warn('⚠️ Error deleting individual account:', deleteError);
+                }
+              }
+            }
+          }
+        } catch (backendError) {
+          console.warn('⚠️ Error deleting from backend (continuing with local removal):', backendError);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error in clearAllAccountData:', error);
+    }
+    
+    // Clear local state regardless of backend success/failure
     setConnectedAccounts([]);
     setActiveAccountId(null);
     setActiveAccount(null);
@@ -1358,6 +1366,8 @@ function FacebookIntegration() {
     setAnalyticsData({});
     removeUserData('fb_connected_accounts');
     removeUserData('fb_active_account_id');
+    
+    console.log('✅ All Facebook account data cleared');
   };
 
   // Store connected page information
@@ -1488,6 +1498,17 @@ function FacebookIntegration() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(accountData)
       });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.warn('Failed to store customer social account - server response:', response.status, errorText);
+        
+        // Don't throw error for social account storage failures - it's not critical
+        if (response.status === 409) {
+          console.log('📝 Document conflict detected - this is normal for concurrent updates');
+        }
+        return;
+      }
       
       const result = await response.json();
       if (result.success) {
@@ -1799,7 +1820,7 @@ function FacebookIntegration() {
                     <span>Add Account</span>
                   </button>
                   <button
-                    onClick={fbLogoutAll}
+                    onClick={() => fbLogoutAll()}
                     className="flex items-center space-x-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
                   >
                     <ExternalLink className="h-4 w-4" />
@@ -1834,7 +1855,7 @@ function FacebookIntegration() {
                         <span>Refresh</span>
                       </button>
                       <button
-                        onClick={fbLogoutAll}
+                        onClick={() => fbLogoutAll()}
                         className="flex items-center space-x-2 px-3 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors text-sm"
                       >
                         <ExternalLink className="h-4 w-4" />
@@ -1908,6 +1929,9 @@ function FacebookIntegration() {
             </div>
           )}
           {renderPostModal()}
+          
+          {/* Render single post analytics */}
+          {renderSinglePostAnalytics()}
         </div>
       </div>
     </div>

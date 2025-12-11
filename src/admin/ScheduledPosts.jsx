@@ -3,7 +3,6 @@ import { Calendar, Clock, Facebook, Instagram, Image, Send, Eye, Edit, Trash2, C
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
 import AdminLayout from './components/layout/AdminLayout';
-import SocialActionManager from './components/SocialActionManager';
 
 function ScheduledPosts() {
   const navigate = useNavigate();
@@ -572,15 +571,11 @@ function ScheduledPosts() {
                               )}
 
                               <div className="flex items-center justify-end space-x-2">
-                                {/* Social Media Actions */}
-                                <SocialActionManager 
-                                  post={post} 
-                                  onPostUpdate={handlePostUpdate} 
-                                />
-                                {/* Existing delete from system */}
+                                {/* Delete from system */}
                                 <button
                                   onClick={() => handleDeletePost(post._id)}
                                   className="text-red-600 hover:text-red-800 p-1"
+                                  title="Delete from scheduler"
                                 >
                                   <Trash2 className="h-4 w-4" />
                                 </button>
@@ -834,15 +829,11 @@ function ScheduledPosts() {
                       )}
 
                       <div className="flex items-center space-x-2 mt-2">
-                        {/* Social Media Actions */}
-                        <SocialActionManager 
-                          post={post} 
-                          onPostUpdate={handlePostUpdate} 
-                        />
-                        {/* Existing delete from system */}
+                        {/* Delete from system */}
                         <button
                           onClick={() => handleDeletePost(post._id)}
                           className="text-red-600 hover:text-red-800 p-1"
+                          title="Delete from scheduler"
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>

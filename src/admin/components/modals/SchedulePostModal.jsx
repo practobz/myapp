@@ -1,8 +1,248 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   Send, XCircle, Image, Video, Facebook, Instagram, Youtube, Linkedin, 
-  Check, Hash, Loader2, Zap, AlertCircle
+  Check, Hash, Loader2, Zap, AlertCircle, Upload, Trash2, MoveVertical
 } from 'lucide-react';
+// ========================================
+// CAROUSEL FUNCTIONS (Instagram & Facebook)
+// ========================================
+
+/**
+ * Helper function to detect video URLs
+ */
+function isVideoUrl(url) {
+  if (!url) return false;
+  const ext = url.split('.').pop().toLowerCase().split('?')[0];
+  return ['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv', 'flv', 'wmv'].includes(ext);
+}
+
+/**
+ * Create individual media containers for Instagram carousel
+ */
+async function createInstagramMediaContainers(mediaUrls, instagramId, pageAccessToken) {
+  const containerIds = [];
+  
+  for (const url of mediaUrls) {
+    try {
+      const isVideo = isVideoUrl(url);
+      
+      const params = new URLSearchParams({
+        access_token: pageAccessToken,
+        is_carousel_item: 'true',
+        ...(isVideo ? {
+          media_type: 'VIDEO',
+          video_url: url
+        } : {
+          image_url: url
+        })
+      });
+
+      const response = await fetch(
+        `https://graph.facebook.com/v21.0/${instagramId}/media?${params.toString()}`,
+        { method: 'POST' }
+      );
+
+      const data = await response.json();
+
+      if (data.id) {
+        containerIds.push(data.id);
+        console.log(`✅ Created ${isVideo ? 'video' : 'image'} container:`, data.id);
+      } else {
+        throw new Error('Failed to create media container');
+      }
+    } catch (error) {
+      console.error('Error creating media container:', error);
+      throw new Error(`Failed to create container for ${url}: ${error.message}`);
+    }
+  }
+  
+  return containerIds;
+}
+
+/**
+ * Create Instagram carousel container
+ */
+async function createInstagramCarouselContainer(containerIds, caption, instagramId, pageAccessToken) {
+  try {
+    const params = new URLSearchParams({
+      access_token: pageAccessToken,
+      media_type: 'CAROUSEL',
+      children: containerIds.join(','),
+      caption: caption || ''
+    });
+
+    const response = await fetch(
+      `https://graph.facebook.com/v21.0/${instagramId}/media?${params.toString()}`,
+      { method: 'POST' }
+    );
+
+    const data = await response.json();
+
+    if (data.id) {
+      console.log('✅ Created carousel container:', data.id);
+      return data.id;
+    } else {
+      throw new Error('Failed to create carousel container');
+    }
+  } catch (error) {
+    console.error('Error creating carousel container:', error);
+    throw new Error(`Failed to create carousel container: ${error.message}`);
+  }
+}
+
+/**
+ * Publish Instagram carousel
+ */
+async function publishInstagramCarousel(carouselContainerId, instagramId, pageAccessToken) {
+  try {
+    const params = new URLSearchParams({
+      access_token: pageAccessToken,
+      creation_id: carouselContainerId
+    });
+
+    const response = await fetch(
+      `https://graph.facebook.com/v21.0/${instagramId}/media_publish?${params.toString()}`,
+      { method: 'POST' }
+    );
+
+    const data = await response.json();
+
+    if (data.id) {
+      console.log('✅ Published carousel post:', data.id);
+      return {
+        success: true,
+        postId: data.id
+      };
+    } else {
+      throw new Error('Failed to publish carousel');
+    }
+  } catch (error) {
+    console.error('Error publishing carousel:', error);
+    throw new Error(`Failed to publish carousel: ${error.message}`);
+  }
+}
+
+/**
+ * Complete Instagram carousel flow
+ */
+async function createAndPublishInstagramCarousel(mediaUrls, caption, instagramId, pageAccessToken) {
+  try {
+    // Validate media count
+    if (mediaUrls.length < 2 || mediaUrls.length > 10) {
+      throw new Error('Carousel must contain 2-10 media items');
+    }
+
+    console.log(`📸 Creating Instagram carousel with ${mediaUrls.length} items...`);
+
+    // Step 1: Create individual media containers
+    const containerIds = await createInstagramMediaContainers(mediaUrls, instagramId, pageAccessToken);
+    
+    if (containerIds.length !== mediaUrls.length) {
+      throw new Error(`Only ${containerIds.length} out of ${mediaUrls.length} containers were created`);
+    }
+
+    // Step 2: Create carousel container
+    const carouselContainerId = await createInstagramCarouselContainer(
+      containerIds, 
+      caption, 
+      instagramId, 
+      pageAccessToken
+    );
+
+    // Step 3: Publish carousel
+    const publishResult = await publishInstagramCarousel(
+      carouselContainerId, 
+      instagramId, 
+      pageAccessToken
+    );
+
+    return {
+      success: true,
+      postId: publishResult.postId,
+      containerIds,
+      carouselContainerId
+    };
+  } catch (error) {
+    console.error('❌ Instagram carousel creation failed:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Create Facebook carousel post using attached_media
+ */
+async function createFacebookCarousel(mediaUrls, caption, pageId, pageAccessToken) {
+  try {
+    // Validate media count
+    if (mediaUrls.length < 2 || mediaUrls.length > 10) {
+      throw new Error('Carousel must contain 2-10 media items');
+    }
+
+    console.log(`📘 Creating Facebook carousel with ${mediaUrls.length} items...`);
+
+    // Step 1: Upload each media item and get media IDs
+    const mediaIds = [];
+    
+    for (const url of mediaUrls) {
+      try {
+        const isVideo = isVideoUrl(url);
+        
+        const params = new URLSearchParams({
+          access_token: pageAccessToken,
+          url: url,
+          published: 'false'
+        });
+
+        const response = await fetch(
+          `https://graph.facebook.com/v21.0/${pageId}/${isVideo ? 'videos' : 'photos'}?${params.toString()}`,
+          { method: 'POST' }
+        );
+
+        const data = await response.json();
+
+        if (data.id) {
+          mediaIds.push(data.id);
+          console.log(`✅ Uploaded ${isVideo ? 'video' : 'photo'} to Facebook:`, data.id);
+        } else {
+          throw new Error('Failed to upload media');
+        }
+      } catch (error) {
+        console.error('Error uploading media to Facebook:', error);
+        throw new Error(`Failed to upload ${url}: ${error.message}`);
+      }
+    }
+
+    // Step 2: Create carousel post with attached_media
+    const attachedMedia = mediaIds.map(id => ({ media_fbid: id }));
+    
+    const postParams = new URLSearchParams({
+      access_token: pageAccessToken,
+      message: caption || '',
+      attached_media: JSON.stringify(attachedMedia)
+    });
+
+    const postResponse = await fetch(
+      `https://graph.facebook.com/v21.0/${pageId}/feed?${postParams.toString()}`,
+      { method: 'POST' }
+    );
+
+    const postData = await postResponse.json();
+
+    if (postData.id) {
+      console.log('✅ Published Facebook carousel:', postData.id);
+      return {
+        success: true,
+        postId: postData.id,
+        mediaIds
+      };
+    } else {
+      throw new Error('Failed to create carousel post');
+    }
+  } catch (error) {
+    console.error('❌ Facebook carousel creation failed:', error.message);
+    throw error;
+  }
+}
 
 // Accept a callback to update local accounts state
 async function disconnectSocialAccount(accountId, onRefresh, onLocalDisconnect) {
@@ -54,6 +294,10 @@ function SchedulePostModal({
 
   // Local state for connected accounts
   const [localAccounts, setLocalAccounts] = useState([]);
+  
+  // Drag and drop state for carousel reordering
+  const [draggedIndex, setDraggedIndex] = useState(null);
+  const [uploadingCarousel, setUploadingCarousel] = useState(false);
 
   useEffect(() => {
     if (selectedContent) {
@@ -213,6 +457,113 @@ function SchedulePostModal({
       ...prev,
       selectedImages: []
     }));
+  };
+
+  // Drag and drop handlers for reordering carousel items
+  const handleDragStart = (e, index) => {
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e, index) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === index) return;
+    
+    const newImages = [...scheduleFormData.selectedImages];
+    const draggedItem = newImages[draggedIndex];
+    newImages.splice(draggedIndex, 1);
+    newImages.splice(index, 0, draggedItem);
+    
+    setScheduleFormData(prev => ({
+      ...prev,
+      selectedImages: newImages
+    }));
+    setDraggedIndex(index);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
+  };
+
+  // Remove specific image from carousel
+  const removeImageFromCarousel = (index) => {
+    setScheduleFormData(prev => ({
+      ...prev,
+      selectedImages: prev.selectedImages.filter((_, i) => i !== index)
+    }));
+  };
+
+  // Upload multiple files for carousel
+  const handleMultipleFileUpload = async (files) => {
+    if (files.length === 0) return;
+    
+    const hasYoutube = scheduleFormData.platforms.includes('youtube');
+    const maxItems = hasYoutube ? 1 : 10;
+    const currentCount = scheduleFormData.selectedImages.length;
+    const availableSlots = maxItems - currentCount;
+    
+    if (availableSlots <= 0) {
+      alert(`Maximum ${maxItems} items allowed for carousel`);
+      return;
+    }
+    
+    const filesToUpload = Array.from(files).slice(0, availableSlots);
+    setUploadingCarousel(true);
+    
+    try {
+      const uploadedMedia = [];
+      
+      for (const file of filesToUpload) {
+        if (file.size > 100 * 1024 * 1024) { // 100MB limit
+          console.warn(`File ${file.name} is too large, skipping...`);
+          continue;
+        }
+        
+        try {
+          const base64Data = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target.result.split(',')[1]);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          });
+          
+          const response = await fetch(`${process.env.REACT_APP_API_URL}/api/gcs/upload-base64`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              filename: `${Date.now()}_${file.name.replace(/[^\w.-]/g, '_')}`,
+              contentType: file.type,
+              base64Data: base64Data
+            })
+          });
+
+          if (!response.ok) {
+            throw new Error(`Upload failed: ${response.status}`);
+          }
+
+          const result = await response.json();
+          uploadedMedia.push({ 
+            url: result.publicUrl, 
+            type: file.type.startsWith('video/') ? 'video' : 'image'
+          });
+        } catch (error) {
+          console.error(`Failed to upload ${file.name}:`, error);
+        }
+      }
+      
+      if (uploadedMedia.length > 0) {
+        setScheduleFormData(prev => ({
+          ...prev,
+          availableImages: [...prev.availableImages, ...uploadedMedia],
+          selectedImages: [...prev.selectedImages, ...uploadedMedia]
+        }));
+      }
+    } catch (error) {
+      console.error('Carousel upload failed:', error);
+      alert('Some files failed to upload. Please try again.');
+    } finally {
+      setUploadingCarousel(false);
+    }
   };
 
   // Helper to detect video URLs
@@ -425,6 +776,11 @@ function SchedulePostModal({
             postData.platforms = ['instagram', 'facebook']; // Track both platforms in one post
             console.log('📸 Instagram post configured to also post to Facebook page:', selectedPage.name);
           }
+        }
+        
+        // Mark as carousel if multiple images
+        if (scheduleFormData.selectedImages.length > 1) {
+          postData.useCarouselService = true;
         }
         
         if (platform === 'instagram') {
@@ -1223,19 +1579,88 @@ function SchedulePostModal({
                   </div>
                 )}
 
+                {/* Carousel Builder - Selected Media with Drag & Drop */}
+                {scheduleFormData.selectedImages.length > 0 && (
+                  <div className="mb-6">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="text-sm font-semibold text-gray-700 flex items-center">
+                        <MoveVertical className="h-4 w-4 mr-2" />
+                        Carousel Preview (Drag to reorder)
+                      </h4>
+                      <span className="text-xs text-gray-500">
+                        {scheduleFormData.selectedImages.length} / {scheduleFormData.platforms.includes('youtube') ? '1' : '10'} items
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-5 gap-3">
+                      {scheduleFormData.selectedImages.map((media, index) => (
+                        <div
+                          key={`selected-${index}`}
+                          draggable
+                          onDragStart={(e) => handleDragStart(e, index)}
+                          onDragOver={(e) => handleDragOver(e, index)}
+                          onDragEnd={handleDragEnd}
+                          className={`relative border-2 rounded-lg overflow-hidden cursor-move transition-all duration-200 ${
+                            draggedIndex === index ? 'opacity-50 scale-95' : 'hover:shadow-lg'
+                          } border-blue-400 bg-white`}
+                        >
+                          {isVideoUrl(media.url) ? (
+                            <div className="w-full h-20 bg-gray-800 flex items-center justify-center">
+                              <Video className="h-6 w-6 text-white" />
+                            </div>
+                          ) : (
+                            <img 
+                              src={media.url} 
+                              alt={`Carousel item ${index + 1}`}
+                              className="w-full h-20 object-cover"
+                            />
+                          )}
+                          
+                          {/* Order number */}
+                          <div className="absolute top-1 left-1 bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">
+                            {index + 1}
+                          </div>
+                          
+                          {/* Remove button */}
+                          <button
+                            type="button"
+                            onClick={() => removeImageFromCarousel(index)}
+                            className="absolute top-1 right-1 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center hover:bg-red-600 transition-colors"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Additional Media Upload */}
                 <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:border-blue-400 transition-all duration-200">
                   <input
                     ref={fileInputRef}
                     type="file"
                     accept={scheduleFormData.platforms.includes('youtube') ? "video/*" : "image/*,video/*"}
+                    multiple={!scheduleFormData.platforms.includes('youtube')}
                     onChange={(e) => {
-                      const file = e.target.files[0];
-                      if (file) handleImageUpload(file);
+                      const files = e.target.files;
+                      if (files && files.length > 0) {
+                        if (files.length === 1) {
+                          handleImageUpload(files[0]);
+                        } else {
+                          handleMultipleFileUpload(files);
+                        }
+                      }
                     }}
                     className="hidden"
                   />
-                  <Image className="h-8 w-8 mx-auto mb-3 text-gray-400" />
+                  {uploadingCarousel ? (
+                    <div className="flex flex-col items-center">
+                      <Loader2 className="h-8 w-8 text-blue-600 animate-spin mb-3" />
+                      <span className="text-sm text-gray-600">Uploading carousel items...</span>
+                    </div>
+                  ) : (
+                    <>
+                      <Upload className="h-8 w-8 mx-auto mb-3 text-gray-400" />
                   {/* Post type selector for Instagram and Facebook (Feed / Story / Reel) */}
                   {(scheduleFormData.platforms.includes('instagram') || scheduleFormData.platforms.includes('facebook')) && (
                     <div className="flex items-center justify-center gap-3 mb-3">
@@ -1296,9 +1721,17 @@ function SchedulePostModal({
                     onClick={() => fileInputRef.current?.click()}
                     className="text-blue-600 hover:text-blue-800 font-semibold text-sm transition-colors duration-200"
                   >
-                    Upload Additional Media
+                    {scheduleFormData.platforms.includes('youtube') 
+                      ? 'Upload Video' 
+                      : 'Upload Multiple Files for Carousel'}
                   </button>
-                  <p className="text-xs text-gray-500 mt-2">Max 5MB</p>
+                  <p className="text-xs text-gray-500 mt-2">
+                    {scheduleFormData.platforms.includes('youtube') 
+                      ? 'Single video only (Max 100MB)' 
+                      : 'Select multiple files (2-10 items, Max 100MB each)'}
+                  </p>
+                    </>
+                  )}
                 </div>
               </div>
             )}

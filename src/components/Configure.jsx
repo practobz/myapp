@@ -37,6 +37,9 @@ export default function Configure() {
 
   // NEW: awaiting user gesture to allow opening popup
   const [awaitingUserGesture, setAwaitingUserGesture] = useState(false);
+  
+  // NEW: show success overlay before closing
+  const [showSuccessOverlay, setShowSuccessOverlay] = useState(false);
 
   const socialRef = useRef(null);
 
@@ -299,55 +302,19 @@ export default function Configure() {
           customer={customer}
           compact={true}
           onConnectionSuccess={() => {
-            // Show success message and close window/tab after QR scan connection
-            setAwaitingUserGesture(false);
-            setError('');
+            // Show success overlay immediately
+            setShowSuccessOverlay(true);
             
-            // Show success overlay
-            const successOverlay = document.createElement('div');
-            successOverlay.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-6';
-            successOverlay.innerHTML = `
-              <div class="bg-white rounded-xl p-8 max-w-md w-full text-center shadow-lg">
-                <div class="flex justify-center mb-4">
-                  <svg class="w-16 h-16 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                  </svg>
-                </div>
-                <h3 class="text-xl font-semibold mb-2 text-green-900">Account Connected Successfully!</h3>
-                <p class="text-sm text-slate-600 mb-6">
-                  Your ${platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : 'social media'} account has been connected.
-                </p>
-                <p class="text-xs text-slate-500">
-                  This window will close automatically...
-                </p>
-              </div>
-            `;
-            document.body.appendChild(successOverlay);
-            
-            // Close the window/tab after 2 seconds
+            // Wait 3 seconds, then close the window
             setTimeout(() => {
-              window.close();
-              
-              // If window.close() fails (some browsers block it), show a close instruction
-              setTimeout(() => {
-                successOverlay.innerHTML = `
-                  <div class="bg-white rounded-xl p-8 max-w-md w-full text-center shadow-lg">
-                    <div class="flex justify-center mb-4">
-                      <svg class="w-16 h-16 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                      </svg>
-                    </div>
-                    <h3 class="text-xl font-semibold mb-2 text-green-900">Connection Complete!</h3>
-                    <p class="text-sm text-slate-600 mb-4">
-                      Your account has been successfully connected.
-                    </p>
-                    <p class="text-sm font-medium text-slate-700">
-                      You can now close this window.
-                    </p>
-                  </div>
-                `;
-              }, 500);
-            }, 2000);
+              // Try to close the window first (works if opened as popup)
+              if (window.opener) {
+                window.close();
+              } else {
+                // If not a popup, just keep the success message visible
+                // User can close manually
+              }
+            }, 3000);
           }}
         />
 
@@ -390,6 +357,38 @@ export default function Configure() {
                   Cancel
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Success Overlay */}
+        {showSuccessOverlay && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6">
+            <div className="bg-white rounded-2xl p-8 max-w-md w-full text-center shadow-2xl">
+              <div className="mb-4 flex justify-center">
+                <div className="rounded-full bg-green-100 p-3">
+                  <CheckCircle className="h-16 w-16 text-green-600" />
+                </div>
+              </div>
+              <h3 className="text-2xl font-bold text-gray-900 mb-2">Successfully Connected!</h3>
+              <p className="text-gray-600 mb-4">
+                Your {platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : 'social media'} account has been connected successfully.
+              </p>
+              <p className="text-sm text-gray-500">
+                This window will close automatically...
+              </p>
+              <button
+                onClick={() => {
+                  if (window.opener) {
+                    window.close();
+                  } else {
+                    setShowSuccessOverlay(false);
+                  }
+                }}
+                className="mt-4 px-6 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors"
+              >
+                Close Now
+              </button>
             </div>
           </div>
         )}

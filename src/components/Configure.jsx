@@ -37,6 +37,7 @@ export default function Configure() {
 
   // NEW: awaiting user gesture to allow opening popup
   const [awaitingUserGesture, setAwaitingUserGesture] = useState(false);
+  const [showConfirmation, setShowConfirmation] = useState(false);
 
   const socialRef = useRef(null);
 
@@ -204,19 +205,11 @@ const source = params.get('source') || '';
   // REPLACE previous auto-trigger effect with user-gesture flow:
   useEffect(() => {
     // If autoConnect was requested, wait for customer & platform to be loaded,
-    // then show a prompt so the user can tap a button (real user gesture)
+    // then show accept/reject confirmation dialog
     if (!autoConnect || !customer || !platformKey) return;
 
-    // show prompt that requires a tap (user gesture) to open auth popup
-    setAwaitingUserGesture(true);
-
-    // focus the button shortly after render so mobile users can tap faster
-    const t = setTimeout(() => {
-      const btn = document.getElementById('auto-connect-btn');
-      if (btn) btn.focus();
-    }, 300);
-
-    return () => clearTimeout(t);
+    // show confirmation dialog for QR scan
+    setShowConfirmation(true);
   }, [autoConnect, customer, platformKey]);
 
   const mapPlatform = (key) => {
@@ -231,6 +224,41 @@ const source = params.get('source') || '';
   };
 
   const platform = mapPlatform(platformKey);
+
+  // Handle accept connection from confirmation dialog
+  const handleAcceptConnection = () => {
+    setShowConfirmation(false);
+    setAwaitingUserGesture(true);
+  };
+
+  // Handle reject connection from confirmation dialog
+  const handleRejectConnection = () => {
+    setShowConfirmation(false);
+    setError('Connection request was rejected.');
+    
+    // Show rejection message and close window
+    const rejectOverlay = document.createElement('div');
+    rejectOverlay.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-6';
+    rejectOverlay.innerHTML = `
+      <div class="bg-white rounded-xl p-8 max-w-md w-full text-center shadow-lg">
+        <div class="flex justify-center mb-4">
+          <svg class="w-16 h-16 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+          </svg>
+        </div>
+        <h3 class="text-xl font-semibold mb-2 text-slate-900">Connection Rejected</h3>
+        <p class="text-sm text-slate-600 mb-4">
+          You can close this window now.
+        </p>
+      </div>
+    `;
+    document.body.appendChild(rejectOverlay);
+    
+    // Try to close the window after 2 seconds
+    setTimeout(() => {
+      window.close();
+    }, 2000);
+  };
 
   if (error) {
     return (

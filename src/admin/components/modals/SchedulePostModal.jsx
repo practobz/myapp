@@ -778,11 +778,17 @@ function SchedulePostModal({
           throw new Error('Selected YouTube channel not found');
         }
 
+        // Extract title from caption (first line or first 100 chars)
+        const captionLines = fullCaption.split('\n');
+        const videoTitle = captionLines[0].substring(0, 100) || 'Video Upload';
+
         Object.assign(postData, {
           videoUrl: scheduleFormData.selectedImages[0]?.url || '',
           channelId: settings.channelId,
           channelName: selectedChannel.name,
-          youtubeAccessToken: selectedAccount.accessToken
+          youtubeAccessToken: selectedAccount.accessToken,
+          title: videoTitle,
+          description: fullCaption
         });
       } else if (platform === 'linkedin') {
         Object.assign(postData, {

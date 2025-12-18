@@ -755,6 +755,8 @@ function SchedulePostModal({
         // Mark as carousel if multiple images
         if (scheduleFormData.selectedImages.length > 1) {
           postData.useCarouselService = true;
+          // Ensure imageUrls array is preserved for carousel
+          postData.imageUrls = scheduleFormData.selectedImages.map(item => item.url);
         }
         
         if (platform === 'instagram') {
@@ -884,6 +886,17 @@ function SchedulePostModal({
           //     console.error('❌ LinkedIn media upload failed:', mediaError.message);
           //   }
           // }
+
+          // Debug log for Instagram carousel
+          if (postData.platform === 'instagram' && postData.isCarousel) {
+            console.log('📸 Instagram Carousel Post Data:', {
+              platform: postData.platform,
+              isCarousel: postData.isCarousel,
+              imageUrlsCount: postData.imageUrls?.length,
+              imageUrls: postData.imageUrls,
+              useCarouselService: postData.useCarouselService
+            });
+          }
 
           // Use /api/immediate-posts for all platforms
           const response = await fetch(`${process.env.REACT_APP_API_URL}/api/immediate-posts`, {

@@ -742,8 +742,10 @@ function SchedulePostModal({
           throw new Error(`Selected ${platform} page does not have a valid access token`);
         }
 
+        // For carousel posts (multiple images), don't set singular imageUrl
+        const isCarouselPost = scheduleFormData.selectedImages.length > 1;
+        
         Object.assign(postData, {
-          imageUrl: scheduleFormData.selectedImages[0]?.url || '',
           pageId: settings.pageId,
           pageName: selectedPage.name,
           pageAccessToken: selectedPage.accessToken,
@@ -752,8 +754,13 @@ function SchedulePostModal({
             : null,
         });
         
+        // Set imageUrl only for single image posts
+        if (!isCarouselPost) {
+          postData.imageUrl = scheduleFormData.selectedImages[0]?.url || '';
+        }
+        
         // Mark as carousel if multiple images
-        if (scheduleFormData.selectedImages.length > 1) {
+        if (isCarouselPost) {
           postData.useCarouselService = true;
           // Ensure imageUrls array is preserved for carousel
           postData.imageUrls = scheduleFormData.selectedImages.map(item => item.url);

@@ -20,10 +20,10 @@ function ScheduledPosts() {
   useEffect(() => {
     fetchScheduledPosts(true); // Show loading on initial load
     fetchCustomers();
-    // Silent auto-refresh every 10 seconds
+    // Silent auto-refresh every 3 seconds
     const intervalId = setInterval(() => {
       fetchScheduledPosts(false); // Don't show loading spinner for auto-refresh
-    }, 10000);
+    }, 3000);
     return () => clearInterval(intervalId);
   }, [currentUser]);
 

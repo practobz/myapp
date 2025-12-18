@@ -524,53 +524,142 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
     setSuccess('');
 
     try {
-      // Use environment variable for YouTube client ID
-      const clientId = process.env.REACT_APP_YOUTUBE_CLIENT_ID;
-      if (!clientId) {
-        throw new Error('YouTube OAuth client ID is not configured. Please set REACT_APP_YOUTUBE_CLIENT_ID in your environment.');
-      }
+      const CLIENT_ID = '593529385135-snp35l6s9dtje8g8f1l1b3ajtp375cjr.apps.googleusercontent.com';
+      const SCOPES = 'https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/yt-analytics.readonly https://www.googleapis.com/auth/youtube.upload';
 
-      const redirectUri = "https://airspark.storage.googleapis.com/index.html";
-      const scope = 'https://www.googleapis.com/auth/youtube https://www.googleapis.com/auth/youtube.upload';
-      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code&access_type=offline&prompt=consent`;
-      const popup = window.open(authUrl, 'youtube-auth', 'width=500,height=600');
-      const checkClosed = setInterval(() => {
-        if (popup.closed) {
-          clearInterval(checkClosed);
-          setError('YouTube authentication was cancelled');
-          setLoading(false);
-        }
-      }, 1000);
-      const handleMessage = async (event) => {
-        if (event.origin !== window.location.origin) return;
-        if (event.data.type === 'YOUTUBE_AUTH_SUCCESS') {
-          clearInterval(checkClosed);
-          popup.close();
-          window.removeEventListener('message', handleMessage);
-          try {
-            // Fix: Use correct API base URL
-            const tokenResponse = await fetch(`${process.env.REACT_APP_API_URL}/api/integration/youtube/token`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ code: event.data.code, customerId: customer.id })
-            });
-            const tokenData = await tokenResponse.json();
-            if (tokenData.success) {
-              setSuccess('Successfully connected YouTube account');
-              await fetchExistingConnections();
-              if (onConnectionSuccess) onConnectionSuccess();
-            } else {
-              setError(tokenData.error || 'Failed to complete YouTube authentication');
-            }
-          } catch (err) {
-            setError('Failed to complete YouTube authentication: ' + err.message);
-          } finally {
+      // Load Google Identity Services library
+      const loadGIS = () => {
+        return new Promise((resolve, reject) => {
+          if (window.google?.accounts?.oauth2) {
+            resolve();
+            return;
+          }
+
+          const script = document.createElement('script');
+          script.src = 'https://accounts.google.com/gsi/client';
+          script.async = true;
+          script.defer = true;
+          script.onload = resolve;
+          script.onerror = reject;
+          document.head.appendChild(script);
+        });
+      };
+
+      await loadGIS();
+
+      // Initialize token client
+      const tokenClient = window.google.accounts.oauth2.initTokenClient({
+        client_id: CLIENT_ID,
+        scope: SCOPES,
+        prompt: 'consent',
+        callback: async (tokenResponse) => {
+          if (tokenResponse.error) {
+            setError('YouTube authentication failed: ' + tokenResponse.error);
             setLoading(false);
+            return;
+          }
+
+          if (tokenResponse.access_token) {
+            try {
+              // Load GAPI for making YouTube API calls
+              if (!window.gapi?.client) {
+                await new Promise((resolve, reject) => {
+                  const gapiScript = document.createElement('script');
+                  gapiScript.src = 'https://apis.google.com/js/api.js';
+                  gapiScript.async = true;
+                  gapiScript.defer = true;
+                  gapiScript.onload = () => {
+                    window.gapi.load('client', resolve);
+                  };
+                  gapiScript.onerror = reject;
+                  document.head.appendChild(gapiScript);
+                });
+
+                await window.gapi.client.init({
+                  apiKey: 'AIzaSyD2fYMvhlDJwk6cMEJSBRQmJnsidFjCFtc',
+                  discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/youtube/v3/rest']
+                });
+              }
+
+              // Set the access token
+              window.gapi.client.setToken({ access_token: tokenResponse.access_token });
+
+              // Fetch channel info
+              const channelResponse = await window.gapi.client.youtube.channels.list({
+                part: 'snippet,statistics,contentDetails',
+                mine: true
+              });
+
+              if (!channelResponse.result.items || channelResponse.result.items.length === 0) {
+                setError('No YouTube channel found for this account');
+                setLoading(false);
+                return;
+              }
+
+              const channel = channelResponse.result.items[0];
+
+              // Prepare account data for saving
+              const accountData = {
+                customerId: getCustomerId(customer),
+                platform: 'youtube',
+                platformUserId: channel.id,
+                name: channel.snippet.title,
+                email: '', // YouTube API doesn't provide email directly
+                profilePicture: channel.snippet.thumbnails.default.url,
+                accessToken: tokenResponse.access_token,
+                refreshToken: tokenResponse.refresh_token || null,
+                tokenExpiresAt: tokenResponse.expires_in ? 
+                  new Date(Date.now() + tokenResponse.expires_in * 1000).toISOString() : null,
+                pages: [],
+                channels: [{
+                  id: channel.id,
+                  name: channel.snippet.title,
+                  description: channel.snippet.description,
+                  thumbnailUrl: channel.snippet.thumbnails.default.url,
+                  customUrl: channel.snippet.customUrl,
+                  subscriberCount: channel.statistics.subscriberCount,
+                  videoCount: channel.statistics.videoCount,
+                  viewCount: channel.statistics.viewCount
+                }],
+                channelInfo: {
+                  subscriberCount: channel.statistics.subscriberCount,
+                  videoCount: channel.statistics.videoCount,
+                  viewCount: channel.statistics.viewCount
+                },
+                connectedAt: new Date().toISOString()
+              };
+
+              // Save to backend
+              const saveResponse = await fetch(`${process.env.REACT_APP_API_URL || ''}/api/customer-social-links`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(accountData)
+              });
+
+              const saveData = await saveResponse.json();
+
+              if (saveData.success) {
+                setSuccess('Successfully connected YouTube account: ' + channel.snippet.title);
+                await fetchExistingConnections();
+                if (onConnectionSuccess) onConnectionSuccess();
+              } else {
+                setError(saveData.error || 'Failed to save YouTube connection');
+              }
+            } catch (err) {
+              console.error('YouTube connection error:', err);
+              setError('Failed to complete YouTube authentication: ' + (err.message || 'Unknown error'));
+            } finally {
+              setLoading(false);
+            }
           }
         }
-      };
-      window.addEventListener('message', handleMessage);
+      });
+
+      // Request token
+      tokenClient.requestAccessToken();
+      
     } catch (err) {
+      console.error('YouTube authentication error:', err);
       setError('Failed to start YouTube authentication: ' + err.message);
       setLoading(false);
     }

@@ -59,8 +59,11 @@ const source = params.get('source') || '';
     }
 
     setPlatformKey(platform);
-    setAutoConnect(auto === '1' || auto === 'true');
-
+   
+    // Show accept/reject for QR scans OR explicit autoConnect
+    // If timestamp is present, it's likely from a QR code
+    const isQrScan = timestamp || source === 'admin-qr-generator' || auto === '1' || auto === 'true';
+    setAutoConnect(isQrScan);
     // Use a local timer id and do NOT return early so fetchCustomer runs
     let tId = null;
 

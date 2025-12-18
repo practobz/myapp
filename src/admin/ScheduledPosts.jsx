@@ -18,12 +18,12 @@ function ScheduledPosts() {
 
   // Fetch scheduled posts on component mount
   useEffect(() => {
-    fetchScheduledPosts();
+    fetchScheduledPosts(true); // Show loading on initial load
     fetchCustomers();
-    // Change polling interval to 5 seconds
+    // Silent auto-refresh every 10 seconds
     const intervalId = setInterval(() => {
-      fetchScheduledPosts();
-    }, 10000); // 5 seconds
+      fetchScheduledPosts(false); // Don't show loading spinner for auto-refresh
+    }, 10000);
     return () => clearInterval(intervalId);
   }, [currentUser]);
 
@@ -50,14 +50,16 @@ function ScheduledPosts() {
     }
   };
 
-  const fetchScheduledPosts = async () => {
+  const fetchScheduledPosts = async (showLoading = true) => {
     if (!currentUser || currentUser.role !== 'admin') {
       console.error('Admin authentication required');
       setScheduledPosts([]);
       return;
     }
 
-    setLoading(true);
+    if (showLoading) {
+      setLoading(true);
+    }
     try {
       console.log('📡 Fetching scheduled posts for admin:', currentUser._id || currentUser.id);
       
@@ -180,6 +182,20 @@ function ScheduledPosts() {
     if (!url || typeof url !== 'string') return false;
     const ext = url.split('.').pop().toLowerCase();
     return ['mp4', 'webm', 'ogg', 'mov', 'avi'].includes(ext);
+  };
+
+  // Helper to determine post type
+  const getPostType = (post) => {
+    // Check if it's a story
+    if (post.isStory || post.postType === 'story') {
+      return { type: 'Story', color: 'bg-orange-100 text-orange-700', icon: '📖' };
+    }
+    // Check if it's a carousel
+    if ((post.isCarousel || post.useCarouselService) && post.imageUrls?.length > 1) {
+      return { type: 'Carousel', color: 'bg-purple-100 text-purple-700', icon: '🎠' };
+    }
+    // Default to regular post
+    return { type: 'Post', color: 'bg-blue-100 text-blue-700', icon: '📝' };
   };
 
   const getPlatformIcon = (platform) => {
@@ -491,18 +507,26 @@ function ScheduledPosts() {
                                   <span className="text-sm font-medium text-gray-600">
                                     {post.pageName || post.channelName || 'Social Media Post'}
                                   </span>
-                                  {/* Carousel indicator */}
-                                  {((post.isCarousel || post.useCarouselService) && post.imageUrls?.length > 1) && (
-                                    <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-semibold rounded-full flex items-center space-x-1">
-                                      <span>🎠</span>
-                                      <span>{post.imageUrls.length} items</span>
-                                    </span>
-                                  )}
                                 </div>
-                                <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center space-x-1 ${getStatusColor(post.status)}`}>
-                                  {getStatusIcon(post.status)}
-                                  <span>{post.status}</span>
-                                </span>
+                                <div className="flex items-center space-x-2">
+                                  {/* Post Type indicator */}
+                                  {(() => {
+                                    const postType = getPostType(post);
+                                    return (
+                                      <span className={`px-2 py-0.5 ${postType.color} text-xs font-semibold rounded-full flex items-center space-x-1`}>
+                                        <span>{postType.icon}</span>
+                                        <span>{postType.type}</span>
+                                        {postType.type === 'Carousel' && post.imageUrls?.length > 1 && (
+                                          <span>({post.imageUrls.length})</span>
+                                        )}
+                                      </span>
+                                    );
+                                  })()}
+                                  <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center space-x-1 ${getStatusColor(post.status)}`}>
+                                    {getStatusIcon(post.status)}
+                                    <span>{post.status}</span>
+                                  </span>
+                                </div>
                               </div>
 
                               {/* Media Preview - Show carousel if multiple images */}
@@ -621,18 +645,26 @@ function ScheduledPosts() {
                           <span className="text-sm font-medium text-gray-600">
                             {post.pageName || post.channelName || 'Social Media Post'}
                           </span>
-                          {/* Carousel indicator */}
-                          {((post.isCarousel || post.useCarouselService) && post.imageUrls?.length > 1) && (
-                            <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-semibold rounded-full flex items-center space-x-1">
-                              <span>🎠</span>
-                              <span>{post.imageUrls.length} items</span>
-                            </span>
-                          )}
                         </div>
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center space-x-1 ${getStatusColor(post.status)}`}>
-                          {getStatusIcon(post.status)}
-                          <span>{post.status}</span>
-                        </span>
+                        <div className="flex items-center space-x-2">
+                          {/* Post Type indicator */}
+                          {(() => {
+                            const postType = getPostType(post);
+                            return (
+                              <span className={`px-2 py-0.5 ${postType.color} text-xs font-semibold rounded-full flex items-center space-x-1`}>
+                                <span>{postType.icon}</span>
+                                <span>{postType.type}</span>
+                                {postType.type === 'Carousel' && post.imageUrls?.length > 1 && (
+                                  <span>({post.imageUrls.length})</span>
+                                )}
+                              </span>
+                            );
+                          })()}
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center space-x-1 ${getStatusColor(post.status)}`}>
+                            {getStatusIcon(post.status)}
+                            <span>{post.status}</span>
+                          </span>
+                        </div>
                       </div>
 
                       {/* Customer Information */}

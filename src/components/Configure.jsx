@@ -46,8 +46,9 @@ export default function Configure() {
     const platform = params.get('platform') || '';
     const auto = params.get('autoConnect') || params.get('auto') || '';
     const timestamp = params.get('t');
+const source = params.get('source') || '';
 
-    console.log('🔍 Configure URL params:', { customerId, platform, auto, timestamp });
+    console.log('🔍 Configure URL params:', { customerId, platform, auto, timestamp, source });
     console.log('🔍 Current URL:', window.location.href);
     console.log('🔍 Origin:', window.location.origin);
 
@@ -351,7 +352,46 @@ export default function Configure() {
             }, 2000);
           }}
         />
+ {/* NEW: Accept/Reject confirmation dialog when QR is scanned */}
+        {showConfirmation && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-6">
+            <div className="bg-white rounded-xl p-6 max-w-md w-full shadow-lg">
+              <div className="text-center mb-6">
+                <div className="flex justify-center mb-4">
+                  <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
+                    <CheckCircle className="w-10 h-10 text-blue-600" />
+                  </div>
+                </div>
+                <h3 className="text-xl font-semibold mb-2 text-slate-900">Connect {platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : 'Account'}?</h3>
+                <p className="text-sm text-slate-600 mb-2">
+                  Do you want to connect your {platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : 'social media'} account?
+                </p>
+                {customer && (
+                  <div className="bg-slate-50 rounded-lg p-3 mt-3">
+                    <p className="text-xs text-slate-500 mb-1">Customer</p>
+                    <p className="text-sm font-medium text-slate-900">{customer.name || 'Unknown'}</p>
+                  </div>
+                )}
+              </div>
 
+              <div className="flex gap-3">
+                <button
+                  onClick={handleRejectConnection}
+                  className="flex-1 px-6 py-3 rounded-lg bg-slate-100 text-slate-700 font-semibold hover:bg-slate-200 transition-colors"
+                >
+                  Reject
+                </button>
+                <button
+                  onClick={handleAcceptConnection}
+                  className="flex-1 px-6 py-3 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 transition-colors"
+                >
+                  Accept
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        
         {/* NEW: Overlay prompt for autoConnect requiring user gesture */}
         {awaitingUserGesture && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-6">

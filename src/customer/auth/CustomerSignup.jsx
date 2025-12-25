@@ -75,8 +75,7 @@ function CustomerSignup() {
     if (!formData.mobile) return 'Mobile number is required';
     if (!/^[+]?[0-9]{10,15}$/.test(formData.mobile.replace(/\s/g, ''))) return 'Please enter a valid mobile number';
     if (!formData.address) return 'Address is required';
-    if (!formData.gstNumber) return 'GST number is required';
-    if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(formData.gstNumber)) return 'Please enter a valid GST number format';
+    if (formData.gstNumber && formData.gstNumber.trim() !== '' && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(formData.gstNumber)) return 'Please enter a valid GST number format';
     if (!formData.password) return 'Password is required';
     if (formData.password.length < 8) return 'Password must be at least 8 characters long';
     if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(formData.password)) {
@@ -334,9 +333,8 @@ function CustomerSignup() {
                       id="gstNumber"
                       name="gstNumber"
                       type="text"
-                      required
                       className="w-full pl-10 pr-4 py-2.5 bg-white border-2 border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent shadow-sm transition-all duration-200 hover:border-cyan-300 hover:shadow-md"
-                      placeholder="27ABCDE1234F1Z5"
+                      placeholder="27ABCDE1234F1Z5 (optional)"
                       value={formData.gstNumber}
                       onChange={handleInputChange}
                     />

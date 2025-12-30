@@ -53,9 +53,9 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
     setError(null);
     
     try {
-      const response = await fetch(
-        `${process.env.REACT_APP_API_URL}/api/historical-data/get?platform=${platform}&accountId=${accountId}&timePeriod=${selectedPeriod}`
-      );
+     const response = await fetch(
+  `${process.env.REACT_APP_API_URL}/api/analytics-data/chart?platform=${platform}&accountId=${accountId}&timePeriod=${selectedPeriod}`
+);
       
       const result = await response.json();
       

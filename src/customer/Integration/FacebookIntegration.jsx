@@ -41,6 +41,9 @@ function FacebookIntegration() {
   const [selectedPostId, setSelectedPostId] = useState(null);
   const [singlePostAnalytics, setSinglePostAnalytics] = useState(null);
 
+  // Analytics data state for charts
+  const [analyticsData, setAnalyticsData] = useState({});
+
   // Helper function to check if Facebook API is ready
   const isFacebookApiReady = () => {
     return window.FB && window.FB.api && typeof window.FB.api === 'function';

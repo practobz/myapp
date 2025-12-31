@@ -23,13 +23,7 @@ function FacebookIntegration() {
   const [loadingInsights, setLoadingInsights] = useState({});
   const [loadingPosts, setLoadingPosts] = useState({});
 
-  // Post upload modal state
-  const [showPostModal, setShowPostModal] = useState(false);
-  const [postTarget, setPostTarget] = useState(null);
-  const [postMessage, setPostMessage] = useState('');
-  const [postImageUrl, setPostImageUrl] = useState('');
-  const [uploadingPost, setUploadingPost] = useState(false);
-  const [uploadResult, setUploadResult] = useState(null);
+  // Post upload modal state - REMOVED (no longer needed)
 
   // Show/Hide Facebook posts state
   const [showFacebookPosts, setShowFacebookPosts] = useState({});
@@ -107,32 +101,54 @@ function FacebookIntegration() {
       return null;
     }
 
-    // --- NEW: Hydrate backend accounts with live data (profile/pages) ---
+    // --- FIXED: Use Graph API directly instead of SDK to avoid session conflicts ---
     async function hydrateFacebookAccounts(accounts) {
-      if (!window.FB || !window.FB.api) return accounts;
-      return await Promise.all(accounts.map(acc =>
-        new Promise(resolve => {
-          // Fetch live profile
-          window.FB.api('/me', {
-            fields: 'id,name,email,picture',
-            access_token: acc.accessToken
-          }, function(profileResponse) {
-            // Fetch pages
-            window.FB.api('/me/accounts', {
-              fields: 'id,name,access_token,category,about,fan_count,link,picture,username,website,phone,verification_status',
-              access_token: acc.accessToken
-            }, function(pagesResponse) {
-              resolve({
+      // IMPORTANT: Don't use FB SDK for validation when multiple accounts exist
+      // The SDK only maintains one session at a time, causing other accounts to appear expired
+      console.log('🔄 Hydrating accounts using direct Graph API calls...');
+      
+      return await Promise.all(accounts.map(async (acc) => {
+        try {
+          // Use direct Graph API fetch instead of FB.api to avoid SDK session conflicts
+          const profileUrl = `https://graph.facebook.com/v18.0/me?fields=id,name,email,picture&access_token=${acc.accessToken}`;
+          const profileResponse = await fetch(profileUrl);
+          const profileData = await profileResponse.json();
+          
+          // Check for API errors
+          if (profileData.error) {
+            console.warn(`⚠️ Token validation failed for ${acc.name}:`, profileData.error.message);
+            // Only mark as needing reconnection if error code is 190 (token expired)
+            if (profileData.error.code === 190) {
+              return {
                 ...acc,
-                name: profileResponse?.name || acc.name,
-                email: profileResponse?.email || acc.email,
-                picture: profileResponse?.picture || acc.picture,
-                pages: pagesResponse?.data || acc.pages
-              });
-            });
-          });
-        })
-      ));
+                needsReconnection: true,
+                lastError: profileData.error
+              };
+            }
+            // For other errors, keep the account as-is
+            return acc;
+          }
+          
+          // Fetch pages using direct API
+          const pagesUrl = `https://graph.facebook.com/v18.0/me/accounts?fields=id,name,access_token,category,about,fan_count,link,picture,username,website,phone,verification_status&access_token=${acc.accessToken}`;
+          const pagesResponse = await fetch(pagesUrl);
+          const pagesData = await pagesResponse.json();
+          
+          return {
+            ...acc,
+            name: profileData.name || acc.name,
+            email: profileData.email || acc.email,
+            picture: profileData.picture || acc.picture,
+            pages: pagesData.data || acc.pages,
+            needsReconnection: false,
+            lastTokenValidation: new Date().toISOString()
+          };
+        } catch (error) {
+          console.warn(`⚠️ Hydration failed for ${acc.name}:`, error.message);
+          // Keep account as-is if hydration fails
+          return acc;
+        }
+      }));
     }
 
     // Helper: Deduplicate accounts by id
@@ -148,14 +164,46 @@ function FacebookIntegration() {
     (async () => {
       const backendAccounts = await fetchConnectedAccountsFromBackend();
       if (backendAccounts && backendAccounts.length > 0) {
-        // Hydrate with live profile/pages
-        const hydratedAccounts = await hydrateFacebookAccounts(backendAccounts);
-        const deduped = dedupeAccounts(hydratedAccounts);
-        setConnectedAccounts(deduped);
-        setUserData('fb_connected_accounts', deduped);
-        setActiveAccountId(deduped[0].id);
-        setActiveAccount(deduped[0]);
-        setUserData('fb_active_account_id', deduped[0].id);
+        console.log(`📥 Loaded ${backendAccounts.length} Facebook accounts from backend`);
+        
+        // CRITICAL FIX: For multiple accounts, NEVER use FB SDK for validation
+        // The SDK can only handle one session at a time, causing other accounts to appear invalid
+        // Instead, trust the backend data and only validate when explicitly requested
+        
+        if (backendAccounts.length > 1) {
+          console.log('✅ Multiple accounts detected - using backend data directly (no SDK validation)');
+          const deduped = dedupeAccounts(backendAccounts);
+          setConnectedAccounts(deduped);
+          setUserData('fb_connected_accounts', deduped);
+          setActiveAccountId(deduped[0].id);
+          setActiveAccount(deduped[0]);
+          setUserData('fb_active_account_id', deduped[0].id);
+          return;
+        }
+        
+        // For single account, validate if needed (using Graph API, not SDK)
+        const account = backendAccounts[0];
+        const needsValidation = !account.lastTokenValidation || 
+          new Date(account.lastTokenValidation) < new Date(Date.now() - 30 * 60 * 1000); // 30 minutes
+        
+        if (needsValidation) {
+          console.log('🔄 Single account - validating token via Graph API...');
+          const validated = await hydrateFacebookAccounts(backendAccounts);
+          const deduped = dedupeAccounts(validated);
+          setConnectedAccounts(deduped);
+          setUserData('fb_connected_accounts', deduped);
+          setActiveAccountId(deduped[0].id);
+          setActiveAccount(deduped[0]);
+          setUserData('fb_active_account_id', deduped[0].id);
+        } else {
+          console.log('✅ Single account - token recently validated, using backend data');
+          const deduped = dedupeAccounts(backendAccounts);
+          setConnectedAccounts(deduped);
+          setUserData('fb_connected_accounts', deduped);
+          setActiveAccountId(deduped[0].id);
+          setActiveAccount(deduped[0]);
+          setUserData('fb_active_account_id', deduped[0].id);
+        }
         return;
       }
 
@@ -227,6 +275,23 @@ function FacebookIntegration() {
       fetchFbPages();
     }
   }, [activeAccount, fbSdkLoaded]);
+  
+  // Auto-upgrade to never-expiring tokens for existing accounts
+  useEffect(() => {
+    const upgradeToNeverExpiringTokens = async () => {
+      if (!activeAccount || !fbSdkLoaded || !isFacebookApiReady()) return;
+      
+      // Check if we need to upgrade (only if pages exist but don't have never-expiring tokens)
+      if (fbPages.length > 0 && !fbPages.some(p => p.tokenExpiry === 'never')) {
+        console.log('🔄 Auto-upgrading to never-expiring page tokens...');
+        await refreshPageTokens();
+      }
+    };
+    
+    // Run upgrade after a short delay to let pages load
+    const timer = setTimeout(upgradeToNeverExpiringTokens, 2000);
+    return () => clearTimeout(timer);
+  }, [fbPages, activeAccount, fbSdkLoaded]);
 
   // Save accounts to localStorage with better error handling
   const saveAccountsToStorage = (accounts) => {
@@ -396,6 +461,30 @@ function FacebookIntegration() {
 
         console.log('💾 Stored long-lived token, expires:', new Date(expirationDate).toLocaleDateString());
         
+        // ✅ NEW: Immediately get never-expiring page tokens
+        console.log('🔄 Requesting never-expiring page tokens...');
+        try {
+          const pageTokenResponse = await fetch(`${process.env.REACT_APP_API_URL}/api/facebook/page-tokens`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              userAccessToken: data.longLivedToken,
+              userId: account.id
+            })
+          });
+          
+          const pageTokenData = await pageTokenResponse.json();
+          
+          if (pageTokenData.success && pageTokenData.pages) {
+            console.log(`✅ Got never-expiring tokens for ${pageTokenData.pages.length} pages`);
+            updatedAccount.pages = pageTokenData.pages;
+          }
+        } catch (pageTokenError) {
+          console.warn('⚠️ Failed to get never-expiring page tokens:', pageTokenError);
+        }
+        
         return updatedAccount;
       } else {
         console.warn('⚠️ Failed to get long-lived token:', data.error || 'Unknown error');
@@ -411,13 +500,35 @@ function FacebookIntegration() {
 
   // Check if token is expired or about to expire
   const isTokenExpired = (account) => {
+    // If account has never-expiring page tokens, it's not expired
+    if (account.pages && account.pages.some(p => p.tokenExpiry === 'never' || p.tokenType === 'never_expiring')) {
+      return false; // Never-expiring page tokens mean account is always valid
+    }
+    
+    // If account has long-lived tokens (60 days), be lenient with expiration check
+    if (account.tokenType === 'long_lived' && account.pages && account.pages.length > 0) {
+      // Long-lived accounts with pages are considered valid
+      return false;
+    }
+    
+    // If no tokenExpiresAt, assume not expired (benefit of the doubt)
     if (!account.tokenExpiresAt) return false;
     
     const expiryTime = new Date(account.tokenExpiresAt);
     const now = new Date();
-    const bufferTime = 5 * 60 * 1000; // 5 minutes buffer
     
-    return (expiryTime.getTime() - now.getTime()) < bufferTime;
+    // Check if token is actually expired (not just close to expiring)
+    // Only mark as expired if it's truly expired or within 1 hour of expiry
+    const bufferTime = 60 * 60 * 1000; // 1 hour buffer (much less aggressive than 24 hours)
+    
+    const isActuallyExpired = (expiryTime.getTime() - now.getTime()) < bufferTime;
+    
+    if (isActuallyExpired) {
+      const daysUntilExpiry = Math.floor((expiryTime.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+      console.log(`⚠️ Token for ${account.name} expires in ${daysUntilExpiry} days`);
+    }
+    
+    return isActuallyExpired;
   };
 
   // Handle API errors and token refresh
@@ -497,99 +608,151 @@ function FacebookIntegration() {
   };
 
   // Modified fetchFbPages with error handling
-  const fetchFbPages = () => {
-    if (!activeAccount || !isFacebookApiReady()) {
-      setFbError({ message: 'Facebook API is not ready or no active account' });
+  const fetchFbPages = async () => {
+    if (!activeAccount) {
+      console.warn('⚠️ No active account');
       return;
     }
     
     // Check if token is expired before making API call
     if (isTokenExpired(activeAccount)) {
-      console.log('⚠️ Token appears to be expired, refreshing...');
+      console.log('⚠️ Token appears to be expired, attempting silent refresh...');
       refreshCurrentSession().then(success => {
         if (success) {
           // Retry after refresh
+          console.log('✅ Silent refresh successful, retrying fetch');
           setTimeout(() => fetchFbPages(), 1000);
         } else {
-          handleApiError({ 
-            message: 'Session expired', 
-            code: 190 
-          });
+          // Only show error if we actually tried to make an API call and it failed
+          console.log('⚠️ Token refresh failed - account may need reconnection');
         }
       });
       return;
     }
     
-    console.log('🔍 Fetching pages...');
+    console.log('🔍 Fetching pages using Graph API...');
     
-    window.FB.api('/me/accounts', {
-      fields: 'id,name,access_token,category,about,fan_count,link,picture,username,website,phone,verification_status',
-      access_token: activeAccount.accessToken
-    }, function(response) {
-      if (!response || response.error) {
-        handleApiError(response.error);
-        console.error('❌ Failed to fetch pages:', response.error);
-      } else {
-        console.log('✅ Fetched pages successfully:', response.data.length);
-        setFbPages(response.data);
-        setFbError(null); // Clear any previous errors
+    try {
+      // Use direct Graph API call instead of FB.api to avoid SDK session conflicts
+      const pagesUrl = `https://graph.facebook.com/v18.0/me/accounts?fields=id,name,access_token,category,about,fan_count,link,picture,username,website,phone,verification_status&access_token=${activeAccount.accessToken}`;
+      const response = await fetch(pagesUrl);
+      const data = await response.json();
+      
+      if (data.error) {
+        handleApiError(data.error);
+        console.error('❌ Failed to fetch pages:', data.error);
+        return;
+      }
+      
+      console.log('✅ Fetched pages successfully:', data.data.length);
+      
+      // ✅ Convert page tokens to never-expiring tokens
+      console.log('🔄 Converting to never-expiring page tokens...');
+      try {
+        const pageTokenResponse = await fetch(`${process.env.REACT_APP_API_URL}/api/facebook/page-tokens`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            userAccessToken: activeAccount.accessToken,
+            userId: activeAccount.id
+          })
+        });
         
-        // Store each page
-        response.data.forEach(async (page) => {
-          console.log(`📄 Processing page: ${page.name} (${page.id})`);
+        const pageTokenData = await pageTokenResponse.json();
+        
+        if (pageTokenData.success && pageTokenData.pages) {
+          console.log(`✅ Got never-expiring tokens for ${pageTokenData.pages.length} pages`);
+          // Merge the never-expiring tokens with page data
+          const pagesWithNeverExpiringTokens = data.data.map(page => {
+            const neverExpiringPage = pageTokenData.pages.find(p => p.id === page.id);
+            if (neverExpiringPage) {
+              return {
+                ...page,
+                access_token: neverExpiringPage.access_token,
+                tokenType: 'never_expiring',
+                tokenExpiry: 'never'
+              };
+            }
+            return page;
+          });
+          setFbPages(pagesWithNeverExpiringTokens);
           
+          // Store each page with never-expiring token
+          pagesWithNeverExpiringTokens.forEach(async (page) => {
+            console.log(`📄 Processing page: ${page.name} (${page.id}) - Token: ${page.tokenType || 'standard'}`);
+            await storeConnectedPage(page);
+          });
+        } else {
+          // Fallback to regular tokens
+          setFbPages(data.data);
+          data.data.forEach(async (page) => {
+            await storeConnectedPage(page);
+          });
+        }
+      } catch (tokenError) {
+        console.warn('⚠️ Failed to get never-expiring tokens, using standard tokens:', tokenError);
+        setFbPages(data.data);
+        data.data.forEach(async (page) => {
           await storeConnectedPage(page);
         });
       }
-    });
+      
+      setFbError(null); // Clear any previous errors
+    } catch (error) {
+      console.error('❌ Error fetching pages:', error);
+      handleApiError({ message: error.message, code: 'FETCH_ERROR' });
+    }
   };
 
   // Modified fetchPageInsights with error handling
-  const fetchPageInsights = (pageId, pageAccessToken) => {
-    if (!isFacebookApiReady()) {
-      setFbError({ message: 'Facebook API is not ready' });
-      return;
-    }
-
+  const fetchPageInsights = async (pageId, pageAccessToken) => {
     setLoadingInsights(prev => ({ ...prev, [pageId]: true }));
     
-    window.FB.api(
-      `/${pageId}/posts`,
-      {
-        fields: 'id,message,created_time,likes.summary(true),comments.summary(true),shares,reactions.summary(true),full_picture',
-        limit: 10,
-        access_token: pageAccessToken
-      },
-      function(response) {
-        setLoadingInsights(prev => ({ ...prev, [pageId]: false }));
-        if (!response || response.error) {
-          console.error('Posts fetch error:', response.error);
-          handleApiError(response.error, pageId);
-          setPageInsights(prev => ({
-            ...prev,
-            [pageId]: []
-          }));
-        } else {
-          const posts = response.data;
-          const totalLikes = posts.reduce((sum, post) => sum + (post.likes?.summary?.total_count || 0), 0);
-          const totalComments = posts.reduce((sum, post) => sum + (post.comments?.summary?.total_count || 0), 0);
-          const totalShares = posts.reduce((sum, post) => sum + (post.shares?.count || 0), 0);
-          const totalReactions = posts.reduce((sum, post) => sum + (post.reactions?.summary?.total_count || 0), 0);
-          
-          let engagementMetrics = [
-            { name: 'FB Likes', value: totalLikes, title: 'Facebook Likes (Last 10 posts)' },
-            { name: 'FB Comments', value: totalComments, title: 'Facebook Comments (Last 10 posts)' },
-            { name: 'FB Shares', value: totalShares, title: 'Facebook Shares (Last 10 posts)' },
-            { name: 'FB Reactions', value: totalReactions, title: 'Facebook Reactions (Last 10 posts)' }
-          ];
-          
-          setPageInsights(prev => ({
-            ...prev,
-            [pageId]: engagementMetrics
-          }));
-        }
+    try {
+      // Use direct Graph API call to avoid SDK session conflicts
+      const postsUrl = `https://graph.facebook.com/v18.0/${pageId}/posts?fields=id,message,created_time,likes.summary(true),comments.summary(true),shares,reactions.summary(true),full_picture&limit=10&access_token=${pageAccessToken}`;
+      const response = await fetch(postsUrl);
+      const data = await response.json();
+      
+      setLoadingInsights(prev => ({ ...prev, [pageId]: false }));
+      
+      if (data.error) {
+        console.error('Posts fetch error:', data.error);
+        handleApiError(data.error, pageId);
+        setPageInsights(prev => ({
+          ...prev,
+          [pageId]: []
+        }));
+        return;
       }
-    );
+      
+      const posts = data.data || [];
+      const totalLikes = posts.reduce((sum, post) => sum + (post.likes?.summary?.total_count || 0), 0);
+      const totalComments = posts.reduce((sum, post) => sum + (post.comments?.summary?.total_count || 0), 0);
+      const totalShares = posts.reduce((sum, post) => sum + (post.shares?.count || 0), 0);
+      const totalReactions = posts.reduce((sum, post) => sum + (post.reactions?.summary?.total_count || 0), 0);
+      
+      let engagementMetrics = [
+        { name: 'FB Likes', value: totalLikes, title: 'Facebook Likes (Last 10 posts)' },
+        { name: 'FB Comments', value: totalComments, title: 'Facebook Comments (Last 10 posts)' },
+        { name: 'FB Shares', value: totalShares, title: 'Facebook Shares (Last 10 posts)' },
+        { name: 'FB Reactions', value: totalReactions, title: 'Facebook Reactions (Last 10 posts)' }
+      ];
+      
+      setPageInsights(prev => ({
+        ...prev,
+        [pageId]: engagementMetrics
+      }));
+    } catch (error) {
+      console.error('Error fetching page insights:', error);
+      setLoadingInsights(prev => ({ ...prev, [pageId]: false }));
+      setPageInsights(prev => ({
+        ...prev,
+        [pageId]: []
+      }));
+    }
   };
 
   // --- SINGLE POST ANALYTICS LOGIC (similar to Instagram) ---
@@ -1023,86 +1186,7 @@ function FacebookIntegration() {
     );
   };
 
-  const renderPostModal = () => {
-    if (!showPostModal || !postTarget) return null;
-    const { type, page } = postTarget;
-
-    const handleFileChange = async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      setUploadResult({
-        success: false,
-        error: 'Instagram requires a public image URL. Please upload your image to a public host (e.g. imgur, Cloudinary, S3) and paste the URL below.'
-      });
-      setPostImageUrl('');
-    };
-
-    return (
-      <div className="fixed inset-0 z-50 bg-black bg-opacity-30 flex items-center justify-center">
-        <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md relative">
-          <button
-            className="absolute top-2 right-2 text-gray-400 hover:text-gray-700"
-            onClick={() => {
-              setShowPostModal(false);
-              setPostMessage('');
-              setPostImageUrl('');
-              setUploadResult(null);
-            }}
-          >✕</button>
-          <h4 className="font-bold mb-4">
-            {type === 'facebook' ? 'Create Facebook Post' : 'Create Instagram Post'}
-          </h4>
-          <div className="space-y-3">
-            <textarea
-              className="w-full border rounded p-2"
-              rows={3}
-              placeholder="Write your post message..."
-              value={postMessage}
-              onChange={e => setPostMessage(e.target.value)}
-            />
-            <input
-              className="w-full border rounded p-2"
-              type="file"
-              accept="image/*"
-              onChange={handleFileChange}
-            />
-            {postImageUrl && (
-              <img src={postImageUrl} alt="Preview" className="w-full h-32 object-contain rounded border" />
-            )}
-            <input
-              className="w-full border rounded p-2"
-              type="text"
-              placeholder="Image URL (publicly accessible, optional for FB, required for IG)"
-              value={postImageUrl}
-              onChange={e => setPostImageUrl(e.target.value)}
-            />
-            <div className="text-xs text-gray-500">
-              {type === 'instagram'
-                ? 'Instagram requires a public image URL. Upload your image to a public host (e.g. imgur, Cloudinary, S3) and paste the URL above.'
-                : 'Image is optional for Facebook posts.'}
-            </div>
-            <button
-              className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:opacity-50 mt-2"
-              disabled={uploadingPost || (!postMessage && !postImageUrl)}
-              onClick={() => {
-                if (type === 'facebook') uploadFacebookPost(page);
-                else if (type === 'instagram') uploadInstagramPost(page, instagramId);
-              }}
-            >
-              {uploadingPost ? 'Posting...' : 'Post'}
-            </button>
-            {uploadResult && (
-              <div className={`mt-2 text-sm ${uploadResult.success ? 'text-green-600' : 'text-red-600'}`}>
-                {uploadResult.success
-                  ? `✅ Post uploaded! ID: ${uploadResult.id}`
-                  : `❌ Error: ${uploadResult.error}`}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  };
+  // renderPostModal - REMOVED (Create Post functionality removed)
 
   const renderPageDetails = (page) => (
     <div key={page.id} className="border rounded-lg p-6 mb-4 bg-white shadow-sm">
@@ -1159,20 +1243,6 @@ function FacebookIntegration() {
 
           <div className="flex flex-wrap gap-2">
             <button
-              className="bg-blue-700 text-white px-4 py-2 rounded text-sm hover:bg-blue-800 flex items-center space-x-2"
-              onClick={() => {
-                setPostTarget({ type: 'facebook', page });
-                setShowPostModal(true);
-                setPostMessage('');
-                setPostImageUrl('');
-                setUploadResult(null);
-              }}
-              disabled={!isFacebookApiReady()}
-            >
-              <Facebook className="h-4 w-4" />
-              <span>Create FB Post</span>
-            </button>
-            <button
               onClick={() => fetchPageInsights(page.id, page.access_token)}
               disabled={loadingInsights[page.id] || !isFacebookApiReady()}
               className="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600 disabled:opacity-50 flex items-center space-x-2"
@@ -1216,10 +1286,20 @@ function FacebookIntegration() {
 
   // Remove account
   const removeAccount = async (accountId) => {
+    // Show confirmation dialog
+    const accountToRemove = connectedAccounts.find(acc => acc.id === accountId);
+    const accountName = accountToRemove?.name || 'this account';
+    
+    const confirmed = window.confirm(
+      `Are you sure you want to disconnect ${accountName}?\n\nThis will remove the account and delete all associated data from the database.`
+    );
+    
+    if (!confirmed) {
+      return; // User cancelled
+    }
+    
     try {
       // Find the account to get its backend data
-      const accountToRemove = connectedAccounts.find(acc => acc.id === accountId);
-      
       if (accountToRemove) {
         // Delete from backend database
         const customerId = getCurrentCustomerId();
@@ -1259,11 +1339,12 @@ function FacebookIntegration() {
         }
       }
       
-      // Remove from local state
+      // Remove ONLY this specific account from local state
       const updatedAccounts = connectedAccounts.filter(acc => acc.id !== accountId);
       setConnectedAccounts(updatedAccounts);
       saveAccountsToStorage(updatedAccounts);
       
+      // Only update active account if we're removing the currently active one
       if (activeAccountId === accountId) {
         if (updatedAccounts.length > 0) {
           // Switch to first remaining account
@@ -1291,6 +1372,16 @@ function FacebookIntegration() {
 
   // Logout all accounts
   const fbLogoutAll = async () => {
+    // Show confirmation dialog
+    const accountCount = connectedAccounts.length;
+    const confirmed = window.confirm(
+      `Are you sure you want to disconnect all ${accountCount} Facebook account${accountCount > 1 ? 's' : ''}?\n\nThis will remove all accounts and delete all associated data from the database.`
+    );
+    
+    if (!confirmed) {
+      return; // User cancelled
+    }
+    
     if (!isFacebookApiReady()) {
       // Just clear local state if FB API is not available
       await clearAllAccountData();
@@ -1449,15 +1540,18 @@ function FacebookIntegration() {
           {
             id: page.id,
             name: page.name,
-            accessToken: page.access_token, // ✅ Store page access token for posting
+            accessToken: page.access_token, // ✅ Store page access token (never-expiring)
             category: page.category,
             fanCount: page.fan_count,
             permissions: ['pages_read_engagement'],
             tasks: page.tasks || [],
-            tokenValidatedAt: new Date().toISOString()
+            tokenValidatedAt: new Date().toISOString(),
+            tokenType: page.tokenType || 'standard', // ✅ Track if never-expiring
+            tokenExpiry: page.tokenExpiry || 'unknown' // ✅ 'never' for never-expiring tokens
           }
         ],
         connectedAt: new Date().toISOString(),
+        tokenExpiresAt: activeAccount.tokenExpiresAt || new Date(Date.now() + (60 * 24 * 60 * 60 * 1000)).toISOString(), // User token expiry (default 60 days)
         // ✅ FORCE RESET - Explicitly set these to false/null
         needsReconnection: false,
         lastTokenValidation: new Date().toISOString(),
@@ -1695,9 +1789,17 @@ function FacebookIntegration() {
                     <p className="text-xs text-gray-500">
                       Connected {new Date(account.connectedAt).toLocaleDateString()}
                     </p>
-                    {account.tokenExpiresAt && (
+                    {account.pages && account.pages.some(p => p.tokenExpiry === 'never' || p.tokenType === 'never_expiring') ? (
+                      <p className="text-xs text-green-600 font-medium">
+                        ✅ Tokens: Never expire
+                      </p>
+                    ) : account.tokenExpiresAt ? (
                       <p className="text-xs text-gray-500">
-                        Token expires: {new Date(account.tokenExpiresAt).toLocaleDateString()}
+                        Expires: {new Date(account.tokenExpiresAt).toLocaleDateString()}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-green-600 font-medium">
+                        ✅ Active
                       </p>
                     )}
                   </div>
@@ -1718,17 +1820,21 @@ function FacebookIntegration() {
         </div>
         {activeAccount && (
           <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-            <h6 className="font-medium text-blue-800 mb-2">🔑 Token Management</h6>
-            <div className="text-sm text-blue-700 space-y-1">
-              <p>📝 <strong>Active Account:</strong> {activeAccount.name}</p>
-              <p>🔄 <strong>Auto-Refresh:</strong> Tokens are automatically refreshed when needed</p>
-              <p>⏰ <strong>Session Management:</strong> Only expires when you manually disconnect</p>
-              <p>🔗 <strong>Manual Actions:</strong> Use "Refresh Tokens" if you encounter issues</p>
-              <p>✅ <strong>Permissions:</strong> pages_read_engagement, pages_manage_metadata</p>
-              {activeAccount.tokenExpiresAt && (
-                <p>⏳ <strong>Token Expires:</strong> {new Date(activeAccount.tokenExpiresAt).toLocaleString()}</p>
-              )}
-            </div>
+              {/*
+              <h6 className="font-medium text-blue-800 mb-2">🔑 Token Management</h6>
+              <div className="text-sm text-blue-700 space-y-1">
+                <p>📝 <strong>Active Account:</strong> {activeAccount.name}</p>
+                <p>✨ <strong>Page Tokens:</strong> Never expire (permanent access)</p>
+                <p>🔄 <strong>Auto-Refresh:</strong> User tokens refreshed automatically every 60 days</p>
+                <p>⏰ <strong>Session Management:</strong> Continuous access with automatic token maintenance</p>
+                <p>🔗 <strong>Manual Actions:</strong> Use "Refresh Tokens" to manually update all tokens</p>
+                <p>✅ <strong>Permissions:</strong> pages_read_engagement, pages_manage_metadata</p>
+                {activeAccount.tokenExpiresAt && (
+                  <p>⏳ <strong>User Token Expires:</strong> {new Date(activeAccount.tokenExpiresAt).toLocaleDateString()}</p>
+                )}
+                <p className="text-green-700 font-medium">💡 Page tokens never expire - no reconnection needed!</p>
+              </div>
+              */}
           </div>
         )}
       </div>
@@ -1858,7 +1964,7 @@ function FacebookIntegration() {
                         <span>Refresh</span>
                       </button>
                       <button
-                        onClick={() => fbLogoutAll()}
+                        onClick={() => removeAccount(activeAccount.id)}
                         className="flex items-center space-x-2 px-3 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors text-sm"
                       >
                         <ExternalLink className="h-4 w-4" />
@@ -1931,7 +2037,6 @@ function FacebookIntegration() {
               )}
             </div>
           )}
-          {renderPostModal()}
           
           {/* Render single post analytics */}
           {renderSinglePostAnalytics()}

@@ -682,19 +682,19 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
         const expiresIn = response.authResponse.expiresIn || (2 * 60 * 60); // Default 2 hours
         
         console.log('✅ Instagram Facebook login successful, token expires in:', Math.round(expiresIn / 60), 'minutes');
+        console.log('🔄 CRITICAL: Exchanging for long-lived token (60 days)...');
         
-        setUserAccessToken(accessToken);
-        
-        // 🔥 CRITICAL: Request long-lived token IMMEDIATELY
-        console.log('🔄 CRITICAL: Requesting long-lived token for Instagram immediately...');
-        requestLongLivedToken(accessToken).then((longLivedToken) => {
-          const finalToken = longLivedToken || accessToken;
+        // 🔥 CRITICAL: Exchange for long-lived user token IMMEDIATELY
+        requestLongLivedToken(accessToken).then((longLivedData) => {
+          const finalToken = longLivedData?.token || accessToken;
+          const finalExpiresIn = longLivedData?.expiresIn || expiresIn;
+          
           setUserAccessToken(finalToken);
           
-          if (longLivedToken) {
-            console.log('✅ Using long-lived token for Instagram');
+          if (longLivedData?.token) {
+            console.log('✅ Using long-lived user token for Instagram (expires in', Math.floor(finalExpiresIn / 86400), 'days)');
           } else {
-            console.warn('⚠️ Using short-lived token for Instagram - will expire soon');
+            console.warn('⚠️ Using short-lived token for Instagram - will expire in', Math.round(finalExpiresIn / 60), 'minutes');
             setError('Warning: Using short-lived token (expires in 1-2 hours). Long-lived token exchange failed.');
           }
           
@@ -711,7 +711,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
   // Enhanced requestLongLivedToken
   const requestLongLivedToken = async (shortLivedToken) => {
     try {
-      console.log('🔄 Requesting long-lived token for Instagram...');
+      console.log('🔄 Requesting long-lived user token for Instagram...');
       
       const response = await fetch(`${process.env.REACT_APP_API_URL}/api/facebook/exchange-token`, {
         method: 'POST',
@@ -727,69 +727,116 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
       const data = await response.json();
       
       if (data.success && data.longLivedToken) {
-        console.log('✅ Received long-lived token for Instagram');
-        console.log('🕐 Token expires in:', Math.round(data.expiresIn / (24 * 60 * 60)), 'days');
-        return data.longLivedToken;
+        console.log('✅ Received long-lived user token for Instagram');
+        console.log('🕐 User token expires in:', Math.round(data.expiresIn / (24 * 60 * 60)), 'days');
+        return {
+          token: data.longLivedToken,
+          expiresIn: data.expiresIn || 5183999, // ~60 days
+          tokenType: 'long_lived_user'
+        };
       } else {
-        console.error('❌ Failed to get long-lived token for Instagram:', data.error);
+        console.error('❌ Failed to get long-lived user token for Instagram:', data.error);
         setError('Warning: Using short-lived token (expires in 1-2 hours). Long-lived token exchange failed.');
         return null;
       }
     } catch (error) {
-      console.error('❌ Error requesting long-lived token for Instagram:', error);
+      console.error('❌ Error requesting long-lived user token for Instagram:', error);
       setError('Warning: Using short-lived token. Network error during token exchange.');
       return null;
     }
   };
 
-  const loadAvailableAccounts = (accessToken) => {
+  const loadAvailableAccounts = async (accessToken) => {
     setLoadingAccounts(true);
     
-    window.FB.api('/me/accounts', {
-      fields: 'id,name,instagram_business_account,access_token',
-      access_token: accessToken
-    }, function(response) {
-      setLoadingAccounts(false);
+    try {
+      // FIXED: Use direct Graph API to avoid SDK session conflicts
+      const pagesUrl = `https://graph.facebook.com/v18.0/me/accounts?fields=id,name,instagram_business_account,access_token&access_token=${accessToken}`;
+      const response = await fetch(pagesUrl);
+      const data = await response.json();
       
-      if (!response || response.error) {
-        handleApiError(response.error);
+      if (data.error) {
+        setLoadingAccounts(false);
+        handleApiError(data.error);
         return;
       }
 
-      const pagesWithInstagram = response.data.filter(page => page.instagram_business_account);
+      const pagesWithInstagram = (data.data || []).filter(page => page.instagram_business_account);
       
       if (pagesWithInstagram.length === 0) {
+        setLoadingAccounts(false);
         setError('No Instagram Business accounts found. To connect Instagram: 1) Convert to Business account in Instagram app, 2) Connect it to a Facebook page you manage.');
         return;
       }
 
-      const accounts = pagesWithInstagram.map(page => {
+      // 🔥 CRITICAL: Exchange each page token for long-lived version (60 days)
+      console.log('🔄 Exchanging page tokens for long-lived versions...');
+      const accountsWithLongLivedTokens = await Promise.all(pagesWithInstagram.map(async (page) => {
+        let finalPageToken = page.access_token;
+        let tokenExpiresIn = 3600; // Default 1 hour
         const hasValidPageToken = !!(page.access_token && page.access_token !== accessToken);
+        
+        // Exchange page token for long-lived version
+        if (hasValidPageToken) {
+          try {
+            const exchangeResponse = await fetch(`${process.env.REACT_APP_API_URL}/api/facebook/exchange-token`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                shortLivedToken: page.access_token,
+                clientId: FACEBOOK_APP_ID
+              })
+            });
+            
+            const exchangeData = await exchangeResponse.json();
+            
+            if (exchangeData.success && exchangeData.longLivedToken) {
+              finalPageToken = exchangeData.longLivedToken;
+              tokenExpiresIn = exchangeData.expiresIn || 5183999; // ~60 days
+              console.log(`✅ Long-lived page token obtained for ${page.name} (expires in ${Math.floor(tokenExpiresIn / 86400)} days)`);
+            } else {
+              console.warn(`⚠️ Could not exchange page token for ${page.name}, using original token`);
+            }
+          } catch (exchangeError) {
+            console.warn(`⚠️ Failed to exchange page token for ${page.name}:`, exchangeError.message);
+          }
+        }
         
         return {
           id: page.instagram_business_account.id,
           pageId: page.id,
           pageName: page.name,
-          pageAccessToken: hasValidPageToken ? page.access_token : null,
+          pageAccessToken: finalPageToken, // ✅ Now using long-lived page token
           userAccessToken: accessToken,
           connected: false,
           profile: null,
           media: [],
           hasValidPageToken,
+          tokenType: 'long_lived_page',
+          tokenExpiresIn: tokenExpiresIn,
+          tokenExpiresAt: new Date(Date.now() + (tokenExpiresIn * 1000)).toISOString(),
+          tokenValidatedAt: new Date().toISOString(),
           tokenWarning: !hasValidPageToken ? 'Page token is same as user token - refresh may not work' : null
         };
-      });
+      }));
 
       // Filter out accounts that are already connected
-      const availableAccountsFiltered = accounts.filter(acc => 
+      const availableAccountsFiltered = accountsWithLongLivedTokens.filter(acc => 
         !connectedAccounts.some(connected => connected.id === acc.id)
       );
 
+      console.log(`✅ Found ${availableAccountsFiltered.length} available Instagram accounts with long-lived tokens`);
       setAvailableAccounts(availableAccountsFiltered);
-    });
+      setLoadingAccounts(false);
+    } catch (error) {
+      console.error('❌ Error loading Instagram accounts:', error);
+      setLoadingAccounts(false);
+      setError('Failed to load Instagram accounts. Please try again.');
+    }
   };
 
   // Enhanced connectInstagramAccount with better persistence and snapshot storage
+  // FIXED: Use direct Graph API to avoid SDK session conflicts
   const connectInstagramAccount = async (accountData) => {
     setLoading(true);
     
@@ -802,77 +849,81 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
 
       console.log('✅ Valid page access token found, proceeding with Instagram connection...');
       
-      // Fetch Instagram profile info
-      window.FB.api(`/${accountData.id}`, {
-        fields: 'id,username,media_count,profile_picture_url,biography,website,followers_count',
-        access_token: accountData.pageAccessToken
-      }, function(profileResponse) {
-        if (!profileResponse || profileResponse.error) {
-          handleApiError(profileResponse.error);
-          setLoading(false);
-          return;
-        }
+      // FIXED: Fetch Instagram profile info using direct Graph API
+      const profileUrl = `https://graph.facebook.com/v18.0/${accountData.id}?fields=id,username,media_count,profile_picture_url,biography,website,followers_count&access_token=${accountData.pageAccessToken}`;
+      const profileResponse = await fetch(profileUrl);
+      const profileData = await profileResponse.json();
+      
+      if (profileData.error) {
+        handleApiError(profileData.error);
+        setLoading(false);
+        return;
+      }
 
-        // Fetch recent media
-        window.FB.api(`/${accountData.id}/media`, {
-          fields: 'id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count',
-          limit: 12,
-          access_token: accountData.pageAccessToken
-        }, function(mediaResponse) {
-          const newAccount = {
-            ...accountData,
-            connected: true,
-            profile: profileResponse,
-            media: mediaResponse.data || [],
-            connectedAt: new Date().toISOString(),
-            userAccessToken: userAccessToken,
-            pageAccessToken: accountData.pageAccessToken,
-            tokenExpiresAt: null // Long-lived tokens don't typically expire
-          };
+      // FIXED: Fetch recent media using direct Graph API
+      const mediaUrl = `https://graph.facebook.com/v18.0/${accountData.id}/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count&limit=12&access_token=${accountData.pageAccessToken}`;
+      const mediaResponse = await fetch(mediaUrl);
+      const mediaData = await mediaResponse.json();
+      
+      const newAccount = {
+        ...accountData,
+        connected: true,
+        profile: profileData,
+        media: mediaData.data || [],
+        connectedAt: new Date().toISOString(),
+        userAccessToken: userAccessToken,
+        pageAccessToken: accountData.pageAccessToken,
+        tokenType: accountData.tokenType || 'long_lived_page',
+        tokenExpiresIn: accountData.tokenExpiresIn || 5183999, // ~60 days
+        tokenExpiresAt: accountData.tokenExpiresAt || new Date(Date.now() + (5183999 * 1000)).toISOString(),
+        tokenValidatedAt: accountData.tokenValidatedAt || new Date().toISOString(),
+        lastTokenValidation: new Date().toISOString()
+      };
 
-          const updatedAccounts = [...connectedAccounts, newAccount];
-          setConnectedAccounts(updatedAccounts);
-          
-          // Set as active if it's the first account
-          if (!activeAccountId) {
-            setActiveAccountId(newAccount.id);
-            setSelectedAccountId(newAccount.id); // Backward compatibility
-            setActiveAccount(newAccount);
-            setUserData('instagram_active_account_id', newAccount.id);
-            setUserData('selected_instagram_account', newAccount.id); // Backward compatibility
-          }
+      const updatedAccounts = [...connectedAccounts, newAccount];
+      setConnectedAccounts(updatedAccounts);
+      
+      // Set as active if it's the first account
+      if (!activeAccountId) {
+        setActiveAccountId(newAccount.id);
+        setSelectedAccountId(newAccount.id); // Backward compatibility
+        setActiveAccount(newAccount);
+        setUserData('instagram_active_account_id', newAccount.id);
+        setUserData('selected_instagram_account', newAccount.id); // Backward compatibility
+      }
 
-          // Save to localStorage with user-specific keys
-          saveAccountsToStorage(updatedAccounts);
+      // Save to localStorage with user-specific keys
+      saveAccountsToStorage(updatedAccounts);
 
-          // Store customer social account for admin access
-          storeCustomerSocialAccount(newAccount);
+      // Store customer social account for admin access
+      await storeCustomerSocialAccount(newAccount);
 
-          // Store initial historical snapshot
-          const media = mediaResponse.data || [];
-          const totalLikes = media.reduce((sum, m) => sum + (m.like_count || 0), 0);
-          const totalComments = media.reduce((sum, m) => sum + (m.comments_count || 0), 0);
-          const photosCount = media.filter(m => m.media_type === 'IMAGE').length;
-          const videosCount = media.filter(m => m.media_type === 'VIDEO').length;
+      // Store initial historical snapshot
+      const media = mediaData.data || [];
+      const totalLikes = media.reduce((sum, m) => sum + (m.like_count || 0), 0);
+      const totalComments = media.reduce((sum, m) => sum + (m.comments_count || 0), 0);
+      const photosCount = media.filter(m => m.media_type === 'IMAGE').length;
+      const videosCount = media.filter(m => m.media_type === 'VIDEO').length;
 
-          storeHistoricalSnapshot(newAccount.id, profileResponse.username, {
-            followersCount: profileResponse.followers_count,
-            mediaCount: profileResponse.media_count,
-            totalLikes,
-            totalComments,
-            postsCount: media.length,
-            photosCount,
-            videosCount
-          });
-
-          // Remove from available accounts
-          setAvailableAccounts(prev => prev.filter(acc => acc.id !== accountData.id));
-          setLoading(false);
-          setError(null);
-        });
+      await storeHistoricalSnapshot(newAccount.id, profileData.username, {
+        followersCount: profileData.followers_count,
+        mediaCount: profileData.media_count,
+        totalLikes,
+        totalComments,
+        postsCount: media.length,
+        photosCount,
+        videosCount
       });
+
+      // Remove from available accounts
+      setAvailableAccounts(prev => prev.filter(acc => acc.id !== accountData.id));
+      setLoading(false);
+      setError(null);
+      
+      console.log('✅ Instagram account connected successfully:', profileData.username);
     } catch (err) {
-      setError('Failed to connect Instagram account');
+      console.error('❌ Failed to connect Instagram account:', err);
+      setError(`Failed to connect Instagram account: ${err.message}`);
       setLoading(false);
     }
   };
@@ -891,13 +942,21 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
     }
   };
 
-  // Remove account: Also remove from backend
+  // Remove account: FIXED - Add confirmation and ensure backend deletion
   const removeAccount = async (accountId) => {
+    // FIXED: Ask for confirmation before disconnecting
+    const account = connectedAccounts.find(acc => acc.id === accountId);
+    const accountName = account?.profile?.username || account?.username || 'this account';
+    
+    if (!window.confirm(`Are you sure you want to disconnect @${accountName}? This will remove all stored data for this account.`)) {
+      return; // User cancelled
+    }
+    
     const updatedAccounts = connectedAccounts.filter(acc => acc.id !== accountId);
     setConnectedAccounts(updatedAccounts);
     saveAccountsToStorage(updatedAccounts);
 
-    // Remove from backend
+    // FIXED: Remove from backend using correct endpoint
     const customerId = getCurrentCustomerId();
     if (customerId) {
       try {
@@ -907,13 +966,16 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
         if (data.success && Array.isArray(data.accounts)) {
           const backendAcc = data.accounts.find(acc => acc.platformUserId === accountId && acc.platform === 'instagram');
           if (backendAcc && backendAcc._id) {
-            await fetch(`${process.env.REACT_APP_API_URL}/api/customer-social-links/${backendAcc._id}`, {
+            const deleteRes = await fetch(`${process.env.REACT_APP_API_URL}/api/customer-social-links/${backendAcc._id}`, {
               method: 'DELETE'
             });
+            const deleteData = await deleteRes.json();
+            console.log('✅ Instagram account deleted from backend:', deleteData);
           }
         }
       } catch (err) {
-        console.warn('Failed to remove Instagram account from backend:', err);
+        console.error('❌ Failed to remove Instagram account from backend:', err);
+        alert('Warning: Account disconnected locally but may still exist in database. Please contact support if issues persist.');
       }
     }
 
@@ -934,9 +996,43 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
     }
   };
 
-  // Enhanced handleSignOut
-  const handleSignOut = () => {
+  // Enhanced handleSignOut - FIXED: Add confirmation
+  const handleSignOut = async () => {
+    // FIXED: Ask for confirmation before disconnecting all accounts
+    if (connectedAccounts.length > 0) {
+      const accountNames = connectedAccounts.map(acc => `@${acc.profile?.username || acc.username || 'Unknown'}`).join(', ');
+      if (!window.confirm(`Are you sure you want to disconnect ALL Instagram accounts (${connectedAccounts.length} accounts: ${accountNames})? This will remove all stored data.`)) {
+        return; // User cancelled
+      }
+    }
+    
     console.log('🔄 Signing out from Instagram integration...');
+    
+    // FIXED: Delete all accounts from backend
+    const customerId = getCurrentCustomerId();
+    if (customerId) {
+      try {
+        const res = await fetch(`${process.env.REACT_APP_API_URL}/api/customer-social-links/${customerId}`);
+        const data = await res.json();
+        if (data.success && Array.isArray(data.accounts)) {
+          const instagramAccounts = data.accounts.filter(acc => acc.platform === 'instagram');
+          // Delete each Instagram account
+          for (const acc of instagramAccounts) {
+            try {
+              await fetch(`${process.env.REACT_APP_API_URL}/api/customer-social-links/${acc._id}`, {
+                method: 'DELETE'
+              });
+              console.log('✅ Deleted Instagram account from backend:', acc.platformUserId);
+            } catch (err) {
+              console.error('❌ Failed to delete account:', acc.platformUserId, err);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('❌ Failed to remove Instagram accounts from backend:', err);
+        alert('Warning: Accounts disconnected locally but may still exist in database. Please contact support if issues persist.');
+      }
+    }
     
     // Clear all state
     setIsSignedIn(false);
@@ -1077,7 +1173,10 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
             id: account.id,
             username: account.profile?.username
           },
-          tokenValidatedAt: new Date().toISOString(),
+          tokenType: account.tokenType || 'long_lived_page',
+          tokenExpiresIn: account.tokenExpiresIn || 5183999,
+          tokenExpiresAt: account.tokenExpiresAt || new Date(Date.now() + (5183999 * 1000)).toISOString(),
+          tokenValidatedAt: account.tokenValidatedAt || new Date().toISOString(),
           permissions: ['pages_read_engagement', 'pages_manage_posts', 'instagram_basic', 'instagram_content_publish']
         }],
         // Instagram-specific metadata
@@ -1201,67 +1300,75 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
     switchAccount(accountId);
   };
 
-  const refreshAccountData = (accountId) => {
+  // FIXED: Use direct Graph API for refresh
+  const refreshAccountData = async (accountId) => {
     const account = connectedAccounts.find(acc => acc.id === accountId);
     if (!account) return;
 
     setLoading(true);
 
-    // Refresh profile and media data
-    window.FB.api(`/${accountId}`, {
-      fields: 'id,username,media_count,profile_picture_url,biography,website,followers_count',
-      access_token: account.pageAccessToken
-    }, function(profileResponse) {
-      if (profileResponse && !profileResponse.error) {
-        window.FB.api(`/${accountId}/media`, {
-          fields: 'id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count',
-          limit: 12,
-          access_token: account.pageAccessToken
-        }, function(mediaResponse) {
-          const updatedAccounts = connectedAccounts.map(acc => 
-            acc.id === accountId 
-              ? { 
-                  ...acc, 
-                  profile: profileResponse, 
-                  media: mediaResponse.data || [],
-                  lastRefreshed: new Date().toISOString()
-                }
-              : acc
-          );
-          
-          setConnectedAccounts(updatedAccounts);
-          saveAccountsToStorage(updatedAccounts);
-          
-          // Update active account if it's the one being refreshed
-          if (activeAccountId === accountId) {
-            const updatedActiveAccount = updatedAccounts.find(acc => acc.id === accountId);
-            setActiveAccount(updatedActiveAccount);
-          }
-
-          // Store updated historical snapshot
-          const media = mediaResponse.data || [];
-          const totalLikes = media.reduce((sum, m) => sum + (m.like_count || 0), 0);
-          const totalComments = media.reduce((sum, m) => sum + (m.comments_count || 0), 0);
-          const photosCount = media.filter(m => m.media_type === 'IMAGE').length;
-          const videosCount = media.filter(m => m.media_type === 'VIDEO').length;
-
-          storeHistoricalSnapshot(accountId, profileResponse.username, {
-            followersCount: profileResponse.followers_count,
-            mediaCount: profileResponse.media_count,
-            totalLikes,
-            totalComments,
-            postsCount: media.length,
-            photosCount,
-            videosCount
-          });
-          
-          setLoading(false);
-        });
-      } else {
-        handleApiError(profileResponse.error);
+    try {
+      // Refresh profile using direct Graph API
+      const profileUrl = `https://graph.facebook.com/v18.0/${accountId}?fields=id,username,media_count,profile_picture_url,biography,website,followers_count&access_token=${account.pageAccessToken}`;
+      const profileResponse = await fetch(profileUrl);
+      const profileData = await profileResponse.json();
+      
+      if (profileData.error) {
+        handleApiError(profileData.error);
         setLoading(false);
+        return;
       }
-    });
+
+      // Refresh media using direct Graph API
+      const mediaUrl = `https://graph.facebook.com/v18.0/${accountId}/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count&limit=12&access_token=${account.pageAccessToken}`;
+      const mediaResponse = await fetch(mediaUrl);
+      const mediaData = await mediaResponse.json();
+      
+      const updatedAccounts = connectedAccounts.map(acc => 
+        acc.id === accountId 
+          ? { 
+              ...acc, 
+              profile: profileData, 
+              media: mediaData.data || [],
+              lastRefreshed: new Date().toISOString(),
+              lastTokenValidation: new Date().toISOString()
+            }
+          : acc
+      );
+      
+      setConnectedAccounts(updatedAccounts);
+      saveAccountsToStorage(updatedAccounts);
+      
+      // Update active account if it's the one being refreshed
+      if (activeAccountId === accountId) {
+        const updatedActiveAccount = updatedAccounts.find(acc => acc.id === accountId);
+        setActiveAccount(updatedActiveAccount);
+      }
+
+      // Store updated historical snapshot
+      const media = mediaData.data || [];
+      const totalLikes = media.reduce((sum, m) => sum + (m.like_count || 0), 0);
+      const totalComments = media.reduce((sum, m) => sum + (m.comments_count || 0), 0);
+      const photosCount = media.filter(m => m.media_type === 'IMAGE').length;
+      const videosCount = media.filter(m => m.media_type === 'VIDEO').length;
+
+      await storeHistoricalSnapshot(accountId, profileData.username, {
+        followersCount: profileData.followers_count,
+        mediaCount: profileData.media_count,
+        totalLikes,
+        totalComments,
+        postsCount: media.length,
+        photosCount,
+        videosCount
+      });
+      
+      setLoading(false);
+      console.log('✅ Instagram account refreshed:', profileData.username);
+    } catch (error) {
+      console.error('❌ Failed to refresh account:', error);
+      setError(`Failed to refresh account: ${error.message}`);
+      setLoading(false);
+    }
   };
 
   const fetchAnalytics = () => {
@@ -1872,16 +1979,12 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
         </div>
         <div className="flex items-center space-x-2">
           <button
-            onClick={() => {
-              if (userAccessToken) {
-                loadAvailableAccounts(userAccessToken);
-              }
-            }}
-            disabled={loadingAccounts || !userAccessToken}
+            onClick={handleSignIn}
+            disabled={loading || !fbSdkLoaded}
             className="flex items-center space-x-2 px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors disabled:opacity-50"
           >
             <Plus className="h-4 w-4" />
-            <span>{loadingAccounts ? 'Searching...' : 'Add Account'}</span>
+            <span>{loading ? 'Connecting...' : 'Add Account'}</span>
           </button>
           <button
             onClick={handleSignOut}

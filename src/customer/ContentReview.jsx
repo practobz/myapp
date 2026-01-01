@@ -564,20 +564,25 @@ function ContentReview() {
   const currentMedia = currentVersion?.media?.[selectedMediaIndex];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#e6f2fb] via-blue-50 to-indigo-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="px-6 sm:px-8 lg:px-12 xl:px-16 2xl:px-24 py-8">
         <div className="flex flex-col xl:flex-row gap-8">
           {/* Left Sidebar - Content List */}
           <div className="w-full xl:w-96 flex-shrink-0">
-            <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border border-[#0a2342]/10 overflow-hidden">
-              <div className="px-6 py-4 border-b border-[#bae6fd] bg-gradient-to-r from-[#bae6fd] to-[#e6f2fb]">
-                <h3 className="text-lg font-bold text-[#0a2342] flex items-center">
-                  <MessageSquare className="h-5 w-5 text-[#38bdf8] mr-2" />
-                  Content Items ({contentItems.length})
+            <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden">
+              <div className="px-6 py-5 border-b border-slate-200 bg-gradient-to-r from-indigo-50 to-blue-50">
+                <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                  <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-blue-500 rounded-lg flex items-center justify-center">
+                    <MessageSquare className="h-5 w-5 text-white" />
+                  </div>
+                  Content Items
+                  <span className="ml-auto px-3 py-1 bg-indigo-600 text-white rounded-full text-sm font-semibold">
+                    {contentItems.length}
+                  </span>
                 </h3>
                 {user && (
-                  <p className="text-sm text-[#38bdf8] mt-1">
+                  <p className="text-sm text-slate-600 mt-2">
                     Showing content for {user.name || user.email}
                   </p>
                 )}
@@ -587,39 +592,39 @@ function ContentReview() {
                 {contentItems.map((item, index) => (
                   <div
                     key={item.id}
-                    className={`p-4 cursor-pointer transition-all duration-200 border-b border-gray-100/50 hover:bg-blue-50/50 ${
+                    className={`p-4 cursor-pointer transition-all duration-200 border-b border-slate-100 hover:bg-gradient-to-r hover:from-indigo-50 hover:to-blue-50 ${
                       selectedContentIndex === index
-                        ? 'bg-blue-50 border-l-4 border-l-blue-500'
+                        ? 'bg-gradient-to-r from-indigo-50 to-blue-50 border-l-4 border-l-indigo-600'
                         : ''
                     }`}
                     onClick={() => handleContentSelect(item, index)}
                   >
                     <div className="flex items-start space-x-3">
                       <div className="flex-shrink-0">
-                        <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">
+                        <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-md">
                           {index + 1}
                         </div>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h4 className="font-semibold text-sm text-gray-900 truncate">{item.title}</h4>
-                        <p className="text-xs text-gray-600 mt-1 line-clamp-2">{item.description}</p>
+                        <h4 className="font-semibold text-sm text-slate-900 truncate">{item.title}</h4>
+                        <p className="text-xs text-slate-600 mt-1 line-clamp-2">{item.description}</p>
                         <div className="flex items-center justify-between mt-2">
                           <div className="flex items-center space-x-2">
-                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${getStatusColor(isContentPublished(item) ? 'published' : item.status)}`}>
+                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold border ${getStatusColor(isContentPublished(item) ? 'published' : item.status)}`}>
                               {isContentPublished(item) ? 'PUBLISHED' : item.status.replace('_', ' ').toUpperCase()}
                             </span>
-                            <span className="text-xs text-gray-500">{item.platform}</span>
+                            <span className="text-xs text-slate-500 font-medium">{item.platform}</span>
                           </div>
                         </div>
                         <div className="flex items-center justify-between mt-2">
-                          <span className="text-xs text-gray-500">By {item.createdBy}</span>
-                          <span className="text-xs text-purple-600 font-medium">
+                          <span className="text-xs text-slate-500">By {item.createdBy}</span>
+                          <span className="text-xs text-indigo-600 font-semibold bg-indigo-50 px-2 py-0.5 rounded-full">
                             {item.totalVersions} version{item.totalVersions !== 1 ? 's' : ''}
                           </span>
                         </div>
-                        <div className="text-xs text-gray-400 mt-1">{formatDate(item.createdAt)}</div>
+                        <div className="text-xs text-slate-400 mt-1">{formatDate(item.createdAt)}</div>
                         {/* Customer info for debugging */}
-                        <div className="text-xs text-green-600 mt-1">
+                        <div className="text-xs text-emerald-600 mt-1 font-medium">
                           Customer: {item.customer_name || item.customer_email}
                         </div>
                       </div>
@@ -630,22 +635,28 @@ function ContentReview() {
             </div>
 
             {/* Comments Panel */}
-            <div className="mt-6 bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border border-[#0a2342]/10 overflow-hidden">
-              <div className="px-6 py-4 border-b border-[#bae6fd] bg-gradient-to-r from-[#bae6fd] to-[#e6f2fb]">
-                <h3 className="text-lg font-bold text-[#0a2342] flex items-center">
-                  <MessageSquare className="h-5 w-5 text-[#38bdf8] mr-2" />
-                  Comments - Media {selectedMediaIndex + 1} ({commentsForCurrentMedia.length})
+            <div className="mt-6 bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden">
+              <div className="px-6 py-5 border-b border-slate-200 bg-gradient-to-r from-indigo-50 to-blue-50">
+                <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                  <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-blue-500 rounded-lg flex items-center justify-center">
+                    <MessageSquare className="h-5 w-5 text-white" />
+                  </div>
+                  Comments
+                  <span className="text-sm font-medium text-slate-600 ml-auto">Media {selectedMediaIndex + 1}</span>
+                  <span className="px-3 py-1 bg-indigo-600 text-white rounded-full text-sm font-semibold">
+                    {commentsForCurrentMedia.length}
+                  </span>
                 </h3>
               </div>
               
               <div className="max-h-80 overflow-y-auto p-4">
                 {commentsForCurrentMedia.length === 0 ? (
                   <div className="text-center py-8">
-                    <div className="bg-gray-100 rounded-full w-12 h-12 flex items-center justify-center mx-auto mb-3">
-                      <MessageSquare className="h-6 w-6 text-gray-400" />
+                    <div className="bg-gradient-to-br from-slate-100 to-blue-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
+                      <MessageSquare className="h-8 w-8 text-slate-400" />
                     </div>
-                    <p className="text-gray-500 text-sm">No comments for this media item</p>
-                    <p className="text-gray-400 text-xs mt-1">Click on the media to add comments</p>
+                    <p className="text-slate-600 font-medium">No comments for this media item</p>
+                    <p className="text-slate-400 text-sm mt-1">Click on the media to add comments</p>
                   </div>
                 ) : (
                   <div className="space-y-3">

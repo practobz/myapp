@@ -1189,74 +1189,91 @@ function FacebookIntegration() {
   // renderPostModal - REMOVED (Create Post functionality removed)
 
   const renderPageDetails = (page) => (
-    <div key={page.id} className="border rounded-lg p-6 mb-4 bg-white shadow-sm">
-      <div className="flex items-start space-x-4">
+    <div key={page.id} className="border-2 border-slate-200 rounded-2xl p-6 mb-6 bg-white shadow-md hover:shadow-lg transition-shadow">
+      <div className="flex items-start gap-4">
         {page.picture && (
           <img 
             src={page.picture.data.url} 
             alt={page.name}
-            className="w-20 h-20 rounded-full border-2 border-gray-200"
+            className="w-24 h-24 rounded-2xl border-4 border-blue-100 shadow-md"
           />
         )}
         <div className="flex-1">
-          <div className="flex items-center space-x-2 mb-2">
-            <h4 className="font-bold text-xl text-gray-800">{page.name}</h4>
+          <div className="flex items-center gap-2 mb-3">
+            <h4 className="font-bold text-2xl text-slate-800">{page.name}</h4>
             {page.verification_status && (
-              <span className="text-blue-500">✓</span>
+              <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
+                <span className="text-white text-sm">✓</span>
+              </div>
             )}
           </div>
           
-          <p className="text-sm text-gray-600 mb-3">
-            <span className="font-medium">Category:</span> {page.category}
-          </p>
+          <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 text-blue-700 rounded-lg mb-4">
+            <span className="font-semibold text-sm">Category:</span>
+            <span className="text-sm">{page.category}</span>
+          </div>
           
           {page.about && (
-            <p className="text-sm text-gray-700 mb-4 bg-gray-50 p-3 rounded">
+            <p className="text-sm text-slate-700 mb-4 bg-gradient-to-r from-slate-50 to-blue-50 p-4 rounded-xl border border-slate-200">
               {page.about}
             </p>
           )}
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mb-4">
-            <div className="space-y-2">
-              <div><strong>Page ID:</strong> {page.id}</div>
-              <div><strong>Followers:</strong> {page.fan_count?.toLocaleString() || 'N/A'}</div>
-              <div><strong>Username:</strong> @{page.username || 'N/A'}</div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mb-6">
+            <div className="space-y-3 bg-slate-50 p-4 rounded-xl">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-slate-700">Page ID:</span>
+                <span className="text-slate-600">{page.id}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-slate-700">Followers:</span>
+                <span className="text-slate-600 font-semibold">{page.fan_count?.toLocaleString() || 'N/A'}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-slate-700">Username:</span>
+                <span className="text-slate-600">@{page.username || 'N/A'}</span>
+              </div>
             </div>
-            <div className="space-y-2">
-              <div><strong>Website:</strong> 
+            <div className="space-y-3 bg-slate-50 p-4 rounded-xl">
+              <div className="flex items-start gap-2">
+                <span className="font-bold text-slate-700">Website:</span>
                 {page.website ? (
-                  <a href={page.website} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline ml-1">
+                  <a href={page.website} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 hover:underline transition-colors">
                     {page.website}
                   </a>
-                ) : 'N/A'}
+                ) : <span className="text-slate-600">N/A</span>}
               </div>
-              <div><strong>Phone:</strong> {page.phone || 'N/A'}</div>
-              <div><strong>Link:</strong> 
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-slate-700">Phone:</span>
+                <span className="text-slate-600">{page.phone || 'N/A'}</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="font-bold text-slate-700">Link:</span>
                 {page.link ? (
-                  <a href={page.link} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline ml-1">
-                    View Page
+                  <a href={page.link} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 hover:underline transition-colors inline-flex items-center gap-1">
+                    View Page <ExternalLink className="h-3 w-3" />
                   </a>
-                ) : 'N/A'}
+                ) : <span className="text-slate-600">N/A</span>}
               </div>
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-3">
             <button
               onClick={() => fetchPageInsights(page.id, page.access_token)}
               disabled={loadingInsights[page.id] || !isFacebookApiReady()}
-              className="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600 disabled:opacity-50 flex items-center space-x-2"
+              className="group bg-gradient-to-r from-blue-500 to-indigo-500 text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:from-blue-600 hover:to-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-md hover:shadow-lg transition-all"
             >
-              <BarChart3 className="h-4 w-4" />
+              <BarChart3 className="h-5 w-5 group-hover:scale-110 transition-transform" />
               <span>{loadingInsights[page.id] ? 'Loading...' : 'Get Insights'}</span>
             </button>
 
             <button
               onClick={() => fetchPagePosts(page.id, page.access_token)}
               disabled={loadingPosts[page.id] || !isFacebookApiReady()}
-              className="bg-green-500 text-white px-4 py-2 rounded text-sm hover:bg-green-600 disabled:opacity-50 flex items-center space-x-2"
+              className="group bg-gradient-to-r from-emerald-500 to-green-500 text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:from-emerald-600 hover:to-green-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-md hover:shadow-lg transition-all"
             >
-              <Facebook className="h-4 w-4" />
+              <Facebook className="h-5 w-5 group-hover:scale-110 transition-transform" />
               <span>{loadingPosts[page.id] ? 'Loading...' : 'Show FB Posts'}</span>
             </button>
           </div>
@@ -1843,44 +1860,68 @@ function FacebookIntegration() {
 
   // --- Facebook Main UI (like Instagram) ---
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-2 sm:px-4 md:px-6 lg:px-8">
-          <div className="flex items-center h-16">
-            <Facebook className="h-8 w-8 text-blue-600" />
-            <span className="ml-2 text-xl font-bold text-[#1a1f2e]">Facebook Integration</span>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+      <header className="bg-white/80 backdrop-blur-md shadow-md border-b border-slate-200 sticky top-0 z-50">
+        <div className="px-6 sm:px-8 lg:px-12 xl:px-16 2xl:px-24">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-md">
+                <Facebook className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold text-slate-800">Facebook Integration</h1>
+                <p className="text-xs text-slate-500">Manage your Facebook pages and analytics</p>
+              </div>
+            </div>
           </div>
         </div>
       </header>
-      <div className="max-w-7xl mx-auto px-2 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-8">
-        <div className="bg-white rounded-lg shadow-md p-2 sm:p-4 md:p-6">
+      <div className="px-6 sm:px-8 lg:px-12 xl:px-16 2xl:px-24 py-8">
+        <div className="bg-white rounded-2xl shadow-lg border border-slate-200 p-6 md:p-8">
           {/* Debug info (optional, can remove) */}
           {/* ...existing code... */}
           {renderError()}
           {connectedAccounts.length === 0 ? (
-            <div className="text-center py-8 sm:py-12">
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-2xl mb-4">
-                <Facebook className="h-8 w-8 text-blue-600" />
+            <div className="text-center py-12">
+              <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl mb-6 shadow-lg">
+                <Facebook className="h-10 w-10 text-white" />
               </div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">Connect Facebook Accounts</h3>
-              <p className="text-gray-600 mb-6 max-w-md mx-auto">
+              <h3 className="text-2xl font-bold text-slate-800 mb-3">Connect Facebook Accounts</h3>
+              <p className="text-slate-600 mb-8 max-w-md mx-auto text-lg">
                 Connect your Facebook accounts to manage your pages and access detailed analytics.
               </p>
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 max-w-md mx-auto text-left">
-                <h4 className="font-medium text-blue-800 mb-2">📱 Multi-Account Setup Guide</h4>
-                <div className="text-sm text-blue-700 text-left space-y-1">
-                  <p>1. Log in with your Facebook account</p>
-                  <p>2. Grant permissions to access your pages</p>
-                  <p>3. Select which accounts to connect and manage</p>
-                  <p>4. Historical data will be captured automatically</p>
+              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-6 mb-8 max-w-md mx-auto">
+                <h4 className="font-bold text-blue-800 mb-4 flex items-center gap-2">
+                  <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
+                    <span className="text-white">📱</span>
+                  </div>
+                  Multi-Account Setup Guide
+                </h4>
+                <div className="text-sm text-slate-700 text-left space-y-3">
+                  <div className="flex items-start gap-3">
+                    <div className="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center flex-shrink-0 font-semibold text-xs">1</div>
+                    <p>Log in with your Facebook account</p>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <div className="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center flex-shrink-0 font-semibold text-xs">2</div>
+                    <p>Grant permissions to access your pages</p>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <div className="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center flex-shrink-0 font-semibold text-xs">3</div>
+                    <p>Select which accounts to connect and manage</p>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <div className="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center flex-shrink-0 font-semibold text-xs">4</div>
+                    <p>Historical data will be captured automatically</p>
+                  </div>
                 </div>
               </div>
               <button
                 onClick={fbLogin}
                 disabled={!isFacebookApiReady()}
-                className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-8 py-3 rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 flex items-center space-x-3 mx-auto font-medium"
+                className="group bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-8 py-4 rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 flex items-center gap-3 mx-auto font-semibold shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <Facebook className="h-5 w-5" />
+                <Facebook className="h-6 w-6 group-hover:scale-110 transition-transform" />
                 <span>Connect Facebook Account</span>
               </button>
             </div>
@@ -1888,103 +1929,106 @@ function FacebookIntegration() {
             <div className="space-y-6">
               {/* Show account selector if multiple accounts */}
               {connectedAccounts.length > 1 && renderAccountSelector()}
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-4 w-full">
-                  <div className="flex items-center space-x-1 bg-green-100 px-3 py-1 rounded-full">
-                    <span className="text-green-600 font-bold">●</span>
-                    <span className="text-sm font-medium text-green-700">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 w-full">
+                  <div className="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-green-500 px-4 py-2 rounded-xl shadow-md">
+                    <span className="text-white font-bold text-lg">●</span>
+                    <span className="text-sm font-semibold text-white">
                       {connectedAccounts.length} Account{connectedAccounts.length !== 1 ? 's' : ''} Connected
                     </span>
                   </div>
                   {activeAccount && (
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center gap-2 bg-slate-100 px-4 py-2 rounded-xl">
                       {activeAccount.picture && (
                         <img
                           src={activeAccount.picture.data.url}
                           alt="Profile"
-                          className="w-6 h-6 rounded-full"
+                          className="w-7 h-7 rounded-full border-2 border-slate-300"
                         />
                       )}
-                      <span className="text-sm font-medium text-gray-700">
+                      <span className="text-sm font-semibold text-slate-700">
                         {activeAccount.name}
                       </span>
                     </div>
                   )}
                 </div>
-                <div className="flex flex-wrap items-center space-x-2 mt-2 sm:mt-0">
+                <div className="flex flex-wrap items-center gap-2">
                   <button
                     onClick={refreshPageTokens}
                     disabled={!fbSdkLoaded || !isFacebookApiReady() || !activeAccount}
-                    className="flex items-center space-x-2 px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors disabled:opacity-50"
+                    className="group flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-500 to-green-500 text-white rounded-xl hover:from-emerald-600 hover:to-green-600 transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                   >
-                    <RefreshCw className="h-4 w-4" />
+                    <RefreshCw className="h-4 w-4 group-hover:rotate-180 transition-transform duration-500" />
                     <span>Refresh Tokens</span>
                   </button>
                   <button
                     onClick={fbLogin}
                     disabled={!fbSdkLoaded || !isFacebookApiReady()}
-                    className="flex items-center space-x-2 px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors disabled:opacity-50"
+                    className="group flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-xl hover:from-blue-600 hover:to-indigo-600 transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                   >
-                    <Plus className="h-4 w-4" />
+                    <Plus className="h-4 w-4 group-hover:scale-110 transition-transform" />
                     <span>Add Account</span>
                   </button>
                   <button
                     onClick={() => fbLogoutAll()}
-                    className="flex items-center space-x-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                    className="group flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-slate-100 to-slate-200 text-slate-700 rounded-xl hover:from-slate-200 hover:to-slate-300 transition-all border border-slate-300 font-medium"
                   >
-                    <ExternalLink className="h-4 w-4" />
+                    <ExternalLink className="h-4 w-4 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
                     <span>Disconnect All</span>
                   </button>
                 </div>
               </div>
               {/* Active account details and pages */}
               {activeAccount && (
-                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-2 sm:p-6">
+                <div className="bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 border-2 border-indigo-200 rounded-2xl p-6 shadow-lg">
                   <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 gap-4">
-                    <div className="flex items-center space-x-4">
+                    <div className="flex items-center gap-4">
                       {activeAccount.picture && (
                         <img
                           src={activeAccount.picture.data.url}
                           alt="Profile"
-                          className="w-20 h-20 rounded-full border-4 border-blue-200"
+                          className="w-20 h-20 rounded-2xl border-4 border-white shadow-md"
                         />
                       )}
                       <div>
-                        <h2 className="text-2xl font-bold text-gray-900">{activeAccount.name}</h2>
-                        <p className="text-sm text-gray-600">{activeAccount.email}</p>
+                        <h2 className="text-2xl font-bold text-slate-800">{activeAccount.name}</h2>
+                        <p className="text-sm text-slate-600 mt-1">{activeAccount.email}</p>
                       </div>
                     </div>
-                    <div className="flex flex-wrap space-x-2">
+                    <div className="flex flex-wrap gap-2">
                       <button
                         onClick={refreshPageTokens}
                         disabled={!fbSdkLoaded || !isFacebookApiReady() || !activeAccount}
-                        className="flex items-center space-x-2 px-3 py-2 bg-white border border-blue-200 text-blue-700 rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-50 text-sm"
+                        className="group flex items-center gap-2 px-4 py-2 bg-white border-2 border-indigo-200 text-indigo-700 rounded-xl hover:bg-indigo-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-sm"
                       >
-                        <RefreshCw className="h-4 w-4" />
+                        <RefreshCw className="h-4 w-4 group-hover:rotate-180 transition-transform duration-500" />
                         <span>Refresh</span>
                       </button>
                       <button
                         onClick={() => removeAccount(activeAccount.id)}
-                        className="flex items-center space-x-2 px-3 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors text-sm"
+                        className="group flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-red-500 to-rose-500 text-white rounded-xl hover:from-red-600 hover:to-rose-600 transition-all font-medium shadow-md hover:shadow-lg"
                       >
-                        <ExternalLink className="h-4 w-4" />
+                        <ExternalLink className="h-4 w-4 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
                         <span>Disconnect</span>
                       </button>
                     </div>
                   </div>
                   <div>
-                    <h4 className="font-medium mb-3">Pages for {activeAccount.name}:</h4>
+                    <h4 className="font-bold text-lg mb-4 text-slate-800">Pages for {activeAccount.name}:</h4>
                     {fbPages.length === 0 ? (
-                      <div className="text-center py-8 text-gray-500">
-                        <Facebook className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                        <p>No pages found or you don't manage any pages.</p>
-                        <p className="text-sm">Make sure you're an admin or editor of at least one Facebook page.</p>
+                      <div className="text-center py-12 bg-white rounded-2xl border-2 border-dashed border-slate-300">
+                        <div className="w-16 h-16 bg-gradient-to-br from-slate-100 to-blue-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                          <Facebook className="h-8 w-8 text-slate-400" />
+                        </div>
+                        <p className="text-slate-600 font-medium mb-2">No pages found or you don't manage any pages.</p>
+                        <p className="text-sm text-slate-500 mb-4">Make sure you're an admin or editor of at least one Facebook page.</p>
                         <button
                           onClick={fetchFbPages}
                           disabled={!isFacebookApiReady()}
-                          className="mt-3 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50 text-sm"
+                          className="group bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-3 rounded-xl hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg font-medium inline-flex items-center gap-2"
                         >
-                          🔄 Retry Loading Pages
+                          <RefreshCw className="h-4 w-4 group-hover:rotate-180 transition-transform duration-500" />
+                          Retry Loading Pages
                         </button>
                       </div>
                     ) : (
@@ -1996,12 +2040,14 @@ function FacebookIntegration() {
                             </div>
                             {/* --- Historical Analytics Toggle and Chart --- */}
                             <div className="mb-6">
-                              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-white rounded-lg border border-gray-200 p-4 gap-2">
-                                <div className="flex items-center space-x-3">
-                                  <Calendar className="h-5 w-5 text-blue-600" />
+                              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-gradient-to-r from-indigo-50 to-blue-50 rounded-2xl border-2 border-indigo-200 p-5 gap-4 shadow-sm">
+                                <div className="flex items-center gap-4">
+                                  <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-blue-500 rounded-xl flex items-center justify-center shadow-md">
+                                    <Calendar className="h-6 w-6 text-white" />
+                                  </div>
                                   <div>
-                                    <h4 className="font-medium text-gray-900">Historical Analytics</h4>
-                                    <p className="text-sm text-gray-600">View long-term trends and growth patterns</p>
+                                    <h4 className="font-bold text-slate-800">Historical Analytics</h4>
+                                    <p className="text-sm text-slate-600">View long-term trends and growth patterns</p>
                                   </div>
                                 </div>
                                 <button
@@ -2009,9 +2055,9 @@ function FacebookIntegration() {
                                     ...prev,
                                     [page.id]: !prev[page.id]
                                   }))}
-                                  className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                                  className="group flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-blue-600 text-white px-5 py-3 rounded-xl hover:from-indigo-700 hover:to-blue-700 transition-all shadow-md hover:shadow-lg font-medium"
                                 >
-                                  <Calendar className="h-4 w-4" />
+                                  <Calendar className="h-5 w-5 group-hover:scale-110 transition-transform" />
                                   <span>
                                     {showHistoricalCharts[page.id] ? 'Hide' : 'Show'} Historical Data
                                   </span>

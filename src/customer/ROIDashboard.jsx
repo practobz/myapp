@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Line, Bar, Doughnut, Area } from 'react-chartjs-2';
-import { ArrowLeft, ExternalLink, RefreshCw } from 'lucide-react';
+import { ArrowLeft, ExternalLink, RefreshCw, TrendingUp,Globe } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
   Chart as ChartJS,
@@ -63,8 +63,8 @@ const ROIDashboard = () => {
       const customerId = currentUser._id;
       console.log('🔍 Fetching analytics data for customer:', customerId);
       
-      // Use full URL to backend server from environment variable
-      const backendUrl = process.env.REACT_APP_API_URL;
+      // Use full URL to backend server
+      const backendUrl = 'http://localhost:3001';
       
       // First try to get historical data
       try {
@@ -224,7 +224,7 @@ const ROIDashboard = () => {
     // First, try to fetch historical data for each connected account
     try {
       console.log('🔗 Attempting to fetch historical data for connected accounts...');
-      const backendUrl = process.env.REACT_APP_API_URL;
+      const backendUrl = 'http://localhost:3001';
       const customerId = currentUser._id;
       
       for (const account of accounts) {
@@ -278,7 +278,7 @@ const ROIDashboard = () => {
     // First, try to fetch real-time metrics from our new API for accounts without historical data
     try {
       console.log('🔗 Attempting to fetch real-time social metrics...');
-      const backendUrl = process.env.REACT_APP_API_URL;
+      const backendUrl = 'http://localhost:3001';
       const customerId = currentUser._id;
       
       const metricsResponse = await fetch(`${backendUrl}/api/customer/social-metrics/${customerId}`, {
@@ -1328,77 +1328,95 @@ const ROIDashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-6">
+      <div className="px-6 sm:px-8 lg:px-12 xl:px-16 2xl:px-24">
         {/* Header */}
         <div className="mb-8">
-          <div className="flex justify-between items-start">
-            <div>
-              <div className="flex items-center gap-4 mb-4">
-                <button
-                  onClick={() => navigate('/customer')}
-                  className="flex items-center gap-2 text-gray-600 hover:text-gray-800 transition-colors"
-                >
-                  <ArrowLeft className="h-5 w-5" />
-                  Back to Dashboard
-                </button>
-              </div>
-              <h1 className="text-4xl font-bold text-gray-900 mb-2">ROI Analytics Dashboard</h1>
-              <p className="text-lg text-gray-600">Comprehensive social media performance and return on investment analysis</p>
-            </div>
-            <div className="text-right">
-              <div className="flex items-center gap-2 mb-2">
-                <button
-                  onClick={handleRefresh}
-                  disabled={isRefreshing}
-                  className="flex items-center gap-1 px-3 py-1 text-sm bg-blue-100 text-blue-800 rounded-full hover:bg-blue-200 disabled:opacity-50"
-                >
-                  <RefreshCw className={`h-3 w-3 ${isRefreshing ? 'animate-spin' : ''}`} />
-                  {isRefreshing ? 'Refreshing...' : 'Refresh'}
-                </button>
-                <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                  analyticsData && !analyticsData.isPreliminary ? 'bg-green-100 text-green-800' : 
-                  analyticsData && analyticsData.isPreliminary ? 'bg-blue-100 text-blue-800' :
-                  'bg-yellow-100 text-yellow-800'
-                }`}>
-                  {analyticsData && !analyticsData.isPreliminary ? '✓ Live Data' : 
-                   analyticsData && analyticsData.isPreliminary ? '🔗 Connected Data' :
-                   '⚠ Demo Data'}
+          <div className="bg-gradient-to-r from-indigo-600 via-blue-600 to-cyan-500 rounded-2xl shadow-xl p-8 text-white relative overflow-hidden">
+            <div className="absolute inset-0 bg-black/10"></div>
+            <div className="relative">
+              <div className="flex justify-between items-start">
+                <div>
+                  <div className="flex items-center gap-4 mb-4">
+                    <button
+                      onClick={() => navigate('/customer')}
+                      className="group flex items-center gap-2 bg-white/20 backdrop-blur-sm px-4 py-2 rounded-lg hover:bg-white/30 transition-all"
+                    >
+                      <ArrowLeft className="h-5 w-5" />
+                      <span className="font-medium">Back to Dashboard</span>
+                    </button>
+                  </div>
+                  <h1 className="text-4xl font-bold mb-3 flex items-center gap-3">
+                    <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
+                      <TrendingUp className="h-7 w-7" />
+                    </div>
+                    ROI Analytics Dashboard
+                  </h1>
+                  <p className="text-blue-50 text-lg">Comprehensive social media performance and return on investment analysis</p>
                 </div>
-              </div>
-              {lastUpdated && (
-                <div className="text-xs text-gray-500">
-                  Last updated: {new Date(lastUpdated).toLocaleDateString()}
-                </div>
-              )}
-              {!analyticsData && (
                 <div className="text-right">
-                  <p className="text-xs text-gray-500">Connect social accounts to see live data</p>
-                  <button
-                    onClick={() => navigate('/customer/settings')}
-                    className="text-xs text-blue-600 hover:text-blue-800 inline-flex items-center gap-1 mt-1"
-                  >
-                    Connect Accounts <ExternalLink className="h-3 w-3" />
-                  </button>
+                  <div className="flex items-center gap-2 mb-3">
+                    <button
+                      onClick={handleRefresh}
+                      disabled={isRefreshing}
+                      className="flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur-sm text-white rounded-lg hover:bg-white/30 disabled:opacity-50 transition-all font-medium"
+                    >
+                      <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                      {isRefreshing ? 'Refreshing...' : 'Refresh'}
+                    </button>
+                    <div className={`inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold backdrop-blur-sm ${
+                      analyticsData && !analyticsData.isPreliminary ? 'bg-emerald-500/90 text-white' : 
+                      analyticsData && analyticsData.isPreliminary ? 'bg-blue-500/90 text-white' :
+                      'bg-amber-500/90 text-white'
+                    }`}>
+                      {analyticsData && !analyticsData.isPreliminary ? '✓ Live Data' : 
+                       analyticsData && analyticsData.isPreliminary ? '🔗 Connected Data' :
+                       '⚠ Demo Data'}
+                    </div>
+                  </div>
+                  {lastUpdated && (
+                    <div className="text-sm text-blue-100 mb-2">
+                      Last updated: {new Date(lastUpdated).toLocaleDateString()}
+                    </div>
+                  )}
+                  {!analyticsData && (
+                    <div className="text-right bg-white/10 backdrop-blur-sm rounded-lg p-3">
+                      <p className="text-sm text-blue-100 mb-1">Connect social accounts to see live data</p>
+                      <button
+                        onClick={() => navigate('/customer/settings')}
+                        className="text-sm text-white font-semibold inline-flex items-center gap-1 hover:gap-2 transition-all"
+                      >
+                        Connect Accounts <ExternalLink className="h-4 w-4" />
+                      </button>
+                    </div>
+                  )}
+                  {analyticsData && analyticsData.isPreliminary && (
+                    <div className="text-right bg-white/10 backdrop-blur-sm rounded-lg p-3">
+                      <p className="text-sm text-blue-100 mb-1">Preliminary data from connected accounts</p>
+                      <p className="text-sm text-blue-200">Analytics processing will provide detailed insights</p>
+                    </div>
+                  )}
                 </div>
-              )}
-              {analyticsData && analyticsData.isPreliminary && (
-                <div className="text-right">
-                  <p className="text-xs text-gray-500">Preliminary data from connected accounts</p>
-                  <p className="text-xs text-blue-600">Analytics processing will provide detailed insights</p>
-                </div>
-              )}
+              </div>
             </div>
           </div>
         </div>
 
         {/* Connected Accounts Summary */}
         {analyticsData && platforms.length > 0 && (
-          <div className="bg-white rounded-xl shadow-sm border p-6 mb-8">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-gray-900">Connected Accounts</h2>
-              <div className="text-sm text-gray-600">
-                {platforms.length} platform{platforms.length !== 1 ? 's' : ''} connected
+          <div className="bg-white rounded-2xl shadow-lg border border-slate-200 p-6 mb-8">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-blue-500 rounded-lg flex items-center justify-center">
+                  <Globe className="h-5 w-5 text-white" />
+                </div>
+                Connected Accounts
+              </h2>
+              <div>
+                <div className="text-sm text-slate-600 bg-slate-100 px-4 py-2 rounded-lg font-medium">
+                  {platforms.length} Platform{platforms.length !== 1 ? 's' : ''} Connected
+                </div>
+                {/* Removed duplicate sibling text node that caused multiple parents */}
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1445,25 +1463,25 @@ const ROIDashboard = () => {
               <p className="text-gray-600 mb-4">View detailed analytics for individual posts by visiting the respective platform integration pages.</p>
               <div className="flex justify-center gap-4">
                 <button
-                  onClick={() => navigate('/customer/integration/facebook')}
+                  onClick={() => navigate('/customer/integrations/facebook')}
                   className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                 >
                   📘 Facebook Analytics
                 </button>
                 <button
-                  onClick={() => navigate('/customer/integration/instagram')}
+                  onClick={() => navigate('/customer/integrations/instagram')}
                   className="flex items-center gap-2 px-4 py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700"
                 >
                   📸 Instagram Analytics
                 </button>
                 <button
-                  onClick={() => navigate('/customer/integration/youtube')}
+                  onClick={() => navigate('/customer/integrations/youtube')}
                   className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
                 >
                   🎬 YouTube Analytics
                 </button>
                 <button
-                  onClick={() => navigate('/customer/integration/linkedin')}
+                  onClick={() => navigate('/customer/integrations/linkedin')}
                   className="flex items-center gap-2 px-4 py-2 bg-blue-700 text-white rounded-lg hover:bg-blue-800"
                 >
                   💼 LinkedIn Analytics

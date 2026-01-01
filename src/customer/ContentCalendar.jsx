@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
-import { MessageSquare, Instagram, Facebook, Linkedin, Youtube, AlertCircle, Eye, CheckCircle } from 'lucide-react';
+import { MessageSquare,CalendarIcon, Instagram, Facebook, Linkedin, Youtube, AlertCircle, Eye, CheckCircle } from 'lucide-react';
 
 // Move these helper functions to the top, before ContentCalendar function
 const getPlatformIcon = (platform) => {
@@ -178,23 +178,26 @@ function ContentCalendar() {
   };
 
   return (
-    <div className="min-h-screen bg-[#e6f2fb]">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="px-6 sm:px-8 lg:px-12 xl:px-16 2xl:px-24 py-8">
         <div className="flex flex-col lg:flex-row gap-6">
           {/* Calendar Selection Sidebar */}
           <div className="lg:w-1/4">
-            <div className="bg-white rounded-lg shadow-md p-6 border border-[#0a2342]/10">
-              <h3 className="text-lg font-semibold mb-4 text-[#0a2342]">Content Calendars</h3>
+            <div className="bg-white rounded-xl shadow-md p-6 border border-slate-200">
+              <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                <CalendarIcon className="h-5 w-5 text-indigo-600" />
+                Content Calendars
+              </h3>
               <div className="space-y-2">
                 {calendars.map((calendar, idx) => (
                   <button
                     key={calendar._id || idx}
                     onClick={() => {/* no-op, only one customer calendar is shown */}}
-                    className="w-full text-left p-3 rounded-md bg-[#0a2342] text-white"
+                    className="w-full text-left p-4 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 text-white hover:from-indigo-700 hover:to-blue-700 transition-all shadow-md hover:shadow-lg"
                   >
-                    <div className="font-medium">{calendar.name}</div>
-                    <div className="text-sm opacity-75">{calendar.contentItems?.length || 0} items</div>
+                    <div className="font-semibold">{calendar.name}</div>
+                    <div className="text-sm opacity-90 mt-1">{calendar.contentItems?.length || 0} items</div>
                   </button>
                 ))}
               </div>
@@ -203,29 +206,29 @@ function ContentCalendar() {
 
           {/* Calendar Content */}
           <div className="lg:w-3/4">
-            <div className="bg-white rounded-lg shadow-md p-6 border border-[#0a2342]/10">
+            <div className="bg-white rounded-xl shadow-md p-6 border border-slate-200">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-4">
                 <div>
-                  <h2 className="text-xl font-semibold text-[#0a2342]">{customer.name}'s Content Calendar</h2>
-                  <p className="text-[#0a2342]/70 text-sm mt-1">Manage your content schedule</p>
+                  <h2 className="text-2xl font-bold text-slate-800">{customer.name}'s Content Calendar</h2>
+                  <p className="text-slate-600 text-sm mt-1">Manage your content schedule</p>
                 </div>
                 {/* Status Filter Buttons */}
                 <div className="flex flex-wrap gap-2">
                   {[
-                    { key: 'all', label: 'All', color: 'bg-[#bae6fd] text-[#0a2342]' },
-                    { key: 'published', label: 'Published', color: 'bg-green-100 text-green-800' },
-                    { key: 'under_review', label: 'Under Review', color: 'bg-yellow-100 text-yellow-800' },
-                    { key: 'scheduled', label: 'Scheduled', color: 'bg-[#7dd3fc] text-[#0a2342]' },
-                    { key: 'waiting_input', label: 'Waiting Input', color: 'bg-orange-100 text-orange-800' },
-                    { key: 'draft', label: 'Draft', color: 'bg-gray-100 text-gray-800' }
+                    { key: 'all', label: 'All', color: 'from-slate-100 to-blue-100', textColor: 'text-slate-700', activeColor: 'from-indigo-600 to-blue-600', activeText: 'text-white' },
+                    { key: 'published', label: 'Published', color: 'from-emerald-100 to-green-100', textColor: 'text-emerald-700', activeColor: 'from-emerald-600 to-green-600', activeText: 'text-white' },
+                    { key: 'under_review', label: 'Under Review', color: 'from-amber-100 to-yellow-100', textColor: 'text-amber-700', activeColor: 'from-amber-600 to-yellow-600', activeText: 'text-white' },
+                    { key: 'scheduled', label: 'Scheduled', color: 'from-blue-100 to-cyan-100', textColor: 'text-blue-700', activeColor: 'from-blue-600 to-cyan-600', activeText: 'text-white' },
+                    { key: 'waiting_input', label: 'Waiting Input', color: 'from-orange-100 to-red-100', textColor: 'text-orange-700', activeColor: 'from-orange-600 to-red-600', activeText: 'text-white' },
+                    { key: 'draft', label: 'Draft', color: 'from-gray-100 to-slate-100', textColor: 'text-gray-700', activeColor: 'from-gray-600 to-slate-600', activeText: 'text-white' }
                   ].map(option => (
                     <button
                       key={option.key}
                       onClick={() => setStatusFilter(option.key)}
-                      className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border transition-colors
+                      className={`inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold transition-all shadow-sm hover:shadow-md
                         ${statusFilter === option.key
-                          ? `${option.color} border-[#0a2342]`
-                          : `${option.color.replace('bg-', 'bg-opacity-50 bg-')} border-transparent hover:border-[#bae6fd]`
+                          ? `bg-gradient-to-r ${option.activeColor} ${option.activeText} border border-transparent`
+                          : `bg-gradient-to-r ${option.color} ${option.textColor} border border-transparent hover:scale-105`
                         }`}
                     >
                       {option.label}
@@ -238,43 +241,45 @@ function ContentCalendar() {
                 {sortedItems.map((item) => (
                   <div 
                     key={item.id} 
-                    className={`border rounded-lg p-4 ${
-                      item.status === 'published' ? 'cursor-pointer hover:bg-[#e6f2fb]' : ''
-                    } transition-colors border-[#bae6fd]`}
+                    className={`border-2 rounded-xl p-5 transition-all duration-200 ${
+                      item.status === 'published' ? 'cursor-pointer hover:shadow-lg hover:border-indigo-300 bg-gradient-to-r from-white to-blue-50/30' : 'bg-white'
+                    } border-slate-200 hover:border-indigo-200`}
                     onClick={() => handleContentClick(item)}
                   >
                     <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center space-x-3">
-                        <span className="text-[#0a2342]/70">{format(new Date(item.date), 'MMM dd, yyyy')}</span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-slate-600 font-medium">{format(new Date(item.date), 'MMM dd, yyyy')}</span>
                         {/* Published status with icon */}
                         {item.status === 'published' ? (
-                          <span className="px-3 py-1 rounded-full text-sm font-medium flex items-center gap-1 bg-green-100 text-green-800">
+                          <span className="px-4 py-1.5 rounded-full text-sm font-semibold flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-green-500 text-white shadow-md">
                             <CheckCircle className="h-4 w-4" />
                             Published
                             {/* --- Show published platforms --- */}
                             {item.publishedPlatforms && item.publishedPlatforms.length > 0 && (
-                              <span className="ml-2 text-xs text-[#38bdf8]">
-                                on: {item.publishedPlatforms.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(', ')}
+                              <span className="ml-1 text-xs bg-white/20 px-2 py-0.5 rounded-full">
+                                {item.publishedPlatforms.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(', ')}
                               </span>
                             )}
                           </span>
                         ) : (
-                          <span className={`px-3 py-1 rounded-full text-sm ${getStatusColor(item.status)}`}>
+                          <span className={`px-4 py-1.5 rounded-full text-sm font-semibold ${getStatusColor(item.status)}`}>
                             {getStatusLabel(item.status)}
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center space-x-3">
-                        <div className="flex items-center text-[#38bdf8]">
-                          <MessageSquare className="h-4 w-4 mr-1" />
-                          <span>{item.commentCount || 0}</span>
+                      <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-1 text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg">
+                          <MessageSquare className="h-4 w-4" />
+                          <span className="font-semibold">{item.commentCount || 0}</span>
                         </div>
                         {item.status === 'published' && (
-                          <Eye className="h-4 w-4 text-[#0a2342]/40" />
+                          <div className="p-2 bg-slate-100 rounded-lg">
+                            <Eye className="h-4 w-4 text-slate-600" />
+                          </div>
                         )}
                       </div>
                     </div>
-                    <p className="text-[#0a2342] mb-3">{item.description}</p>
+                    <p className="text-slate-700 mb-3 font-medium">{item.description}</p>
                     
                     {/* Assigned Creator */}
                     {item.creator && (

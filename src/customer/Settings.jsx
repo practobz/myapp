@@ -25,8 +25,8 @@ const platformIcons = {
   facebook: <Facebook className="h-6 w-6" />,
   linkedin: <Linkedin className="h-6 w-6" />,
   youtube: <Youtube className="h-6 w-6" />,
-  twitter: <Twitter className="h-6 w-6" />,
-  whatsapp: <MessageCircle className="h-6 w-6" />,
+  // twitter: <Twitter className="h-6 w-6" />, 
+  // whatsapp: <MessageCircle className="h-6 w-6" />, 
   'instagram-ads': <Target className="h-6 w-6" />
 };
 
@@ -86,28 +86,7 @@ const platforms = [
     textColor: 'text-blue-700',
     features: ['Professional Networks', 'Company Updates', 'Lead Generation', 'Industry Analytics']
   },
-  { 
-    key: 'twitter', 
-    label: 'Twitter/X', 
-    description: 'Connect your Twitter/X account for tweet management and analytics',
-    route: '/customer/integration/twitter',
-    icon: platformIcons.twitter,
-    color: 'from-blue-400 to-blue-500',
-    bgColor: 'bg-blue-50',
-    textColor: 'text-blue-500',
-    features: ['Tweet Management', 'Real Analytics', 'Audience Insights', 'Engagement Metrics']
-  },
-  { 
-    key: 'whatsapp', 
-    label: 'WhatsApp Business', 
-    description: 'Send notifications and updates to customers via WhatsApp',
-    route: '/customer/integration/whatsapp',
-    icon: platformIcons.whatsapp,
-    color: 'from-green-500 to-emerald-600',
-    bgColor: 'bg-green-50',
-    textColor: 'text-green-600',
-    features: ['Customer Notifications', 'Content Alerts', 'Business Templates', 'Automated Messages']
-  }
+  // Twitter and WhatsApp removed
 ];
 
 function Settings() {
@@ -129,9 +108,7 @@ function Settings() {
     facebook: false,
     instagram: false,
     youtube: false,
-    linkedin: false,
-    twitter: false,
-    whatsapp: false
+    linkedin: false
   });
 
   // Handle URL-based navigation
@@ -558,40 +535,49 @@ function Settings() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#e6f2fb] flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#38bdf8] mx-auto mb-4"></div>
-          <p className="text-[#0a2342]/70">Loading your settings...</p>
+          <div className="relative">
+            <div className="animate-spin rounded-full h-16 w-16 border-4 border-indigo-200 border-t-indigo-600 mx-auto"></div>
+            <div className="absolute inset-0 rounded-full h-16 w-16 border-4 border-transparent border-r-blue-400 animate-ping mx-auto opacity-20"></div>
+          </div>
+          <p className="mt-6 text-slate-600 font-medium">Loading your settings...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#e6f2fb]">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+      <div className="px-6 sm:px-8 lg:px-12 xl:px-16 2xl:px-24 py-8">
         {!activeIntegration ? (
           <div className="space-y-8">
             {/* Header */}
-            <div className="text-center">
-              <h1 className="text-3xl font-bold text-[#0a2342] mb-2">Account Settings</h1>
-              <p className="text-[#0a2342]/70">Manage your account information and social media integrations</p>
+            <div className="bg-gradient-to-r from-indigo-600 via-blue-600 to-cyan-500 rounded-2xl shadow-xl p-8 text-white relative overflow-hidden">
+              <div className="absolute inset-0 bg-black/10"></div>
+              <div className="relative text-center">
+                <h1 className="text-4xl font-bold mb-3">Account Settings</h1>
+                <p className="text-blue-50 text-lg">Manage your account information and social media integrations</p>
+              </div>
             </div>
 
             {/* Tab Navigation */}
-            <div className="bg-white rounded-2xl shadow-lg border border-[#0a2342]/10 overflow-hidden">
-              <div className="border-b border-[#bae6fd]">
+            <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden">
+              <div className="border-b border-slate-200">
                 <nav className="flex">
                   <button
                     type="button"
                     onClick={() => handleTabChange('customer')}
-                    className={`flex-1 py-4 px-6 text-sm font-medium border-b-2 transition-all duration-200 ${
+                    className={`flex-1 py-5 px-6 text-sm font-semibold transition-all duration-200 relative ${
                       activeTab === 'customer'
-                        ? 'border-[#38bdf8] text-[#0a2342] bg-[#bae6fd]'
-                        : 'border-transparent text-[#0a2342]/60 hover:text-[#0a2342] hover:border-[#bae6fd] hover:bg-[#e6f2fb]'
+                        ? 'text-indigo-600 bg-gradient-to-r from-indigo-50 to-blue-50'
+                        : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
                     }`}
                   >
-                    <div className="flex items-center justify-center space-x-2">
+                    {activeTab === 'customer' && (
+                      <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-600 to-blue-600"></div>
+                    )}
+                    <div className="flex items-center justify-center gap-2">
                       <User className="h-5 w-5" />
                       <span>Customer Information</span>
                     </div>
@@ -599,13 +585,16 @@ function Settings() {
                   <button
                     type="button"
                     onClick={() => handleTabChange('integrations')}
-                    className={`flex-1 py-4 px-6 text-sm font-medium border-b-2 transition-all duration-200 ${
+                    className={`flex-1 py-5 px-6 text-sm font-semibold transition-all duration-200 relative ${
                       activeTab === 'integrations'
-                        ? 'border-[#38bdf8] text-[#0a2342] bg-[#bae6fd]'
-                        : 'border-transparent text-[#0a2342]/60 hover:text-[#0a2342] hover:border-[#bae6fd] hover:bg-[#e6f2fb]'
+                        ? 'text-indigo-600 bg-gradient-to-r from-indigo-50 to-blue-50'
+                        : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
                     }`}
                   >
-                    <div className="flex items-center justify-center space-x-2">
+                    {activeTab === 'integrations' && (
+                      <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-600 to-blue-600"></div>
+                    )}
+                    <div className="flex items-center justify-center gap-2">
                       <SettingsIcon className="h-5 w-5" />
                       <span>Social Media Integrations</span>
                     </div>

@@ -57,15 +57,15 @@ function CustomerLogin() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-teal-100 via-cyan-50 to-yellow-100 relative overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 relative overflow-hidden">
       {/* Animated Background Elements */}
       <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute top-20 left-10 w-32 h-32 bg-blue-400/30 rounded-full animate-float"></div>
-        <div className="absolute top-40 right-20 w-48 h-48 bg-pink-300/40 rounded-full animate-float-delayed"></div>
-        <div className="absolute bottom-32 left-1/4 w-40 h-40 bg-yellow-400/30 transform rotate-45 animate-spin-slow"></div>
-        <div className="absolute top-1/3 right-1/3 w-24 h-24 bg-green-400/30 rounded-lg animate-pulse-slow"></div>
-        <div className="absolute bottom-0 left-0 w-96 h-96 bg-gradient-to-tr from-pink-300/40 to-transparent rounded-tr-full"></div>
-        <div className="absolute top-0 right-0 w-80 h-80 bg-gradient-to-bl from-blue-300/40 to-transparent rounded-bl-full"></div>
+        <div className="absolute top-20 left-10 w-32 h-32 bg-indigo-400/20 rounded-full animate-float"></div>
+        <div className="absolute top-40 right-20 w-48 h-48 bg-blue-300/30 rounded-full animate-float-delayed"></div>
+        <div className="absolute bottom-32 left-1/4 w-40 h-40 bg-cyan-400/20 transform rotate-45 animate-spin-slow"></div>
+        <div className="absolute top-1/3 right-1/3 w-24 h-24 bg-indigo-400/20 rounded-lg animate-pulse-slow"></div>
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-gradient-to-tr from-indigo-300/30 to-transparent rounded-tr-full"></div>
+        <div className="absolute top-0 right-0 w-80 h-80 bg-gradient-to-bl from-blue-300/30 to-transparent rounded-bl-full"></div>
       </div>
 
       {/* Content */}
@@ -78,18 +78,18 @@ function CustomerLogin() {
             <div className="flex justify-center mb-6">
               <Logo size="large" />
             </div>
-            <h2 className="text-4xl font-bold text-gray-800 mb-2 animate-fade-in-up">
+            <h2 className="text-4xl font-bold text-slate-800 mb-2 animate-fade-in-up">
               Welcome Back
             </h2>
-            <p className="text-gray-600 animate-fade-in-up animation-delay-100">
+            <p className="text-slate-600 animate-fade-in-up animation-delay-100">
               Sign in to continue your journey
             </p>
           </div>
 
           {/* Login Form */}
-          <div className="bg-white/70 backdrop-blur-md rounded-3xl shadow-2xl p-8 border border-white/50 transform hover:scale-[1.02] transition-all duration-300">
+          <div className="bg-white rounded-2xl shadow-xl hover:shadow-2xl p-8 border border-slate-200 transition-all duration-300">
             {error && (
-              <div className="mb-6 bg-red-50/80 backdrop-blur-sm border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-start animate-shake">
+              <div className="mb-6 bg-red-50 border-2 border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-start animate-shake">
                 <AlertCircle className="h-5 w-5 mr-3 mt-0.5 flex-shrink-0" />
                 <span className="text-sm font-medium">{error}</span>
               </div>
@@ -98,12 +98,12 @@ function CustomerLogin() {
             <form className="space-y-6" onSubmit={handleSubmit}>
               {/* Email Field */}
               <div className="transform transition-all duration-200 hover:translate-x-1">
-                <label htmlFor="email" className="block text-sm font-semibold text-gray-700 mb-2">
+                <label htmlFor="email" className="block text-sm font-semibold text-slate-700 mb-2">
                   Email Address
                 </label>
                 <div className="relative group">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <AtSign className="h-5 w-5 text-gray-400 group-focus-within:text-cyan-600 transition-colors" />
+                    <AtSign className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
                   </div>
                   <input
                     id="email"
@@ -111,7 +111,7 @@ function CustomerLogin() {
                     type="email"
                     autoComplete="email"
                     required
-                    className="w-full pl-10 pr-4 py-3 bg-white border-2 border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent shadow-sm transition-all duration-200 hover:border-cyan-300 hover:shadow-md"
+                    className="w-full pl-10 pr-4 py-3 bg-white border-2 border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent shadow-sm transition-all duration-200 hover:border-indigo-300 hover:shadow-md"
                     placeholder="Enter your email address"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
@@ -121,12 +121,12 @@ function CustomerLogin() {
 
               {/* Password Field */}
               <div className="transform transition-all duration-200 hover:translate-x-1">
-                <label htmlFor="password" className="block text-sm font-semibold text-gray-700 mb-2">
+                <label htmlFor="password" className="block text-sm font-semibold text-slate-700 mb-2">
                   Password
                 </label>
                 <div className="relative group">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Lock className="h-5 w-5 text-gray-400 group-focus-within:text-cyan-600 transition-colors" />
+                    <Lock className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
                   </div>
                   <input
                     id="password"
@@ -134,7 +134,7 @@ function CustomerLogin() {
                     type={showPassword ? "text" : "password"}
                     autoComplete="current-password"
                     required
-                    className="w-full pl-10 pr-12 py-3 bg-white border-2 border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent shadow-sm transition-all duration-200 hover:border-cyan-300 hover:shadow-md"
+                    className="w-full pl-10 pr-12 py-3 bg-white border-2 border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent shadow-sm transition-all duration-200 hover:border-indigo-300 hover:shadow-md"
                     placeholder="Enter your password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
@@ -145,9 +145,9 @@ function CustomerLogin() {
                     onClick={togglePasswordVisibility}
                   >
                     {showPassword ? (
-                      <EyeOff className="h-5 w-5 text-gray-400 hover:text-cyan-600 transition-colors" />
+                      <EyeOff className="h-5 w-5 text-slate-400 hover:text-indigo-600 transition-colors" />
                     ) : (
-                      <Eye className="h-5 w-5 text-gray-400 hover:text-cyan-600 transition-colors" />
+                      <Eye className="h-5 w-5 text-slate-400 hover:text-indigo-600 transition-colors" />
                     )}
                   </button>
                 </div>
@@ -180,16 +180,16 @@ function CustomerLogin() {
             <div className="mt-8 text-center">
               <div className="relative">
                 <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t-2 border-gray-200"></div>
+                  <div className="w-full border-t-2 border-slate-200"></div>
                 </div>
                 <div className="relative flex justify-center text-sm">
-                  <span className="px-4 bg-white/70 text-gray-500 font-medium">New to AirSpark?</span>
+                  <span className="px-4 bg-white text-slate-500 font-medium">New to AirSpark?</span>
                 </div>
               </div>
               <div className="mt-4">
                 <Link
                   to="/customer/signup"
-                  className="inline-flex items-center px-6 py-2.5 border-2 border-cyan-500 rounded-xl text-sm font-semibold text-cyan-600 bg-white hover:bg-cyan-50 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 transition-all duration-200 hover:scale-105 hover:shadow-lg"
+                  className="inline-flex items-center px-6 py-2.5 border-2 border-indigo-500 rounded-xl text-sm font-semibold text-indigo-600 bg-white hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-all duration-200 hover:scale-105 hover:shadow-lg"
                 >
                   Create an account
                 </Link>
@@ -199,11 +199,11 @@ function CustomerLogin() {
 
           {/* Additional Info */}
           <div className="text-center animate-fade-in-up animation-delay-200">
-            <p className="text-xs text-gray-600">
+            <p className="text-xs text-slate-600">
               By signing in, you agree to our{' '}
-              <span className="text-cyan-600 hover:underline cursor-pointer font-medium">Terms</span>
+              <span className="text-indigo-600 hover:underline cursor-pointer font-medium">Terms</span>
               {' '}and{' '}
-              <span className="text-cyan-600 hover:underline cursor-pointer font-medium">Privacy Policy</span>
+              <span className="text-indigo-600 hover:underline cursor-pointer font-medium">Privacy Policy</span>
             </p>
           </div>
         </div>

@@ -188,15 +188,15 @@ function CustomerSignup() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-teal-100 via-cyan-50 to-yellow-100 relative overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 relative overflow-hidden">
       {/* Animated Background Elements */}
       <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute top-20 left-10 w-32 h-32 bg-blue-400/30 rounded-full animate-float"></div>
-        <div className="absolute top-40 right-20 w-48 h-48 bg-pink-300/40 rounded-full animate-float-delayed"></div>
-        <div className="absolute bottom-32 left-1/4 w-40 h-40 bg-yellow-400/30 transform rotate-45 animate-spin-slow"></div>
-        <div className="absolute top-1/3 right-1/3 w-24 h-24 bg-green-400/30 rounded-lg animate-pulse-slow"></div>
-        <div className="absolute bottom-0 left-0 w-96 h-96 bg-gradient-to-tr from-pink-300/40 to-transparent rounded-tr-full"></div>
-        <div className="absolute top-0 right-0 w-80 h-80 bg-gradient-to-bl from-blue-300/40 to-transparent rounded-bl-full"></div>
+        <div className="absolute top-20 left-10 w-32 h-32 bg-indigo-400/20 rounded-full animate-float"></div>
+        <div className="absolute top-40 right-20 w-48 h-48 bg-blue-300/30 rounded-full animate-float-delayed"></div>
+        <div className="absolute bottom-32 left-1/4 w-40 h-40 bg-cyan-400/20 transform rotate-45 animate-spin-slow"></div>
+        <div className="absolute top-1/3 right-1/3 w-24 h-24 bg-indigo-400/20 rounded-lg animate-pulse-slow"></div>
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-gradient-to-tr from-indigo-300/30 to-transparent rounded-tr-full"></div>
+        <div className="absolute top-0 right-0 w-80 h-80 bg-gradient-to-bl from-blue-300/30 to-transparent rounded-bl-full"></div>
       </div>
 
       {/* Content */}
@@ -209,10 +209,10 @@ function CustomerSignup() {
             <div className="flex justify-center mb-6">
               <Logo size="large" />
             </div>
-            <h2 className="text-4xl font-bold text-gray-800 mb-2 animate-fade-in-up">
+            <h2 className="text-4xl font-bold text-slate-800 mb-2 animate-fade-in-up">
               {showOtpForm ? 'Verify Your Email' : 'Create Account'}
             </h2>
-            <p className="text-gray-600 animate-fade-in-up animation-delay-100">
+            <p className="text-slate-600 animate-fade-in-up animation-delay-100">
               {showOtpForm
                 ? `Enter the OTP sent to ${formData.email}`
                 : 'Join AirSpark and ignite your social presence'
@@ -221,9 +221,9 @@ function CustomerSignup() {
           </div>
 
           {/* Form Container */}
-          <div className="bg-white/70 backdrop-blur-md rounded-3xl shadow-2xl p-8 border border-white/50 transform hover:scale-[1.01] transition-all duration-300">
+          <div className="bg-white rounded-2xl shadow-xl hover:shadow-2xl p-8 border border-slate-200 transition-all duration-300">
             {error && (
-              <div className="mb-6 bg-red-50/80 backdrop-blur-sm border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-start animate-shake">
+              <div className="mb-6 bg-red-50 border-2 border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-start animate-shake">
                 <AlertCircle className="h-5 w-5 mr-3 mt-0.5 flex-shrink-0" />
                 <span className="text-sm font-medium">{error}</span>
               </div>
@@ -233,19 +233,19 @@ function CustomerSignup() {
               <form className="space-y-5" onSubmit={handleSubmit}>
                 {/* Name Field */}
                 <div className="transform transition-all duration-200 hover:translate-x-1">
-                  <label htmlFor="name" className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label htmlFor="name" className="block text-sm font-semibold text-slate-700 mb-2">
                     Full Name
                   </label>
                   <div className="relative group">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <User className="h-5 w-5 text-gray-400 group-focus-within:text-cyan-600 transition-colors" />
+                      <User className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
                     </div>
                     <input
                       id="name"
                       name="name"
                       type="text"
                       required
-                      className="w-full pl-10 pr-4 py-2.5 bg-white border-2 border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent shadow-sm transition-all duration-200 hover:border-cyan-300 hover:shadow-md"
+                      className="w-full pl-10 pr-4 py-2.5 bg-white border-2 border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent shadow-sm transition-all duration-200 hover:border-indigo-300 hover:shadow-md"
                       placeholder="Enter your full name"
                       value={formData.name}
                       onChange={handleInputChange}
@@ -255,12 +255,12 @@ function CustomerSignup() {
 
                 {/* Email Field */}
                 <div className="transform transition-all duration-200 hover:translate-x-1">
-                  <label htmlFor="email" className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label htmlFor="email" className="block text-sm font-semibold text-slate-700 mb-2">
                     Email Address
                   </label>
                   <div className="relative group">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <AtSign className="h-5 w-5 text-gray-400 group-focus-within:text-cyan-600 transition-colors" />
+                      <AtSign className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
                     </div>
                     <input
                       id="email"
@@ -268,7 +268,7 @@ function CustomerSignup() {
                       type="email"
                       autoComplete="email"
                       required
-                      className="w-full pl-10 pr-4 py-2.5 bg-white border-2 border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent shadow-sm transition-all duration-200 hover:border-cyan-300 hover:shadow-md"
+                      className="w-full pl-10 pr-4 py-2.5 bg-white border-2 border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent shadow-sm transition-all duration-200 hover:border-indigo-300 hover:shadow-md"
                       placeholder="Enter your email address"
                       value={formData.email}
                       onChange={handleInputChange}
@@ -278,19 +278,19 @@ function CustomerSignup() {
 
                 {/* Mobile Field */}
                 <div className="transform transition-all duration-200 hover:translate-x-1">
-                  <label htmlFor="mobile" className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label htmlFor="mobile" className="block text-sm font-semibold text-slate-700 mb-2">
                     Mobile Number
                   </label>
                   <div className="relative group">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Phone className="h-5 w-5 text-gray-400 group-focus-within:text-cyan-600 transition-colors" />
+                      <Phone className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
                     </div>
                     <input
                       id="mobile"
                       name="mobile"
                       type="tel"
                       required
-                      className="w-full pl-10 pr-4 py-2.5 bg-white border-2 border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent shadow-sm transition-all duration-200 hover:border-cyan-300 hover:shadow-md"
+                      className="w-full pl-10 pr-4 py-2.5 bg-white border-2 border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent shadow-sm transition-all duration-200 hover:border-indigo-300 hover:shadow-md"
                       placeholder="+91 9876543210"
                       value={formData.mobile}
                       onChange={handleInputChange}
@@ -300,19 +300,19 @@ function CustomerSignup() {
 
                 {/* Address Field */}
                 <div className="transform transition-all duration-200 hover:translate-x-1">
-                  <label htmlFor="address" className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label htmlFor="address" className="block text-sm font-semibold text-slate-700 mb-2">
                     Address
                   </label>
                   <div className="relative group">
                     <div className="absolute top-3 left-3 pointer-events-none">
-                      <MapPin className="h-5 w-5 text-gray-400 group-focus-within:text-cyan-600 transition-colors" />
+                      <MapPin className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
                     </div>
                     <textarea
                       id="address"
                       name="address"
                       rows={2}
                       required
-                      className="w-full pl-10 pr-4 py-2.5 bg-white border-2 border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent shadow-sm transition-all duration-200 hover:border-cyan-300 hover:shadow-md resize-none"
+                      className="w-full pl-10 pr-4 py-2.5 bg-white border-2 border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent shadow-sm transition-all duration-200 hover:border-indigo-300 hover:shadow-md resize-none"
                       placeholder="Enter your complete address"
                       value={formData.address}
                       onChange={handleInputChange}
@@ -322,18 +322,18 @@ function CustomerSignup() {
 
                 {/* GST Number Field */}
                 <div className="transform transition-all duration-200 hover:translate-x-1">
-                  <label htmlFor="gstNumber" className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label htmlFor="gstNumber" className="block text-sm font-semibold text-slate-700 mb-2">
                     GST Number
                   </label>
                   <div className="relative group">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <FileText className="h-5 w-5 text-gray-400 group-focus-within:text-cyan-600 transition-colors" />
+                      <FileText className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
                     </div>
                     <input
                       id="gstNumber"
                       name="gstNumber"
                       type="text"
-                      className="w-full pl-10 pr-4 py-2.5 bg-white border-2 border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent shadow-sm transition-all duration-200 hover:border-cyan-300 hover:shadow-md"
+                      className="w-full pl-10 pr-4 py-2.5 bg-white border-2 border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent shadow-sm transition-all duration-200 hover:border-indigo-300 hover:shadow-md"
                       placeholder="27ABCDE1234F1Z5 (optional)"
                       value={formData.gstNumber}
                       onChange={handleInputChange}
@@ -343,12 +343,12 @@ function CustomerSignup() {
 
                 {/* Password Field */}
                 <div className="transform transition-all duration-200 hover:translate-x-1">
-                  <label htmlFor="password" className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label htmlFor="password" className="block text-sm font-semibold text-slate-700 mb-2">
                     Password
                   </label>
                   <div className="relative group">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Lock className="h-5 w-5 text-gray-400 group-focus-within:text-cyan-600 transition-colors" />
+                      <Lock className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
                     </div>
                     <input
                       id="password"
@@ -356,7 +356,7 @@ function CustomerSignup() {
                       type={showPassword ? "text" : "password"}
                       autoComplete="new-password"
                       required
-                      className="w-full pl-10 pr-12 py-2.5 bg-white border-2 border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent shadow-sm transition-all duration-200 hover:border-cyan-300 hover:shadow-md"
+                      className="w-full pl-10 pr-12 py-2.5 bg-white border-2 border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent shadow-sm transition-all duration-200 hover:border-indigo-300 hover:shadow-md"
                       placeholder="Create a strong password"
                       value={formData.password}
                       onChange={handleInputChange}
@@ -367,9 +367,9 @@ function CustomerSignup() {
                       onClick={togglePasswordVisibility}
                     >
                       {showPassword ? (
-                        <EyeOff className="h-5 w-5 text-gray-400 hover:text-cyan-600 transition-colors" />
+                        <EyeOff className="h-5 w-5 text-slate-400 hover:text-indigo-600 transition-colors" />
                       ) : (
-                        <Eye className="h-5 w-5 text-gray-400 hover:text-cyan-600 transition-colors" />
+                        <Eye className="h-5 w-5 text-slate-400 hover:text-indigo-600 transition-colors" />
                       )}
                     </button>
                   </div>
@@ -377,12 +377,12 @@ function CustomerSignup() {
                   {formData.password && (
                     <div className="mt-2">
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs text-gray-500">Password strength:</span>
+                        <span className="text-xs text-slate-500">Password strength:</span>
                         <span className={`text-xs font-semibold ${passwordStrength.color}`}>
                           {passwordStrength.text}
                         </span>
                       </div>
-                      <div className="w-full bg-gray-200 rounded-full h-1.5">
+                      <div className="w-full bg-slate-200 rounded-full h-1.5">
                         <div
                           className={`h-1.5 rounded-full transition-all duration-300 ${passwordStrength.strength === 1 ? 'bg-red-500 w-1/4' :
                               passwordStrength.strength === 2 ? 'bg-yellow-500 w-2/4' :
@@ -397,12 +397,12 @@ function CustomerSignup() {
 
                 {/* Confirm Password Field */}
                 <div className="transform transition-all duration-200 hover:translate-x-1">
-                  <label htmlFor="confirmPassword" className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label htmlFor="confirmPassword" className="block text-sm font-semibold text-slate-700 mb-2">
                     Confirm Password
                   </label>
                   <div className="relative group">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Lock className="h-5 w-5 text-gray-400 group-focus-within:text-cyan-600 transition-colors" />
+                      <Lock className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
                     </div>
                     <input
                       id="confirmPassword"
@@ -410,7 +410,7 @@ function CustomerSignup() {
                       type={showConfirmPassword ? "text" : "password"}
                       autoComplete="new-password"
                       required
-                      className="w-full pl-10 pr-12 py-2.5 bg-white border-2 border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent shadow-sm transition-all duration-200 hover:border-cyan-300 hover:shadow-md"
+                      className="w-full pl-10 pr-12 py-2.5 bg-white border-2 border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent shadow-sm transition-all duration-200 hover:border-indigo-300 hover:shadow-md"
                       placeholder="Confirm your password"
                       value={formData.confirmPassword}
                       onChange={handleInputChange}
@@ -421,9 +421,9 @@ function CustomerSignup() {
                       onClick={toggleConfirmPasswordVisibility}
                     >
                       {showConfirmPassword ? (
-                        <EyeOff className="h-5 w-5 text-gray-400 hover:text-cyan-600 transition-colors" />
+                        <EyeOff className="h-5 w-5 text-slate-400 hover:text-indigo-600 transition-colors" />
                       ) : (
-                        <Eye className="h-5 w-5 text-gray-400 hover:text-cyan-600 transition-colors" />
+                        <Eye className="h-5 w-5 text-slate-400 hover:text-indigo-600 transition-colors" />
                       )}
                     </button>
                   </div>
@@ -450,7 +450,7 @@ function CustomerSignup() {
                   <button
                     type="submit"
                     disabled={loading}
-                    className="group relative w-full flex items-center justify-center px-4 py-3 bg-gradient-to-r from-teal-500 to-emerald-600 text-white font-semibold rounded-xl hover:from-teal-600 hover:to-emerald-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-2xl disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none overflow-hidden"
+                    className="group relative w-full flex items-center justify-center px-4 py-3 bg-gradient-to-r from-indigo-600 to-blue-600 text-white font-semibold rounded-xl hover:from-indigo-700 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-2xl disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none overflow-hidden"
                   >
                     <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent transform -skew-x-12 group-hover:animate-shine"></div>
                     {loading ? (
@@ -470,12 +470,12 @@ function CustomerSignup() {
             ) : (
               <form className="space-y-6" onSubmit={handleOtpVerification}>
                 <div className="transform transition-all duration-200 hover:translate-x-1">
-                  <label htmlFor="otp" className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label htmlFor="otp" className="block text-sm font-semibold text-slate-700 mb-2">
                     Enter OTP
                   </label>
                   <div className="relative group">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Mail className="h-5 w-5 text-gray-400 group-focus-within:text-cyan-600 transition-colors" />
+                      <Mail className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
                     </div>
                     <input
                       id="otp"
@@ -483,21 +483,21 @@ function CustomerSignup() {
                       type="text"
                       maxLength="6"
                       required
-                      className="w-full pl-10 pr-4 py-3 bg-white border-2 border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent shadow-sm transition-all duration-200 hover:border-cyan-300 hover:shadow-md text-center text-lg font-mono tracking-widest"
+                      className="w-full pl-10 pr-4 py-3 bg-white border-2 border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent shadow-sm transition-all duration-200 hover:border-indigo-300 hover:shadow-md text-center text-lg font-mono tracking-widest"
                       placeholder="000000"
                       value={otp}
                       onChange={handleOtpChange}
                     />
                   </div>
-                  <div className="mt-2 text-xs text-gray-500 text-center">
+                  <div className="mt-2 text-xs text-slate-500 text-center">
                     Enter the 6-digit code sent to your email
                   </div>
                 </div>
 
                 {otpTimer > 0 && (
-                  <div className="flex items-center justify-center text-sm text-gray-600 bg-blue-50 py-2 rounded-lg">
-                    <Clock className="h-4 w-4 mr-2 text-blue-600" />
-                    <span>Resend OTP in <span className="font-bold text-blue-600">{formatTime(otpTimer)}</span></span>
+                  <div className="flex items-center justify-center text-sm text-slate-600 bg-indigo-50 py-2 rounded-lg">
+                    <Clock className="h-4 w-4 mr-2 text-indigo-600" />
+                    <span>Resend OTP in <span className="font-bold text-indigo-600">{formatTime(otpTimer)}</span></span>
                   </div>
                 )}
 
@@ -505,7 +505,7 @@ function CustomerSignup() {
                   <button
                     type="submit"
                     disabled={otpLoading || !otp || otp.length !== 6}
-                    className="group relative w-full flex items-center justify-center px-4 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-semibold rounded-xl hover:from-green-600 hover:to-emerald-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-2xl disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none overflow-hidden"
+                    className="group relative w-full flex items-center justify-center px-4 py-3 bg-gradient-to-r from-emerald-500 to-green-600 text-white font-semibold rounded-xl hover:from-emerald-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-2xl disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none overflow-hidden"
                   >
                     <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent transform -skew-x-12 group-hover:animate-shine"></div>
                     {otpLoading ? (
@@ -528,11 +528,11 @@ function CustomerSignup() {
                       type="button"
                       onClick={handleResendOtp}
                       disabled={resendLoading}
-                      className="inline-flex items-center px-4 py-2 text-sm font-semibold text-cyan-600 hover:text-cyan-700 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 rounded-lg transition-colors disabled:opacity-50"
+                      className="inline-flex items-center px-4 py-2 text-sm font-semibold text-indigo-600 hover:text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 rounded-lg transition-colors disabled:opacity-50"
                     >
                       {resendLoading ? (
                         <>
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-cyan-600 mr-2"></div>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600 mr-2"></div>
                           Sending...
                         </>
                       ) : (
@@ -549,7 +549,7 @@ function CustomerSignup() {
                   <button
                     type="button"
                     onClick={handleBackToForm}
-                    className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 rounded-lg transition-colors"
+                    className="inline-flex items-center px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 rounded-lg transition-colors"
                   >
                     <ArrowRight className="h-4 w-4 mr-1 rotate-180" />
                     Back to form
@@ -562,16 +562,16 @@ function CustomerSignup() {
               <div className="mt-6 text-center">
                 <div className="relative">
                   <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t-2 border-gray-200"></div>
+                    <div className="w-full border-t-2 border-slate-200"></div>
                   </div>
                   <div className="relative flex justify-center text-sm">
-                    <span className="px-4 bg-white/70 text-gray-500 font-medium">Already have an account?</span>
+                    <span className="px-4 bg-white text-slate-500 font-medium">Already have an account?</span>
                   </div>
                 </div>
                 <div className="mt-4">
                   <Link
                     to="/customer/login"
-                    className="inline-flex items-center px-6 py-2.5 border-2 border-cyan-500 rounded-xl text-sm font-semibold text-cyan-600 bg-white hover:bg-cyan-50 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 transition-all duration-200 hover:scale-105 hover:shadow-lg"
+                    className="inline-flex items-center px-6 py-2.5 border-2 border-indigo-500 rounded-xl text-sm font-semibold text-indigo-600 bg-white hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-all duration-200 hover:scale-105 hover:shadow-lg"
                   >
                     Sign in instead
                   </Link>
@@ -582,11 +582,11 @@ function CustomerSignup() {
 
           {/* Additional Info */}
           <div className="text-center animate-fade-in-up animation-delay-200">
-            <p className="text-xs text-gray-600">
+            <p className="text-xs text-slate-600">
               By creating an account, you agree to our{' '}
-              <span className="text-cyan-600 hover:underline cursor-pointer font-medium">Terms</span>
+              <span className="text-indigo-600 hover:underline cursor-pointer font-medium">Terms</span>
               {' '}and{' '}
-              <span className="text-cyan-600 hover:underline cursor-pointer font-medium">Privacy Policy</span>
+              <span className="text-indigo-600 hover:underline cursor-pointer font-medium">Privacy Policy</span>
             </p>
           </div>
         </div>

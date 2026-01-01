@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { QrCode, Facebook, Instagram, Linkedin, Youtube, Download, ExternalLink, AlertCircle, Loader2, User, Clock, AlertTriangle, Search, Filter, CheckCircle, X, BarChart3, Users } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
 
 const PLATFORMS = [
   { key: 'fb', label: 'Facebook', icon: Facebook, color: 'bg-blue-600 hover:bg-blue-700', lightColor: 'bg-blue-50 text-blue-700' },
@@ -15,6 +16,7 @@ const API_BASE = "https://my-backend-593529385135.asia-south1.run.app";
 const FRONTEND_URL = "https://airspark.storage.googleapis.com/index.html";
 
 export default function AdminQrGenerator() {
+  const { currentUser } = useAuth();
   const [customers, setCustomers] = useState([]);
   const [filteredCustomers, setFilteredCustomers] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -28,18 +30,33 @@ export default function AdminQrGenerator() {
   const [successMessage, setSuccessMessage] = useState('');
 
   useEffect(() => {
-    fetch(`${API_BASE}/api/customers`)
-      .then(res => res.json())
-      .then(data => {
-        setCustomers(data.customers || []);
-        setFilteredCustomers(data.customers || []);
-        setFetchingCustomers(false);
-      })
-      .catch(() => {
-        setError('Failed to load customers');
-        setFetchingCustomers(false);
-      });
-  }, []);
+    fetchAssignedCustomers();
+  }, [currentUser]);
+
+  const fetchAssignedCustomers = async () => {
+    if (!currentUser || currentUser.role !== 'admin') {
+      setFetchingCustomers(false);
+      return;
+    }
+
+    try {
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+      const response = await fetch(`${apiUrl}/admin/assigned-customers?adminId=${currentUser._id || currentUser.id}`);
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch assigned customers');
+      }
+      
+      const data = await response.json();
+      setCustomers(data);
+      setFilteredCustomers(data);
+      setFetchingCustomers(false);
+    } catch (err) {
+      console.error('Error fetching assigned customers:', err);
+      setError('Failed to load your assigned customers');
+      setFetchingCustomers(false);
+    }
+  };
 
   // Search and filter functionality
   useEffect(() => {

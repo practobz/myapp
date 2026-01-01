@@ -100,6 +100,9 @@ function YouTubeIntegration(props) {
   const [loadingVideoAnalytics, setLoadingVideoAnalytics] = useState({});
   const [showAnalyticsFor, setShowAnalyticsFor] = useState(null);
 
+  // Token refresh timer
+  const [tokenRefreshTimer, setTokenRefreshTimer] = useState(null);
+
   // Safe error setter wrapper
   const setSafeErrorState = (error) => setSafeError(setError, error);
 
@@ -429,8 +432,13 @@ function YouTubeIntegration(props) {
         setUserData('yt_active_account_id', userId);
         
         // Store token and expiry with user-specific keys
+        const expiryTime = Date.now() + (tokenResponse.expires_in || 3600) * 1000;
         setUserData(`yt_access_token_${userId}`, tokenResponse.access_token);
-        setUserData(`yt_token_expiry_${userId}`, (Date.now() + (tokenResponse.expires_in || 3600) * 1000).toString());
+        setUserData(`yt_token_expiry_${userId}`, expiryTime.toString());
+        
+        // Schedule automatic token refresh (5 minutes before expiry)
+        scheduleTokenRefresh(userId, expiryTime);
+        console.log('✅ Automatic token refresh scheduled');
         
         // Fetch additional data - pass the newAccount instead of relying on state
         await fetchChannelData(channel, newAccount);
@@ -946,11 +954,16 @@ function YouTubeIntegration(props) {
 
         // Store new token with expiry
         const expiresIn = tokenData.expires_in || 3600;
+        const newExpiry = Date.now() + expiresIn * 1000;
         setUserData(`yt_access_token_${accountId}`, tokenData.access_token);
-        setUserData(`yt_token_expiry_${accountId}`, (Date.now() + expiresIn * 1000).toString());
+        setUserData(`yt_token_expiry_${accountId}`, newExpiry.toString());
 
         // Update the stored customer social account with new token
         await updateStoredToken(accountId, tokenData.access_token, expiresIn);
+
+        // Schedule next automatic refresh (5 minutes before expiry)
+        scheduleTokenRefresh(accountId, newExpiry);
+        console.log(`⏰ Next auto-refresh scheduled at: ${new Date(newExpiry - 5 * 60 * 1000).toLocaleString()}`);
 
         return true;
       } else {
@@ -961,6 +974,33 @@ function YouTubeIntegration(props) {
       console.error('❌ Error refreshing YouTube token:', error);
       return false;
     }
+  };
+
+  // Schedule automatic token refresh before expiry
+  const scheduleTokenRefresh = (accountId, expiryTime) => {
+    // Clear existing timer
+    if (tokenRefreshTimer) {
+      clearTimeout(tokenRefreshTimer);
+    }
+
+    // Calculate when to refresh (5 minutes before expiry)
+    const refreshTime = expiryTime - Date.now() - (5 * 60 * 1000);
+    
+    // Don't schedule if already expired or too soon
+    if (refreshTime <= 0) {
+      console.log('⚠️ Token expires too soon, refreshing immediately...');
+      refreshYouTubeToken(accountId);
+      return;
+    }
+
+    console.log(`⏰ Scheduled token refresh in ${Math.round(refreshTime / 1000 / 60)} minutes`);
+    
+    const timer = setTimeout(() => {
+      console.log('⏰ Auto-refreshing YouTube token...');
+      refreshYouTubeToken(accountId);
+    }, refreshTime);
+
+    setTokenRefreshTimer(timer);
   };
 
   // Update stored token in database with error handling
@@ -1234,25 +1274,35 @@ function YouTubeIntegration(props) {
     const storedExpiry = getUserData(`yt_token_expiry_${activeAccount.id}`);
     const tokenExpired = !storedExpiry || Date.now() >= parseInt(storedExpiry, 10);
     const tokenExpiringSoon = storedExpiry && Date.now() >= parseInt(storedExpiry, 10) - 600000; // 10 minutes
+    const hasRefreshToken = !!activeAccount.refreshToken;
 
     return (
-      <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-        <h6 className="font-medium text-yellow-800 mb-2">🔑 Token Status</h6>
-        <div className="text-sm text-yellow-700 space-y-1">
+      <div className="mt-4 p-3 bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-lg">
+        <h6 className="font-medium text-green-800 mb-2">🔑 Token Status</h6>
+        <div className="text-sm text-green-700 space-y-1">
           <p>📅 <strong>Token Status:</strong> {tokenExpired ? '❌ Expired' : tokenExpiringSoon ? '⚠️ Expiring Soon' : '✅ Valid'}</p>
           {storedExpiry && (
             <p>⏰ <strong>Expires:</strong> {new Date(parseInt(storedExpiry, 10)).toLocaleString()}</p>
+          )}
+          {hasRefreshToken && (
+            <div className="mt-2 p-2 bg-green-100 border border-green-300 rounded text-xs">
+              <p className="flex items-center">
+                <RefreshCw className="h-3 w-3 mr-1 text-green-600" />
+                <strong className="text-green-800">✅ Auto-Refresh Enabled:</strong>
+                <span className="ml-1 text-green-700">Token will refresh automatically before expiry</span>
+              </p>
+            </div>
           )}
           <div className="mt-2 space-x-2">
             {(tokenExpired || tokenExpiringSoon) && (
               <button
                 onClick={() => refreshYouTubeToken(activeAccount.id)}
-                className="bg-yellow-600 text-white px-3 py-1 rounded text-sm hover:bg-yellow-700"
+                className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700"
               >
-                🔄 Refresh Token
+                🔄 Refresh Now
               </button>
             )}
-            {!activeAccount.refreshToken && (
+            {!hasRefreshToken && (
               <button
                 onClick={() => {
                   if (tokenClient) {
@@ -1261,13 +1311,13 @@ function YouTubeIntegration(props) {
                 }}
                 className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
               >
-                🔑 Re-authenticate
+                🔑 Enable Auto-Refresh
               </button>
             )}
           </div>
-          {!activeAccount.refreshToken && (
-            <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700">
-              <strong>⚠️ No refresh token:</strong> Click "Re-authenticate" to get a refresh token for auto-renewal.
+          {!hasRefreshToken && (
+            <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
+              <strong>⚠️ Auto-refresh disabled:</strong> Click "Enable Auto-Refresh" to allow automatic token renewal. This will keep your session active indefinitely.
             </div>
           )}
         </div>
@@ -1648,11 +1698,22 @@ function YouTubeIntegration(props) {
           window.gapi.client.setToken({ access_token: activeAccount.accessToken });
           // Only fetch channel info if not already loaded
           if (!channelInfo) fetchChannelInfo();
+          
+          // Schedule automatic token refresh for this account
+          const expiryTime = parseInt(storedExpiry, 10);
+          scheduleTokenRefresh(activeAccount.id, expiryTime);
         }
       } catch (error) {
         console.warn('Error restoring active account token:', error);
       }
     }
+
+    // Cleanup timer on unmount or account change
+    return () => {
+      if (tokenRefreshTimer) {
+        clearTimeout(tokenRefreshTimer);
+      }
+    };
   }, [gapiClientReady, gisLoaded, activeAccount]);
 
   // Initialize token client with error handling

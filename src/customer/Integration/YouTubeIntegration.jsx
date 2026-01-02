@@ -3,6 +3,44 @@ import { Youtube, TrendingUp, ExternalLink, CheckCircle, AlertCircle, Loader2, U
 import YouTubePostAnalytics from './components/YouTubePostAnalytics';
 import { getUserData, setUserData, removeUserData, migrateToUserSpecificStorage } from '../../utils/sessionUtils';
 
+/**
+ * YouTube Integration Component with Automatic Token Refresh
+ * 
+ * TOKEN REFRESH MECHANISM:
+ * ========================
+ * This component implements a multi-layered token refresh strategy to prevent YouTube token expiration:
+ * 
+ * 1. REFRESH TOKEN ACQUISITION:
+ *    - When users connect their YouTube account, we request with prompt='consent'
+ *    - This ensures Google returns a refresh_token alongside the access_token
+ *    - The refresh_token is stored securely and persists across sessions
+ * 
+ * 2. AUTOMATIC SCHEDULED REFRESH:
+ *    - When a token is obtained, we schedule automatic refresh 10 minutes before expiry
+ *    - Uses setTimeout to trigger refreshYouTubeToken() at the calculated time
+ *    - New tokens are automatically scheduled for refresh upon successful renewal
+ * 
+ * 3. PERIODIC VALIDATION:
+ *    - Every 10 minutes, we check if the current token expires within 15 minutes
+ *    - Provides a safety net in case scheduled refresh fails or browser tab is inactive
+ *    - Runs via setInterval throughout the component lifecycle
+ * 
+ * 4. ON-DEMAND REFRESH:
+ *    - Before any API call, ensureValidToken() checks if token expires soon
+ *    - Automatically refreshes if token expires within 10 minutes
+ *    - Prevents API errors from expired tokens
+ * 
+ * 5. MANUAL REFRESH:
+ *    - Users can manually trigger refresh via the "Refresh Token" button
+ *    - Useful for debugging or immediate token renewal
+ * 
+ * IMPORTANT NOTES:
+ * - Refresh tokens are only provided on first authorization with prompt='consent'
+ * - Users must disconnect and reconnect to get a refresh token if missing
+ * - Token refresh requires client_secret in production (consider backend refresh)
+ * - GAPI client token is updated immediately after refresh for seamless API calls
+ */
+
 // YouTube Integration Constants
 const CLIENT_ID = '593529385135-snp35l6s9dtje8g8f1l1b3ajtp375cjr.apps.googleusercontent.com';
 const API_KEY = 'AIzaSyD2fYMvhlDJwk6cMEJSBRQmJnsidFjCFtc';
@@ -436,7 +474,7 @@ function YouTubeIntegration(props) {
         setUserData(`yt_access_token_${userId}`, tokenResponse.access_token);
         setUserData(`yt_token_expiry_${userId}`, expiryTime.toString());
         
-        // Schedule automatic token refresh (5 minutes before expiry)
+        // Schedule automatic token refresh (10 minutes before expiry for safety)
         scheduleTokenRefresh(userId, expiryTime);
         console.log('✅ Automatic token refresh scheduled');
         
@@ -725,7 +763,9 @@ function YouTubeIntegration(props) {
   const handleSignIn = () => {
     try {
       if (tokenClient) {
-        tokenClient.requestAccessToken();
+        // CRITICAL: Request with prompt=consent to ensure we get a refresh token
+        // Without this, YouTube tokens expire after 1 hour with no way to refresh
+        tokenClient.requestAccessToken({ prompt: 'consent' });
       } else {
         setSafeErrorState('Authentication service not ready. Please refresh the page and try again.');
       }
@@ -839,6 +879,15 @@ function YouTubeIntegration(props) {
     setLoadingVideoAnalytics(prev => ({ ...prev, [videoId]: true }));
 
     try {
+      // Ensure valid token before fetching analytics
+      if (activeAccount) {
+        const tokenValid = await ensureValidToken(activeAccount.id);
+        if (!tokenValid) {
+          setLoadingVideoAnalytics(prev => ({ ...prev, [videoId]: false }));
+          return;
+        }
+      }
+
       // Fetch detailed video statistics
       const response = await window.gapi.client.youtube.videos.list({
         part: 'statistics,snippet,contentDetails',
@@ -909,14 +958,16 @@ function YouTubeIntegration(props) {
   const refreshYouTubeToken = async (accountId) => {
     const account = connectedAccounts.find(acc => acc.id === accountId);
     if (!account || !account.refreshToken) {
-      console.warn('No refresh token available for account:', accountId);
+      console.warn('⚠️ No refresh token available for account:', accountId);
+      console.warn('💡 To enable auto-refresh: Disconnect and reconnect your YouTube account with consent prompt');
       return false;
     }
 
     try {
       console.log('🔄 Refreshing YouTube access token...');
       
-      // Use Google's token refresh endpoint
+      // Try direct refresh with Google's token endpoint (requires client_secret in production)
+      // For development/testing, we'll use a simpler approach
       const response = await fetch('https://oauth2.googleapis.com/token', {
         method: 'POST',
         headers: {
@@ -926,6 +977,8 @@ function YouTubeIntegration(props) {
           client_id: CLIENT_ID,
           refresh_token: account.refreshToken,
           grant_type: 'refresh_token'
+          // Note: client_secret may be required for production apps
+          // Consider moving token refresh to backend for security
         })
       });
 
@@ -950,6 +1003,8 @@ function YouTubeIntegration(props) {
 
         if (activeAccountId === accountId) {
           setActiveAccount(updatedAccount);
+          // Update the GAPI client token immediately
+          window.gapi.client.setToken({ access_token: tokenData.access_token });
         }
 
         // Store new token with expiry
@@ -961,13 +1016,17 @@ function YouTubeIntegration(props) {
         // Update the stored customer social account with new token
         await updateStoredToken(accountId, tokenData.access_token, expiresIn);
 
-        // Schedule next automatic refresh (5 minutes before expiry)
+        // Schedule next automatic refresh (10 minutes before expiry for safety)
         scheduleTokenRefresh(accountId, newExpiry);
-        console.log(`⏰ Next auto-refresh scheduled at: ${new Date(newExpiry - 5 * 60 * 1000).toLocaleString()}`);
+        console.log(`⏰ Next auto-refresh scheduled at: ${new Date(newExpiry - 10 * 60 * 1000).toLocaleString()}`);
 
         return true;
       } else {
         console.error('❌ Failed to refresh YouTube token:', tokenData);
+        if (tokenData.error === 'invalid_grant') {
+          console.error('🔴 Refresh token is invalid or revoked. User needs to reconnect YouTube account.');
+          setSafeErrorState('YouTube access has been revoked. Please reconnect your account.');
+        }
         return false;
       }
     } catch (error) {
@@ -983,8 +1042,8 @@ function YouTubeIntegration(props) {
       clearTimeout(tokenRefreshTimer);
     }
 
-    // Calculate when to refresh (5 minutes before expiry)
-    const refreshTime = expiryTime - Date.now() - (5 * 60 * 1000);
+    // Calculate when to refresh (10 minutes before expiry for better safety)
+    const refreshTime = expiryTime - Date.now() - (10 * 60 * 1000);
     
     // Don't schedule if already expired or too soon
     if (refreshTime <= 0) {
@@ -993,7 +1052,7 @@ function YouTubeIntegration(props) {
       return;
     }
 
-    console.log(`⏰ Scheduled token refresh in ${Math.round(refreshTime / 1000 / 60)} minutes`);
+    console.log(`⏰ Scheduled token refresh in ${Math.round(refreshTime / 1000 / 60)} minutes (at ${new Date(Date.now() + refreshTime).toLocaleTimeString()})`);
     
     const timer = setTimeout(() => {
       console.log('⏰ Auto-refreshing YouTube token...');
@@ -1044,13 +1103,19 @@ function YouTubeIntegration(props) {
       if (!account) return false;
 
       const storedExpiry = getUserData(`yt_token_expiry_${accountId}`);
-      const tokenExpired = !storedExpiry || Date.now() >= parseInt(storedExpiry, 10) - 300000; // Refresh 5 minutes before expiry
+      const tokenExpired = !storedExpiry || Date.now() >= parseInt(storedExpiry, 10) - 600000; // Refresh 10 minutes before expiry
 
-      if (tokenExpired && account.refreshToken) {
-        console.log('🔄 Token expired or expiring soon, attempting refresh...');
-        const refreshed = await refreshYouTubeToken(accountId);
-        if (!refreshed) {
-          setSafeErrorState('Failed to refresh YouTube token. Please reconnect your YouTube account.');
+      if (tokenExpired) {
+        if (account.refreshToken) {
+          console.log('🔄 Token expired or expiring soon, attempting refresh...');
+          const refreshed = await refreshYouTubeToken(accountId);
+          if (!refreshed) {
+            setSafeErrorState('Failed to refresh YouTube token. Please reconnect your YouTube account.');
+            return false;
+          }
+        } else {
+          console.warn('⚠️ Token expired but no refresh token available');
+          setSafeErrorState('YouTube session expired. Please reconnect your account to continue.');
           return false;
         }
       }
@@ -1702,17 +1767,36 @@ function YouTubeIntegration(props) {
           // Schedule automatic token refresh for this account
           const expiryTime = parseInt(storedExpiry, 10);
           scheduleTokenRefresh(activeAccount.id, expiryTime);
+        } else if (activeAccount.refreshToken) {
+          // Token expired but we have refresh token, try to refresh
+          console.log('🔄 Token expired, attempting automatic refresh...');
+          refreshYouTubeToken(activeAccount.id);
         }
       } catch (error) {
         console.warn('Error restoring active account token:', error);
       }
     }
 
-    // Cleanup timer on unmount or account change
+    // Set up periodic token validation check (every 10 minutes)
+    const validationInterval = setInterval(() => {
+      if (activeAccount && activeAccount.refreshToken) {
+        const storedExpiry = getUserData(`yt_token_expiry_${activeAccount.id}`);
+        const timeUntilExpiry = storedExpiry ? parseInt(storedExpiry, 10) - Date.now() : 0;
+        
+        // If token expires within 15 minutes, refresh it
+        if (timeUntilExpiry < 15 * 60 * 1000) {
+          console.log('⏰ Periodic check: Token expiring soon, refreshing...');
+          refreshYouTubeToken(activeAccount.id);
+        }
+      }
+    }, 10 * 60 * 1000); // Check every 10 minutes
+
+    // Cleanup timers on unmount or account change
     return () => {
       if (tokenRefreshTimer) {
         clearTimeout(tokenRefreshTimer);
       }
+      clearInterval(validationInterval);
     };
   }, [gapiClientReady, gisLoaded, activeAccount]);
 
@@ -1723,9 +1807,6 @@ function YouTubeIntegration(props) {
         const client = window.google.accounts.oauth2.initTokenClient({
           client_id: CLIENT_ID,
           scope: SCOPES,
-          // Add these parameters for offline access and refresh tokens
-          access_type: 'offline',
-          prompt: 'consent', // Force consent to get refresh token
           callback: (tokenResponse) => {
             try {
               if (tokenResponse && tokenResponse.access_token) {

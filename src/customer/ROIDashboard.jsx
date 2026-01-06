@@ -69,8 +69,7 @@ const ROIDashboard = () => {
       // First try to get historical data
       try {
         console.log('📊 Attempting to fetch historical data...');
-        const dashboardResponse = await fetch(`${backendUrl}/api/historical-data/get?accountId=${customerId}&platform=all&timePeriod=30`, {
-          method: 'GET',
+        const dashboardResponse = await fetch(`${backendUrl}/api/customer-analytics-data/${customerId}?platform=all&timePeriod=30`, { method: 'GET',
           headers: {
             'Content-Type': 'application/json'
           },

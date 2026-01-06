@@ -749,22 +749,36 @@ const ROIDashboard = () => {
   // Process historical data from the historical_data API
   const processHistoricalData = (historicalData) => {
     console.log('🔄 Processing historical data:', historicalData);
-    
     if (!historicalData || typeof historicalData !== 'object') {
       console.log('❌ Historical data missing or invalid structure');
       return null;
     }
 
+    // Log the keys and a sample of each array for debugging
+    const keys = Object.keys(historicalData);
+    console.log('🗝️ Historical data keys:', keys);
+    keys.forEach(key => {
+      const arr = historicalData[key];
+      if (Array.isArray(arr) && arr.length > 0) {
+        console.log(`🔑 Sample for ${key}:`, arr[0]);
+      }
+    });
+
     const platformData = {};
+
+    // Acceptable metric types for dashboard
+    const allowedMetrics = ['followers', 'likes', 'comments', 'shares', 'engagement', 'views', 'reach', 'impressions', 'subscribers'];
 
     // Process each metric type in the historical data
     Object.keys(historicalData).forEach(metricType => {
       const metricDataArray = historicalData[metricType];
-      
       if (!Array.isArray(metricDataArray) || metricDataArray.length === 0) {
         return;
       }
-
+      // Warn if metricType is not expected
+      if (!allowedMetrics.includes(metricType)) {
+        console.warn(`⚠️ Unexpected metric type: ${metricType}`);
+      }
       console.log(`📊 Processing metric type: ${metricType} with ${metricDataArray.length} data points`);
 
       // Get the latest values for current metrics

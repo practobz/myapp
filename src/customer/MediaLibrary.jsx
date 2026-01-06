@@ -7,10 +7,16 @@ function MediaLibrary() {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
 
-  // TODO: Replace with actual customer info from context/auth/session
-  const customer_id = "customer123";
-  const customer_name = "John Doe";
-  const customer_email = "john@example.com";
+  // Get logged-in customer info from localStorage (same pattern as ContentCalendar)
+  let user = null;
+  try {
+    user = JSON.parse(localStorage.getItem('user'));
+  } catch {
+    user = null;
+  }
+  const customer_id = user?.id || user?._id;
+  const customer_name = user?.name || '';
+  const customer_email = user?.email || '';
 
   // Dynamic state
   const [mediaItems, setMediaItems] = useState([]);
@@ -28,6 +34,11 @@ function MediaLibrary() {
 
   // Fetch media items from backend (filtered by customer)
   useEffect(() => {
+    if (!customer_id) {
+      setLoading(false);
+      setError('No customer logged in');
+      return;
+    }
     setLoading(true);
     fetch(`${process.env.REACT_APP_API_URL}/api/media-library?customer_id=${encodeURIComponent(customer_id)}`)
       .then(res => res.json())

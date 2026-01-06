@@ -689,4 +689,3 @@ function CustomerSignup() {
 }
 
 export default CustomerSignup;
-     hello

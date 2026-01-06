@@ -232,8 +232,28 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
       
       if (data.length === 0) return null;
 
-      // Show last 7 days for bar chart
-      const barData = data.slice(-7);
+      // Metrics that are cumulative (show latest value, not sum)
+      const cumulativeMetrics = ['followers', 'reach', 'impressions', 'views'];
+      const isCumulative = cumulativeMetrics.includes(metric);
+      
+      // Determine how many bars to show based on selected period
+      let barsToShow;
+      if (selectedPeriod <= 7) barsToShow = selectedPeriod;
+      else if (selectedPeriod <= 30) barsToShow = Math.min(14, data.length);
+      else if (selectedPeriod <= 90) barsToShow = Math.min(30, data.length);
+      else barsToShow = Math.min(60, data.length); // For longer periods, show max 60 bars
+      
+      const barData = data.slice(-barsToShow);
+      
+      // Calculate display value
+      let displayValue;
+      if (isCumulative) {
+        // Use the latest value for cumulative metrics
+        displayValue = barData[barData.length - 1]?.value || 0;
+      } else {
+        // Sum for incremental metrics
+        displayValue = barData.reduce((sum, item) => sum + (item.value || 0), 0);
+      }
 
       return (
         <div key={metric} className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
@@ -242,13 +262,13 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
               <h4 className="text-lg font-semibold text-gray-900">
                 {metricInfo?.label || metric}
               </h4>
-              <p className="text-sm text-gray-600">Last 7 days</p>
+              <p className="text-sm text-gray-600">Last {barsToShow} {barsToShow === 1 ? 'day' : 'days'}</p>
             </div>
             <div className="text-right">
               <div className="text-2xl font-bold" style={{ color: metricInfo?.color }}>
-                {barData.reduce((sum, item) => sum + (item.value || 0), 0).toLocaleString()}
+                {displayValue.toLocaleString()}
               </div>
-              <div className="text-xs text-gray-500">Total</div>
+              <div className="text-xs text-gray-500">{isCumulative ? 'Current' : 'Total'}</div>
             </div>
           </div>
           
@@ -294,27 +314,52 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
     };
 
     const renderPieChart = () => {
-      // Create pie chart from total values of selected metrics
+      // Metrics that are cumulative (use latest value, not sum)
+      const cumulativeMetrics = ['followers', 'reach', 'impressions', 'views'];
+      
+      // Create pie chart from values of selected metrics
       const pieData = selectedMetrics.map(metric => {
         const data = chartData[metric] || [];
-        const total = data.reduce((sum, item) => sum + (item.value || 0), 0);
+        const isCumulative = cumulativeMetrics.includes(metric);
+        
+        let value;
+        if (isCumulative) {
+          // Use latest value for cumulative metrics
+          value = data[data.length - 1]?.value || 0;
+        } else {
+          // Sum for incremental metrics
+          value = data.reduce((sum, item) => sum + (item.value || 0), 0);
+        }
+        
         const metricInfo = METRICS_OPTIONS.find(m => m.value === metric);
         
         return {
           name: metricInfo?.label || metric,
-          value: total,
-          color: metricInfo?.color || '#6B7280'
+          value: value,
+          color: metricInfo?.color || '#6B7280',
+          isCumulative
         };
       }).filter(item => item.value > 0);
 
       if (pieData.length === 0) return null;
+      
+      const hasCumulative = pieData.some(item => item.isCumulative);
+      const hasIncremental = pieData.some(item => !item.isCumulative);
+      let subtitle;
+      if (hasCumulative && hasIncremental) {
+        subtitle = 'Current values & period totals';
+      } else if (hasCumulative) {
+        subtitle = 'Current values';
+      } else {
+        subtitle = `Last ${selectedPeriod} days totals`;
+      }
 
       return (
         <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h4 className="text-lg font-semibold text-gray-900">Metrics Distribution</h4>
-              <p className="text-sm text-gray-600">Last {selectedPeriod} days totals</p>
+              <p className="text-sm text-gray-600">{subtitle}</p>
             </div>
           </div>
           
@@ -374,10 +419,25 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
             <div className="space-y-4">
               {selectedMetrics.map(metric => {
                 const data = chartData[metric] || [];
-                const total = data.reduce((sum, item) => sum + (item.value || 0), 0);
-                const average = data.length > 0 ? total / data.length : 0;
+                const cumulativeMetrics = ['followers', 'reach', 'impressions', 'views'];
+                const isCumulative = cumulativeMetrics.includes(metric);
+                
                 const latest = data[data.length - 1]?.value || 0;
                 const metricInfo = METRICS_OPTIONS.find(m => m.value === metric);
+                
+                let total, average, peakValue;
+                if (isCumulative) {
+                  // For cumulative metrics, show peak/min instead of sum
+                  const values = data.map(d => d.value || 0).filter(v => v > 0);
+                  peakValue = values.length > 0 ? Math.max(...values) : 0;
+                  const minValue = values.length > 0 ? Math.min(...values) : 0;
+                  total = peakValue; // Show peak as "Total"
+                  average = minValue; // Show min as "Average"
+                } else {
+                  // For incremental metrics, sum and average make sense
+                  total = data.reduce((sum, item) => sum + (item.value || 0), 0);
+                  average = data.length > 0 ? total / data.length : 0;
+                }
                 
                 return (
                   <div key={metric} className="p-4 bg-gray-50 rounded-lg">
@@ -390,15 +450,15 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-sm">
                       <div>
-                        <div className="text-gray-500">Latest</div>
+                        <div className="text-gray-500">{isCumulative ? 'Current' : 'Latest'}</div>
                         <div className="font-semibold">{latest.toLocaleString()}</div>
                       </div>
                       <div>
-                        <div className="text-gray-500">Total</div>
+                        <div className="text-gray-500">{isCumulative ? 'Peak' : 'Total'}</div>
                         <div className="font-semibold">{total.toLocaleString()}</div>
                       </div>
                       <div>
-                        <div className="text-gray-500">Avg/Day</div>
+                        <div className="text-gray-500">{isCumulative ? 'Min' : 'Avg/Day'}</div>
                         <div className="font-semibold">{Math.round(average).toLocaleString()}</div>
                       </div>
                     </div>

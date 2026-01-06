@@ -64,7 +64,7 @@ const ROIDashboard = () => {
       console.log('🔍 Fetching analytics data for customer:', customerId);
       
       // Use full URL to backend server
-      const backendUrl = 'http://localhost:3001';
+    const backendUrl = 'https://my-backend-593529385135.asia-south1.run.app';
       
       // First try to get historical data
       try {

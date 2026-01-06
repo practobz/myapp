@@ -223,7 +223,7 @@ const ROIDashboard = () => {
     // First, try to fetch historical data for each connected account
     try {
       console.log('🔗 Attempting to fetch historical data for connected accounts...');
-      const backendUrl = 'http://localhost:3001';
+    const backendUrl = 'https://my-backend-593529385135.asia-south1.run.app';
       const customerId = currentUser._id;
       
       for (const account of accounts) {
@@ -277,7 +277,7 @@ const ROIDashboard = () => {
     // First, try to fetch real-time metrics from our new API for accounts without historical data
     try {
       console.log('🔗 Attempting to fetch real-time social metrics...');
-      const backendUrl = 'http://localhost:3001';
+    const backendUrl = 'https://my-backend-593529385135.asia-south1.run.app';
       const customerId = currentUser._id;
       
       const metricsResponse = await fetch(`${backendUrl}/api/customer/social-metrics/${customerId}`, {

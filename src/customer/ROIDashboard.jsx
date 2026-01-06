@@ -749,105 +749,30 @@ const ROIDashboard = () => {
   // Process historical data from the historical_data API
   const processHistoricalData = (historicalData) => {
     console.log('🔄 Processing historical data:', historicalData);
-    if (!historicalData || typeof historicalData !== 'object') {
+    if (!historicalData || typeof historicalData !== 'object' || !historicalData.platforms) {
       console.log('❌ Historical data missing or invalid structure');
       return null;
     }
 
-    // Log the keys and a sample of each array for debugging
-    const keys = Object.keys(historicalData);
-    console.log('🗝️ Historical data keys:', keys);
-    keys.forEach(key => {
-      const arr = historicalData[key];
-      if (Array.isArray(arr) && arr.length > 0) {
-        console.log(`🔑 Sample for ${key}:`, arr[0]);
-      }
-    });
-
     const platformData = {};
 
-    // Acceptable metric types for dashboard
-    const allowedMetrics = ['followers', 'likes', 'comments', 'shares', 'engagement', 'views', 'reach', 'impressions', 'subscribers'];
+    Object.keys(historicalData.platforms).forEach(platform => {
+      const metrics = historicalData.platforms[platform];
+      platformData[platform] = {};
 
-    // Process each metric type in the historical data
-    Object.keys(historicalData).forEach(metricType => {
-      const metricDataArray = historicalData[metricType];
-      if (!Array.isArray(metricDataArray) || metricDataArray.length === 0) {
-        return;
-      }
-      // Warn if metricType is not expected
-      if (!allowedMetrics.includes(metricType)) {
-        console.warn(`⚠️ Unexpected metric type: ${metricType}`);
-      }
-      console.log(`📊 Processing metric type: ${metricType} with ${metricDataArray.length} data points`);
+      // List of metrics to extract
+      ['followers', 'likes', 'comments', 'shares', 'engagement_rate', 'reach', 'impressions', 'views', 'monthlyData'].forEach(metric => {
+        if (metrics[metric] !== undefined) {
+          platformData[platform][metric] = metrics[metric];
+        }
+      });
 
-      // Get the latest values for current metrics
-      const latestData = metricDataArray[metricDataArray.length - 1];
-      const previousData = metricDataArray.length > 1 ? metricDataArray[metricDataArray.length - 2] : latestData;
-      const firstData = metricDataArray[0];
-
-      const currentValue = latestData.value || 0;
-      const previousValue = previousData.value || 0;
-      const growth = previousValue > 0 ? ((currentValue - previousValue) / previousValue * 100) : 0;
-
-      // Extract platform information (this would need to be enhanced based on your data structure)
-      const platform = latestData.platform || 'unknown';
-      
-      if (!platformData[platform]) {
-        platformData[platform] = {};
-      }
-
-      // Map historical data metrics to dashboard format
-      if (metricType === 'followers') {
-        platformData[platform].followers = {
-          current: currentValue,
-          previous: previousValue,
-          growth: Math.round(growth * 100) / 100,
-          monthlyData: metricDataArray.map(d => d.value)
-        };
-      } else if (metricType === 'likes') {
-        platformData[platform].likes = {
-          current: currentValue,
-          previous: previousValue,
-          growth: Math.round(growth * 100) / 100
-        };
-      } else if (metricType === 'comments') {
-        platformData[platform].comments = {
-          current: currentValue,
-          previous: previousValue,
-          growth: Math.round(growth * 100) / 100
-        };
-      } else if (metricType === 'shares') {
-        platformData[platform].shares = {
-          current: currentValue,
-          previous: previousValue,
-          growth: Math.round(growth * 100) / 100
-        };
-      } else if (metricType === 'engagement') {
-        platformData[platform].engagement_rate = {
-          current: currentValue,
-          previous: previousValue,
-          growth: Math.round(growth * 100) / 100
-        };
-      } else if (metricType === 'views') {
-        platformData[platform].views = {
-          current: currentValue,
-          previous: previousValue,
-          growth: Math.round(growth * 100) / 100
-        };
-      } else if (metricType === 'reach') {
-        platformData[platform].reach = {
-          current: currentValue,
-          previous: previousValue,
-          growth: Math.round(growth * 100) / 100
-        };
-      } else if (metricType === 'impressions') {
-        platformData[platform].impressions = {
-          current: currentValue,
-          previous: previousValue,
-          growth: Math.round(growth * 100) / 100
-        };
-      }
+      // Optionally, copy accountName, postCount, lastUpdated, etc.
+      ['accountName', 'postCount', 'lastUpdated'].forEach(meta => {
+        if (metrics[meta] !== undefined) {
+          platformData[platform][meta] = metrics[meta];
+        }
+      });
     });
 
     console.log('✅ Processed historical platform data:', Object.keys(platformData));

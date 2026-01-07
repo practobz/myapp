@@ -1,7 +1,24 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
-import { MessageSquare,CalendarIcon, Instagram, Facebook, Linkedin, Youtube, AlertCircle, Eye, CheckCircle } from 'lucide-react';
+import { MessageSquare,CalendarIcon, Instagram, Facebook, Linkedin, Youtube, AlertCircle, Eye, CheckCircle, Video, ExternalLink } from 'lucide-react';
+// Helper to get default post URL if missing
+const getDefaultPostUrl = (post) => {
+  if (post.postUrl) return post.postUrl;
+  if (!post.platform || !post.postId) return null;
+  switch (post.platform) {
+    case 'instagram':
+      return `https://www.instagram.com/p/${post.postId}`;
+    case 'facebook':
+      return `https://www.facebook.com/${post.postId}`;
+    case 'linkedin':
+      return `https://www.linkedin.com/feed/update/${post.postId}`;
+    case 'youtube':
+      return `https://www.youtube.com/watch?v=${post.postId}`;
+    default:
+      return null;
+  }
+};
 
 // Move these helper functions to the top, before ContentCalendar function
 const getPlatformIcon = (platform) => {
@@ -46,6 +63,12 @@ const getStatusLabel = (status) => {
     default:
       return status.replace('_', ' ').charAt(0).toUpperCase() + status.slice(1);
   }
+};
+
+const isVideoUrl = (url) => {
+  if (!url || typeof url !== 'string') return false;
+  const ext = url.split('.').pop().toLowerCase();
+  return ['mp4', 'webm', 'ogg', 'mov', 'avi'].includes(ext);
 };
 
 function ContentCalendar() {
@@ -174,7 +197,17 @@ function ContentCalendar() {
 
   // Add this function to handle item clicks
   const handleContentClick = (item) => {
-    setSelectedContent(item);
+    // Get the published posts for this item
+    const publishedPosts = scheduledPosts.filter(post =>
+      (post.item_id && post.item_id === item.id) ||
+      (post.contentId && post.contentId === item.id) ||
+      (post.item_name && post.item_name === item.title)
+    );
+    
+    setSelectedContent({
+      ...item,
+      publishedPosts: publishedPosts
+    });
   };
 
   return (
@@ -313,39 +346,148 @@ function ContentCalendar() {
 
       {/* Content Details Modal */}
       {selectedContent && (
-        <div className="fixed inset-0 bg-[#0a2342]/70 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg">
+        <div className="fixed inset-0 bg-[#0a2342]/70 flex items-center justify-center p-4 z-50" onClick={() => setSelectedContent(null)}>
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="p-6">
-              <h3 className="text-lg font-semibold mb-4 text-[#0a2342]">Content Details</h3>
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold text-[#0a2342]">Published Content Details</h3>
+                <button
+                  onClick={() => setSelectedContent(null)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
               
-              <div className="space-y-4">
-                <div>
-                  <p className="text-sm text-[#38bdf8]">Date</p>
-                  <p className="font-medium text-[#0a2342]">{format(new Date(selectedContent.date), 'MMMM dd, yyyy')}</p>
-                </div>
-                
-                <div>
-                  <p className="text-sm text-[#38bdf8]">Description</p>
-                  <p className="font-medium text-[#0a2342]">{selectedContent.description}</p>
+              <div className="space-y-6">
+                <div className="bg-slate-50 p-4 rounded-lg">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-[#38bdf8] font-semibold">Date</p>
+                      <p className="font-medium text-[#0a2342]">{format(new Date(selectedContent.date), 'MMMM dd, yyyy')}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-[#38bdf8] font-semibold">Status</p>
+                      <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(selectedContent.status)}`}>
+                        {getStatusLabel(selectedContent.status)}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="mt-3">
+                    <p className="text-sm text-[#38bdf8] font-semibold mb-1">Description</p>
+                    <p className="font-medium text-[#0a2342]">{selectedContent.description}</p>
+                  </div>
+                  {selectedContent.creator && (
+                    <div className="mt-3">
+                      <p className="text-sm text-[#38bdf8] font-semibold">Assigned to</p>
+                      <p className="font-medium text-[#0a2342]">{selectedContent.creator}</p>
+                    </div>
+                  )}
                 </div>
 
-                <div>
-                  <p className="text-sm text-[#38bdf8]">Published On</p>
-                  <div className="flex items-center space-x-3 mt-2">
-                    {(selectedContent.publishedPlatforms || selectedContent.platforms || []).map((platform) => (
-                      <div key={platform} className="flex items-center space-x-2 bg-[#bae6fd] px-3 py-2 rounded-md">
-                        {getPlatformIcon(platform)}
-                        <span className="capitalize text-[#0a2342]">{platform}</span>
-                      </div>
-                    ))}
+                {selectedContent.publishedPosts && selectedContent.publishedPosts.length > 0 ? (
+                  <div>
+                    <h4 className="text-lg font-semibold text-[#0a2342] mb-4">Published Posts ({selectedContent.publishedPosts.length})</h4>
+                    <div className="space-y-4">
+                      {selectedContent.publishedPosts.map((post, idx) => (
+                        <div key={post._id || idx} className="border-2 border-slate-200 rounded-lg p-4 bg-white hover:border-indigo-300 transition-all">
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex items-center space-x-3">
+                              {getPlatformIcon(post.platform)}
+                              <div>
+                                <p className="font-semibold text-[#0a2342]">{post.pageName || post.channelName || 'Social Media Post'}</p>
+                                <p className="text-sm text-gray-600 capitalize">{post.platform}</p>
+                              </div>
+                            </div>
+                            {getDefaultPostUrl(post) && (
+                              <a
+                                href={getDefaultPostUrl(post)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center space-x-2 px-3 py-2 bg-gradient-to-r from-indigo-600 to-blue-600 text-white rounded-lg hover:from-indigo-700 hover:to-blue-700 transition-all shadow-sm hover:shadow-md"
+                              >
+                                <span className="text-sm font-semibold">View on {post.platform}</span>
+                                <ExternalLink className="h-4 w-4" />
+                              </a>
+                            )}
+                          </div>
+
+                          {/* Media Display */}
+                          {post.imageUrls && post.imageUrls.length > 1 ? (
+                            <div className="mb-3">
+                              <div className="grid grid-cols-3 gap-2">
+                                {post.imageUrls.slice(0, 6).map((url, mediaIdx) => (
+                                  isVideoUrl(url) ? (
+                                    <div key={mediaIdx} className="relative h-32 bg-gray-800 rounded-lg flex items-center justify-center">
+                                      <Video className="h-8 w-8 text-white" />
+                                      <span className="absolute top-2 left-2 bg-purple-600 text-white text-xs px-2 py-1 rounded">{mediaIdx + 1}</span>
+                                    </div>
+                                  ) : (
+                                    <div key={mediaIdx} className="relative">
+                                      <img
+                                        src={url}
+                                        alt={`Item ${mediaIdx + 1}`}
+                                        className="w-full h-32 object-cover rounded-lg"
+                                      />
+                                      <span className="absolute top-2 left-2 bg-purple-600 text-white text-xs px-2 py-1 rounded">{mediaIdx + 1}</span>
+                                    </div>
+                                  )
+                                ))}
+                                {post.imageUrls.length > 6 && (
+                                  <div className="h-32 bg-gray-200 rounded-lg flex items-center justify-center">
+                                    <span className="text-gray-600 text-lg font-semibold">+{post.imageUrls.length - 6}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ) : post.imageUrl && isVideoUrl(post.imageUrl) ? (
+                            <video
+                              src={post.imageUrl}
+                              controls
+                              className="w-full h-64 object-cover rounded-lg mb-3"
+                              style={{ background: '#f3f4f6' }}
+                            />
+                          ) : post.imageUrl ? (
+                            <img
+                              src={post.imageUrl}
+                              alt="Post content"
+                              className="w-full h-64 object-cover rounded-lg mb-3"
+                            />
+                          ) : null}
+
+                          {/* Caption */}
+                          {post.caption && (
+                            <div className="mb-3">
+                              <p className="text-sm text-gray-700 bg-slate-50 p-3 rounded-lg">{post.caption}</p>
+                            </div>
+                          )}
+
+                          {/* Post Stats */}
+                          <div className="flex items-center justify-between text-xs text-gray-500">
+                            <div className="flex items-center space-x-2">
+                              <CalendarIcon className="h-3 w-3" />
+                              <span>Published: {new Date(post.scheduledAt).toLocaleString()}</span>
+                            </div>
+                            {post.postId && (
+                              <span className="text-gray-400">Post ID: {post.postId.substring(0, 15)}...</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="text-center py-8 bg-slate-50 rounded-lg">
+                    <AlertCircle className="h-12 w-12 text-gray-400 mx-auto mb-3" />
+                    <p className="text-gray-600">No published posts found for this content item.</p>
+                  </div>
+                )}
               </div>
 
               <div className="mt-6 flex justify-end">
                 <button
                   onClick={() => setSelectedContent(null)}
-                  className="px-4 py-2 bg-[#bae6fd] text-[#0a2342] rounded-md hover:bg-[#38bdf8]/20"
+                  className="px-6 py-2 bg-gradient-to-r from-slate-600 to-gray-600 text-white rounded-lg hover:from-slate-700 hover:to-gray-700 transition-all shadow-sm"
                 >
                   Close
                 </button>

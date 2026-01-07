@@ -76,6 +76,7 @@ function ContentCalendar() {
   const [selectedContent, setSelectedContent] = useState(null);
   const [statusFilter, setStatusFilter] = useState('all');
   const [calendars, setCalendars] = useState([]);
+  const [selectedCalendarId, setSelectedCalendarId] = useState(null);
   const [customer, setCustomer] = useState(null);
   const [loading, setLoading] = useState(true);
   const [scheduledPosts, setScheduledPosts] = useState([]);
@@ -152,18 +153,21 @@ function ContentCalendar() {
   let allItems = [];
   calendars.forEach(calendar => {
     if (Array.isArray(calendar.contentItems)) {
-      calendar.contentItems.forEach(item => {
-        // --- Override status if published in scheduledPosts ---
-        const published = isItemPublished(item);
-        allItems.push({
-          ...item,
-          calendarName: calendar.name || '',
-          id: item.id || item._id || Math.random().toString(36).slice(2),
-          creator: item.assignedToName || item.assignedTo || calendar.assignedToName || calendar.assignedTo || '',
-          status: published ? 'published' : item.status,
-          publishedPlatforms: published ? getPublishedPlatformsForItem(item) : []
+      // Only add items from selected calendar (or all if none selected)
+      if (!selectedCalendarId || calendar._id === selectedCalendarId || calendar.id === selectedCalendarId) {
+        calendar.contentItems.forEach(item => {
+          // --- Override status if published in scheduledPosts ---
+          const published = isItemPublished(item);
+          allItems.push({
+            ...item,
+            calendarName: calendar.name || '',
+            id: item.id || item._id || Math.random().toString(36).slice(2),
+            creator: item.assignedToName || item.assignedTo || calendar.assignedToName || calendar.assignedTo || '',
+            status: published ? 'published' : item.status,
+            publishedPlatforms: published ? getPublishedPlatformsForItem(item) : []
+          });
         });
-      });
+      }
     }
   });
 
@@ -223,16 +227,19 @@ function ContentCalendar() {
                 Content Calendars
               </h3>
               <div className="space-y-2">
-                {calendars.map((calendar, idx) => (
-                  <button
-                    key={calendar._id || idx}
-                    onClick={() => {/* no-op, only one customer calendar is shown */}}
-                    className="w-full text-left p-4 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 text-white hover:from-indigo-700 hover:to-blue-700 transition-all shadow-md hover:shadow-lg"
-                  >
-                    <div className="font-semibold">{calendar.name}</div>
-                    <div className="text-sm opacity-90 mt-1">{calendar.contentItems?.length || 0} items</div>
-                  </button>
-                ))}
+                {calendars.map((calendar, idx) => {
+                  const isSelected = (calendar._id || calendar.id) === selectedCalendarId;
+                  return (
+                    <button
+                      key={calendar._id || calendar.id || idx}
+                      onClick={() => setSelectedCalendarId(calendar._id || calendar.id)}
+                      className={`w-full text-left p-4 rounded-xl transition-all shadow-md hover:shadow-lg ${isSelected ? 'bg-gradient-to-r from-indigo-700 to-blue-700 text-white' : 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white hover:from-indigo-700 hover:to-blue-700'}`}
+                    >
+                      <div className="font-semibold">{calendar.name}</div>
+                      <div className="text-sm opacity-90 mt-1">{calendar.contentItems?.length || 0} items</div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>

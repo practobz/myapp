@@ -454,12 +454,8 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
                         <div className="font-semibold">{latest.toLocaleString()}</div>
                       </div>
                       <div>
-                        <div className="text-gray-500">{isCumulative ? 'Peak' : 'Total'}</div>
-                        <div className="font-semibold">{total.toLocaleString()}</div>
-                      </div>
-                      <div>
-                        <div className="text-gray-500">{isCumulative ? 'Min' : 'Avg/Day'}</div>
-                        <div className="font-semibold">{Math.round(average).toLocaleString()}</div>
+                        <div className="text-gray-500">Actual</div>
+                        <div className="font-semibold">{(isCumulative ? latest : latest).toLocaleString()}</div>
                       </div>
                     </div>
                   </div>
@@ -546,14 +542,6 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
             </div>
           </div>
           <div className="flex items-center space-x-2">
-            <button
-              onClick={debugStoredAccounts}
-              className="bg-purple-600 text-white px-3 py-2 rounded-lg hover:bg-purple-700 flex items-center space-x-2 text-sm"
-              title="Debug stored social accounts"
-            >
-              <span>🔍</span>
-              <span>Debug Accounts</span>
-            </button>
             <button
               onClick={captureNewSnapshot}
               className="bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 flex items-center space-x-2 text-sm"

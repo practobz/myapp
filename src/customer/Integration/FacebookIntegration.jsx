@@ -498,34 +498,57 @@ function FacebookIntegration() {
     }
   };
 
-  // Check if token is expired or about to expire
+  // Check if token is expired or about to expire (FIXED - matching Instagram logic)
   const isTokenExpired = (account) => {
-    // If account has never-expiring page tokens, it's not expired
-    if (account.pages && account.pages.some(p => p.tokenExpiry === 'never' || p.tokenType === 'never_expiring')) {
+    // CRITICAL: If account has never-expiring page tokens, it's NEVER expired
+    if (account.pages && account.pages.some(p => p.tokenExpiry === 'never' || p.tokenType === 'never_expiring' || p.tokenType === 'never_expiring_page_token')) {
+      console.log(`✅ Account ${account.name} has never-expiring tokens - never expired`);
       return false; // Never-expiring page tokens mean account is always valid
     }
     
-    // If account has long-lived tokens (60 days), be lenient with expiration check
-    if (account.tokenType === 'long_lived' && account.pages && account.pages.length > 0) {
-      // Long-lived accounts with pages are considered valid
+    // CRITICAL: If account has long-lived tokens, don't mark as expired
+    if (account.tokenType === 'long_lived' || account.tokenType === 'long_lived_page') {
+      console.log(`✅ Account ${account.name} has long-lived tokens - not expired`);
       return false;
     }
     
-    // If no tokenExpiresAt, assume not expired (benefit of the doubt)
-    if (!account.tokenExpiresAt) return false;
+    // If account has pages with valid tokens, trust them
+    if (account.pages && account.pages.length > 0) {
+      const hasValidPageTokens = account.pages.some(p => 
+        p.access_token && 
+        (p.tokenType === 'never_expiring' || p.tokenType === 'never_expiring_page_token' || p.tokenType === 'long_lived_page')
+      );
+      if (hasValidPageTokens) {
+        console.log(`✅ Account ${account.name} has valid page tokens - not expired`);
+        return false;
+      }
+    }
+    
+    // If no tokenExpiresAt, check if recently validated (like Instagram)
+    if (!account.tokenExpiresAt) {
+      // If recently validated (within last hour), assume valid
+      if (account.lastTokenValidation) {
+        const lastValidation = new Date(account.lastTokenValidation);
+        const oneHourAgo = new Date(Date.now() - (60 * 60 * 1000));
+        if (lastValidation > oneHourAgo) {
+          return false; // Recently validated, not expired
+        }
+      }
+      // If no expiry and never validated, assume not expired (benefit of doubt)
+      return false;
+    }
     
     const expiryTime = new Date(account.tokenExpiresAt);
     const now = new Date();
     
-    // Check if token is actually expired (not just close to expiring)
-    // Only mark as expired if it's truly expired or within 1 hour of expiry
-    const bufferTime = 60 * 60 * 1000; // 1 hour buffer (much less aggressive than 24 hours)
+    // FIXED: Use minimal buffer time (30 minutes like Instagram, not 1 hour)
+    const bufferTime = 30 * 60 * 1000; // 30 minutes buffer
     
     const isActuallyExpired = (expiryTime.getTime() - now.getTime()) < bufferTime;
     
     if (isActuallyExpired) {
-      const daysUntilExpiry = Math.floor((expiryTime.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
-      console.log(`⚠️ Token for ${account.name} expires in ${daysUntilExpiry} days`);
+      const minutesUntilExpiry = Math.floor((expiryTime.getTime() - now.getTime()) / (60 * 1000));
+      console.log(`⚠️ Token for ${account.name} expires in ${minutesUntilExpiry} minutes`);
     }
     
     return isActuallyExpired;
@@ -607,29 +630,16 @@ function FacebookIntegration() {
     });
   };
 
-  // Modified fetchFbPages with error handling
+  // Modified fetchFbPages with error handling (FIXED - don't preemptively block on expiration)
   const fetchFbPages = async () => {
     if (!activeAccount) {
       console.warn('⚠️ No active account');
       return;
     }
     
-    // Check if token is expired before making API call
-    if (isTokenExpired(activeAccount)) {
-      console.log('⚠️ Token appears to be expired, attempting silent refresh...');
-      refreshCurrentSession().then(success => {
-        if (success) {
-          // Retry after refresh
-          console.log('✅ Silent refresh successful, retrying fetch');
-          setTimeout(() => fetchFbPages(), 1000);
-        } else {
-          // Only show error if we actually tried to make an API call and it failed
-          console.log('⚠️ Token refresh failed - account may need reconnection');
-        }
-      });
-      return;
-    }
-    
+    // FIXED: Don't check token expiration before making API calls
+    // The backend token might be valid even if our local check thinks it's expired
+    // Only handle actual API errors (code 190) when they occur
     console.log('🔍 Fetching pages using Graph API...');
     
     try {
@@ -1806,7 +1816,7 @@ function FacebookIntegration() {
                     <p className="text-xs text-gray-500">
                       Connected {new Date(account.connectedAt).toLocaleDateString()}
                     </p>
-                    {account.pages && account.pages.some(p => p.tokenExpiry === 'never' || p.tokenType === 'never_expiring') ? (
+                    {account.pages && account.pages.some(p => p.tokenExpiry === 'never' || p.tokenType === 'never_expiring' || p.tokenType === 'never_expiring_page_token') ? (
                       <p className="text-xs text-green-600 font-medium">
                         ✅ Tokens: Never expire
                       </p>

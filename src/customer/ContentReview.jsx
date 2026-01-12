@@ -1,9 +1,32 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, MessageSquare, CheckCircle, Edit3, Trash2, Move, Bell, ChevronDown, LogOut, Settings, User, Calendar, Clock, Eye, Image, ChevronLeft, ChevronRight, Play, Video, AlertCircle } from 'lucide-react';
+import { MessageSquare, CheckCircle, Edit3, Trash2, Move, ChevronLeft, ChevronRight, Image, Video, AlertCircle } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 function ContentReview() {
+    // Scheduled posts state
+    const [scheduledPosts, setScheduledPosts] = useState([]);
+    const [scheduledPostsLoading, setScheduledPostsLoading] = useState(false);
+    const [scheduledPostsError, setScheduledPostsError] = useState(null);
+    // Fetch scheduled posts on mount
+    useEffect(() => {
+      const fetchScheduledPosts = async () => {
+        setScheduledPostsLoading(true);
+        setScheduledPostsError(null);
+        try {
+          const res = await fetch('/api/scheduled-posts');
+          if (!res.ok) throw new Error('Failed to fetch scheduled posts');
+          const data = await res.json();
+          setScheduledPosts(Array.isArray(data) ? data : []);
+        } catch (err) {
+          setScheduledPostsError(err.message);
+          setScheduledPosts([]);
+        } finally {
+          setScheduledPostsLoading(false);
+        }
+      };
+      fetchScheduledPosts();
+    }, []);
   const navigate = useNavigate();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [selectedContentIndex, setSelectedContentIndex] = useState(0);
@@ -323,8 +346,18 @@ function ContentReview() {
           setCommentsForCurrentMedia(commentsForCurrentMedia.map((c) => (c.id === id ? { ...c, editing: false } : c)));
           setActiveComment(null);
           
+          // Store current selection before refresh
+          const currentIndex = selectedContentIndex;
+          const currentVersionIndex = selectedVersionIndex;
+          const currentMediaIndex = selectedMediaIndex;
+          
           // Refresh the content submissions to get updated data
           await fetchContentSubmissions();
+          
+          // Restore the selection after refresh
+          setSelectedContentIndex(currentIndex);
+          setSelectedVersionIndex(currentVersionIndex);
+          setSelectedMediaIndex(currentMediaIndex);
         } else {
           const errorData = await response.json();
           console.error('Failed to save comment:', errorData);
@@ -335,6 +368,7 @@ function ContentReview() {
         }
       } catch (error) {
         console.error('Error saving comment:', error);
+        // Update UI state
         setComments(comments.map((c) => (c.id === id ? { ...c, editing: false } : c)));
         setCommentsForCurrentMedia(commentsForCurrentMedia.map((c) => (c.id === id ? { ...c, editing: false } : c)));
         setActiveComment(null);
@@ -472,17 +506,39 @@ function ContentReview() {
     }
   };
 
-  // Improved published status detection logic (matches admin logic)
-  function isContentPublished(content) {
-    // Check main content status or publishedAt
+  // Published status detection logic (now also checks scheduled_posts DB)
+  const isContentPublished = (contentOrId) => {
+    const content = typeof contentOrId === 'object' ? contentOrId : selectedContent;
+    if (!content) return false;
+    // Check scheduledPosts for published status
+    if (scheduledPosts && scheduledPosts.length > 0) {
+      // Try to match by assignmentId, item_id, or contentId
+      const match = scheduledPosts.find(post => {
+        return (
+          (post.assignmentId && (post.assignmentId === content.id || post.assignmentId === content.assignment_id)) ||
+          (post.assignmentId && post.assignmentId === content.assignment_id) ||
+          (post.item_id && post.item_id === content.id) ||
+          (post.contentId && post.contentId === content.id) ||
+          (post.assignmentId && post.assignmentId === content.id)
+        );
+      });
+      if (match && (match.status === 'published' || !!match.publishedAt)) {
+        return true;
+      }
+    }
+    // Fallback to local logic
     if (
       content.status === 'published' ||
       content.published === true ||
       !!content.publishedAt
     ) return true;
-
-    // Check if any version is published
-    if (Array.isArray(content.versions)) {
+    if (Array.isArray(content.versions) && content.versions.length > 0) {
+      const latestVersion = content.versions[content.versions.length - 1];
+      if (
+        latestVersion.status === 'published' ||
+        latestVersion.published === true ||
+        !!latestVersion.publishedAt
+      ) return true;
       return content.versions.some(
         v =>
           v.status === 'published' ||
@@ -491,30 +547,58 @@ function ContentReview() {
       );
     }
     return false;
-  }
+  };
+
+  // Get the appropriate status to display (checks latest version first)
+  const getDisplayStatus = (content) => {
+    if (!content) return 'under_review';
+    if (isContentPublished(content)) return 'published';
+    // If not published, show latest version's status if available
+    if (Array.isArray(content.versions) && content.versions.length > 0) {
+      const latestVersion = content.versions[content.versions.length - 1];
+      return latestVersion.status || content.status || 'under_review';
+    }
+    return content.status || 'under_review';
+  };
 
   const getStatusColor = (status) => {
     switch (status) {
       case 'under_review':
-        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+        return 'bg-amber-100 text-amber-800 border-amber-300';
       case 'approved':
-        return 'bg-green-100 text-green-800 border-green-200';
+        return 'bg-emerald-100 text-emerald-800 border-emerald-300';
       case 'rejected':
-        return 'bg-red-100 text-red-800 border-red-200';
+        return 'bg-rose-100 text-rose-800 border-rose-300';
       case 'published':
-        return 'bg-blue-100 text-blue-800 border-blue-200';
+        return 'bg-blue-100 text-blue-800 border-blue-300';
       default:
-        return 'bg-gray-100 text-gray-800 border-gray-200';
+        return 'bg-slate-100 text-slate-800 border-slate-300';
+    }
+  };
+
+  const getStatusLabel = (status) => {
+    switch (status) {
+      case 'under_review':
+        return 'Under Review';
+      case 'approved':
+        return 'Approved';
+      case 'rejected':
+        return 'Rejected';
+      case 'published':
+        return 'Published';
+      default:
+        return 'Pending';
     }
   };
 
   // Handle loading state
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#e6f2fb] via-blue-50 to-indigo-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#38bdf8] mx-auto mb-4"></div>
-          <p className="text-[#0a2342] font-medium">Loading content submissions...</p>
+          <div className="animate-spin rounded-full h-16 w-16 border-4 border-indigo-200 border-t-indigo-600 mx-auto mb-4"></div>
+          <p className="text-slate-800 font-semibold text-lg">Loading content submissions...</p>
+          <p className="text-slate-500 text-sm mt-2">Please wait</p>
         </div>
       </div>
     );
@@ -523,13 +607,13 @@ function ContentReview() {
   // Handle error state
   if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#e6f2fb] via-blue-50 to-indigo-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="bg-red-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-            <AlertCircle className="h-8 w-8 text-red-600" />
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto p-8">
+          <div className="bg-rose-100 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-6 shadow-lg">
+            <AlertCircle className="h-10 w-10 text-rose-600" />
           </div>
-          <p className="text-red-600 font-medium mb-2">Error loading content</p>
-          <p className="text-[#0a2342] text-sm mb-4">{error}</p>
+          <h2 className="text-rose-700 font-bold text-xl mb-3">Error Loading Content</h2>
+          <p className="text-slate-600 text-sm mb-6 leading-relaxed">{error}</p>
           <Button onClick={fetchContentSubmissions} variant="primary">
             Retry
           </Button>
@@ -541,13 +625,13 @@ function ContentReview() {
   // Handle no content state
   if (contentItems.length === 0) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#e6f2fb] via-blue-50 to-indigo-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="bg-gray-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-            <MessageSquare className="h-8 w-8 text-[#38bdf8]" />
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto p-8">
+          <div className="bg-gradient-to-br from-indigo-100 to-blue-100 rounded-2xl w-24 h-24 flex items-center justify-center mx-auto mb-6 shadow-xl">
+            <MessageSquare className="h-12 w-12 text-indigo-600" />
           </div>
-          <p className="text-[#0a2342] font-medium mb-2">No content submissions found</p>
-          <p className="text-[#38bdf8] text-sm mb-4">
+          <h2 className="text-slate-800 font-bold text-2xl mb-3">No Content Submissions</h2>
+          <p className="text-slate-600 text-base mb-6 leading-relaxed">
             {user ? `No content found for ${user.name || user.email}` : 'Please log in to view content'}
           </p>
           {!user && (
@@ -566,8 +650,8 @@ function ContentReview() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       {/* Main Content */}
-      <div className="px-6 sm:px-8 lg:px-12 xl:px-16 2xl:px-24 py-8">
-        <div className="flex flex-col xl:flex-row gap-8">
+      <div className="px-6 sm:px-8 lg:px-12 xl:px-16 2xl:px-24 py-10">
+        <div className="flex flex-col xl:flex-row gap-8 font-sans">
           {/* Left Sidebar - Content List */}
           <div className="w-full xl:w-96 flex-shrink-0">
             <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden">
@@ -606,14 +690,14 @@ function ContentReview() {
                         </div>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h4 className="font-semibold text-sm text-slate-900 truncate">{item.title}</h4>
-                        <p className="text-xs text-slate-600 mt-1 line-clamp-2">{item.description}</p>
+                        <h4 className="font-bold text-sm text-slate-900 truncate leading-tight">{item.title}</h4>
+                        <p className="text-xs text-slate-600 mt-1.5 line-clamp-2 leading-relaxed">{item.description}</p>
                         <div className="flex items-center justify-between mt-2">
                           <div className="flex items-center space-x-2">
-                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold border ${getStatusColor(isContentPublished(item) ? 'published' : item.status)}`}>
-                              {isContentPublished(item) ? 'PUBLISHED' : item.status.replace('_', ' ').toUpperCase()}
+                            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border shadow-sm ${getStatusColor(getDisplayStatus(item))}`}>
+                              {getStatusLabel(getDisplayStatus(item))}
                             </span>
-                            <span className="text-xs text-slate-500 font-medium">{item.platform}</span>
+                            <span className="text-xs text-slate-600 font-medium">{item.platform}</span>
                           </div>
                         </div>
                         <div className="flex items-center justify-between mt-2">
@@ -701,20 +785,20 @@ function ContentReview() {
               <div className="px-8 py-6 border-b border-[#bae6fd] bg-gradient-to-r from-[#e6f2fb] to-[#bae6fd]">
                 <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
                   <div>
-                    <h2 className="text-2xl font-bold text-[#0a2342] mb-2">{selectedContent.title}</h2>
-                    <p className="text-[#38bdf8]">{selectedContent.description}</p>
-                    <div className="flex items-center mt-2 space-x-4">
-                      <span className="text-sm text-[#0a2342]">By {selectedContent.createdBy}</span>
-                      <span className="text-sm text-[#0a2342]">•</span>
-                      <span className="text-sm text-[#0a2342]">{selectedContent.platform}</span>
+                    <h2 className="text-3xl font-bold text-slate-900 mb-3 tracking-tight">{selectedContent.title}</h2>
+                    <p className="text-slate-600 text-base leading-relaxed">{selectedContent.description}</p>
+                    <div className="flex items-center mt-3 space-x-4">
+                      <span className="text-sm text-slate-700 font-medium">By {selectedContent.createdBy}</span>
+                      <span className="text-sm text-slate-400">•</span>
+                      <span className="text-sm text-slate-700 font-medium">{selectedContent.platform}</span>
                     </div>
                   </div>
                   <div className="flex flex-col sm:flex-row gap-3">
-                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border ${getStatusColor(isContentPublished(selectedContent) ? 'published' : selectedContent.status)}`}>
-                      {isContentPublished(selectedContent) ? 'PUBLISHED' : selectedContent.status.replace('_', ' ').toUpperCase()}
+                    <span className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-semibold border-2 shadow-sm ${getStatusColor(getDisplayStatus(selectedContent))}`}>
+                      {getStatusLabel(getDisplayStatus(selectedContent))}
                     </span>
-                    <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-[#bae6fd] text-[#0a2342] border border-[#38bdf8]">
-                      <Image className="h-4 w-4 mr-1" />
+                    <span className="inline-flex items-center px-4 py-2 rounded-full text-sm font-semibold bg-indigo-100 text-indigo-800 border-2 border-indigo-300 shadow-sm">
+                      <Image className="h-4 w-4 mr-2" />
                       {selectedContent.totalVersions} Version{selectedContent.totalVersions !== 1 ? 's' : ''}
                     </span>
                   </div>
@@ -723,36 +807,36 @@ function ContentReview() {
 
               {/* Version Controls */}
               {selectedContent.totalVersions > 1 && (
-                <div className="px-8 py-4 border-b border-[#bae6fd] bg-gradient-to-r from-[#bae6fd] to-[#e6f2fb]">
+                <div className="px-8 py-5 border-b border-blue-100 bg-gradient-to-r from-blue-50 to-indigo-50">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-semibold text-[#0a2342]">
+                    <h3 className="text-lg font-bold text-slate-800 tracking-tight">
                       Version {currentVersion?.versionNumber} of {selectedContent.totalVersions}
                     </h3>
                     <div className="flex items-center space-x-2">
                       <button
                         onClick={() => handleVersionChange('prev')}
                         disabled={selectedVersionIndex === 0}
-                        className="p-2 rounded-lg bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 border"
+                        className="p-2.5 rounded-lg bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 border border-slate-200 shadow-sm"
                       >
-                        <ChevronLeft className="h-4 w-4" />
+                        <ChevronLeft className="h-4 w-4 text-slate-700" />
                       </button>
-                      <span className="px-3 py-1 bg-white rounded-lg border text-sm font-medium">
+                      <span className="px-4 py-2 bg-white rounded-lg border border-slate-200 text-sm font-semibold text-slate-800 shadow-sm">
                         {selectedVersionIndex + 1} / {selectedContent.totalVersions}
                       </span>
                       <button
                         onClick={() => handleVersionChange('next')}
                         disabled={selectedVersionIndex === selectedContent.totalVersions - 1}
-                        className="p-2 rounded-lg bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 border"
+                        className="p-2.5 rounded-lg bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 border border-slate-200 shadow-sm"
                       >
-                        <ChevronRight className="h-4 w-4" />
+                        <ChevronRight className="h-4 w-4 text-slate-700" />
                       </button>
                     </div>
                   </div>
-                  <div className="mt-2 text-sm text-[#38bdf8]">
+                  <div className="mt-3 text-sm text-slate-600 font-medium">
                     Created: {formatDate(currentVersion?.createdAt)}
                   </div>
                 </div>
-              )}
+              )})
 
               {/* Media with Comments */}
               <div className="p-8">
@@ -760,24 +844,24 @@ function ContentReview() {
                   <div className="relative inline-block max-w-full">
                     {/* Media Navigation for multiple items */}
                     {currentVersion?.media && currentVersion.media.length > 1 && (
-                      <div className="flex items-center justify-between mb-4">
-                        <span className="text-sm text-gray-500">
-                          {selectedMediaIndex + 1} of {currentVersion.media.length}
+                      <div className="flex items-center justify-between mb-6 bg-slate-50 rounded-xl p-4 border border-slate-200">
+                        <span className="text-sm font-semibold text-slate-700">
+                          Media {selectedMediaIndex + 1} of {currentVersion.media.length}
                         </span>
                         <div className="flex gap-2">
                           <button
                             onClick={() => handleMediaChange('prev')}
                             disabled={selectedMediaIndex === 0}
-                            className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                            className="p-2.5 rounded-lg bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 border border-slate-300 shadow-sm"
                           >
-                            <ChevronLeft className="h-4 w-4" />
+                            <ChevronLeft className="h-4 w-4 text-slate-700" />
                           </button>
                           <button
                             onClick={() => handleMediaChange('next')}
                             disabled={selectedMediaIndex === currentVersion.media.length - 1}
-                            className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                            className="p-2.5 rounded-lg bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 border border-slate-300 shadow-sm"
                           >
-                            <ChevronRight className="h-4 w-4" />
+                            <ChevronRight className="h-4 w-4 text-slate-700" />
                           </button>
                         </div>
                       </div>
@@ -1021,15 +1105,15 @@ function ContentReview() {
                 {currentVersion && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Caption</label>
-                      <div className="bg-gray-50 rounded-lg p-4">
-                        <p className="text-gray-900">{currentVersion.caption || 'No caption provided'}</p>
+                      <label className="block text-sm font-bold text-slate-700 mb-3 tracking-wide">Caption</label>
+                      <div className="bg-slate-50 rounded-xl p-5 border border-slate-200 shadow-sm">
+                        <p className="text-slate-900 leading-relaxed">{currentVersion.caption || 'No caption provided'}</p>
                       </div>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
-                      <div className="bg-gray-50 rounded-lg p-4">
-                        <p className="text-gray-900">{currentVersion.notes || 'No notes provided'}</p>
+                      <label className="block text-sm font-bold text-slate-700 mb-3 tracking-wide">Notes</label>
+                      <div className="bg-slate-50 rounded-xl p-5 border border-slate-200 shadow-sm">
+                        <p className="text-slate-900 leading-relaxed">{currentVersion.notes || 'No notes provided'}</p>
                       </div>
                     </div>
                   </div>

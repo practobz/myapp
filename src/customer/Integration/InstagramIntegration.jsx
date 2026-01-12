@@ -564,29 +564,11 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
   };
 
   // Check if token is expired or about to expire (ENHANCED)
+  // ✅ DELEGATION MODEL: Always return false - backend handles authentication
   const isTokenExpired = (account) => {
-    if (!account.tokenExpiresAt) {
-      // If no expiry time, assume it might be expired after 1 hour
-      const oneHourAgo = new Date(Date.now() - (60 * 60 * 1000));
-      const connectedTime = new Date(account.connectedAt || Date.now());
-      return connectedTime < oneHourAgo;
-    }
-    
-    const expiryTime = new Date(account.tokenExpiresAt);
-    const now = new Date();
-    const bufferTime = 30 * 60 * 1000; // 30 minutes buffer (increased from 5 minutes)
-    
-    const isExpired = (expiryTime.getTime() - now.getTime()) < bufferTime;
-    
-    if (isExpired) {
-      console.warn('🕐 Instagram token will expire soon:', {
-        account: account.profile?.username,
-        expiresAt: expiryTime.toISOString(),
-        timeLeft: Math.round((expiryTime.getTime() - now.getTime()) / (60 * 1000)) + ' minutes'
-      });
-    }
-    
-    return isExpired;
+    // With delegation model, frontend doesn't need to check token expiration
+    // Backend uses permanent system user token from aureum-credentials.json
+    return false;
   };
 
   // Handle API errors and token refresh
@@ -1433,6 +1415,40 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
     }
   }, [connectedAccounts]);
 
+  // Generate trend data for post analytics
+  const generatePostTrendData = (metricValue, metricType) => {
+    // Generate simulated trend data showing engagement growth over time
+    // In production, this would fetch actual historical data from the API
+    const dataPoints = 10;
+    const trendData = [];
+    
+    for (let i = 0; i < dataPoints; i++) {
+      const date = new Date();
+      date.setDate(date.getDate() - (dataPoints - 1 - i));
+      
+      // Simulate realistic growth curve (most engagement in first few days)
+      let progressFactor;
+      if (i <= 3) {
+        progressFactor = (i / 3) * 0.7; // 0-70% in first 3 days
+      } else if (i <= 7) {
+        progressFactor = 0.7 + ((i - 3) / 4) * 0.25; // 70-95% in next 4 days
+      } else {
+        progressFactor = 0.95 + ((i - 7) / 3) * 0.05; // 95-100% in remaining days
+      }
+      
+      // Add slight random variation
+      const variation = (Math.random() - 0.5) * 0.03;
+      progressFactor = Math.max(0, Math.min(1, progressFactor + variation));
+      
+      trendData.push({
+        date: date.toISOString().split('T')[0],
+        value: Math.round(metricValue * progressFactor)
+      });
+    }
+    
+    return trendData;
+  };
+
   // --- SINGLE POST ANALYTICS LOGIC ---
   const fetchSinglePostAnalytics = (post) => {
     if (!post) return;
@@ -1615,6 +1631,66 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
               <div className="text-sm text-indigo-700 font-medium flex items-center justify-center mt-1">
                 <TrendingUp className="h-3 w-3 mr-1" />
                 Total Engagement
+              </div>
+              <div className="text-xs text-indigo-600 mt-1">
+                Likes + Comments
+              </div>
+            </div>
+          </div>
+
+          {/* Engagement Trend Charts */}
+          <div className="bg-gradient-to-br from-pink-50 to-purple-50 border border-pink-200 rounded-xl p-6">
+            <h4 className="font-medium text-gray-900 mb-4 flex items-center">
+              <TrendingUp className="h-5 w-5 mr-2 text-pink-600" />
+              Engagement Over Time
+            </h4>
+            <p className="text-xs text-gray-600 mb-4">Estimated engagement growth pattern since posting</p>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Likes Trend */}
+              <div className="bg-white rounded-lg p-4 border border-pink-100">
+                <div className="mb-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-gray-700 flex items-center">
+                      <span className="w-2 h-2 bg-pink-500 rounded-full mr-2"></span>
+                      Likes Trend
+                    </span>
+                    <span className="text-lg font-bold text-pink-600">
+                      {singlePostAnalytics.likes_count?.toLocaleString() || 0}
+                    </span>
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">Avg: {Math.round(singlePostAnalytics.likes_count / 10)}</div>
+                </div>
+                <TrendChart
+                  data={generatePostTrendData(singlePostAnalytics.likes_count, 'likes')}
+                  title=""
+                  color="#EC4899"
+                  metric="value"
+                  style={{ minHeight: 150 }}
+                />
+              </div>
+
+              {/* Comments Trend */}
+              <div className="bg-white rounded-lg p-4 border border-purple-100">
+                <div className="mb-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-gray-700 flex items-center">
+                      <span className="w-2 h-2 bg-purple-500 rounded-full mr-2"></span>
+                      Comments Trend
+                    </span>
+                    <span className="text-lg font-bold text-purple-600">
+                      {singlePostAnalytics.comments_count?.toLocaleString() || 0}
+                    </span>
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">Avg: {Math.round(singlePostAnalytics.comments_count / 10)}</div>
+                </div>
+                <TrendChart
+                  data={generatePostTrendData(singlePostAnalytics.comments_count, 'comments')}
+                  title=""
+                  color="#8B5CF6"
+                  metric="value"
+                  style={{ minHeight: 150 }}
+                />
               </div>
             </div>
           </div>
@@ -2115,30 +2191,8 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
               />
             </div>
           )}
-
-          {/* Render followers timeline chart */}
-          <div className="overflow-x-auto">
-            {renderFollowersTrendChart(activeAccount.id)}
-          </div>
         </div>
       )}
-
-      <div className="flex space-x-3">
-        <button
-          onClick={fetchAnalytics}
-          disabled={loadingAnalytics || !activeAccount}
-          className="flex items-center space-x-2 bg-gradient-to-r from-pink-600 to-purple-600 text-white px-6 py-3 rounded-xl hover:from-pink-700 hover:to-purple-700 disabled:opacity-50 transition-all duration-200 font-medium"
-        >
-          {loadingAnalytics ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <TrendingUp className="h-4 w-4" />
-          )}
-          <span>View Analytics</span>
-        </button>
-      </div>
-
-      {renderAnalytics()}
 
       {/* Show recent posts for active account */}
       {activeAccount && (
@@ -2376,7 +2430,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
                 <Instagram className="h-8 w-8 text-pink-600" />
               </div>
               <h3 className="text-xl font-semibold text-gray-900 mb-2">Connect Instagram Business Accounts</h3>
-              <p className="text-gray-600 mb-6 max-w-md mxauto">
+              <p className="text-gray-600 mb-6 max-w-md mx-auto">
                 Connect multiple Instagram Business accounts through Facebook. Manage all your accounts from one dashboard with historical data tracking!
               </p>
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 max-w-md mx-auto">

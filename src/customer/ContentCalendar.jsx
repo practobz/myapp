@@ -319,7 +319,7 @@ function ContentCalendar() {
                         )}
                       </div>
                     </div>
-                    <p className="text-slate-700 mb-3 font-medium">{item.description}</p>
+                    <p className="text-slate-700 mb-3 font-medium break-words line-clamp-2">{item.description}</p>
                     
                     {/* Assigned Creator */}
                     {item.creator && (

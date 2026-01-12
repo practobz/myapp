@@ -64,13 +64,12 @@ const ROIDashboard = () => {
       console.log('🔍 Fetching analytics data for customer:', customerId);
       
       // Use full URL to backend server
-      const backendUrl = 'https://my-backend-593529385135.asia-south1.run.app';
+    const backendUrl = 'https://my-backend-593529385135.asia-south1.run.app';
       
       // First try to get historical data
       try {
         console.log('📊 Attempting to fetch historical data...');
-        const dashboardResponse = await fetch(`${backendUrl}/api/historical-data/get?accountId=${customerId}&platform=all&timePeriod=30`, {
-          method: 'GET',
+        const dashboardResponse = await fetch(`${backendUrl}/api/customer-analytics-data/${customerId}?platform=all&timePeriod=30`, { method: 'GET',
           headers: {
             'Content-Type': 'application/json'
           },
@@ -224,7 +223,7 @@ const ROIDashboard = () => {
     // First, try to fetch historical data for each connected account
     try {
       console.log('🔗 Attempting to fetch historical data for connected accounts...');
-      const backendUrl = 'https://my-backend-593529385135.asia-south1.run.app';
+    const backendUrl = 'https://my-backend-593529385135.asia-south1.run.app';
       const customerId = currentUser._id;
       
       for (const account of accounts) {
@@ -278,7 +277,7 @@ const ROIDashboard = () => {
     // First, try to fetch real-time metrics from our new API for accounts without historical data
     try {
       console.log('🔗 Attempting to fetch real-time social metrics...');
-      const backendUrl = 'https://my-backend-593529385135.asia-south1.run.app';
+    const backendUrl = 'https://my-backend-593529385135.asia-south1.run.app';
       const customerId = currentUser._id;
       
       const metricsResponse = await fetch(`${backendUrl}/api/customer/social-metrics/${customerId}`, {
@@ -736,9 +735,9 @@ const ROIDashboard = () => {
         const engagementRate = (totalEngagement / followerMetric.current * 100);
         
         platformData.engagement_rate = {
-          current: Math.round(engagementRate * 100) / 100,
-          previous: Math.round((engagementRate * 0.9) * 100) / 100,
-          growth: 10
+          current: Math.min(100, Math.round(engagementRate * 100) / 100),
+          previous: Math.min(100, Math.round((engagementRate * 0.9) * 100) / 100),
+          growth: Math.round((engagementRate - (engagementRate * 0.9)) / (engagementRate * 0.9) * 100 * 100) / 100
         };
       }
     }
@@ -750,91 +749,30 @@ const ROIDashboard = () => {
   // Process historical data from the historical_data API
   const processHistoricalData = (historicalData) => {
     console.log('🔄 Processing historical data:', historicalData);
-    
-    if (!historicalData || typeof historicalData !== 'object') {
+    if (!historicalData || typeof historicalData !== 'object' || !historicalData.platforms) {
       console.log('❌ Historical data missing or invalid structure');
       return null;
     }
 
     const platformData = {};
 
-    // Process each metric type in the historical data
-    Object.keys(historicalData).forEach(metricType => {
-      const metricDataArray = historicalData[metricType];
-      
-      if (!Array.isArray(metricDataArray) || metricDataArray.length === 0) {
-        return;
-      }
+    Object.keys(historicalData.platforms).forEach(platform => {
+      const metrics = historicalData.platforms[platform];
+      platformData[platform] = {};
 
-      console.log(`📊 Processing metric type: ${metricType} with ${metricDataArray.length} data points`);
+      // List of metrics to extract
+      ['followers', 'likes', 'comments', 'shares', 'engagement_rate', 'reach', 'impressions', 'views', 'monthlyData'].forEach(metric => {
+        if (metrics[metric] !== undefined) {
+          platformData[platform][metric] = metrics[metric];
+        }
+      });
 
-      // Get the latest values for current metrics
-      const latestData = metricDataArray[metricDataArray.length - 1];
-      const previousData = metricDataArray.length > 1 ? metricDataArray[metricDataArray.length - 2] : latestData;
-      const firstData = metricDataArray[0];
-
-      const currentValue = latestData.value || 0;
-      const previousValue = previousData.value || 0;
-      const growth = previousValue > 0 ? ((currentValue - previousValue) / previousValue * 100) : 0;
-
-      // Extract platform information (this would need to be enhanced based on your data structure)
-      const platform = latestData.platform || 'unknown';
-      
-      if (!platformData[platform]) {
-        platformData[platform] = {};
-      }
-
-      // Map historical data metrics to dashboard format
-      if (metricType === 'followers') {
-        platformData[platform].followers = {
-          current: currentValue,
-          previous: previousValue,
-          growth: Math.round(growth * 100) / 100,
-          monthlyData: metricDataArray.map(d => d.value)
-        };
-      } else if (metricType === 'likes') {
-        platformData[platform].likes = {
-          current: currentValue,
-          previous: previousValue,
-          growth: Math.round(growth * 100) / 100
-        };
-      } else if (metricType === 'comments') {
-        platformData[platform].comments = {
-          current: currentValue,
-          previous: previousValue,
-          growth: Math.round(growth * 100) / 100
-        };
-      } else if (metricType === 'shares') {
-        platformData[platform].shares = {
-          current: currentValue,
-          previous: previousValue,
-          growth: Math.round(growth * 100) / 100
-        };
-      } else if (metricType === 'engagement') {
-        platformData[platform].engagement_rate = {
-          current: currentValue,
-          previous: previousValue,
-          growth: Math.round(growth * 100) / 100
-        };
-      } else if (metricType === 'views') {
-        platformData[platform].views = {
-          current: currentValue,
-          previous: previousValue,
-          growth: Math.round(growth * 100) / 100
-        };
-      } else if (metricType === 'reach') {
-        platformData[platform].reach = {
-          current: currentValue,
-          previous: previousValue,
-          growth: Math.round(growth * 100) / 100
-        };
-      } else if (metricType === 'impressions') {
-        platformData[platform].impressions = {
-          current: currentValue,
-          previous: previousValue,
-          growth: Math.round(growth * 100) / 100
-        };
-      }
+      // Optionally, copy accountName, postCount, lastUpdated, etc.
+      ['accountName', 'postCount', 'lastUpdated'].forEach(meta => {
+        if (metrics[meta] !== undefined) {
+          platformData[platform][meta] = metrics[meta];
+        }
+      });
     });
 
     console.log('✅ Processed historical platform data:', Object.keys(platformData));
@@ -1131,23 +1069,25 @@ const ROIDashboard = () => {
   };
 
   const getTotalFollowers = () => {
-    if (analyticsData?.summary?.totalFollowers) {
+    if (analyticsData?.summary?.totalFollowers && selectedPlatform === 'all') {
       return analyticsData.summary.totalFollowers;
     }
     if (!dashboardData) return 0;
-    return Object.keys(dashboardData).reduce((total, platform) => {
+    const filteredData = getFilteredDashboardData();
+    return Object.keys(filteredData).reduce((total, platform) => {
       const followerKey = platform === 'youtube' ? 'subscribers' : 'followers';
-      return total + (dashboardData[platform]?.[followerKey]?.current || 0);
+      return total + (filteredData[platform]?.[followerKey]?.current || 0);
     }, 0);
   };
 
   const getTotalEngagement = () => {
-    if (analyticsData?.summary?.totalEngagement) {
+    if (analyticsData?.summary?.totalEngagement && selectedPlatform === 'all') {
       return analyticsData.summary.totalEngagement;
     }
     if (!dashboardData) return 0;
-    return Object.keys(dashboardData).reduce((total, platform) => {
-      const data = dashboardData[platform];
+    const filteredData = getFilteredDashboardData();
+    return Object.keys(filteredData).reduce((total, platform) => {
+      const data = filteredData[platform];
       const likes = data?.likes?.current || 0;
       const comments = data?.comments?.current || 0;
       const shares = data?.shares?.current || 0;
@@ -1156,12 +1096,13 @@ const ROIDashboard = () => {
   };
 
   const getAverageEngagementRate = () => {
-    if (analyticsData?.summary?.averageEngagementRate) {
+    if (analyticsData?.summary?.averageEngagementRate && selectedPlatform === 'all') {
       return analyticsData.summary.averageEngagementRate.toFixed(1);
     }
     if (!dashboardData) return 0;
-    const rates = Object.keys(dashboardData).map(platform => 
-      dashboardData[platform]?.engagement_rate?.current || 0
+    const filteredData = getFilteredDashboardData();
+    const rates = Object.keys(filteredData).map(platform => 
+      filteredData[platform]?.engagement_rate?.current || 0
     ).filter(rate => rate > 0);
     return rates.length > 0 ? (rates.reduce((sum, rate) => sum + rate, 0) / rates.length).toFixed(1) : 0;
   };
@@ -1179,85 +1120,157 @@ const ROIDashboard = () => {
     return totalPrevious > 0 ? ((totalCurrent - totalPrevious) / totalPrevious * 100).toFixed(1) : 0;
   };
 
+  // Helper function to filter dashboard data based on selected platform
+  const getFilteredDashboardData = () => {
+    if (!dashboardData) return {};
+    if (selectedPlatform === 'all') return dashboardData;
+    
+    // Return only the selected platform's data
+    if (dashboardData[selectedPlatform]) {
+      return { [selectedPlatform]: dashboardData[selectedPlatform] };
+    }
+    return {};
+  };
+
   // Chart configurations
   const followerGrowthChart = {
     labels: timeframe === '6months' 
       ? ['Month 1', 'Month 2', 'Month 3', 'Month 4', 'Month 5', 'Month 6']
       : ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-    datasets: dashboardData ? Object.keys(dashboardData).map(platform => {
-      let monthlyData = dashboardData[platform].monthlyData;
-      // If monthlyData is missing or flat, generate synthetic growth
-      if (!monthlyData || monthlyData.length < 6 || monthlyData.every(v => v === monthlyData[0])) {
+    datasets: dashboardData ? Object.keys(getFilteredDashboardData())
+      .filter(platform => {
+        const filteredData = getFilteredDashboardData();
         const followerKey = platform === 'youtube' ? 'subscribers' : 'followers';
-        const current = dashboardData[platform][followerKey]?.current || 0;
-        const previous = dashboardData[platform][followerKey]?.previous || 0;
-        const months = timeframe === '6months' ? 6 : 12;
-        // Linear interpolation from previous to current
-        monthlyData = Array.from({ length: months }, (_, i) =>
-          Math.round(previous + ((current - previous) * (i + 1) / months))
-        );
-      }
-      return {
-        label: platform.charAt(0).toUpperCase() + platform.slice(1),
-        data: monthlyData,
-        borderColor: platformColors[platform],
-        backgroundColor: platformColors[platform] + '20',
-        fill: true,
-        tension: 0.4
-      };
-    }) : []
+        return filteredData[platform]?.[followerKey]?.current > 0;
+      })
+      .map(platform => {
+        const filteredData = getFilteredDashboardData();
+        let monthlyData = filteredData[platform].monthlyData;
+        const followerKey = platform === 'youtube' ? 'subscribers' : 'followers';
+        const current = filteredData[platform][followerKey]?.current || 0;
+        const previous = filteredData[platform][followerKey]?.previous || current * 0.8;
+        const months = timeframe === 'last_7_days' || timeframe === 'last_30_days' ? 6 : 12;
+        
+        // If monthlyData is missing or flat, generate synthetic growth
+        if (!monthlyData || monthlyData.length < 6 || monthlyData.every(v => v === monthlyData[0])) {
+          // Linear interpolation from previous to current
+          monthlyData = Array.from({ length: months }, (_, i) =>
+            Math.round(previous + ((current - previous) * (i + 1) / months))
+          );
+        }
+        
+        // Ensure we have the right number of data points
+        if (monthlyData.length > months) {
+          monthlyData = monthlyData.slice(-months);
+        } else if (monthlyData.length < months) {
+          const fillCount = months - monthlyData.length;
+          const fillValue = monthlyData[0] || previous;
+          monthlyData = Array(fillCount).fill(fillValue).concat(monthlyData);
+        }
+        
+        return {
+          label: platform.charAt(0).toUpperCase() + platform.slice(1),
+          data: monthlyData,
+          borderColor: platformColors[platform],
+          backgroundColor: platformColors[platform] + '20',
+          fill: true,
+          tension: 0.4
+        };
+      }) : []
   };
 
   const engagementChart = {
     labels: ['Likes', 'Comments', 'Shares/Views/Impressions'],
-    datasets: dashboardData ? Object.keys(dashboardData).map(platform => ({
-      label: platform.charAt(0).toUpperCase() + platform.slice(1),
-      data: [
-        dashboardData[platform].likes?.current || 0,
-        dashboardData[platform].comments?.current || 0,
-        platform === 'youtube' ? dashboardData[platform].views?.current || 0 : 
-        platform === 'linkedin' ? dashboardData[platform].impressions?.current || 0 :
-        dashboardData[platform].shares?.current || 0
-      ],
-      backgroundColor: platformColors[platform],
-      borderColor: platformColors[platform],
-      borderWidth: 1
-    })) : []
+    datasets: dashboardData ? Object.keys(getFilteredDashboardData())
+      .filter(platform => {
+        const filteredData = getFilteredDashboardData();
+        const data = filteredData[platform];
+        return (data.likes?.current > 0 || data.comments?.current > 0 || 
+                data.shares?.current > 0 || data.views?.current > 0 || data.impressions?.current > 0);
+      })
+      .map(platform => {
+        const filteredData = getFilteredDashboardData();
+        return {
+          label: platform.charAt(0).toUpperCase() + platform.slice(1),
+          data: [
+            filteredData[platform].likes?.current || 0,
+            filteredData[platform].comments?.current || 0,
+            platform === 'youtube' ? filteredData[platform].views?.current || 0 : 
+            platform === 'linkedin' ? filteredData[platform].impressions?.current || 0 :
+            filteredData[platform].shares?.current || 0
+          ],
+          backgroundColor: platformColors[platform],
+          borderColor: platformColors[platform],
+          borderWidth: 1
+        };
+      }) : []
   };
 
-  const platformDistribution = {
-    labels: ['Facebook', 'Instagram', 'YouTube', 'LinkedIn'],
-    datasets: [{
-      data: dashboardData ? [
-        dashboardData.facebook?.followers?.current || 0,
-        dashboardData.instagram?.followers?.current || 0,
-        dashboardData.youtube?.subscribers?.current || 0,
-        dashboardData.linkedin?.followers?.current || 0
-      ] : [],
-      backgroundColor: [
-        platformColors.facebook,
-        platformColors.instagram,
-        platformColors.youtube,
-        platformColors.linkedin
-      ],
-      borderWidth: 2
-    }]
-  };
+  const platformDistribution = (() => {
+    if (!dashboardData) return { labels: [], datasets: [{ data: [], backgroundColor: [], borderWidth: 2 }] };
+    
+    const filteredData = getFilteredDashboardData();
+    const labels = [];
+    const data = [];
+    const colors = [];
+    
+    if (filteredData.facebook && filteredData.facebook.followers?.current > 0) {
+      labels.push('Facebook');
+      data.push(filteredData.facebook.followers.current);
+      colors.push(platformColors.facebook);
+    }
+    if (filteredData.instagram && filteredData.instagram.followers?.current > 0) {
+      labels.push('Instagram');
+      data.push(filteredData.instagram.followers.current);
+      colors.push(platformColors.instagram);
+    }
+    if (filteredData.youtube && filteredData.youtube.subscribers?.current > 0) {
+      labels.push('YouTube');
+      data.push(filteredData.youtube.subscribers.current);
+      colors.push(platformColors.youtube);
+    }
+    if (filteredData.linkedin && filteredData.linkedin.followers?.current > 0) {
+      labels.push('LinkedIn');
+      data.push(filteredData.linkedin.followers.current);
+      colors.push(platformColors.linkedin);
+    }
+    
+    return {
+      labels,
+      datasets: [{
+        data,
+        backgroundColor: colors,
+        borderWidth: 2
+      }]
+    };
+  })();
 
   const growthComparisonChart = {
     labels: ['Followers', 'Likes', 'Comments', 'Engagement Rate'],
-    datasets: dashboardData ? Object.keys(dashboardData).filter(platform => dashboardData[platform]).map(platform => ({
-      label: platform.charAt(0).toUpperCase() + platform.slice(1),
-      data: [
-        dashboardData[platform]?.[platform === 'youtube' ? 'subscribers' : 'followers']?.growth || 0,
-        dashboardData[platform]?.likes?.growth || 0,
-        dashboardData[platform]?.comments?.growth || 0,
-        dashboardData[platform]?.engagement_rate?.growth || 0
-      ],
-      backgroundColor: platformColors[platform] + '80',
-      borderColor: platformColors[platform],
-      borderWidth: 2
-    })) : []
+    datasets: dashboardData ? Object.keys(getFilteredDashboardData())
+      .filter(platform => {
+        const filteredData = getFilteredDashboardData();
+        const data = filteredData[platform];
+        return data && (
+          (data.followers?.current > 0) || (data.subscribers?.current > 0) ||
+          (data.likes?.current > 0) || (data.comments?.current > 0)
+        );
+      })
+      .map(platform => {
+        const filteredData = getFilteredDashboardData();
+        return {
+          label: platform.charAt(0).toUpperCase() + platform.slice(1),
+          data: [
+            Math.abs(filteredData[platform]?.[platform === 'youtube' ? 'subscribers' : 'followers']?.growth || 0),
+            Math.abs(filteredData[platform]?.likes?.growth || 0),
+            Math.abs(filteredData[platform]?.comments?.growth || 0),
+            Math.abs(filteredData[platform]?.engagement_rate?.growth || 0)
+          ],
+          backgroundColor: platformColors[platform] + '80',
+          borderColor: platformColors[platform],
+          borderWidth: 2
+        };
+      }) : []
   };
 
   const chartOptions = {
@@ -1463,25 +1476,25 @@ const ROIDashboard = () => {
               <p className="text-gray-600 mb-4">View detailed analytics for individual posts by visiting the respective platform integration pages.</p>
               <div className="flex justify-center gap-4">
                 <button
-                  onClick={() => navigate('/customer/integrations/facebook')}
+                  onClick={() => navigate('/customer/integration/facebook')}
                   className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                 >
                   📘 Facebook Analytics
                 </button>
                 <button
-                  onClick={() => navigate('/customer/integrations/instagram')}
+                  onClick={() => navigate('/customer/integration/instagram')}
                   className="flex items-center gap-2 px-4 py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700"
                 >
                   📸 Instagram Analytics
                 </button>
                 <button
-                  onClick={() => navigate('/customer/integrations/youtube')}
+                  onClick={() => navigate('/customer/integration/youtube')}
                   className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
                 >
                   🎬 YouTube Analytics
                 </button>
                 <button
-                  onClick={() => navigate('/customer/integrations/linkedin')}
+                  onClick={() => navigate('/customer/integration/linkedin')}
                   className="flex items-center gap-2 px-4 py-2 bg-blue-700 text-white rounded-lg hover:bg-blue-800"
                 >
                   💼 LinkedIn Analytics
@@ -1668,12 +1681,8 @@ const ROIDashboard = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6">
             {dashboardData && Object.keys(dashboardData)
               .filter(platform => {
-                // Show platform if it has connected accounts OR has at least one real metric
-                const hasConnectedAccounts = analyticsData && analyticsData.platforms && analyticsData.platforms.includes(platform);
+                // Only show if there is at least one real metric (followers/subscribers, likes, comments, shares, views, impressions, engagement_rate)
                 const data = dashboardData[platform];
-                
-                if (hasConnectedAccounts) return true; // Show connected platforms even with 0 metrics
-                
                 if (!data) return false;
                 return (
                   (data.followers && data.followers.current > 0) ||
@@ -1716,7 +1725,7 @@ const ROIDashboard = () => {
                           {(dashboardData[platform]?.[platform === 'youtube' ? 'subscribers' : 'followers']?.current || 0).toLocaleString()}
                         </div>
                         <div className="text-sm text-green-600 font-medium">
-                          +{dashboardData[platform]?.[platform === 'youtube' ? 'subscribers' : 'followers']?.growth || 0}%
+                          +{Math.abs(dashboardData[platform]?.[platform === 'youtube' ? 'subscribers' : 'followers']?.growth || 0).toFixed(1)}%
                         </div>
                       </div>
                     </div>
@@ -1727,7 +1736,7 @@ const ROIDashboard = () => {
                           {(dashboardData[platform]?.likes?.current || 0).toLocaleString()}
                         </div>
                         <div className="text-sm text-green-600">
-                          +{dashboardData[platform]?.likes?.growth || 0}%
+                          +{Math.abs(dashboardData[platform]?.likes?.growth || 0).toFixed(1)}%
                         </div>
                       </div>
                     </div>
@@ -1738,7 +1747,7 @@ const ROIDashboard = () => {
                           {(dashboardData[platform]?.comments?.current || 0).toLocaleString()}
                         </div>
                         <div className="text-sm text-green-600">
-                          +{dashboardData[platform]?.comments?.growth || 0}%
+                          +{Math.abs(dashboardData[platform]?.comments?.growth || 0).toFixed(1)}%
                         </div>
                       </div>
                     </div>
@@ -1757,12 +1766,12 @@ const ROIDashboard = () => {
                           }
                         </div>
                         <div className="text-sm text-green-600">
-                          +{platform === 'youtube' 
+                          +{Math.abs(platform === 'youtube' 
                             ? (dashboardData[platform]?.views?.growth || 0)
                             : platform === 'linkedin'
                             ? (dashboardData[platform]?.impressions?.growth || 0)
                             : (dashboardData[platform]?.shares?.growth || 0)
-                          }%
+                          ).toFixed(1)}%
                         </div>
                       </div>
                     </div>
@@ -1771,10 +1780,10 @@ const ROIDashboard = () => {
                         <span className="text-gray-600 font-medium">Engagement Rate</span>
                         <div className="text-right">
                           <div className="font-bold text-lg" style={{ color: platformColors[platform] }}>
-                            {dashboardData[platform]?.engagement_rate?.current || 0}%
+                            {Math.min(100, dashboardData[platform]?.engagement_rate?.current || 0).toFixed(1)}%
                           </div>
                           <div className="text-sm text-green-600 font-medium">
-                            +{dashboardData[platform]?.engagement_rate?.growth || 0}%
+                            +{Math.abs(dashboardData[platform]?.engagement_rate?.growth || 0).toFixed(1)}%
                           </div>
                         </div>
                       </div>
@@ -1784,7 +1793,7 @@ const ROIDashboard = () => {
                         <div 
                           className="h-2 rounded-full transition-all duration-500"
                           style={{ 
-                            width: `${Math.min((dashboardData[platform]?.engagement_rate?.current || 0) * 10, 100)}%`,
+                            width: `${Math.min(dashboardData[platform]?.engagement_rate?.current || 0, 100)}%`,
                             backgroundColor: platformColors[platform]
                           }}
                         ></div>

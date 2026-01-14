@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { Calendar, TrendingUp, BarChart3, PieChart as PieChartIcon, RefreshCw } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Calendar, TrendingUp, BarChart3, PieChart as PieChartIcon, RefreshCw, Download } from 'lucide-react';
 import { 
   AreaChart, Area, BarChart as RechartsBarChart, Bar, PieChart as RechartsPieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
 } from 'recharts';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 const TIME_PERIOD_OPTIONS = [
   { value: 7, label: 'Last 7 days' },
@@ -40,6 +42,8 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
+  const chartContainerRef = useRef(null);
 
   // Fetch historical data when parameters change
   useEffect(() => {
@@ -434,6 +438,461 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
     );
   };
 
+  // Generate comprehensive PDF report
+  const generatePDFReport = async () => {
+    if (!chartData) {
+      alert('No data available to generate report');
+      return;
+    }
+
+    setGeneratingPdf(true);
+
+    try {
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 15;
+      let yPosition = margin;
+
+      // Helper function to add new page if needed
+      const checkPageBreak = (neededHeight) => {
+        if (yPosition + neededHeight > pageHeight - margin) {
+          pdf.addPage();
+          yPosition = margin;
+          return true;
+        }
+        return false;
+      };
+
+      // Helper function to format platform name
+      const formatPlatformName = (p) => {
+        const names = {
+          facebook: 'Facebook',
+          instagram: 'Instagram',
+          twitter: 'Twitter/X',
+          linkedin: 'LinkedIn',
+          youtube: 'YouTube',
+          tiktok: 'TikTok'
+        };
+        return names[p?.toLowerCase()] || p || 'Unknown Platform';
+      };
+
+      // ========== HEADER SECTION ==========
+      pdf.setFillColor(59, 130, 246);
+      pdf.rect(0, 0, pageWidth, 45, 'F');
+      
+      pdf.setTextColor(255, 255, 255);
+      pdf.setFontSize(24);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('Analytics Report', margin, 20);
+      
+      pdf.setFontSize(12);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text(`${formatPlatformName(platform)} Performance Analytics`, margin, 30);
+      
+      pdf.setFontSize(10);
+      const reportDate = new Date().toLocaleDateString('en-US', { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      });
+      pdf.text(`Generated: ${reportDate}`, margin, 38);
+
+      yPosition = 55;
+
+      // ========== REPORT SUMMARY SECTION ==========
+      pdf.setTextColor(31, 41, 55);
+      pdf.setFontSize(16);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('Report Summary', margin, yPosition);
+      yPosition += 8;
+
+      pdf.setFillColor(249, 250, 251);
+      pdf.setDrawColor(229, 231, 235);
+      pdf.roundedRect(margin, yPosition, pageWidth - 2 * margin, 35, 3, 3, 'FD');
+      
+      pdf.setFontSize(10);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setTextColor(75, 85, 99);
+      
+      const summaryItems = [
+        `Platform: ${formatPlatformName(platform)}`,
+        `Account ID: ${accountId}`,
+        `Time Period: Last ${selectedPeriod} days`,
+        `Chart Type: ${CHART_TYPE_OPTIONS.find(c => c.value === selectedChart)?.label || selectedChart}`,
+        `Metrics Analyzed: ${selectedMetrics.map(m => METRICS_OPTIONS.find(o => o.value === m)?.label || m).join(', ')}`
+      ];
+      
+      let summaryY = yPosition + 7;
+      summaryItems.forEach(item => {
+        pdf.text(`• ${item}`, margin + 5, summaryY);
+        summaryY += 6;
+      });
+      
+      yPosition += 45;
+
+      // ========== EXECUTIVE SUMMARY ==========
+      checkPageBreak(60);
+      pdf.setTextColor(31, 41, 55);
+      pdf.setFontSize(16);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('Executive Summary', margin, yPosition);
+      yPosition += 10;
+
+      let totalDataPoints = 0;
+      let highestPerformer = { metric: '', value: 0, growth: 0 };
+      
+      selectedMetrics.forEach(metric => {
+        const data = chartData[metric] || [];
+        if (data.length > 0) {
+          totalDataPoints += data.length;
+          const firstValue = data[0]?.value || 0;
+          const lastValue = data[data.length - 1]?.value || 0;
+          const growth = firstValue > 0 ? ((lastValue - firstValue) / firstValue * 100) : 0;
+          
+          if (lastValue > highestPerformer.value) {
+            highestPerformer = { 
+              metric: METRICS_OPTIONS.find(m => m.value === metric)?.label || metric, 
+              value: lastValue, 
+              growth 
+            };
+          }
+        }
+      });
+
+      pdf.setFontSize(10);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setTextColor(55, 65, 81);
+      
+      const executiveSummary = [
+        `This report provides a comprehensive analysis of your ${formatPlatformName(platform)} account performance`,
+        `over the last ${selectedPeriod} days. The analysis covers ${selectedMetrics.length} key metric(s) with`,
+        `${totalDataPoints} data points collected during this period.`,
+        ``,
+        `Key Highlight: Your ${highestPerformer.metric} shows the strongest performance with`,
+        `${highestPerformer.value.toLocaleString()} as the current value${highestPerformer.growth !== 0 ? ` (${highestPerformer.growth > 0 ? '+' : ''}${highestPerformer.growth.toFixed(1)}% change)` : ''}.`
+      ];
+      
+      executiveSummary.forEach(line => {
+        pdf.text(line, margin, yPosition);
+        yPosition += 5;
+      });
+      
+      yPosition += 10;
+
+      // ========== DETAILED METRICS ANALYSIS ==========
+      for (const metric of selectedMetrics) {
+        const data = chartData[metric] || [];
+        const metricInfo = METRICS_OPTIONS.find(m => m.value === metric);
+        
+        if (data.length === 0) continue;
+
+        checkPageBreak(80);
+
+        pdf.setFillColor(metricInfo?.color || '#6B7280');
+        pdf.rect(margin, yPosition, 4, 10, 'F');
+        
+        pdf.setTextColor(31, 41, 55);
+        pdf.setFontSize(14);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text(metricInfo?.label || metric, margin + 8, yPosition + 7);
+        yPosition += 15;
+
+        const values = data.map(d => d.value || 0);
+        const currentValue = values[values.length - 1];
+        const previousValue = values[0];
+        const maxValue = Math.max(...values);
+        const minValue = Math.min(...values);
+        const avgValue = values.reduce((a, b) => a + b, 0) / values.length;
+        const totalValue = values.reduce((a, b) => a + b, 0);
+        const nonZeroCount = values.filter(v => v > 0).length;
+        const growthPercent = previousValue > 0 ? ((currentValue - previousValue) / previousValue * 100) : 0;
+
+        const peakIndex = values.indexOf(maxValue);
+        const lowIndex = values.indexOf(minValue);
+        const peakDate = data[peakIndex]?.date ? new Date(data[peakIndex].date).toLocaleDateString() : 'N/A';
+        const lowDate = data[lowIndex]?.date ? new Date(data[lowIndex].date).toLocaleDateString() : 'N/A';
+
+        pdf.setFillColor(249, 250, 251);
+        pdf.roundedRect(margin, yPosition, pageWidth - 2 * margin, 45, 2, 2, 'F');
+
+        const statsData = [
+          { label: 'Current Value', value: currentValue.toLocaleString() },
+          { label: 'Previous Value', value: previousValue.toLocaleString() },
+          { label: 'Change', value: `${growthPercent > 0 ? '+' : ''}${growthPercent.toFixed(2)}%` },
+          { label: 'Peak Value', value: `${maxValue.toLocaleString()} (${peakDate})` },
+          { label: 'Lowest Value', value: `${minValue.toLocaleString()} (${lowDate})` },
+          { label: 'Average', value: Math.round(avgValue).toLocaleString() },
+          { label: 'Total (Sum)', value: totalValue.toLocaleString() },
+          { label: 'Data Points', value: `${nonZeroCount} of ${data.length}` }
+        ];
+
+        pdf.setFontSize(9);
+        let statsX = margin + 5;
+        let statsY = yPosition + 8;
+        const colWidth = (pageWidth - 2 * margin - 10) / 4;
+
+        statsData.forEach((stat, index) => {
+          if (index > 0 && index % 4 === 0) {
+            statsY += 12;
+            statsX = margin + 5;
+          }
+          
+          pdf.setFont('helvetica', 'normal');
+          pdf.setTextColor(107, 114, 128);
+          pdf.text(stat.label, statsX, statsY);
+          
+          pdf.setFont('helvetica', 'bold');
+          pdf.setTextColor(31, 41, 55);
+          pdf.text(stat.value, statsX, statsY + 5);
+          
+          statsX += colWidth;
+        });
+
+        yPosition += 55;
+
+        // Trend Analysis
+        checkPageBreak(30);
+        pdf.setFontSize(11);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setTextColor(31, 41, 55);
+        pdf.text('Trend Analysis:', margin, yPosition);
+        yPosition += 6;
+
+        pdf.setFontSize(9);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setTextColor(55, 65, 81);
+
+        let trendDescription = '';
+        if (growthPercent > 10) {
+          trendDescription = `Strong upward trend detected. ${metricInfo?.label} has grown significantly by ${growthPercent.toFixed(1)}% over the analysis period, indicating positive momentum and engagement growth.`;
+        } else if (growthPercent > 0) {
+          trendDescription = `Moderate positive trend observed. ${metricInfo?.label} shows steady growth of ${growthPercent.toFixed(1)}%, suggesting consistent performance improvement.`;
+        } else if (growthPercent === 0) {
+          trendDescription = `${metricInfo?.label} has remained stable during the analysis period with no significant change, indicating consistent but flat performance.`;
+        } else if (growthPercent > -10) {
+          trendDescription = `Slight decline detected. ${metricInfo?.label} decreased by ${Math.abs(growthPercent).toFixed(1)}%. Consider reviewing content strategy to reverse this trend.`;
+        } else {
+          trendDescription = `Significant decline observed. ${metricInfo?.label} dropped by ${Math.abs(growthPercent).toFixed(1)}%. Immediate attention recommended to identify causes and implement corrective measures.`;
+        }
+
+        const trendLines = pdf.splitTextToSize(trendDescription, pageWidth - 2 * margin);
+        trendLines.forEach(line => {
+          pdf.text(line, margin, yPosition);
+          yPosition += 5;
+        });
+
+        yPosition += 10;
+
+        // Data Table (last 7 days)
+        checkPageBreak(50);
+        pdf.setFontSize(11);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setTextColor(31, 41, 55);
+        pdf.text('Recent Data (Last 7 Days):', margin, yPosition);
+        yPosition += 8;
+
+        const recentData = data.slice(-7);
+        const tableColWidth = (pageWidth - 2 * margin) / 3;
+        
+        pdf.setFillColor(243, 244, 246);
+        pdf.rect(margin, yPosition, pageWidth - 2 * margin, 7, 'F');
+        pdf.setFontSize(9);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text('Date', margin + 3, yPosition + 5);
+        pdf.text('Value', margin + tableColWidth + 3, yPosition + 5);
+        pdf.text('Change', margin + 2 * tableColWidth + 3, yPosition + 5);
+        yPosition += 7;
+
+        pdf.setFont('helvetica', 'normal');
+        recentData.forEach((item, index) => {
+          const prevItem = index > 0 ? recentData[index - 1] : null;
+          const change = prevItem ? item.value - prevItem.value : 0;
+          const changeText = prevItem ? `${change >= 0 ? '+' : ''}${change.toLocaleString()}` : '-';
+          
+          if (index % 2 === 0) {
+            pdf.setFillColor(249, 250, 251);
+            pdf.rect(margin, yPosition, pageWidth - 2 * margin, 6, 'F');
+          }
+          
+          const dateStr = new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          pdf.text(dateStr, margin + 3, yPosition + 4);
+          pdf.text(item.value?.toLocaleString() || '0', margin + tableColWidth + 3, yPosition + 4);
+          
+          if (change > 0) pdf.setTextColor(16, 185, 129);
+          else if (change < 0) pdf.setTextColor(239, 68, 68);
+          else pdf.setTextColor(107, 114, 128);
+          
+          pdf.text(changeText, margin + 2 * tableColWidth + 3, yPosition + 4);
+          pdf.setTextColor(55, 65, 81);
+          
+          yPosition += 6;
+        });
+
+        yPosition += 15;
+      }
+
+      // ========== CAPTURE CHARTS AS IMAGES ==========
+      if (chartContainerRef.current) {
+        checkPageBreak(100);
+        
+        pdf.setFontSize(16);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setTextColor(31, 41, 55);
+        pdf.text('Visual Analytics', margin, yPosition);
+        yPosition += 10;
+
+        try {
+          const canvas = await html2canvas(chartContainerRef.current, {
+            scale: 2,
+            useCORS: true,
+            logging: false,
+            backgroundColor: '#ffffff'
+          });
+          
+          const imgData = canvas.toDataURL('image/png');
+          const imgWidth = pageWidth - 2 * margin;
+          const imgHeight = (canvas.height * imgWidth) / canvas.width;
+          
+          if (yPosition + imgHeight > pageHeight - margin) {
+            pdf.addPage();
+            yPosition = margin;
+          }
+          
+          pdf.addImage(imgData, 'PNG', margin, yPosition, imgWidth, Math.min(imgHeight, pageHeight - yPosition - margin));
+          yPosition += imgHeight + 10;
+        } catch (imgError) {
+          console.error('Error capturing chart image:', imgError);
+          pdf.setFontSize(10);
+          pdf.setTextColor(239, 68, 68);
+          pdf.text('Chart image could not be captured', margin, yPosition);
+          yPosition += 10;
+        }
+      }
+
+      // ========== RECOMMENDATIONS SECTION ==========
+      pdf.addPage();
+      yPosition = margin;
+
+      pdf.setFillColor(16, 185, 129);
+      pdf.rect(0, 0, pageWidth, 35, 'F');
+      
+      pdf.setTextColor(255, 255, 255);
+      pdf.setFontSize(20);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('Recommendations & Insights', margin, 22);
+      
+      yPosition = 45;
+
+      pdf.setTextColor(31, 41, 55);
+      pdf.setFontSize(12);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('Based on your analytics, here are our recommendations:', margin, yPosition);
+      yPosition += 12;
+
+      const recommendations = [];
+      
+      selectedMetrics.forEach(metric => {
+        const data = chartData[metric] || [];
+        if (data.length > 0) {
+          const values = data.map(d => d.value || 0);
+          const current = values[values.length - 1];
+          const previous = values[0];
+          const growth = previous > 0 ? ((current - previous) / previous * 100) : 0;
+          const metricLabel = METRICS_OPTIONS.find(m => m.value === metric)?.label || metric;
+
+          if (growth > 20) {
+            recommendations.push({
+              type: 'success',
+              title: `Excellent ${metricLabel} Growth`,
+              text: `Your ${metricLabel.toLowerCase()} has increased by ${growth.toFixed(1)}%. Continue your current strategy and consider scaling successful campaigns.`
+            });
+          } else if (growth > 5) {
+            recommendations.push({
+              type: 'info',
+              title: `Positive ${metricLabel} Trend`,
+              text: `Your ${metricLabel.toLowerCase()} shows healthy growth of ${growth.toFixed(1)}%. Consider A/B testing to optimize further.`
+            });
+          } else if (growth < -10) {
+            recommendations.push({
+              type: 'warning',
+              title: `${metricLabel} Needs Attention`,
+              text: `Your ${metricLabel.toLowerCase()} has declined by ${Math.abs(growth).toFixed(1)}%. Review recent content changes and engagement patterns.`
+            });
+          }
+        }
+      });
+
+      recommendations.push({
+        type: 'info',
+        title: 'Content Consistency',
+        text: 'Maintain a consistent posting schedule to keep your audience engaged and improve algorithm visibility.'
+      });
+
+      recommendations.push({
+        type: 'info',
+        title: 'Engagement Strategy',
+        text: 'Respond to comments and messages promptly to build community and increase organic reach.'
+      });
+
+      recommendations.forEach((rec, index) => {
+        checkPageBreak(25);
+        
+        const colors = {
+          success: { bg: [209, 250, 229], border: [16, 185, 129] },
+          warning: { bg: [254, 243, 199], border: [245, 158, 11] },
+          info: { bg: [219, 234, 254], border: [59, 130, 246] }
+        };
+        
+        const color = colors[rec.type] || colors.info;
+        
+        pdf.setFillColor(...color.bg);
+        pdf.setDrawColor(...color.border);
+        pdf.roundedRect(margin, yPosition, pageWidth - 2 * margin, 22, 2, 2, 'FD');
+        
+        pdf.setFontSize(10);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setTextColor(31, 41, 55);
+        pdf.text(`${index + 1}. ${rec.title}`, margin + 5, yPosition + 7);
+        
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(9);
+        pdf.setTextColor(55, 65, 81);
+        const recLines = pdf.splitTextToSize(rec.text, pageWidth - 2 * margin - 10);
+        pdf.text(recLines[0], margin + 5, yPosition + 14);
+        if (recLines[1]) pdf.text(recLines[1], margin + 5, yPosition + 19);
+        
+        yPosition += 28;
+      });
+
+      // ========== FOOTER ==========
+      const pageCount = pdf.internal.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        pdf.setPage(i);
+        pdf.setFontSize(8);
+        pdf.setTextColor(156, 163, 175);
+        pdf.text(
+          `Page ${i} of ${pageCount} | ${formatPlatformName(platform)} Analytics Report | Generated by Airspark`,
+          pageWidth / 2,
+          pageHeight - 10,
+          { align: 'center' }
+        );
+      }
+
+      const fileName = `${platform}_analytics_report_${new Date().toISOString().split('T')[0]}.pdf`;
+      pdf.save(fileName);
+      
+      console.log('✅ PDF Report generated successfully:', fileName);
+
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      alert('Failed to generate PDF report. Please try again.');
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
   const debugStoredAccounts = async () => {
     try {
       const response = await fetch(`${process.env.REACT_APP_API_URL}/api/historical-data/debug-accounts`);
@@ -500,6 +959,19 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
             </div>
           </div>
           <div className="flex items-center space-x-2">
+            <button
+              onClick={generatePDFReport}
+              disabled={generatingPdf || !chartData}
+              className="bg-indigo-600 text-white px-3 py-2 rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 text-sm"
+              title="Download PDF Report"
+            >
+              {generatingPdf ? (
+                <RefreshCw className="h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
+              <span>{generatingPdf ? 'Generating...' : 'Download Report'}</span>
+            </button>
             <button
               onClick={captureNewSnapshot}
               className="bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 flex items-center space-x-2 text-sm"
@@ -652,7 +1124,11 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
       )}
 
       {/* Charts */}
-      {chartData && !loading && renderChart()}
+      {chartData && !loading && (
+        <div ref={chartContainerRef}>
+          {renderChart()}
+        </div>
+      )}
     </div>
   );
 }

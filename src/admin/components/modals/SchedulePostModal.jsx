@@ -861,6 +861,10 @@ function SchedulePostModal({
   const handlePostNow = async () => {
     if (!validatePostData(false)) return;
 
+    // Generate unique request ID to prevent duplicate processing
+    const requestId = `post_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    console.log('🆔 Generated request ID:', requestId);
+
     setIsPostingNow(true);
     try {
       const postsData = createPostsData(false);
@@ -884,6 +888,9 @@ function SchedulePostModal({
           //     console.error('❌ LinkedIn media upload failed:', mediaError.message);
           //   }
           // }
+
+          // Add unique request ID to prevent duplicate processing
+          postData.requestId = `${requestId}_${postData.platform}`;
 
           // Use /api/immediate-posts for all platforms
           const response = await fetch(`${process.env.REACT_APP_API_URL}/api/immediate-posts`, {
@@ -1013,39 +1020,39 @@ function SchedulePostModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6">
           {/* Modal Header */}
-          <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-200">
+          <div className="flex items-center justify-between mb-4 pb-3 border-b border-[#E2E8F0]">
             <div className="flex items-center space-x-3">
-              <div className="p-2 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-xl">
+              <div className="p-2 bg-gradient-to-r from-[#00E5FF] to-[#0066CC] rounded-xl shadow">
                 <Send className="h-6 w-6 text-white" />
               </div>
               <div>
-                <h2 className="text-2xl font-bold text-gray-900">Post to Multiple Platforms</h2>
-                <p className="text-sm text-gray-500">Select platforms, schedule for later or publish immediately</p>
+                <h2 className="text-2xl font-bold text-[#0F172A]">Post to Multiple Platforms</h2>
+                <p className="text-sm text-[#475569]">Select platforms, schedule for later or publish immediately</p>
               </div>
             </div>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 p-2 rounded-lg hover:bg-gray-100 transition-all duration-200"
+              className="text-[#475569] hover:text-[#0F172A] p-2 rounded-lg hover:bg-[#F4F9FF] transition-all duration-200"
             >
               <XCircle className="h-6 w-6" />
             </button>
           </div>
 
-          <div className="space-y-8">
+          <div className="space-y-4">
             {/* Platform Selection */}
             <div className="bg-gradient-to-r from-gray-50 to-blue-50 p-6 rounded-xl border border-gray-200">
               <label className="block text-lg font-semibold text-gray-900 mb-4">Select Platforms (Multi-Select)</label>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {/* Facebook */}
-                <label className={`flex items-center p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
+                <label className={`flex items-center p-3 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
                   scheduleFormData.platforms.includes('facebook') 
-                    ? 'border-blue-500 bg-blue-50 shadow-md' 
+                    ? 'border-[#0066CC] bg-white shadow-sm' 
                     : hasAccountsForPlatform(selectedContent?.customerId, 'facebook')
-                    ? 'border-gray-300 hover:border-blue-400 hover:bg-blue-50'
-                    : 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-60'
+                    ? 'border-[#E2E8F0] hover:border-[#0066CC] hover:bg-white'
+                    : 'border-[#E2E8F0] bg-[#F4F9FF]/50 cursor-not-allowed opacity-60'
                 }`}>
                   <input
                     type="checkbox"

@@ -381,51 +381,75 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
           if (platform === 'instagram') {
             const instagramPages = updatedPages.filter(page => page.instagramBusinessAccount);
             
-            // Enhanced Instagram account data with validation metadata
-            const instagramAccountData = {
-              customerId: customer.id,
-              platform: 'instagram',
-              platformUserId: userId,
-              name: userResponse.name,
-              email: userResponse.email,
-              profilePicture: userResponse.picture?.data?.url,
-              accessToken: finalUserToken,
-              tokenType: longLivedResult ? 'long_lived' : 'short_lived',
-              tokenExpiresAt: tokenExpiresAt,
-              facebookAccountId: accountData.accountId,
-              pages: instagramPages.map(page => ({
-                ...page,
-                isLinkedToFacebook: true,
-                validationTimestamp: new Date().toISOString(),
-                // Add debugging info for troubleshooting
-                debugInfo: {
-                  pageTokenLength: page.accessToken?.length,
-                  instagramIdPresent: !!page.instagramBusinessAccount?.id,
-                  usernamePresent: !!page.instagramBusinessAccount?.username
-                }
-              })),
-              connectedAt: new Date().toISOString(),
-              needsReconnection: false,
-              lastTokenValidation: new Date().toISOString(),
-              tokenStatus: 'active',
-              connectionMetadata: {
-                connectedVia: 'facebook_business_integration',
-                validationLevel: 'enhanced',
-                tokenValidatedAt: new Date().toISOString()
+            if (instagramPages.length > 0) {
+              // 🔥 CRITICAL FIX: Loop through each Instagram Business Account and save separately
+              for (const page of instagramPages) {
+                const igAccount = page.instagramBusinessAccount;
+                
+                console.log('💾 Saving Instagram Business Account:', {
+                  instagramId: igAccount.id,
+                  username: igAccount.username,
+                  pageName: page.name,
+                  pageId: page.id
+                });
+                
+                const instagramAccountData = {
+                  customerId: customer.id,
+                  platform: 'instagram',
+                  platformUserId: igAccount.id, // ✅ FIX: Use Instagram Business Account ID, NOT Facebook User ID
+                  facebookUserId: userId, // Store Facebook User ID separately
+                  facebookPageId: page.id,
+                  name: igAccount.name || page.name,
+                  username: igAccount.username,
+                  email: userResponse.email,
+                  profilePicture: igAccount.profile_picture_url || userResponse.picture?.data?.url,
+                  accessToken: finalUserToken,
+                  tokenType: longLivedResult ? 'long_lived' : 'short_lived',
+                  tokenExpiresAt: tokenExpiresAt,
+                  facebookAccountId: accountData.accountId,
+                  pages: [{
+                    ...page,
+                    isLinkedToFacebook: true,
+                    validationTimestamp: new Date().toISOString(),
+                    debugInfo: {
+                      pageTokenLength: page.accessToken?.length,
+                      instagramIdPresent: !!igAccount.id,
+                      usernamePresent: !!igAccount.username
+                    }
+                  }],
+                  // Instagram-specific metadata
+                  instagramData: {
+                    businessAccountId: igAccount.id,
+                    username: igAccount.username,
+                    name: igAccount.name
+                  },
+                  connectedAt: new Date().toISOString(),
+                  needsReconnection: false,
+                  lastTokenValidation: new Date().toISOString(),
+                  tokenStatus: 'active',
+                  connectionMetadata: {
+                    connectedVia: 'facebook_business_integration',
+                    validationLevel: 'enhanced',
+                    tokenValidatedAt: new Date().toISOString()
+                  }
+                };
+                
+                console.log('💾 Saving Instagram account with enhanced validation...');
+                console.log('📋 Instagram account summary:', {
+                  platform: 'instagram',
+                  instagramId: igAccount.id,
+                  username: igAccount.username,
+                  hasUserToken: !!instagramAccountData.accessToken,
+                  userTokenLength: instagramAccountData.accessToken?.length,
+                  tokenType: instagramAccountData.tokenType
+                });
+                
+                // Save Instagram account separately
+                await saveAccountToDatabase(instagramAccountData);
               }
-            };
-            
-            console.log('💾 Saving Instagram account with enhanced validation...');
-            console.log('📋 Instagram account summary:', {
-              platform: 'instagram',
-              pagesCount: instagramPages.length,
-              hasUserToken: !!instagramAccountData.accessToken,
-              userTokenLength: instagramAccountData.accessToken?.length,
-              tokenType: instagramAccountData.tokenType
-            });
-            
-            // Save Instagram account separately
-            await saveAccountToDatabase(instagramAccountData);
+            } else {
+              console.warn('⚠️ No Instagram Business Accounts found on connected Facebook pages');
+            }
           }
         });
       });
@@ -478,22 +502,45 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
       if (platform === 'instagram') {
         const instagramPages = pagesData.data.filter(page => page.instagram_business_account);
         if (instagramPages.length > 0) {
-          const instagramAccountData = {
-            platform: 'instagram',
-            platformUserId: userId,
-            name: userData.name,
-            email: userData.email,
-            accessToken: accessToken,
-            tokenExpiry: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
-            pages: instagramPages.map(page => ({
-              id: page.id,
-              name: page.name,
-              category: page.category,
-              accessToken: page.access_token,
-              instagramBusinessAccount: page.instagram_business_account
-            }))
-          };
-          await saveAccountToDatabase(instagramAccountData);
+          // 🔥 CRITICAL FIX: Loop through each Instagram Business Account and save separately
+          for (const page of instagramPages) {
+            const igAccount = page.instagram_business_account;
+            
+            console.log('💾 Saving Instagram Business Account (fetchFacebookPages):', {
+              instagramId: igAccount.id,
+              username: igAccount.username,
+              pageName: page.name,
+              pageId: page.id
+            });
+            
+            const instagramAccountData = {
+              customerId: getCustomerId(customer),
+              platform: 'instagram',
+              platformUserId: igAccount.id, // ✅ FIX: Use Instagram Business Account ID, NOT Facebook User ID
+              facebookUserId: userId, // Store Facebook User ID separately
+              facebookPageId: page.id,
+              name: igAccount.name || page.name,
+              username: igAccount.username,
+              email: userData.email,
+              profilePicture: igAccount.profile_picture_url,
+              accessToken: accessToken,
+              tokenExpiry: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
+              pages: [{
+                id: page.id,
+                name: page.name,
+                category: page.category,
+                accessToken: page.access_token,
+                instagramBusinessAccount: igAccount
+              }],
+              // Instagram-specific metadata
+              instagramData: {
+                businessAccountId: igAccount.id,
+                username: igAccount.username,
+                name: igAccount.name
+              }
+            };
+            await saveAccountToDatabase(instagramAccountData);
+          }
         } else {
           setError('No Instagram Business accounts found. Please connect an Instagram Business account to your Facebook pages first.');
           setLoading(false);

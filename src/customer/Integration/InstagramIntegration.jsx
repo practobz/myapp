@@ -123,27 +123,41 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
         const data = await res.json();
         if (data.success && Array.isArray(data.accounts)) {
           // Only Instagram accounts for this customer
-          return data.accounts
+          const instagramAccounts = data.accounts
             .filter(acc => acc.platform === 'instagram' && acc.customerId === customerId)
-            .map(acc => ({
-              id: acc.platformUserId,
-              pageId: acc.facebookPageId,
-              pageName: acc.name,
-              profile: {
+            .map(acc => {
+              console.log('📦 Backend Instagram account data:', {
+                platformUserId: acc.platformUserId,
                 username: acc.username,
-                profile_picture_url: acc.profilePicture,
-                followers_count: acc.instagramData?.followersCount,
-                media_count: acc.instagramData?.mediaCount,
-                biography: acc.instagramData?.biography,
-                website: acc.instagramData?.website
-              },
-              media: [], // Optionally fetch media if needed
-              userAccessToken: acc.accessToken,
-              pageAccessToken: acc.pages?.[0]?.accessToken,
-              connected: true,
-              connectedAt: acc.connectedAt,
-              tokenExpiresAt: acc.tokenExpiresAt || null
-            }));
+                instagramDataUsername: acc.instagramData?.username,
+                name: acc.name,
+                hasAccessToken: !!acc.accessToken,
+                hasPageToken: !!acc.pages?.[0]?.accessToken
+              });
+              
+              return {
+                id: acc.platformUserId,
+                pageId: acc.facebookPageId,
+                pageName: acc.name,
+                profile: {
+                  username: acc.instagramData?.username || acc.username,
+                  profile_picture_url: acc.profilePicture,
+                  followers_count: acc.instagramData?.followersCount,
+                  media_count: acc.instagramData?.mediaCount,
+                  biography: acc.instagramData?.biography,
+                  website: acc.instagramData?.website
+                },
+                media: [],
+                userAccessToken: acc.accessToken,
+                pageAccessToken: acc.pages?.[0]?.accessToken,
+                connected: true,
+                connectedAt: acc.connectedAt,
+                tokenExpiresAt: acc.tokenExpiresAt || null
+              };
+            });
+          
+          console.log(`✅ Retrieved ${instagramAccounts.length} Instagram accounts from backend`);
+          return instagramAccounts;
         }
       } catch (err) {
         console.warn('Failed to fetch Instagram accounts from backend:', err);
@@ -153,13 +167,24 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
 
     // Helper to hydrate backend accounts with live profile/media using direct Graph API
     const hydrateInstagramAccounts = async (accounts) => {
-      if (!accounts || accounts.length === 0) return accounts;
+      if (!accounts || accounts.length === 0) {
+        console.log('ℹ️ No accounts to hydrate');
+        return accounts;
+      }
+      
+      console.log(`🔄 Starting hydration of ${accounts.length} Instagram accounts...`);
       
       try {
         const hydrated = await Promise.all(accounts.map(async (acc) => {
           try {
             // Use direct Graph API calls instead of FB SDK to avoid session issues
             const pageToken = acc.pageAccessToken || acc.accessToken;
+            
+            console.log(`🔄 Hydrating account ${acc.id}:`, {
+              hasPageToken: !!acc.pageAccessToken,
+              hasUserToken: !!acc.accessToken,
+              usingToken: pageToken ? pageToken.substring(0, 20) + '...' : 'none'
+            });
             
             if (!pageToken) {
               console.warn(`⚠️ No access token for account ${acc.id}, using stored data`);
@@ -168,19 +193,32 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
             
             // Fetch profile data
             const profileUrl = `https://graph.facebook.com/v18.0/${acc.id}?fields=id,username,media_count,profile_picture_url,biography,website,followers_count&access_token=${pageToken}`;
+            console.log(`📡 Fetching profile for ${acc.id}...`);
             const profileResponse = await fetch(profileUrl);
             const profileData = await profileResponse.json();
             
             // Fetch media data
             const mediaUrl = `https://graph.facebook.com/v18.0/${acc.id}/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count&limit=12&access_token=${pageToken}`;
+            console.log(`📡 Fetching media for ${acc.id}...`);
             const mediaResponse = await fetch(mediaUrl);
             const mediaData = await mediaResponse.json();
             
             // Check for API errors
-            if (profileData.error || mediaData.error) {
-              console.warn(`⚠️ API error for account ${acc.id}:`, profileData.error || mediaData.error);
+            if (profileData.error) {
+              console.error(`❌ Profile API error for ${acc.id}:`, profileData.error);
               return acc; // Return original account with stored data
             }
+            
+            if (mediaData.error) {
+              console.warn(`⚠️ Media API error for ${acc.id}:`, mediaData.error);
+              // Continue with profile data even if media fails
+            }
+            
+            console.log(`✅ Successfully hydrated ${acc.id}:`, {
+              username: profileData.username,
+              followers: profileData.followers_count,
+              media: profileData.media_count
+            });
             
             return {
               ...acc,
@@ -188,15 +226,15 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
               media: mediaData.data || []
             };
           } catch (error) {
-            console.warn(`⚠️ Failed to hydrate account ${acc.id}:`, error);
+            console.error(`❌ Failed to hydrate account ${acc.id}:`, error);
             return acc; // Return original account with stored data on error
           }
         }));
         
-        console.log(`✅ Hydrated ${hydrated.length} Instagram accounts`);
+        console.log(`✅ Hydration complete for ${hydrated.length} Instagram accounts`);
         return hydrated;
       } catch (error) {
-        console.error('❌ Error hydrating Instagram accounts:', error);
+        console.error('❌ Error during hydration process:', error);
         return accounts; // Return original accounts on error
       }
     };

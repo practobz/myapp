@@ -1758,7 +1758,7 @@ const ROIDashboard = () => {
               <p className="text-sm sm:text-base text-gray-600 mb-4 px-2">View detailed analytics for individual posts by visiting the respective platform integration pages.</p>
               <div className="grid grid-cols-2 sm:flex sm:flex-wrap sm:justify-center gap-2 sm:gap-4">
                 <button
-                  onClick={() => navigate('/customer/integrations/facebook')}
+                  onClick={() => navigate('/customer/integration/facebook')}
                   className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 py-2 sm:px-4 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-xs sm:text-sm font-medium"
                 >
                   <span>📘</span>
@@ -1766,7 +1766,7 @@ const ROIDashboard = () => {
                   <span className="sm:hidden">Facebook</span>
                 </button>
                 <button
-                  onClick={() => navigate('/customer/integrations/instagram')}
+                  onClick={() => navigate('/customer/integration/instagram')}
                   className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 py-2 sm:px-4 sm:py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700 text-xs sm:text-sm font-medium"
                 >
                   <span>📸</span>
@@ -1774,7 +1774,7 @@ const ROIDashboard = () => {
                   <span className="sm:hidden">Instagram</span>
                 </button>
                 <button
-                  onClick={() => navigate('/customer/integrations/youtube')}
+                  onClick={() => navigate('/customer/integration/youtube')}
                   className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 py-2 sm:px-4 sm:py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-xs sm:text-sm font-medium"
                 >
                   <span>🎬</span>
@@ -1782,7 +1782,7 @@ const ROIDashboard = () => {
                   <span className="sm:hidden">YouTube</span>
                 </button>
                 <button
-                  onClick={() => navigate('/customer/integrations/linkedin')}
+                  onClick={() => navigate('/customer/integration/linkedin')}
                   className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 py-2 sm:px-4 sm:py-2 bg-blue-700 text-white rounded-lg hover:bg-blue-800 text-xs sm:text-sm font-medium"
                 >
                   <span>💼</span>

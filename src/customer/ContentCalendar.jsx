@@ -103,7 +103,14 @@ function ContentCalendar() {
         // Fetch all calendars, then filter by customerId
         const calendarsRes = await fetch(`${process.env.REACT_APP_API_URL}/calendars`);
         const allCalendars = await calendarsRes.json();
-        const customerCalendars = allCalendars.filter(c => c.customerId === customerId);
+        const customerCalendars = allCalendars
+          .filter(c => c.customerId === customerId)
+          .sort((a, b) => {
+            // Sort by createdAt date (most recent first)
+            const dateA = new Date(a.createdAt || a._id || 0);
+            const dateB = new Date(b.createdAt || b._id || 0);
+            return dateB - dateA;
+          });
         setCalendars(customerCalendars);
 
         // --- Fetch scheduled posts for this customer ---
@@ -254,26 +261,24 @@ function ContentCalendar() {
                 </div>
                 {/* Status Filter Buttons */}
                 <div className="flex flex-wrap gap-2">
-                  {[
-                    { key: 'all', label: 'All', color: 'from-slate-100 to-blue-100', textColor: 'text-slate-700', activeColor: 'from-indigo-600 to-blue-600', activeText: 'text-white' },
-                    { key: 'published', label: 'Published', color: 'from-emerald-100 to-green-100', textColor: 'text-emerald-700', activeColor: 'from-emerald-600 to-green-600', activeText: 'text-white' },
-                    { key: 'under_review', label: 'Under Review', color: 'from-amber-100 to-yellow-100', textColor: 'text-amber-700', activeColor: 'from-amber-600 to-yellow-600', activeText: 'text-white' },
-                    { key: 'scheduled', label: 'Scheduled', color: 'from-blue-100 to-cyan-100', textColor: 'text-blue-700', activeColor: 'from-blue-600 to-cyan-600', activeText: 'text-white' },
-                    { key: 'waiting_input', label: 'Waiting Input', color: 'from-orange-100 to-red-100', textColor: 'text-orange-700', activeColor: 'from-orange-600 to-red-600', activeText: 'text-white' },
-                    { key: 'draft', label: 'Draft', color: 'from-gray-100 to-slate-100', textColor: 'text-gray-700', activeColor: 'from-gray-600 to-slate-600', activeText: 'text-white' }
-                  ].map(option => (
-                    <button
-                      key={option.key}
-                      onClick={() => setStatusFilter(option.key)}
-                      className={`inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold transition-all shadow-sm hover:shadow-md
-                        ${statusFilter === option.key
-                          ? `bg-gradient-to-r ${option.activeColor} ${option.activeText} border border-transparent`
-                          : `bg-gradient-to-r ${option.color} ${option.textColor} border border-transparent hover:scale-105`
-                        }`}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
+                    {[
+                      { key: 'all', label: 'All', color: 'from-slate-100 to-blue-100', textColor: 'text-slate-700', activeColor: 'from-indigo-600 to-blue-600', activeText: 'text-white' },
+                      { key: 'published', label: 'Published', color: 'from-emerald-100 to-green-100', textColor: 'text-emerald-700', activeColor: 'from-emerald-600 to-green-600', activeText: 'text-white' },
+                      { key: 'under_review', label: 'Under Review', color: 'from-amber-100 to-yellow-100', textColor: 'text-amber-700', activeColor: 'from-amber-600 to-yellow-600', activeText: 'text-white' },
+                      { key: 'scheduled', label: 'Scheduled', color: 'from-blue-100 to-cyan-100', textColor: 'text-blue-700', activeColor: 'from-blue-600 to-cyan-600', activeText: 'text-white' }
+                    ].map(option => (
+                      <button
+                        key={option.key}
+                        onClick={() => setStatusFilter(option.key)}
+                        className={`inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold transition-all shadow-sm hover:shadow-md
+                          ${statusFilter === option.key
+                            ? `bg-gradient-to-r ${option.activeColor} ${option.activeText} border border-transparent`
+                            : `bg-gradient-to-r ${option.color} ${option.textColor} border border-transparent hover:scale-105`
+                          }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
                 </div>
               </div>
               
@@ -308,15 +313,15 @@ function ContentCalendar() {
                         )}
                       </div>
                       <div className="flex items-center gap-4">
-                        <div className="flex items-center gap-1 text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg">
-                          <MessageSquare className="h-4 w-4" />
-                          <span className="font-semibold">{item.commentCount || 0}</span>
-                        </div>
-                        {item.status === 'published' && (
-                          <div className="p-2 bg-slate-100 rounded-lg">
-                            <Eye className="h-4 w-4 text-slate-600" />
-                          </div>
-                        )}
+                            <div className="flex items-center gap-1 text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg">
+                              <MessageSquare className="h-4 w-4" />
+                              <span className="font-semibold">{item.commentCount || 0}</span>
+                            </div>
+                            {item.status === 'published' && (
+                              <div className="flex-shrink-0 flex items-center justify-center p-2 bg-slate-100 rounded-lg" style={{ minWidth: '2.5rem', minHeight: '2.5rem' }}>
+                                <Eye className="h-4 w-4 text-slate-600" />
+                              </div>
+                            )}
                       </div>
                     </div>
                     <p className="text-slate-700 mb-3 font-medium break-words line-clamp-2">{item.description}</p>

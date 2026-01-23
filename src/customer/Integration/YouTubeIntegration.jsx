@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Youtube, TrendingUp, ExternalLink, CheckCircle, AlertCircle, Loader2, Users, Eye, Play, Clock, Plus, UserCheck, Trash2, RefreshCw, BarChart3, ThumbsUp, MessageSquare, ChevronUp } from 'lucide-react';
+import { Youtube, TrendingUp, ExternalLink, CheckCircle, AlertCircle, Loader2, Users, Eye, Play, Clock, Plus, UserCheck, Trash2, RefreshCw, BarChart3, ThumbsUp, MessageSquare, ChevronUp, LayoutGrid, X } from 'lucide-react';
 import YouTubePostAnalytics from './components/YouTubePostAnalytics';
 import TimePeriodChart from '../../components/TimeperiodChart';
 import { getUserData, setUserData, removeUserData, migrateToUserSpecificStorage } from '../../utils/sessionUtils';
@@ -103,6 +103,12 @@ function YouTubeIntegration(props) {
 
   // Token refresh timer
   const [tokenRefreshTimer, setTokenRefreshTimer] = useState(null);
+
+  // Confirmation dialog state
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [confirmAction, setConfirmAction] = useState(null);
+  const [confirmMessage, setConfirmMessage] = useState('');
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
 
   // Safe error setter wrapper
   const setSafeErrorState = (error) => setSafeError(setError, error);
@@ -765,9 +771,58 @@ function YouTubeIntegration(props) {
     }
   };
 
-  // Remove account with error handling
-  const removeAccount = (accountId) => {
+  // Show confirmation dialog for account removal
+  const confirmRemoveAccount = (accountId) => {
+    const account = connectedAccounts.find(acc => acc.id === accountId);
+    setConfirmMessage(`Are you sure you want to disconnect "${account?.name || 'this account'}"? This will remove all associated data.`);
+    setConfirmAction(() => () => removeAccount(accountId));
+    setShowConfirmDialog(true);
+  };
+
+  // Remove account with error handling - now also deletes from database
+  const removeAccount = async (accountId) => {
+    setIsDisconnecting(true);
     try {
+      // Get current user/customer ID
+      let customerId = null;
+      try {
+        const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
+        customerId = currentUser.userId || currentUser.id || currentUser._id || currentUser.customer_id;
+      } catch (e) {
+        console.warn('Error parsing currentUser:', e);
+      }
+
+      // Delete from database
+      if (customerId) {
+        try {
+          const response = await fetch(`${process.env.REACT_APP_API_URL}/api/customer-social-links/${customerId}/youtube/${accountId}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' }
+          });
+          const result = await response.json();
+          if (result.success) {
+            console.log('✅ YouTube account deleted from database');
+          } else {
+            console.warn('Failed to delete from database:', result.message);
+          }
+        } catch (dbError) {
+          console.warn('Error deleting from database:', dbError);
+        }
+      }
+
+      // Revoke the token
+      const account = connectedAccounts.find(acc => acc.id === accountId);
+      if (account?.accessToken) {
+        try {
+          await fetch(`https://oauth2.googleapis.com/revoke?token=${account.accessToken}`, {
+            method: 'POST',
+            headers: { 'Content-type': 'application/x-www-form-urlencoded' }
+          });
+        } catch (err) {
+          console.warn('Error revoking token:', err);
+        }
+      }
+
       const updatedAccounts = connectedAccounts.filter(acc => acc.id !== accountId);
       setConnectedAccounts(updatedAccounts);
       saveAccountsToStorage(updatedAccounts);
@@ -788,33 +843,68 @@ function YouTubeIntegration(props) {
           setVideos([]);
           setShortsCount(0);
           setVideosCount(0);
+          window.gapi.client.setToken('');
           removeUserData('yt_active_account_id');
         }
       }
+      
+      setShowConfirmDialog(false);
     } catch (error) {
       console.error('Error removing account:', error);
       setSafeErrorState('Failed to remove YouTube account. Please try again.');
+    } finally {
+      setIsDisconnecting(false);
     }
   };
 
-  // Sign out all accounts with error handling
-  const handleSignOutAll = () => {
+  // Show confirmation dialog for disconnecting all
+  const confirmSignOutAll = () => {
+    setConfirmMessage(`Are you sure you want to disconnect all ${connectedAccounts.length} YouTube account(s)? This will remove all associated data and cannot be undone.`);
+    setConfirmAction(() => handleSignOutAll);
+    setShowConfirmDialog(true);
+  };
+
+  // Sign out all accounts with error handling - now also deletes from database
+  const handleSignOutAll = async () => {
+    setIsDisconnecting(true);
     try {
-      // Revoke all tokens
-      connectedAccounts.forEach(account => {
+      // Get current user/customer ID
+      let customerId = null;
+      try {
+        const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
+        customerId = currentUser.userId || currentUser.id || currentUser._id || currentUser.customer_id;
+      } catch (e) {
+        console.warn('Error parsing currentUser:', e);
+      }
+
+      // Delete all accounts from database
+      for (const account of connectedAccounts) {
+        if (customerId) {
+          try {
+            await fetch(`${process.env.REACT_APP_API_URL}/api/customer-social-links/${customerId}/youtube/${account.id}`, {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' }
+            });
+            console.log(`✅ Deleted YouTube account ${account.id} from database`);
+          } catch (dbError) {
+            console.warn('Error deleting from database:', dbError);
+          }
+        }
+
+        // Revoke token
         if (account.accessToken) {
           try {
-            fetch(`https://oauth2.googleapis.com/revoke?token=${account.accessToken}`, {
+            await fetch(`https://oauth2.googleapis.com/revoke?token=${account.accessToken}`, {
               method: 'POST',
               headers: { 'Content-type': 'application/x-www-form-urlencoded' }
-            }).catch(err => console.warn('Failed to revoke token:', err));
+            });
           } catch (err) {
             console.warn('Error revoking token:', err);
           }
         }
         removeUserData(`yt_access_token_${account.id}`);
         removeUserData(`yt_token_expiry_${account.id}`);
-      });
+      }
       
       // Clear all state
       setConnectedAccounts([]);
@@ -827,10 +917,59 @@ function YouTubeIntegration(props) {
       window.gapi.client.setToken('');
       removeUserData('yt_connected_accounts');
       removeUserData('yt_active_account_id');
+      
+      setShowConfirmDialog(false);
     } catch (error) {
       console.error('Error signing out:', error);
       setSafeErrorState('Failed to sign out completely. Some data may remain cached.');
+    } finally {
+      setIsDisconnecting(false);
     }
+  };
+
+  // Confirmation Dialog Component
+  const renderConfirmDialog = () => {
+    if (!showConfirmDialog) return null;
+    
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
+        <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 animate-in fade-in zoom-in duration-200">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+              <AlertCircle className="h-6 w-6 text-red-600" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900">Confirm Disconnect</h3>
+          </div>
+          <p className="text-gray-600 mb-6">{confirmMessage}</p>
+          <div className="flex gap-3">
+            <button
+              onClick={() => setShowConfirmDialog(false)}
+              disabled={isDisconnecting}
+              className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors font-medium disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => confirmAction && confirmAction()}
+              disabled={isDisconnecting}
+              className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors font-medium flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {isDisconnecting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Disconnecting...</span>
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4" />
+                  <span>Disconnect</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   // Fetch single video analytics
@@ -1039,11 +1178,8 @@ function YouTubeIntegration(props) {
   };
 
   // Check and refresh token if needed before operations
-  // ✅ DELEGATION MODEL: Always return true - backend handles authentication
   const ensureValidToken = async (accountId) => {
-    // With delegation model, frontend doesn't need to check token expiration
-    // Backend uses permanent system user token from aureum-credentials.json
-    // or handles token refresh automatically
+    // Backend handles token refresh automatically
     return true;
   };
 
@@ -1313,49 +1449,52 @@ function YouTubeIntegration(props) {
   // Render account selector with improved error handling
   const renderAccountSelector = () => {
     return (
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <h4 className="font-medium text-gray-700 flex items-center">
-            <Users className="h-5 w-5 mr-2" />
-            Connected YouTube Accounts ({connectedAccounts.length})
+      <div className="mb-4 sm:mb-6 px-3 sm:px-0">
+        <div className="flex items-center justify-between mb-3 sm:mb-4">
+          <h4 className="font-medium text-gray-700 flex items-center text-sm sm:text-base">
+            <Users className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
+            <span className="hidden sm:inline">Connected YouTube Accounts</span>
+            <span className="sm:hidden">Accounts</span>
+            <span className="ml-1">({connectedAccounts.length})</span>
           </h4>
           <button
             onClick={handleSignIn}
-            className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 flex items-center space-x-2 text-sm"
+            className="bg-red-600 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-red-700 flex items-center gap-1 sm:gap-2 text-xs sm:text-sm"
           >
             <Plus className="h-4 w-4" />
-            <span>Add Account</span>
+            <span className="hidden sm:inline">Add Account</span>
+            <span className="sm:hidden">Add</span>
           </button>
         </div>
         
         {connectedAccounts.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
             {connectedAccounts.map((account) => (
               <div
                 key={account.id}
-                className={`border rounded-lg p-4 transition-all cursor-pointer ${
+                className={`border rounded-lg p-3 sm:p-4 transition-all cursor-pointer ${
                   activeAccountId === account.id
                     ? 'border-red-500 bg-red-50 shadow-md'
                     : 'border-gray-200 bg-white hover:border-gray-300'
                 }`}
                 onClick={() => switchAccount(account.id)}
               >
-                <div className="flex items-center space-x-3">
+                <div className="flex items-center gap-2 sm:gap-3">
                   {account.picture && (
                     <img
                       src={account.picture.url}
                       alt={account.name}
-                      className="w-12 h-12 rounded-full"
+                      className="w-10 h-10 sm:w-12 sm:h-12 rounded-full"
                     />
                   )}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center space-x-2">
-                      <h5 className="font-medium text-gray-900 truncate">{account.name}</h5>
+                    <div className="flex items-center gap-1 sm:gap-2">
+                      <h5 className="font-medium text-gray-900 truncate text-sm sm:text-base">{account.name}</h5>
                       {activeAccountId === account.id && (
-                        <UserCheck className="h-4 w-4 text-red-600" />
+                        <UserCheck className="h-4 w-4 text-red-600 flex-shrink-0" />
                       )}
                     </div>
-                    <p className="text-sm text-gray-600 truncate">{account.email}</p>
+                    <p className="text-xs sm:text-sm text-gray-600 truncate">{account.email}</p>
                     <p className="text-xs text-gray-500">
                       Connected {new Date(account.connectedAt).toLocaleDateString()}
                     </p>
@@ -1363,7 +1502,7 @@ function YouTubeIntegration(props) {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      removeAccount(account.id);
+                      confirmRemoveAccount(account.id);
                     }}
                     className="p-1 text-gray-400 hover:text-red-600 transition-colors"
                     title="Remove account"
@@ -1736,13 +1875,13 @@ function YouTubeIntegration(props) {
 
   // Update renderConnectedState to include token status and historical charts
   const renderConnectedState = () => (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {renderAccountSelector()}
       
       {activeAccount && (
         <>
-          <div className="flex items-center justify-between p-4 bg-white rounded-lg border">
-            <div className="flex items-center space-x-3">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 sm:p-4 bg-white sm:rounded-lg border-y sm:border gap-3">
+            <div className="flex items-center gap-3 w-full sm:w-auto">
               {activeAccount.picture && (
                 <img 
                   src={activeAccount.picture.url} 
@@ -1750,145 +1889,137 @@ function YouTubeIntegration(props) {
                   className="w-10 h-10 rounded-full"
                 />
               )}
-              <div>
-                <p className="font-medium">Active Account: {activeAccount.name}</p>
-                <p className="text-sm text-gray-600">{activeAccount.email}</p>
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-sm sm:text-base truncate">{activeAccount.name}</p>
+                <p className="text-xs sm:text-sm text-gray-600 truncate">{activeAccount.email}</p>
               </div>
             </div>
             <button
-              onClick={handleSignOutAll}
-              className="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400 transition-colors text-sm"
+              onClick={confirmSignOutAll}
+              className="bg-red-100 text-red-700 px-3 sm:px-4 py-2 rounded-lg hover:bg-red-200 transition-colors text-xs sm:text-sm w-full sm:w-auto justify-center flex items-center gap-2"
             >
-              Disconnect All
+              <Trash2 className="h-4 w-4" />
+              <span>Disconnect All</span>
             </button>
           </div>
 
           {renderTokenStatus()}
 
           {channelInfo && (
-            <div className="bg-gradient-to-br from-red-50 to-pink-50 border border-red-200 rounded-2xl p-6">
-              <div className="flex items-center space-x-4 mb-6">
+            <div className="bg-gradient-to-br from-red-50 to-pink-50 sm:border border-red-200 sm:rounded-2xl p-4 sm:p-6">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 mb-4 sm:mb-6">
                 <img
                   src={channelInfo.snippet.thumbnails.default.url}
                   alt="Channel thumbnail"
-                  className="w-20 h-20 rounded-full border-4 border-red-200"
+                  className="w-16 h-16 sm:w-20 sm:h-20 rounded-full border-4 border-red-200"
                 />
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-900">{channelInfo.snippet.title}</h2>
-                  <p className="text-gray-700 text-sm">{channelInfo.snippet.description}</p>
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-lg sm:text-2xl font-bold text-gray-900 truncate">{channelInfo.snippet.title}</h2>
+                  <p className="text-gray-700 text-xs sm:text-sm line-clamp-2">{channelInfo.snippet.description}</p>
                 </div>
-                <div className="ml-auto">
-                  <button
-                    onClick={() => storeHistoricalSnapshot(channelInfo.id, channelInfo.snippet.title, {
-                      subscriberCount: channelInfo.statistics?.subscriberCount,
-                      videoCount: channelInfo.statistics?.videoCount,
-                      viewCount: channelInfo.statistics?.viewCount,
-                      totalViews: channelInfo.statistics?.viewCount,
-                      totalSubscribers: channelInfo.statistics?.subscriberCount,
-                      shortsCount,
-                      videosCount
-                    })}
-                    className="flex items-center space-x-2 px-3 py-2 bg-cyan-100 text-cyan-700 rounded-lg hover:bg-cyan-200 transition-colors text-sm"
-                  >
-                    <RefreshCw className="h-4 w-4" />
-                    <span>Capture Snapshot</span>
-                  </button>
-                </div>
+                <button
+                  onClick={() => storeHistoricalSnapshot(channelInfo.id, channelInfo.snippet.title, {
+                    subscriberCount: channelInfo.statistics?.subscriberCount,
+                    videoCount: channelInfo.statistics?.videoCount,
+                    viewCount: channelInfo.statistics?.viewCount,
+                    totalViews: channelInfo.statistics?.viewCount,
+                    totalSubscribers: channelInfo.statistics?.subscriberCount,
+                    shortsCount,
+                    videosCount
+                  })}
+                  className="flex items-center gap-2 px-3 py-2 bg-cyan-100 text-cyan-700 rounded-lg hover:bg-cyan-200 transition-colors text-xs sm:text-sm w-full sm:w-auto justify-center"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  <span className="hidden sm:inline">Capture Snapshot</span>
+                  <span className="sm:hidden">Snapshot</span>
+                </button>
               </div>
               
               {/* Enhanced Stats Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4 mb-4 sm:mb-6">
                 {/* Subscribers */}
-                <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center space-x-2">
-                      <div className="p-2 bg-red-100 rounded-lg">
-                        <Users className="h-5 w-5 text-red-600" />
-                      </div>
-                      <span className="text-sm font-medium text-gray-600">Subscribers</span>
+                <div className="bg-white rounded-xl p-3 sm:p-6 shadow-sm sm:border border-gray-200 hover:shadow-md transition-shadow">
+                  <div className="flex items-center gap-2 mb-1 sm:mb-2">
+                    <div className="p-1.5 sm:p-2 bg-red-100 rounded-lg">
+                      <Users className="h-4 w-4 sm:h-5 sm:w-5 text-red-600" />
                     </div>
+                    <span className="text-xs sm:text-sm font-medium text-gray-600">Subscribers</span>
                   </div>
-                  <div className="text-2xl font-bold text-gray-900 mb-1">
+                  <div className="text-lg sm:text-2xl font-bold text-gray-900 mb-0.5 sm:mb-1">
                     {channelInfo.statistics.subscriberCount && channelInfo.statistics.subscriberCount !== '0' 
                       ? parseInt(channelInfo.statistics.subscriberCount).toLocaleString()
                       : 'Hidden'
                     }
                   </div>
-                  <div className="flex items-center text-sm text-green-600">
-                    <TrendingUp className="h-4 w-4 mr-1" />
+                  <div className="flex items-center text-xs sm:text-sm text-green-600">
+                    <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
                     <span>Growing</span>
                   </div>
                 </div>
 
                 {/* Total Views */}
-                <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center space-x-2">
-                      <div className="p-2 bg-blue-100 rounded-lg">
-                        <Eye className="h-5 w-5 text-blue-600" />
-                      </div>
-                      <span className="text-sm font-medium text-gray-600">Total Views</span>
+                <div className="bg-white rounded-xl p-3 sm:p-6 shadow-sm sm:border border-gray-200 hover:shadow-md transition-shadow">
+                  <div className="flex items-center gap-2 mb-1 sm:mb-2">
+                    <div className="p-1.5 sm:p-2 bg-blue-100 rounded-lg">
+                      <Eye className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
                     </div>
+                    <span className="text-xs sm:text-sm font-medium text-gray-600">Views</span>
                   </div>
-                  <div className="text-2xl font-bold text-gray-900 mb-1">
+                  <div className="text-lg sm:text-2xl font-bold text-gray-900 mb-0.5 sm:mb-1">
                     {channelInfo.statistics.viewCount 
                       ? parseInt(channelInfo.statistics.viewCount).toLocaleString()
                       : '0'
                     }
                   </div>
-                  <div className="flex items-center text-sm text-blue-600">
-                    <Eye className="h-4 w-4 mr-1" />
+                  <div className="flex items-center text-xs sm:text-sm text-blue-600">
+                    <Eye className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
                     <span>All time</span>
                   </div>
                 </div>
 
                 {/* Videos */}
-                <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center space-x-2">
-                      <div className="p-2 bg-purple-100 rounded-lg">
-                        <Play className="h-5 w-5 text-purple-600" />
-                      </div>
-                      <span className="text-sm font-medium text-gray-600">Videos</span>
+                <div className="bg-white rounded-xl p-3 sm:p-6 shadow-sm sm:border border-gray-200 hover:shadow-md transition-shadow">
+                  <div className="flex items-center gap-2 mb-1 sm:mb-2">
+                    <div className="p-1.5 sm:p-2 bg-purple-100 rounded-lg">
+                      <Play className="h-4 w-4 sm:h-5 sm:w-5 text-purple-600" />
                     </div>
+                    <span className="text-xs sm:text-sm font-medium text-gray-600">Videos</span>
                   </div>
-                  <div className="text-2xl font-bold text-gray-900 mb-1">
+                  <div className="text-lg sm:text-2xl font-bold text-gray-900 mb-0.5 sm:mb-1">
                     {videosCount.toLocaleString()}
                   </div>
-                  <div className="flex items-center text-sm text-purple-600">
-                    <Clock className="h-4 w-4 mr-1" />
+                  <div className="flex items-center text-xs sm:text-sm text-purple-600">
+                    <Clock className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
                     <span>Long form</span>
                   </div>
                 </div>
 
                 {/* Shorts */}
-                <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center space-x-2">
-                      <div className="p-2 bg-orange-100 rounded-lg">
-                        <Youtube className="h-5 w-5 text-orange-600" />
-                      </div>
-                      <span className="text-sm font-medium text-gray-600">Shorts</span>
+                <div className="bg-white rounded-xl p-3 sm:p-6 shadow-sm sm:border border-gray-200 hover:shadow-md transition-shadow">
+                  <div className="flex items-center gap-2 mb-1 sm:mb-2">
+                    <div className="p-1.5 sm:p-2 bg-orange-100 rounded-lg">
+                      <Youtube className="h-4 w-4 sm:h-5 sm:w-5 text-orange-600" />
                     </div>
+                    <span className="text-xs sm:text-sm font-medium text-gray-600">Shorts</span>
                   </div>
-                  <div className="text-2xl font-bold text-gray-900 mb-1">
+                  <div className="text-lg sm:text-2xl font-bold text-gray-900 mb-0.5 sm:mb-1">
                     {shortsCount.toLocaleString()}
                   </div>
-                  <div className="flex items-center text-sm text-orange-600">
-                    <TrendingUp className="h-4 w-4 mr-1" />
+                  <div className="flex items-center text-xs sm:text-sm text-orange-600">
+                    <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
                     <span>Short form</span>
                   </div>
                 </div>
               </div>
 
               {/* Historical Charts Toggle */}
-              <div className="flex justify-center mt-6">
+              <div className="flex justify-center mt-4 sm:mt-6">
                 <button
                   onClick={() => setShowHistoricalCharts(prev => ({
                     ...prev,
                     [channelInfo.id]: !prev[channelInfo.id]
                   }))}
-                  className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-red-500 to-pink-500 text-white rounded-lg hover:from-red-600 hover:to-pink-600 transition-all duration-200 text-sm font-medium"
+                  className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-gradient-to-r from-red-500 to-pink-500 text-white rounded-lg hover:from-red-600 hover:to-pink-600 transition-all duration-200 text-xs sm:text-sm font-medium w-full sm:w-auto justify-center"
                 >
                   <BarChart3 className="h-4 w-4" />
                   <span>
@@ -1913,12 +2044,12 @@ function YouTubeIntegration(props) {
             </div>
           )}
 
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
-                <Youtube className="h-6 w-6 text-red-600" />
-                <span>Latest Videos</span>
-                <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded-lg text-sm font-medium">
+          <div className="bg-white sm:rounded-2xl sm:border border-gray-200 shadow-sm p-2 sm:p-6">
+            <div className="flex items-center justify-between mb-3 sm:mb-6 px-2 sm:px-0">
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <LayoutGrid className="h-5 w-5 sm:h-6 sm:w-6 text-red-600" />
+                <span>Videos</span>
+                <span className="bg-gray-100 text-gray-700 px-2 py-0.5 sm:py-1 rounded-lg text-xs sm:text-sm font-medium">
                   {channelInfo && channelInfo.statistics.videoCount 
                     ? parseInt(channelInfo.statistics.videoCount).toLocaleString()
                     : videos.length
@@ -1927,128 +2058,194 @@ function YouTubeIntegration(props) {
               </h3>
             </div>
             
-            <div className="grid gap-6">
-              {videos.length > 0 ? videos.map(video => {
-                const videoId = video.snippet.resourceId.videoId;
-                const analytics = videoAnalytics[videoId];
-                const isLoadingAnalytics = loadingVideoAnalytics[videoId];
-                const showingAnalytics = showAnalyticsFor === videoId;
-                
-                return (
-                  <div key={video.id} className="bg-gradient-to-r from-gray-50 to-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-md transition-all duration-200">
-                    {/* Video Header */}
-                    <div className="p-6">
-                      <div className="flex items-start space-x-4">
-                        <div className="relative">
-                          <img
-                            src={video.snippet.thumbnails.medium?.url || video.snippet.thumbnails.default.url}
-                            alt={video.snippet.title}
-                            className="w-40 h-28 object-cover rounded-lg shadow-sm"
-                            onError={e => {
-                              e.target.onerror = null;
-                              e.target.src = "https://via.placeholder.com/160x90?text=No+Image";
-                            }}
-                          />
-                          <div className="absolute top-2 left-2 bg-black bg-opacity-75 text-white px-2 py-1 rounded text-xs">
-                            <Youtube className="h-3 w-3 inline mr-1" />
-                            Video
+            {/* YouTube-style Grid */}
+            {videos.length > 0 ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-1 sm:gap-3">
+                {videos.map(video => {
+                  const videoId = video.snippet.resourceId.videoId;
+                  const analytics = videoAnalytics[videoId];
+                  const isLoadingAnalytics = loadingVideoAnalytics[videoId];
+                  const showingAnalytics = showAnalyticsFor === videoId;
+                  
+                  return (
+                    <div key={video.id} className="relative group">
+                      {/* Video Thumbnail */}
+                      <div 
+                        className="relative aspect-video cursor-pointer overflow-hidden rounded-lg sm:rounded-xl"
+                        onClick={() => {
+                          if (!analytics) {
+                            fetchSingleVideoAnalytics(videoId);
+                          }
+                          setShowAnalyticsFor(showingAnalytics ? null : videoId);
+                        }}
+                      >
+                        <img
+                          src={video.snippet.thumbnails.medium?.url || video.snippet.thumbnails.default.url}
+                          alt={video.snippet.title}
+                          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                          onError={e => {
+                            e.target.onerror = null;
+                            e.target.src = "https://via.placeholder.com/320x180?text=No+Image";
+                          }}
+                        />
+                        
+                        {/* Play Icon Overlay */}
+                        <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-all duration-300 flex items-center justify-center">
+                          <div className="w-10 h-10 sm:w-12 sm:h-12 bg-red-600 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transform scale-75 group-hover:scale-100 transition-all duration-300 shadow-lg">
+                            <Play className="h-5 w-5 sm:h-6 sm:w-6 text-white ml-0.5" />
                           </div>
                         </div>
                         
-                        <div className="flex-1 min-w-0">
-                          <h4 className="font-semibold text-gray-900 text-lg mb-2 line-clamp-2 leading-tight">
-                            {video.snippet.title}
-                          </h4>
-                          <p className="text-sm text-gray-600 mb-3">
-                            Published {new Date(video.snippet.publishedAt).toLocaleDateString('en-US', {
-                              year: 'numeric',
-                              month: 'short',
-                              day: 'numeric'
-                            })}
-                          </p>
-                          
-                          {/* Quick Stats Preview */}
-                          {analytics && (
-                            <div className="flex items-center space-x-6 mb-3">
-                              <div className="flex items-center space-x-1 text-sm text-gray-600">
-                                <Eye className="h-4 w-4" />
-                                <span className="font-medium">{analytics.views.toLocaleString()}</span>
-                              </div>
-                              <div className="flex items-center space-x-1 text-sm text-gray-600">
-                                <ThumbsUp className="h-4 w-4" />
-                                <span className="font-medium">{analytics.likes.toLocaleString()}</span>
-                              </div>
-                              <div className="flex items-center space-x-1 text-sm text-gray-600">
-                                <MessageSquare className="h-4 w-4" />
-                                <span className="font-medium">{analytics.comments.toLocaleString()}</span>
-                              </div>
-                              <div className="flex items-center space-x-1 text-sm">
-                                <TrendingUp className="h-4 w-4 text-green-600" />
-                                <span className="font-medium text-green-600">{analytics.engagementRate}%</span>
-                              </div>
-                            </div>
-                          )}
-                          
-                          {/* Action Buttons */}
-                          <div className="flex items-center space-x-3">
-                            <button
-                              onClick={() => {
-                                if (!analytics) {
-                                  fetchSingleVideoAnalytics(videoId);
-                                }
-                                setShowAnalyticsFor(showingAnalytics ? null : videoId);
-                              }}
-                              disabled={isLoadingAnalytics}
-                              className="inline-flex items-center px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 transition-colors"
-                            >
-                              {isLoadingAnalytics ? (
-                                <>
-                                  <Loader2 className="animate-spin h-4 w-4 mr-2" />
-                                  Loading...
-                                </>
-                              ) : showingAnalytics ? (
-                                <>
-                                  <ChevronUp className="h-4 w-4 mr-2" />
-                                  Hide Analytics
-                                </>
-                              ) : (
-                                <>
-                                  <BarChart3 className="h-4 w-4 mr-2" />
-                                  View Analytics
-                                </>
-                              )}
-                            </button>
-                            
-                            <button
-                              onClick={() => window.open(`https://www.youtube.com/watch?v=${videoId}`, '_blank')}
-                              className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-colors"
-                            >
-                              <ExternalLink className="h-4 w-4 mr-2" />
-                              View on YouTube
-                            </button>
+                        {/* YouTube Badge */}
+                        <div className="absolute top-1 left-1 sm:top-2 sm:left-2 bg-red-600 text-white px-1.5 py-0.5 rounded text-xs font-medium flex items-center gap-1">
+                          <Youtube className="h-3 w-3" />
+                        </div>
+                        
+                        {/* Stats Overlay on Hover */}
+                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black via-black/70 to-transparent p-2 sm:p-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                          <div className="flex items-center justify-center gap-3 sm:gap-4 text-white text-xs sm:text-sm">
+                            {analytics ? (
+                              <>
+                                <span className="flex items-center gap-1">
+                                  <Eye className="h-3 w-3 sm:h-4 sm:w-4" />
+                                  {analytics.views >= 1000 ? `${(analytics.views / 1000).toFixed(1)}K` : analytics.views}
+                                </span>
+                                <span className="flex items-center gap-1">
+                                  <ThumbsUp className="h-3 w-3 sm:h-4 sm:w-4" />
+                                  {analytics.likes >= 1000 ? `${(analytics.likes / 1000).toFixed(1)}K` : analytics.likes}
+                                </span>
+                                <span className="flex items-center gap-1">
+                                  <MessageSquare className="h-3 w-3 sm:h-4 sm:w-4" />
+                                  {analytics.comments}
+                                </span>
+                              </>
+                            ) : (
+                              <span className="text-xs">Tap for analytics</span>
+                            )}
                           </div>
                         </div>
                       </div>
-                    </div>
-                    
-                    {/* Analytics Panel */}
-                    {showingAnalytics && analytics && (
-                      <div className="border-t border-gray-200 bg-gray-50">
-                        <YouTubePostAnalytics analytics={analytics} />
+                      
+                      {/* Video Info - Below Thumbnail */}
+                      <div className="p-1.5 sm:p-2">
+                        <h4 className="text-xs sm:text-sm font-medium text-gray-900 line-clamp-2 leading-tight mb-1">
+                          {video.snippet.title}
+                        </h4>
+                        <p className="text-xs text-gray-500">
+                          {new Date(video.snippet.publishedAt).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric'
+                          })}
+                        </p>
                       </div>
-                    )}
-                  </div>
-                );
-              }) : (
-                <div className="text-center py-16">
-                  <div className="bg-gray-100 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-4">
-                    <Youtube className="h-10 w-10 text-gray-400" />
-                  </div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No videos found</h3>
-                  <p className="text-gray-500">Upload your first video to YouTube to see it here.</p>
+                      
+                      {/* Analytics Modal for Selected Video */}
+                      {showingAnalytics && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-75" onClick={(e) => {
+                          if (e.target === e.currentTarget) setShowAnalyticsFor(null);
+                        }}>
+                          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                            {/* Modal Header */}
+                            <div className="sticky top-0 bg-white border-b p-4 flex items-center justify-between z-10">
+                              <div className="flex items-center gap-3">
+                                <Youtube className="h-6 w-6 text-red-600" />
+                                <h3 className="font-semibold text-gray-900 text-sm sm:text-base line-clamp-1">{video.snippet.title}</h3>
+                              </div>
+                              <button 
+                                onClick={() => setShowAnalyticsFor(null)}
+                                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                              >
+                                <X className="h-5 w-5 text-gray-500" />
+                              </button>
+                            </div>
+                            
+                            {/* Video Preview */}
+                            <div className="p-4">
+                              <div className="aspect-video rounded-xl overflow-hidden mb-4">
+                                <img
+                                  src={video.snippet.thumbnails.high?.url || video.snippet.thumbnails.medium?.url}
+                                  alt={video.snippet.title}
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                              
+                              {/* Action Buttons */}
+                              <div className="flex gap-2 mb-4">
+                                <button
+                                  onClick={() => window.open(`https://www.youtube.com/watch?v=${videoId}`, '_blank')}
+                                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors font-medium text-sm"
+                                >
+                                  <Play className="h-4 w-4" />
+                                  Watch on YouTube
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(`https://www.youtube.com/watch?v=${videoId}`);
+                                  }}
+                                  className="px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-medium text-sm"
+                                >
+                                  <ExternalLink className="h-4 w-4" />
+                                </button>
+                              </div>
+                              
+                              {/* Analytics Content */}
+                              {isLoadingAnalytics ? (
+                                <div className="flex items-center justify-center py-8">
+                                  <Loader2 className="h-8 w-8 animate-spin text-red-600" />
+                                </div>
+                              ) : analytics ? (
+                                <div>
+                                  {/* Stats Grid */}
+                                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                                    <div className="bg-blue-50 rounded-xl p-3 text-center">
+                                      <Eye className="h-5 w-5 text-blue-600 mx-auto mb-1" />
+                                      <p className="text-lg sm:text-xl font-bold text-gray-900">{analytics.views.toLocaleString()}</p>
+                                      <p className="text-xs text-gray-600">Views</p>
+                                    </div>
+                                    <div className="bg-green-50 rounded-xl p-3 text-center">
+                                      <ThumbsUp className="h-5 w-5 text-green-600 mx-auto mb-1" />
+                                      <p className="text-lg sm:text-xl font-bold text-gray-900">{analytics.likes.toLocaleString()}</p>
+                                      <p className="text-xs text-gray-600">Likes</p>
+                                    </div>
+                                    <div className="bg-purple-50 rounded-xl p-3 text-center">
+                                      <MessageSquare className="h-5 w-5 text-purple-600 mx-auto mb-1" />
+                                      <p className="text-lg sm:text-xl font-bold text-gray-900">{analytics.comments.toLocaleString()}</p>
+                                      <p className="text-xs text-gray-600">Comments</p>
+                                    </div>
+                                    <div className="bg-orange-50 rounded-xl p-3 text-center">
+                                      <TrendingUp className="h-5 w-5 text-orange-600 mx-auto mb-1" />
+                                      <p className="text-lg sm:text-xl font-bold text-gray-900">{analytics.engagementRate}%</p>
+                                      <p className="text-xs text-gray-600">Engagement</p>
+                                    </div>
+                                  </div>
+                                  
+                                  {/* Additional Analytics */}
+                                  <YouTubePostAnalytics analytics={analytics} />
+                                </div>
+                              ) : (
+                                <div className="text-center py-8 text-gray-500">
+                                  <BarChart3 className="h-8 w-8 mx-auto mb-2 text-gray-400" />
+                                  <p>Analytics data unavailable</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-12 sm:py-16">
+                <div className="bg-gray-100 rounded-full w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center mx-auto mb-4">
+                  <Youtube className="h-8 w-8 sm:h-10 sm:w-10 text-gray-400" />
                 </div>
-              )}
-            </div>
+                <h3 className="text-base sm:text-lg font-medium text-gray-900 mb-2">No videos found</h3>
+                <p className="text-sm text-gray-500">Upload your first video to YouTube to see it here.</p>
+              </div>
+            )}
           </div>
         </>
       )}
@@ -2098,7 +2295,7 @@ function YouTubeIntegration(props) {
     if (!error) return null;
     const expired = isTokenExpiredError(error);
     return (
-      <div className="bg-red-50 border border-red-200 rounded-2xl p-6 mb-6">
+      <div className="bg-red-50 sm:border border-red-200 rounded-2xl p-4 sm:p-6 mb-6 mx-3 sm:mx-0">
         <div className="flex items-center space-x-3 mb-4">
           <AlertCircle className="h-6 w-6 text-red-600" />
           <span className="text-lg font-semibold text-red-800">
@@ -2162,19 +2359,37 @@ function YouTubeIntegration(props) {
     // Handle different error states gracefully
     if (error) {
       return (
-        <div className="border rounded-lg p-6 mb-6 bg-gradient-to-r from-red-50 to-pink-50">
-          <div className="flex items-center space-x-3 mb-4">
-            <Youtube className="h-6 w-6 text-red-600" />
-            <h3 className="font-medium text-lg">YouTube Integration</h3>
+        <div className="min-h-screen bg-gray-50">
+          <header className="bg-white border-b sticky top-0 z-50">
+            <div className="px-3 sm:px-4">
+              <div className="flex items-center gap-2 sm:gap-3 h-14 sm:h-16">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-red-500 to-red-700 rounded-lg flex items-center justify-center">
+                  <Youtube className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
+                </div>
+                <h1 className="text-base sm:text-lg font-semibold text-gray-900">YouTube Integration</h1>
+              </div>
+            </div>
+          </header>
+          <div className="p-4">
+            {renderError()}
           </div>
-          {renderError()}
         </div>
       );
     }
 
     if (!gapiLoaded || !gisLoaded) {
       return (
-        <div className="border rounded-lg p-6 mb-6 bg-gradient-to-r from-red-50 to-pink-50">
+        <div className="min-h-screen bg-gray-50">
+          <header className="bg-white border-b sticky top-0 z-50">
+            <div className="px-3 sm:px-4">
+              <div className="flex items-center gap-2 sm:gap-3 h-14 sm:h-16">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-red-500 to-red-700 rounded-lg flex items-center justify-center">
+                  <Youtube className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
+                </div>
+                <h1 className="text-base sm:text-lg font-semibold text-gray-900">YouTube Integration</h1>
+              </div>
+            </div>
+          </header>
           <div className="flex items-center justify-center py-12">
             <div className="text-center">
               <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-red-600" />
@@ -2189,39 +2404,54 @@ function YouTubeIntegration(props) {
     }
 
     return (
-      <div className="border rounded-lg p-6 mb-6 bg-gradient-to-r from-red-50 to-pink-50">
-        <div className="flex items-center space-x-3 mb-4">
-          <Youtube className="h-6 w-6 text-red-600" />
-          <h3 className="font-medium text-lg">YouTube Integration</h3>
-        </div>
-
-        <div className="space-y-6">
-          {connectedAccounts.length === 0 ? (
-            <div className="text-center py-12">
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-red-100 to-pink-100 rounded-2xl mb-4">
-                <Youtube className="h-8 w-8 text-red-600" />
+      <div className="min-h-screen bg-gray-50">
+        {/* Sticky Header */}
+        <header className="bg-white border-b sticky top-0 z-50">
+          <div className="px-3 sm:px-4">
+            <div className="flex items-center gap-2 sm:gap-3 h-14 sm:h-16">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-red-500 to-red-700 rounded-lg flex items-center justify-center">
+                <Youtube className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
               </div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">Connect YouTube Account</h3>
-              <p className="text-gray-600 mb-6 max-w-md mx-auto">
+              <div>
+                <h1 className="text-base sm:text-lg font-semibold text-gray-900">YouTube Integration</h1>
+                <p className="text-xs text-gray-500 hidden sm:block">Manage your channels and analytics</p>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <div className="sm:p-4">
+          <div className="bg-white sm:rounded-lg sm:p-6 sm:shadow-sm">
+          {connectedAccounts.length === 0 ? (
+            <div className="text-center py-8 sm:py-12 px-4 sm:px-0">
+              <div className="inline-flex items-center justify-center w-14 h-14 sm:w-16 sm:h-16 bg-gradient-to-br from-red-500 to-red-700 rounded-2xl mb-4">
+                <Youtube className="h-7 w-7 sm:h-8 sm:w-8 text-white" />
+              </div>
+              <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-2">Connect YouTube Account</h3>
+              <p className="text-sm text-gray-600 mb-6 max-w-md mx-auto">
                 Connect your YouTube accounts to manage your channels and access video analytics with historical data tracking.
               </p>
-              <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-6 max-w-md mx-auto">
-                <p className="text-sm text-yellow-800">
+              <div className="bg-yellow-50 sm:border border-yellow-200 rounded-xl p-4 mb-6 max-w-md mx-auto">
+                <p className="text-xs sm:text-sm text-yellow-800">
                   <strong>Note:</strong> For detailed analytics, you may need to enable YouTube Analytics API in your Google Cloud Console. Historical data will be captured automatically.
                 </p>
               </div>
               <button
                 onClick={handleSignIn}
-                className="bg-gradient-to-r from-red-600 to-red-700 text-white px-8 py-3 rounded-xl hover:from-red-700 hover:to-red-800 transition-all duration-200 flex items-center space-x-3 mx-auto font-medium"
+                className="bg-gradient-to-r from-red-600 to-red-700 text-white px-6 sm:px-8 py-3 rounded-xl hover:from-red-700 hover:to-red-800 transition-all duration-200 flex items-center gap-2 sm:gap-3 mx-auto font-medium text-sm sm:text-base w-full sm:w-auto justify-center"
               >
-                <Youtube className="h-5 w-5" />
+                <Youtube className="h-4 w-4 sm:h-5 sm:w-5" />
                 <span>Connect YouTube Account</span>
               </button>
             </div>
           ) : (
             renderConnectedState()
           )}
+          </div>
         </div>
+        
+        {/* Confirmation Dialog */}
+        {renderConfirmDialog()}
       </div>
     );
   });

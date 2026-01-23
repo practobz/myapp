@@ -1114,7 +1114,7 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
               </div>
 
               {/* Simplified Integration Guide */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 sm:p-6 mx-4 sm:mx-0">
+              <div className="bg-blue-50 sm:border border-blue-200 rounded-lg p-4 sm:p-6 mx-4 sm:mx-0">
                 <h4 className="font-medium text-blue-800 mb-3">How It Works</h4>
                 <div className="space-y-2 text-sm text-blue-700">
                   <p>1. Click "Connect LinkedIn Account" above</p>
@@ -1123,7 +1123,7 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
                   <p>4. Start creating posts and managing your LinkedIn presence</p>
                 </div>
                 
-                <div className="mt-4 bg-white rounded-lg p-3 border border-blue-200">
+                <div className="mt-4 bg-white rounded-lg p-3 sm:border border-blue-200">
                   <p className="text-xs text-blue-600">
                     <strong>Note:</strong> This integration works with any LinkedIn account. 
                     Advanced features like detailed analytics require LinkedIn Marketing Developer Platform access.
@@ -1138,7 +1138,7 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
               {selectedAccount && (
                 <>
                   {/* Post creation removed */}
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 sm:p-4 bg-gradient-to-r from-blue-50 to-indigo-50 sm:rounded-lg border-y sm:border border-blue-200 gap-3 sm:gap-4">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 sm:p-4 bg-gradient-to-r from-blue-50 to-indigo-50 sm:rounded-lg sm:border border-blue-200 gap-3 sm:gap-4">
                     <div className="flex items-center gap-3 w-full sm:w-auto">
                       {selectedAccount.profile?.picture ? (
                         <img 
@@ -1183,7 +1183,7 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
           )}
 
           {error && (
-            <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded">
+            <div className="mt-4 p-3 bg-red-50 sm:border border-red-200 rounded mx-3 sm:mx-0">
               <p className="text-red-600 text-sm">
                 <strong>Error:</strong> {error}
               </p>
@@ -1191,7 +1191,7 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
           )}
 
           {success && (
-            <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded">
+            <div className="mt-4 p-3 bg-green-50 sm:border border-green-200 rounded mx-3 sm:mx-0">
               <p className="text-green-600 text-sm">
                 <strong>Success:</strong> {success}
               </p>

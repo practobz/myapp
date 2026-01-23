@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Line, Bar, Doughnut, Area } from 'react-chartjs-2';
-import { ArrowLeft, ExternalLink, RefreshCw, TrendingUp,Globe } from 'lucide-react';
+import { ArrowLeft, ExternalLink, RefreshCw, TrendingUp, Globe, Download, FileText } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -43,6 +45,8 @@ const ROIDashboard = () => {
   const [platforms, setPlatforms] = useState([]);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+  const dashboardRef = useRef(null);
 
   // Fetch customer analytics data from our new API
   const fetchAnalyticsData = async () => {
@@ -64,12 +68,13 @@ const ROIDashboard = () => {
       console.log('🔍 Fetching analytics data for customer:', customerId);
       
       // Use full URL to backend server
-    const backendUrl = 'https://my-backend-593529385135.asia-south1.run.app';
+      const backendUrl = 'http://localhost:3001';
       
       // First try to get historical data
       try {
         console.log('📊 Attempting to fetch historical data...');
-        const dashboardResponse = await fetch(`${backendUrl}/api/customer-analytics-data/${customerId}?platform=all&timePeriod=30`, { method: 'GET',
+        const dashboardResponse = await fetch(`${backendUrl}/api/historical-data/get?accountId=${customerId}&platform=all&timePeriod=30`, {
+          method: 'GET',
           headers: {
             'Content-Type': 'application/json'
           },
@@ -223,7 +228,7 @@ const ROIDashboard = () => {
     // First, try to fetch historical data for each connected account
     try {
       console.log('🔗 Attempting to fetch historical data for connected accounts...');
-    const backendUrl = 'https://my-backend-593529385135.asia-south1.run.app';
+      const backendUrl = 'http://localhost:3001';
       const customerId = currentUser._id;
       
       for (const account of accounts) {
@@ -277,7 +282,7 @@ const ROIDashboard = () => {
     // First, try to fetch real-time metrics from our new API for accounts without historical data
     try {
       console.log('🔗 Attempting to fetch real-time social metrics...');
-    const backendUrl = 'https://my-backend-593529385135.asia-south1.run.app';
+      const backendUrl = 'http://localhost:3001';
       const customerId = currentUser._id;
       
       const metricsResponse = await fetch(`${backendUrl}/api/customer/social-metrics/${customerId}`, {
@@ -735,9 +740,9 @@ const ROIDashboard = () => {
         const engagementRate = (totalEngagement / followerMetric.current * 100);
         
         platformData.engagement_rate = {
-          current: Math.min(100, Math.round(engagementRate * 100) / 100),
-          previous: Math.min(100, Math.round((engagementRate * 0.9) * 100) / 100),
-          growth: Math.round((engagementRate - (engagementRate * 0.9)) / (engagementRate * 0.9) * 100 * 100) / 100
+          current: Math.round(engagementRate * 100) / 100,
+          previous: Math.round((engagementRate * 0.9) * 100) / 100,
+          growth: 10
         };
       }
     }
@@ -749,30 +754,91 @@ const ROIDashboard = () => {
   // Process historical data from the historical_data API
   const processHistoricalData = (historicalData) => {
     console.log('🔄 Processing historical data:', historicalData);
-    if (!historicalData || typeof historicalData !== 'object' || !historicalData.platforms) {
+    
+    if (!historicalData || typeof historicalData !== 'object') {
       console.log('❌ Historical data missing or invalid structure');
       return null;
     }
 
     const platformData = {};
 
-    Object.keys(historicalData.platforms).forEach(platform => {
-      const metrics = historicalData.platforms[platform];
-      platformData[platform] = {};
+    // Process each metric type in the historical data
+    Object.keys(historicalData).forEach(metricType => {
+      const metricDataArray = historicalData[metricType];
+      
+      if (!Array.isArray(metricDataArray) || metricDataArray.length === 0) {
+        return;
+      }
 
-      // List of metrics to extract
-      ['followers', 'likes', 'comments', 'shares', 'engagement_rate', 'reach', 'impressions', 'views', 'monthlyData'].forEach(metric => {
-        if (metrics[metric] !== undefined) {
-          platformData[platform][metric] = metrics[metric];
-        }
-      });
+      console.log(`📊 Processing metric type: ${metricType} with ${metricDataArray.length} data points`);
 
-      // Optionally, copy accountName, postCount, lastUpdated, etc.
-      ['accountName', 'postCount', 'lastUpdated'].forEach(meta => {
-        if (metrics[meta] !== undefined) {
-          platformData[platform][meta] = metrics[meta];
-        }
-      });
+      // Get the latest values for current metrics
+      const latestData = metricDataArray[metricDataArray.length - 1];
+      const previousData = metricDataArray.length > 1 ? metricDataArray[metricDataArray.length - 2] : latestData;
+      const firstData = metricDataArray[0];
+
+      const currentValue = latestData.value || 0;
+      const previousValue = previousData.value || 0;
+      const growth = previousValue > 0 ? ((currentValue - previousValue) / previousValue * 100) : 0;
+
+      // Extract platform information (this would need to be enhanced based on your data structure)
+      const platform = latestData.platform || 'unknown';
+      
+      if (!platformData[platform]) {
+        platformData[platform] = {};
+      }
+
+      // Map historical data metrics to dashboard format
+      if (metricType === 'followers') {
+        platformData[platform].followers = {
+          current: currentValue,
+          previous: previousValue,
+          growth: Math.round(growth * 100) / 100,
+          monthlyData: metricDataArray.map(d => d.value)
+        };
+      } else if (metricType === 'likes') {
+        platformData[platform].likes = {
+          current: currentValue,
+          previous: previousValue,
+          growth: Math.round(growth * 100) / 100
+        };
+      } else if (metricType === 'comments') {
+        platformData[platform].comments = {
+          current: currentValue,
+          previous: previousValue,
+          growth: Math.round(growth * 100) / 100
+        };
+      } else if (metricType === 'shares') {
+        platformData[platform].shares = {
+          current: currentValue,
+          previous: previousValue,
+          growth: Math.round(growth * 100) / 100
+        };
+      } else if (metricType === 'engagement') {
+        platformData[platform].engagement_rate = {
+          current: currentValue,
+          previous: previousValue,
+          growth: Math.round(growth * 100) / 100
+        };
+      } else if (metricType === 'views') {
+        platformData[platform].views = {
+          current: currentValue,
+          previous: previousValue,
+          growth: Math.round(growth * 100) / 100
+        };
+      } else if (metricType === 'reach') {
+        platformData[platform].reach = {
+          current: currentValue,
+          previous: previousValue,
+          growth: Math.round(growth * 100) / 100
+        };
+      } else if (metricType === 'impressions') {
+        platformData[platform].impressions = {
+          current: currentValue,
+          previous: previousValue,
+          growth: Math.round(growth * 100) / 100
+        };
+      }
     });
 
     console.log('✅ Processed historical platform data:', Object.keys(platformData));
@@ -1037,7 +1103,279 @@ const ROIDashboard = () => {
     setIsRefreshing(false);
   };
 
+  // Generate PDF Report
+  const generatePDFReport = async () => {
+    if (!dashboardData) {
+      alert('No data available to generate report');
+      return;
+    }
 
+    setIsGeneratingPDF(true);
+
+    try {
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 15;
+      let yPosition = margin;
+
+      // Helper function to add new page if needed
+      const checkPageBreak = (neededHeight) => {
+        if (yPosition + neededHeight > pageHeight - margin) {
+          pdf.addPage();
+          yPosition = margin;
+          return true;
+        }
+        return false;
+      };
+
+      // ========== HEADER SECTION ==========
+      pdf.setFillColor(79, 70, 229); // Indigo
+      pdf.rect(0, 0, pageWidth, 50, 'F');
+      
+      pdf.setTextColor(255, 255, 255);
+      pdf.setFontSize(28);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('ROI Analytics Report', margin, 25);
+      
+      pdf.setFontSize(12);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text('Comprehensive Social Media Performance Analysis', margin, 35);
+      
+      pdf.setFontSize(10);
+      const reportDate = new Date().toLocaleDateString('en-US', { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      });
+      pdf.text(`Generated: ${reportDate}`, margin, 45);
+
+      yPosition = 60;
+
+      // ========== REPORT OVERVIEW ==========
+      pdf.setTextColor(31, 41, 55);
+      pdf.setFontSize(16);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('Report Overview', margin, yPosition);
+      yPosition += 10;
+
+      pdf.setFillColor(249, 250, 251);
+      pdf.setDrawColor(229, 231, 235);
+      pdf.roundedRect(margin, yPosition, pageWidth - 2 * margin, 30, 3, 3, 'FD');
+      
+      pdf.setFontSize(10);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setTextColor(75, 85, 99);
+      
+      const timeframeLabel = timeframe === 'last_7_days' ? 'Last 7 Days' : 
+                             timeframe === 'last_30_days' ? 'Last 30 Days' : 'Last 90 Days';
+      
+      const overviewItems = [
+        `Time Period: ${timeframeLabel}`,
+        `Connected Platforms: ${platforms.length > 0 ? platforms.join(', ') : 'All Platforms'}`,
+        `Data Status: ${analyticsData && !analyticsData.isPreliminary ? 'Live Data' : analyticsData?.isPreliminary ? 'Connected Data' : 'Demo Data'}`,
+        `Total Accounts Analyzed: ${analyticsData?.summary?.totalAccounts || Object.keys(dashboardData).length}`
+      ];
+      
+      let overviewY = yPosition + 7;
+      overviewItems.forEach(item => {
+        pdf.text(`• ${item}`, margin + 5, overviewY);
+        overviewY += 6;
+      });
+      
+      yPosition += 40;
+
+      // ========== KEY METRICS SUMMARY ==========
+      checkPageBreak(60);
+      pdf.setTextColor(31, 41, 55);
+      pdf.setFontSize(16);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('Key Performance Metrics', margin, yPosition);
+      yPosition += 10;
+
+      // Metrics boxes
+      const boxWidth = (pageWidth - 2 * margin - 15) / 4;
+      const boxHeight = 35;
+      
+      const metrics = [
+        { label: 'Total Followers', value: getTotalFollowers().toLocaleString(), color: [59, 130, 246] },
+        { label: 'Total Engagement', value: getTotalEngagement().toLocaleString(), color: [34, 197, 94] },
+        { label: 'Avg. Engagement Rate', value: `${getAverageEngagementRate()}%`, color: [168, 85, 247] },
+        { label: 'Overall ROI', value: `+${getOverallROI()}%`, color: [234, 179, 8] }
+      ];
+
+      metrics.forEach((metric, index) => {
+        const xPos = margin + (index * (boxWidth + 5));
+        
+        pdf.setFillColor(metric.color[0], metric.color[1], metric.color[2]);
+        pdf.roundedRect(xPos, yPosition, boxWidth, boxHeight, 3, 3, 'F');
+        
+        pdf.setTextColor(255, 255, 255);
+        pdf.setFontSize(8);
+        pdf.setFont('helvetica', 'normal');
+        pdf.text(metric.label, xPos + 5, yPosition + 10);
+        
+        pdf.setFontSize(14);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text(metric.value, xPos + 5, yPosition + 25);
+      });
+      
+      yPosition += boxHeight + 15;
+
+      // ========== PLATFORM PERFORMANCE ==========
+      checkPageBreak(40);
+      pdf.setTextColor(31, 41, 55);
+      pdf.setFontSize(16);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('Platform Performance Details', margin, yPosition);
+      yPosition += 10;
+
+      const platformColorMap = {
+        facebook: [24, 119, 242],
+        instagram: [228, 64, 95],
+        youtube: [255, 0, 0],
+        linkedin: [0, 119, 181]
+      };
+
+      Object.keys(dashboardData).forEach(platform => {
+        const data = dashboardData[platform];
+        if (!data) return;
+
+        checkPageBreak(50);
+        
+        const color = platformColorMap[platform] || [107, 114, 128];
+        
+        // Platform header
+        pdf.setFillColor(color[0], color[1], color[2]);
+        pdf.roundedRect(margin, yPosition, pageWidth - 2 * margin, 8, 2, 2, 'F');
+        
+        pdf.setTextColor(255, 255, 255);
+        pdf.setFontSize(11);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text(platform.charAt(0).toUpperCase() + platform.slice(1), margin + 5, yPosition + 6);
+        yPosition += 12;
+
+        // Platform metrics table
+        pdf.setTextColor(55, 65, 81);
+        pdf.setFontSize(9);
+        pdf.setFont('helvetica', 'normal');
+
+        const followerKey = platform === 'youtube' ? 'subscribers' : 'followers';
+        const followerValue = data[followerKey]?.current || 0;
+        const followerGrowth = data[followerKey]?.growth || 0;
+        
+        const platformMetrics = [
+          { name: platform === 'youtube' ? 'Subscribers' : 'Followers', value: followerValue.toLocaleString(), growth: `+${followerGrowth}%` },
+          { name: 'Likes', value: (data.likes?.current || 0).toLocaleString(), growth: `+${data.likes?.growth || 0}%` },
+          { name: 'Comments', value: (data.comments?.current || 0).toLocaleString(), growth: `+${data.comments?.growth || 0}%` },
+          { name: platform === 'youtube' ? 'Views' : platform === 'linkedin' ? 'Impressions' : 'Shares', 
+            value: (platform === 'youtube' ? data.views?.current : platform === 'linkedin' ? data.impressions?.current : data.shares?.current || 0).toLocaleString(), 
+            growth: `+${platform === 'youtube' ? data.views?.growth : platform === 'linkedin' ? data.impressions?.growth : data.shares?.growth || 0}%` },
+          { name: 'Engagement Rate', value: `${data.engagement_rate?.current || 0}%`, growth: `+${data.engagement_rate?.growth || 0}%` }
+        ];
+
+        // Table headers
+        pdf.setFillColor(243, 244, 246);
+        pdf.rect(margin, yPosition, pageWidth - 2 * margin, 6, 'F');
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(8);
+        pdf.text('Metric', margin + 3, yPosition + 4);
+        pdf.text('Current Value', margin + 50, yPosition + 4);
+        pdf.text('Growth', margin + 100, yPosition + 4);
+        yPosition += 8;
+
+        pdf.setFont('helvetica', 'normal');
+        platformMetrics.forEach(metric => {
+          pdf.text(metric.name, margin + 3, yPosition + 4);
+          pdf.text(metric.value, margin + 50, yPosition + 4);
+          pdf.setTextColor(34, 197, 94);
+          pdf.text(metric.growth, margin + 100, yPosition + 4);
+          pdf.setTextColor(55, 65, 81);
+          yPosition += 6;
+        });
+        
+        yPosition += 8;
+      });
+
+      // ========== ROI ANALYSIS SUMMARY ==========
+      checkPageBreak(60);
+      pdf.setTextColor(31, 41, 55);
+      pdf.setFontSize(16);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('ROI Analysis Summary', margin, yPosition);
+      yPosition += 12;
+
+      // Summary boxes
+      const summaryBoxWidth = (pageWidth - 2 * margin - 10) / 3;
+      const summaryBoxHeight = 40;
+      
+      const summaryMetrics = [
+        { label: 'Overall Growth', value: `+${getOverallROI()}%`, subtext: 'Follower increase', bgColor: [220, 252, 231], textColor: [22, 163, 74] },
+        { label: 'Avg Engagement', value: `${getAverageEngagementRate()}%`, subtext: 'Across platforms', bgColor: [219, 234, 254], textColor: [37, 99, 235] },
+        { label: 'Total Interactions', value: getTotalEngagement().toLocaleString(), subtext: 'Current period', bgColor: [243, 232, 255], textColor: [147, 51, 234] }
+      ];
+
+      summaryMetrics.forEach((metric, index) => {
+        const xPos = margin + (index * (summaryBoxWidth + 5));
+        
+        pdf.setFillColor(metric.bgColor[0], metric.bgColor[1], metric.bgColor[2]);
+        pdf.roundedRect(xPos, yPosition, summaryBoxWidth, summaryBoxHeight, 3, 3, 'F');
+        
+        pdf.setTextColor(metric.textColor[0], metric.textColor[1], metric.textColor[2]);
+        pdf.setFontSize(18);
+        pdf.setFont('helvetica', 'bold');
+        const valueWidth = pdf.getTextWidth(metric.value);
+        pdf.text(metric.value, xPos + (summaryBoxWidth - valueWidth) / 2, yPosition + 15);
+        
+        pdf.setTextColor(31, 41, 55);
+        pdf.setFontSize(10);
+        pdf.setFont('helvetica', 'bold');
+        const labelWidth = pdf.getTextWidth(metric.label);
+        pdf.text(metric.label, xPos + (summaryBoxWidth - labelWidth) / 2, yPosition + 26);
+        
+        pdf.setTextColor(107, 114, 128);
+        pdf.setFontSize(8);
+        pdf.setFont('helvetica', 'normal');
+        const subtextWidth = pdf.getTextWidth(metric.subtext);
+        pdf.text(metric.subtext, xPos + (summaryBoxWidth - subtextWidth) / 2, yPosition + 34);
+      });
+      
+      yPosition += summaryBoxHeight + 15;
+
+      // ========== FOOTER ==========
+      checkPageBreak(20);
+      pdf.setDrawColor(229, 231, 235);
+      pdf.line(margin, yPosition, pageWidth - margin, yPosition);
+      yPosition += 8;
+
+      pdf.setTextColor(107, 114, 128);
+      pdf.setFontSize(8);
+      pdf.setFont('helvetica', 'italic');
+      pdf.text('This report was automatically generated by the ROI Analytics Dashboard.', margin, yPosition);
+      yPosition += 5;
+      pdf.text(`Report generated on ${reportDate}. Data may vary based on platform API availability.`, margin, yPosition);
+
+      // Add page numbers
+      const pageCount = pdf.internal.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        pdf.setPage(i);
+        pdf.setFontSize(8);
+        pdf.setTextColor(156, 163, 175);
+        pdf.text(`Page ${i} of ${pageCount}`, pageWidth - margin - 20, pageHeight - 10);
+      }
+
+      // Save the PDF
+      const fileName = `ROI_Analytics_Report_${new Date().toISOString().split('T')[0]}.pdf`;
+      pdf.save(fileName);
+      
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      alert('Failed to generate PDF report. Please try again.');
+    } finally {
+      setIsGeneratingPDF(false);
+    }
+  };
 
   const platformColors = {
     facebook: '#1877F2',
@@ -1069,25 +1407,23 @@ const ROIDashboard = () => {
   };
 
   const getTotalFollowers = () => {
-    if (analyticsData?.summary?.totalFollowers && selectedPlatform === 'all') {
+    if (analyticsData?.summary?.totalFollowers) {
       return analyticsData.summary.totalFollowers;
     }
     if (!dashboardData) return 0;
-    const filteredData = getFilteredDashboardData();
-    return Object.keys(filteredData).reduce((total, platform) => {
+    return Object.keys(dashboardData).reduce((total, platform) => {
       const followerKey = platform === 'youtube' ? 'subscribers' : 'followers';
-      return total + (filteredData[platform]?.[followerKey]?.current || 0);
+      return total + (dashboardData[platform]?.[followerKey]?.current || 0);
     }, 0);
   };
 
   const getTotalEngagement = () => {
-    if (analyticsData?.summary?.totalEngagement && selectedPlatform === 'all') {
+    if (analyticsData?.summary?.totalEngagement) {
       return analyticsData.summary.totalEngagement;
     }
     if (!dashboardData) return 0;
-    const filteredData = getFilteredDashboardData();
-    return Object.keys(filteredData).reduce((total, platform) => {
-      const data = filteredData[platform];
+    return Object.keys(dashboardData).reduce((total, platform) => {
+      const data = dashboardData[platform];
       const likes = data?.likes?.current || 0;
       const comments = data?.comments?.current || 0;
       const shares = data?.shares?.current || 0;
@@ -1096,13 +1432,12 @@ const ROIDashboard = () => {
   };
 
   const getAverageEngagementRate = () => {
-    if (analyticsData?.summary?.averageEngagementRate && selectedPlatform === 'all') {
+    if (analyticsData?.summary?.averageEngagementRate) {
       return analyticsData.summary.averageEngagementRate.toFixed(1);
     }
     if (!dashboardData) return 0;
-    const filteredData = getFilteredDashboardData();
-    const rates = Object.keys(filteredData).map(platform => 
-      filteredData[platform]?.engagement_rate?.current || 0
+    const rates = Object.keys(dashboardData).map(platform => 
+      dashboardData[platform]?.engagement_rate?.current || 0
     ).filter(rate => rate > 0);
     return rates.length > 0 ? (rates.reduce((sum, rate) => sum + rate, 0) / rates.length).toFixed(1) : 0;
   };
@@ -1120,157 +1455,85 @@ const ROIDashboard = () => {
     return totalPrevious > 0 ? ((totalCurrent - totalPrevious) / totalPrevious * 100).toFixed(1) : 0;
   };
 
-  // Helper function to filter dashboard data based on selected platform
-  const getFilteredDashboardData = () => {
-    if (!dashboardData) return {};
-    if (selectedPlatform === 'all') return dashboardData;
-    
-    // Return only the selected platform's data
-    if (dashboardData[selectedPlatform]) {
-      return { [selectedPlatform]: dashboardData[selectedPlatform] };
-    }
-    return {};
-  };
-
   // Chart configurations
   const followerGrowthChart = {
     labels: timeframe === '6months' 
       ? ['Month 1', 'Month 2', 'Month 3', 'Month 4', 'Month 5', 'Month 6']
       : ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-    datasets: dashboardData ? Object.keys(getFilteredDashboardData())
-      .filter(platform => {
-        const filteredData = getFilteredDashboardData();
+    datasets: dashboardData ? Object.keys(dashboardData).map(platform => {
+      let monthlyData = dashboardData[platform].monthlyData;
+      // If monthlyData is missing or flat, generate synthetic growth
+      if (!monthlyData || monthlyData.length < 6 || monthlyData.every(v => v === monthlyData[0])) {
         const followerKey = platform === 'youtube' ? 'subscribers' : 'followers';
-        return filteredData[platform]?.[followerKey]?.current > 0;
-      })
-      .map(platform => {
-        const filteredData = getFilteredDashboardData();
-        let monthlyData = filteredData[platform].monthlyData;
-        const followerKey = platform === 'youtube' ? 'subscribers' : 'followers';
-        const current = filteredData[platform][followerKey]?.current || 0;
-        const previous = filteredData[platform][followerKey]?.previous || current * 0.8;
-        const months = timeframe === 'last_7_days' || timeframe === 'last_30_days' ? 6 : 12;
-        
-        // If monthlyData is missing or flat, generate synthetic growth
-        if (!monthlyData || monthlyData.length < 6 || monthlyData.every(v => v === monthlyData[0])) {
-          // Linear interpolation from previous to current
-          monthlyData = Array.from({ length: months }, (_, i) =>
-            Math.round(previous + ((current - previous) * (i + 1) / months))
-          );
-        }
-        
-        // Ensure we have the right number of data points
-        if (monthlyData.length > months) {
-          monthlyData = monthlyData.slice(-months);
-        } else if (monthlyData.length < months) {
-          const fillCount = months - monthlyData.length;
-          const fillValue = monthlyData[0] || previous;
-          monthlyData = Array(fillCount).fill(fillValue).concat(monthlyData);
-        }
-        
-        return {
-          label: platform.charAt(0).toUpperCase() + platform.slice(1),
-          data: monthlyData,
-          borderColor: platformColors[platform],
-          backgroundColor: platformColors[platform] + '20',
-          fill: true,
-          tension: 0.4
-        };
-      }) : []
+        const current = dashboardData[platform][followerKey]?.current || 0;
+        const previous = dashboardData[platform][followerKey]?.previous || 0;
+        const months = timeframe === '6months' ? 6 : 12;
+        // Linear interpolation from previous to current
+        monthlyData = Array.from({ length: months }, (_, i) =>
+          Math.round(previous + ((current - previous) * (i + 1) / months))
+        );
+      }
+      return {
+        label: platform.charAt(0).toUpperCase() + platform.slice(1),
+        data: monthlyData,
+        borderColor: platformColors[platform],
+        backgroundColor: platformColors[platform] + '20',
+        fill: true,
+        tension: 0.4
+      };
+    }) : []
   };
 
   const engagementChart = {
     labels: ['Likes', 'Comments', 'Shares/Views/Impressions'],
-    datasets: dashboardData ? Object.keys(getFilteredDashboardData())
-      .filter(platform => {
-        const filteredData = getFilteredDashboardData();
-        const data = filteredData[platform];
-        return (data.likes?.current > 0 || data.comments?.current > 0 || 
-                data.shares?.current > 0 || data.views?.current > 0 || data.impressions?.current > 0);
-      })
-      .map(platform => {
-        const filteredData = getFilteredDashboardData();
-        return {
-          label: platform.charAt(0).toUpperCase() + platform.slice(1),
-          data: [
-            filteredData[platform].likes?.current || 0,
-            filteredData[platform].comments?.current || 0,
-            platform === 'youtube' ? filteredData[platform].views?.current || 0 : 
-            platform === 'linkedin' ? filteredData[platform].impressions?.current || 0 :
-            filteredData[platform].shares?.current || 0
-          ],
-          backgroundColor: platformColors[platform],
-          borderColor: platformColors[platform],
-          borderWidth: 1
-        };
-      }) : []
+    datasets: dashboardData ? Object.keys(dashboardData).map(platform => ({
+      label: platform.charAt(0).toUpperCase() + platform.slice(1),
+      data: [
+        dashboardData[platform].likes?.current || 0,
+        dashboardData[platform].comments?.current || 0,
+        platform === 'youtube' ? dashboardData[platform].views?.current || 0 : 
+        platform === 'linkedin' ? dashboardData[platform].impressions?.current || 0 :
+        dashboardData[platform].shares?.current || 0
+      ],
+      backgroundColor: platformColors[platform],
+      borderColor: platformColors[platform],
+      borderWidth: 1
+    })) : []
   };
 
-  const platformDistribution = (() => {
-    if (!dashboardData) return { labels: [], datasets: [{ data: [], backgroundColor: [], borderWidth: 2 }] };
-    
-    const filteredData = getFilteredDashboardData();
-    const labels = [];
-    const data = [];
-    const colors = [];
-    
-    if (filteredData.facebook && filteredData.facebook.followers?.current > 0) {
-      labels.push('Facebook');
-      data.push(filteredData.facebook.followers.current);
-      colors.push(platformColors.facebook);
-    }
-    if (filteredData.instagram && filteredData.instagram.followers?.current > 0) {
-      labels.push('Instagram');
-      data.push(filteredData.instagram.followers.current);
-      colors.push(platformColors.instagram);
-    }
-    if (filteredData.youtube && filteredData.youtube.subscribers?.current > 0) {
-      labels.push('YouTube');
-      data.push(filteredData.youtube.subscribers.current);
-      colors.push(platformColors.youtube);
-    }
-    if (filteredData.linkedin && filteredData.linkedin.followers?.current > 0) {
-      labels.push('LinkedIn');
-      data.push(filteredData.linkedin.followers.current);
-      colors.push(platformColors.linkedin);
-    }
-    
-    return {
-      labels,
-      datasets: [{
-        data,
-        backgroundColor: colors,
-        borderWidth: 2
-      }]
-    };
-  })();
+  const platformDistribution = {
+    labels: ['Facebook', 'Instagram', 'YouTube', 'LinkedIn'],
+    datasets: [{
+      data: dashboardData ? [
+        dashboardData.facebook?.followers?.current || 0,
+        dashboardData.instagram?.followers?.current || 0,
+        dashboardData.youtube?.subscribers?.current || 0,
+        dashboardData.linkedin?.followers?.current || 0
+      ] : [],
+      backgroundColor: [
+        platformColors.facebook,
+        platformColors.instagram,
+        platformColors.youtube,
+        platformColors.linkedin
+      ],
+      borderWidth: 2
+    }]
+  };
 
   const growthComparisonChart = {
     labels: ['Followers', 'Likes', 'Comments', 'Engagement Rate'],
-    datasets: dashboardData ? Object.keys(getFilteredDashboardData())
-      .filter(platform => {
-        const filteredData = getFilteredDashboardData();
-        const data = filteredData[platform];
-        return data && (
-          (data.followers?.current > 0) || (data.subscribers?.current > 0) ||
-          (data.likes?.current > 0) || (data.comments?.current > 0)
-        );
-      })
-      .map(platform => {
-        const filteredData = getFilteredDashboardData();
-        return {
-          label: platform.charAt(0).toUpperCase() + platform.slice(1),
-          data: [
-            Math.abs(filteredData[platform]?.[platform === 'youtube' ? 'subscribers' : 'followers']?.growth || 0),
-            Math.abs(filteredData[platform]?.likes?.growth || 0),
-            Math.abs(filteredData[platform]?.comments?.growth || 0),
-            Math.abs(filteredData[platform]?.engagement_rate?.growth || 0)
-          ],
-          backgroundColor: platformColors[platform] + '80',
-          borderColor: platformColors[platform],
-          borderWidth: 2
-        };
-      }) : []
+    datasets: dashboardData ? Object.keys(dashboardData).filter(platform => dashboardData[platform]).map(platform => ({
+      label: platform.charAt(0).toUpperCase() + platform.slice(1),
+      data: [
+        dashboardData[platform]?.[platform === 'youtube' ? 'subscribers' : 'followers']?.growth || 0,
+        dashboardData[platform]?.likes?.growth || 0,
+        dashboardData[platform]?.comments?.growth || 0,
+        dashboardData[platform]?.engagement_rate?.growth || 0
+      ],
+      backgroundColor: platformColors[platform] + '80',
+      borderColor: platformColors[platform],
+      borderWidth: 2
+    })) : []
   };
 
   const chartOptions = {
@@ -1341,72 +1604,91 @@ const ROIDashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-6">
-      <div className="px-6 sm:px-8 lg:px-12 xl:px-16 2xl:px-24">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-3 sm:p-6">
+      <div className="px-2 sm:px-6 lg:px-12 xl:px-16 2xl:px-24" ref={dashboardRef}>
         {/* Header */}
-        <div className="mb-8">
-          <div className="bg-gradient-to-r from-indigo-600 via-blue-600 to-cyan-500 rounded-2xl shadow-xl p-8 text-white relative overflow-hidden">
+        <div className="mb-6 sm:mb-8">
+          <div className="bg-gradient-to-r from-indigo-600 via-blue-600 to-cyan-500 rounded-xl sm:rounded-2xl shadow-xl p-4 sm:p-6 lg:p-8 text-white relative overflow-hidden">
             <div className="absolute inset-0 bg-black/10"></div>
             <div className="relative">
-              <div className="flex justify-between items-start">
-                <div>
-                  <div className="flex items-center gap-4 mb-4">
+              <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-4">
+                <div className="flex-1">
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-4 mb-4">
                     <button
                       onClick={() => navigate('/customer')}
-                      className="group flex items-center gap-2 bg-white/20 backdrop-blur-sm px-4 py-2 rounded-lg hover:bg-white/30 transition-all"
+                      className="group flex items-center gap-1 sm:gap-2 bg-white/20 backdrop-blur-sm px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg hover:bg-white/30 transition-all text-sm sm:text-base"
                     >
-                      <ArrowLeft className="h-5 w-5" />
-                      <span className="font-medium">Back to Dashboard</span>
+                      <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5" />
+                      <span className="font-medium hidden sm:inline">Back to Dashboard</span>
+                      <span className="font-medium sm:hidden">Back</span>
                     </button>
                   </div>
-                  <h1 className="text-4xl font-bold mb-3 flex items-center gap-3">
-                    <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
-                      <TrendingUp className="h-7 w-7" />
+                  <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-2 sm:mb-3 flex items-center gap-2 sm:gap-3">
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white/20 backdrop-blur-sm rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0">
+                      <TrendingUp className="h-5 w-5 sm:h-7 sm:w-7" />
                     </div>
-                    ROI Analytics Dashboard
+                    <span className="leading-tight">ROI Analytics Dashboard</span>
                   </h1>
-                  <p className="text-blue-50 text-lg">Comprehensive social media performance and return on investment analysis</p>
+                  <p className="text-blue-50 text-sm sm:text-base lg:text-lg">Comprehensive social media performance and return on investment analysis</p>
                 </div>
-                <div className="text-right">
-                  <div className="flex items-center gap-2 mb-3">
+                <div className="flex flex-col sm:items-end gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={generatePDFReport}
+                      disabled={isGeneratingPDF}
+                      className="flex items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-4 sm:py-2 bg-white/20 backdrop-blur-sm text-white rounded-lg hover:bg-white/30 disabled:opacity-50 transition-all font-medium text-sm sm:text-base"
+                    >
+                      {isGeneratingPDF ? (
+                        <>
+                          <RefreshCw className="h-4 w-4 animate-spin" />
+                          <span className="hidden sm:inline">Generating...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Download className="h-4 w-4" />
+                          <span className="hidden sm:inline">Download PDF</span>
+                          <span className="sm:hidden">PDF</span>
+                        </>
+                      )}
+                    </button>
                     <button
                       onClick={handleRefresh}
                       disabled={isRefreshing}
-                      className="flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur-sm text-white rounded-lg hover:bg-white/30 disabled:opacity-50 transition-all font-medium"
+                      className="flex items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-4 sm:py-2 bg-white/20 backdrop-blur-sm text-white rounded-lg hover:bg-white/30 disabled:opacity-50 transition-all font-medium text-sm sm:text-base"
                     >
                       <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-                      {isRefreshing ? 'Refreshing...' : 'Refresh'}
+                      <span className="hidden sm:inline">{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
                     </button>
-                    <div className={`inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold backdrop-blur-sm ${
+                    <div className={`inline-flex items-center px-2.5 py-1 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold backdrop-blur-sm ${
                       analyticsData && !analyticsData.isPreliminary ? 'bg-emerald-500/90 text-white' : 
                       analyticsData && analyticsData.isPreliminary ? 'bg-blue-500/90 text-white' :
                       'bg-amber-500/90 text-white'
                     }`}>
                       {analyticsData && !analyticsData.isPreliminary ? '✓ Live Data' : 
-                       analyticsData && analyticsData.isPreliminary ? '🔗 Connected Data' :
-                       '⚠ Demo Data'}
+                       analyticsData && analyticsData.isPreliminary ? '🔗 Connected' :
+                       '⚠ Demo'}
                     </div>
                   </div>
                   {lastUpdated && (
-                    <div className="text-sm text-blue-100 mb-2">
+                    <div className="text-xs sm:text-sm text-blue-100">
                       Last updated: {new Date(lastUpdated).toLocaleDateString()}
                     </div>
                   )}
                   {!analyticsData && (
-                    <div className="text-right bg-white/10 backdrop-blur-sm rounded-lg p-3">
-                      <p className="text-sm text-blue-100 mb-1">Connect social accounts to see live data</p>
+                    <div className="bg-white/10 backdrop-blur-sm rounded-lg p-2.5 sm:p-3 w-full sm:w-auto">
+                      <p className="text-xs sm:text-sm text-blue-100 mb-1">Connect social accounts to see live data</p>
                       <button
                         onClick={() => navigate('/customer/settings')}
-                        className="text-sm text-white font-semibold inline-flex items-center gap-1 hover:gap-2 transition-all"
+                        className="text-xs sm:text-sm text-white font-semibold inline-flex items-center gap-1 hover:gap-2 transition-all"
                       >
-                        Connect Accounts <ExternalLink className="h-4 w-4" />
+                        Connect Accounts <ExternalLink className="h-3 w-3 sm:h-4 sm:w-4" />
                       </button>
                     </div>
                   )}
                   {analyticsData && analyticsData.isPreliminary && (
-                    <div className="text-right bg-white/10 backdrop-blur-sm rounded-lg p-3">
-                      <p className="text-sm text-blue-100 mb-1">Preliminary data from connected accounts</p>
-                      <p className="text-sm text-blue-200">Analytics processing will provide detailed insights</p>
+                    <div className="bg-white/10 backdrop-blur-sm rounded-lg p-2.5 sm:p-3 w-full sm:w-auto">
+                      <p className="text-xs sm:text-sm text-blue-100 mb-1">Preliminary data from connected accounts</p>
+                      <p className="text-xs sm:text-sm text-blue-200">Analytics processing will provide detailed insights</p>
                     </div>
                   )}
                 </div>
@@ -1417,33 +1699,33 @@ const ROIDashboard = () => {
 
         {/* Connected Accounts Summary */}
         {analyticsData && platforms.length > 0 && (
-          <div className="bg-white rounded-2xl shadow-lg border border-slate-200 p-6 mb-8">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-blue-500 rounded-lg flex items-center justify-center">
-                  <Globe className="h-5 w-5 text-white" />
+          <div className="bg-white rounded-xl sm:rounded-2xl shadow-lg border border-slate-200 p-4 sm:p-6 mb-6 sm:mb-8">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6 gap-3">
+              <h2 className="text-lg sm:text-2xl font-bold text-slate-800 flex items-center gap-2 sm:gap-3">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-indigo-500 to-blue-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <Globe className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
                 </div>
                 Connected Accounts
               </h2>
               <div>
-                <div className="text-sm text-slate-600 bg-slate-100 px-4 py-2 rounded-lg font-medium">
+                <div className="text-xs sm:text-sm text-slate-600 bg-slate-100 px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg font-medium">
                   {platforms.length} Platform{platforms.length !== 1 ? 's' : ''} Connected
                 </div>
                 {/* Removed duplicate sibling text node that caused multiple parents */}
               </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
               {platforms.map((platform) => {
                 const platformKey = platform.toLowerCase();
                 return (
-                  <div key={platformKey} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                  <div key={platformKey} className="flex items-center gap-2 sm:gap-3 p-2.5 sm:p-3 bg-gray-50 rounded-lg">
                     <div 
-                      className="w-3 h-3 rounded-full"
+                      className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full flex-shrink-0"
                       style={{ backgroundColor: platformColors[platformKey] || '#6B7280' }}
                     ></div>
-                    <div>
-                      <div className="font-medium capitalize text-gray-900">{platform}</div>
-                      <div className="text-sm text-green-600">Connected</div>
+                    <div className="min-w-0">
+                      <div className="font-medium capitalize text-gray-900 text-sm sm:text-base truncate">{platform}</div>
+                      <div className="text-xs sm:text-sm text-green-600">Connected</div>
                     </div>
                   </div>
                 );
@@ -1469,35 +1751,43 @@ const ROIDashboard = () => {
         )}
 
         {/* Analytics Job Manager */}
-        <div className="mb-8">
-          <div className="bg-white rounded-xl shadow-sm border p-6">
-            <div className="text-center py-8">
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Post-Level Analytics Available</h3>
-              <p className="text-gray-600 mb-4">View detailed analytics for individual posts by visiting the respective platform integration pages.</p>
-              <div className="flex justify-center gap-4">
+        <div className="mb-6 sm:mb-8">
+          <div className="bg-white rounded-xl shadow-sm border p-4 sm:p-6">
+            <div className="text-center py-4 sm:py-8">
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">Post-Level Analytics Available</h3>
+              <p className="text-sm sm:text-base text-gray-600 mb-4 px-2">View detailed analytics for individual posts by visiting the respective platform integration pages.</p>
+              <div className="grid grid-cols-2 sm:flex sm:flex-wrap sm:justify-center gap-2 sm:gap-4">
                 <button
-                  onClick={() => navigate('/customer/integration/facebook')}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  onClick={() => navigate('/customer/integrations/facebook')}
+                  className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 py-2 sm:px-4 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-xs sm:text-sm font-medium"
                 >
-                  📘 Facebook Analytics
+                  <span>📘</span>
+                  <span className="hidden sm:inline">Facebook Analytics</span>
+                  <span className="sm:hidden">Facebook</span>
                 </button>
                 <button
-                  onClick={() => navigate('/customer/integration/instagram')}
-                  className="flex items-center gap-2 px-4 py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700"
+                  onClick={() => navigate('/customer/integrations/instagram')}
+                  className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 py-2 sm:px-4 sm:py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700 text-xs sm:text-sm font-medium"
                 >
-                  📸 Instagram Analytics
+                  <span>📸</span>
+                  <span className="hidden sm:inline">Instagram Analytics</span>
+                  <span className="sm:hidden">Instagram</span>
                 </button>
                 <button
-                  onClick={() => navigate('/customer/integration/youtube')}
-                  className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+                  onClick={() => navigate('/customer/integrations/youtube')}
+                  className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 py-2 sm:px-4 sm:py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-xs sm:text-sm font-medium"
                 >
-                  🎬 YouTube Analytics
+                  <span>🎬</span>
+                  <span className="hidden sm:inline">YouTube Analytics</span>
+                  <span className="sm:hidden">YouTube</span>
                 </button>
                 <button
-                  onClick={() => navigate('/customer/integration/linkedin')}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-700 text-white rounded-lg hover:bg-blue-800"
+                  onClick={() => navigate('/customer/integrations/linkedin')}
+                  className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 py-2 sm:px-4 sm:py-2 bg-blue-700 text-white rounded-lg hover:bg-blue-800 text-xs sm:text-sm font-medium"
                 >
-                  💼 LinkedIn Analytics
+                  <span>💼</span>
+                  <span className="hidden sm:inline">LinkedIn Analytics</span>
+                  <span className="sm:hidden">LinkedIn</span>
                 </button>
               </div>
             </div>
@@ -1505,26 +1795,26 @@ const ROIDashboard = () => {
         </div>
 
         {/* Controls */}
-        <div className="bg-white rounded-xl shadow-sm border p-6 mb-8">
-          <div className="flex flex-wrap gap-6 items-center">
-            <div>
+        <div className="bg-white rounded-xl shadow-sm border p-4 sm:p-6 mb-6 sm:mb-8">
+          <div className="flex flex-col sm:flex-row sm:flex-wrap gap-4 sm:gap-6 sm:items-center">
+            <div className="flex-1 sm:flex-none">
               <label className="block text-sm font-medium text-gray-700 mb-2">Time Period</label>
               <select
                 value={timeframe}
                 onChange={(e) => setTimeframe(e.target.value)}
-                className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full sm:w-auto border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="last_7_days">Last 7 Days</option>
                 <option value="last_30_days">Last 30 Days</option>
                 <option value="last_90_days">Last 90 Days</option>
               </select>
             </div>
-            <div>
+            <div className="flex-1 sm:flex-none">
               <label className="block text-sm font-medium text-gray-700 mb-2">Platform Filter</label>
               <select
                 value={selectedPlatform}
                 onChange={(e) => setSelectedPlatform(e.target.value)}
-                className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full sm:w-auto border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="all">All Platforms</option>
                 <option value="facebook">Facebook</option>
@@ -1537,88 +1827,88 @@ const ROIDashboard = () => {
         </div>
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-xl shadow-sm border p-6">
-            <div className="flex items-center">
-              <div className="p-3 bg-blue-100 rounded-xl">
-                <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-6 sm:mb-8">
+          <div className="bg-white rounded-xl shadow-sm border p-3 sm:p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center">
+              <div className="p-2 sm:p-3 bg-blue-100 rounded-lg sm:rounded-xl w-fit mb-2 sm:mb-0">
+                <svg className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                 </svg>
               </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Total Followers</p>
-                <p className="text-2xl font-bold text-gray-900">{getTotalFollowers().toLocaleString()}</p>
-                <p className="text-sm text-green-600 mt-1">Across all platforms</p>
+              <div className="sm:ml-4">
+                <p className="text-xs sm:text-sm font-medium text-gray-600">Total Followers</p>
+                <p className="text-lg sm:text-2xl font-bold text-gray-900">{getTotalFollowers().toLocaleString()}</p>
+                <p className="text-xs sm:text-sm text-green-600 mt-0.5 sm:mt-1 hidden sm:block">Across all platforms</p>
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border p-6">
-            <div className="flex items-center">
-              <div className="p-3 bg-green-100 rounded-xl">
-                <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="bg-white rounded-xl shadow-sm border p-3 sm:p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center">
+              <div className="p-2 sm:p-3 bg-green-100 rounded-lg sm:rounded-xl w-fit mb-2 sm:mb-0">
+                <svg className="w-5 h-5 sm:w-6 sm:h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
                 </svg>
               </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Total Engagement</p>
-                <p className="text-2xl font-bold text-gray-900">{getTotalEngagement().toLocaleString()}</p>
-                <p className="text-sm text-green-600 mt-1">Likes + Comments + Shares</p>
+              <div className="sm:ml-4">
+                <p className="text-xs sm:text-sm font-medium text-gray-600">Total Engagement</p>
+                <p className="text-lg sm:text-2xl font-bold text-gray-900">{getTotalEngagement().toLocaleString()}</p>
+                <p className="text-xs sm:text-sm text-green-600 mt-0.5 sm:mt-1 hidden sm:block">Likes + Comments + Shares</p>
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border p-6">
-            <div className="flex items-center">
-              <div className="p-3 bg-purple-100 rounded-xl">
-                <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="bg-white rounded-xl shadow-sm border p-3 sm:p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center">
+              <div className="p-2 sm:p-3 bg-purple-100 rounded-lg sm:rounded-xl w-fit mb-2 sm:mb-0">
+                <svg className="w-5 h-5 sm:w-6 sm:h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                 </svg>
               </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Avg. Engagement Rate</p>
-                <p className="text-2xl font-bold text-gray-900">{getAverageEngagementRate()}%</p>
-                <p className="text-sm text-green-600 mt-1">Platform average</p>
+              <div className="sm:ml-4">
+                <p className="text-xs sm:text-sm font-medium text-gray-600">Avg. Engagement Rate</p>
+                <p className="text-lg sm:text-2xl font-bold text-gray-900">{getAverageEngagementRate()}%</p>
+                <p className="text-xs sm:text-sm text-green-600 mt-0.5 sm:mt-1 hidden sm:block">Platform average</p>
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border p-6">
-            <div className="flex items-center">
-              <div className="p-3 bg-yellow-100 rounded-xl">
-                <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="bg-white rounded-xl shadow-sm border p-3 sm:p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center">
+              <div className="p-2 sm:p-3 bg-yellow-100 rounded-lg sm:rounded-xl w-fit mb-2 sm:mb-0">
+                <svg className="w-5 h-5 sm:w-6 sm:h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
                 </svg>
               </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Overall ROI</p>
-                <p className="text-2xl font-bold text-green-600">+{getOverallROI()}%</p>
-                <p className="text-sm text-gray-600 mt-1">Growth period</p>
+              <div className="sm:ml-4">
+                <p className="text-xs sm:text-sm font-medium text-gray-600">Overall ROI</p>
+                <p className="text-lg sm:text-2xl font-bold text-green-600">+{getOverallROI()}%</p>
+                <p className="text-xs sm:text-sm text-gray-600 mt-0.5 sm:mt-1 hidden sm:block">Growth period</p>
               </div>
             </div>
           </div>
         </div>
 
         {/* Charts Row 1 */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          <div className="bg-white rounded-xl shadow-sm border p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-semibold text-gray-900">Follower Growth Over Time</h3>
-              <div className="text-sm text-gray-500">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-8">
+          <div className="bg-white rounded-xl shadow-sm border p-4 sm:p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6 gap-2">
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900">Follower Growth Over Time</h3>
+              <div className="text-xs sm:text-sm text-gray-500">
                 {timeframe === '6months' ? 'Last 6 Months' : 'Last 12 Months'}
               </div>
             </div>
-            <div className="h-80">
+            <div className="h-60 sm:h-80">
               <Line data={followerGrowthChart} options={chartOptions} />
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-semibold text-gray-900">Platform Distribution</h3>
-              <div className="text-sm text-gray-500">Current Followers</div>
+          <div className="bg-white rounded-xl shadow-sm border p-4 sm:p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6 gap-2">
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900">Platform Distribution</h3>
+              <div className="text-xs sm:text-sm text-gray-500">Current Followers</div>
             </div>
-            <div className="h-80">
+            <div className="h-60 sm:h-80">
               <Doughnut 
                 data={platformDistribution} 
                 options={{
@@ -1640,23 +1930,23 @@ const ROIDashboard = () => {
         </div>
 
         {/* Charts Row 2 */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          <div className="bg-white rounded-xl shadow-sm border p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-semibold text-gray-900">Engagement Comparison</h3>
-              <div className="text-sm text-gray-500">Current Period</div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-8">
+          <div className="bg-white rounded-xl shadow-sm border p-4 sm:p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6 gap-2">
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900">Engagement Comparison</h3>
+              <div className="text-xs sm:text-sm text-gray-500">Current Period</div>
             </div>
-            <div className="h-80">
+            <div className="h-60 sm:h-80">
               <Bar data={engagementChart} options={chartOptions} />
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-semibold text-gray-900">Growth Rate Comparison</h3>
-              <div className="text-sm text-gray-500">% Growth</div>
+          <div className="bg-white rounded-xl shadow-sm border p-4 sm:p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6 gap-2">
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900">Growth Rate Comparison</h3>
+              <div className="text-xs sm:text-sm text-gray-500">% Growth</div>
             </div>
-            <div className="h-80">
+            <div className="h-60 sm:h-80">
               <Bar data={growthComparisonChart} options={{
                 ...chartOptions,
                 scales: {
@@ -1676,13 +1966,17 @@ const ROIDashboard = () => {
         </div>
 
         {/* Platform Details */}
-        <div className="mb-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6">Platform Performance Details</h2>
-          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6">
+        <div className="mb-6 sm:mb-8">
+          <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4 sm:mb-6">Platform Performance Details</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-6">
             {dashboardData && Object.keys(dashboardData)
               .filter(platform => {
-                // Only show if there is at least one real metric (followers/subscribers, likes, comments, shares, views, impressions, engagement_rate)
+                // Show platform if it has connected accounts OR has at least one real metric
+                const hasConnectedAccounts = analyticsData && analyticsData.platforms && analyticsData.platforms.includes(platform);
                 const data = dashboardData[platform];
+                
+                if (hasConnectedAccounts) return true; // Show connected platforms even with 0 metrics
+                
                 if (!data) return false;
                 return (
                   (data.followers && data.followers.current > 0) ||
@@ -1696,68 +1990,68 @@ const ROIDashboard = () => {
                 );
               })
               .map(platform => (
-                <div key={platform} className="bg-white rounded-xl shadow-sm border p-6">
-                  <div className="flex items-center justify-between mb-6">
+                <div key={platform} className="bg-white rounded-xl shadow-sm border p-4 sm:p-6">
+                  <div className="flex items-center justify-between mb-4 sm:mb-6">
                     <div>
-                      <h3 className="text-lg font-semibold capitalize" style={{ color: platformColors[platform] }}>
+                      <h3 className="text-base sm:text-lg font-semibold capitalize" style={{ color: platformColors[platform] }}>
                         {platform}
                       </h3>
                       {getAccountNames()[platform] && (
-                        <p className="text-sm text-gray-600 mt-1">
+                        <p className="text-xs sm:text-sm text-gray-600 mt-1">
                           @{getAccountNames()[platform]}
                         </p>
                       )}
                     </div>
                     <div 
-                      className="px-3 py-1 rounded-full text-xs font-medium text-white"
+                      className="px-2 py-0.5 sm:px-3 sm:py-1 rounded-full text-xs font-medium text-white"
                       style={{ backgroundColor: platformColors[platform] }}
                     >
                       {analyticsData ? 'Connected' : 'Demo'}
                     </div>
                   </div>
-                  <div className="space-y-4">
+                  <div className="space-y-3 sm:space-y-4">
                     <div className="flex justify-between items-center">
-                      <span className="text-gray-600 font-medium">
+                      <span className="text-xs sm:text-sm text-gray-600 font-medium">
                         {platform === 'youtube' ? 'Subscribers' : 'Followers'}
                       </span>
                       <div className="text-right">
-                        <div className="font-bold text-lg">
+                        <div className="font-bold text-sm sm:text-lg">
                           {(dashboardData[platform]?.[platform === 'youtube' ? 'subscribers' : 'followers']?.current || 0).toLocaleString()}
                         </div>
-                        <div className="text-sm text-green-600 font-medium">
-                          +{Math.abs(dashboardData[platform]?.[platform === 'youtube' ? 'subscribers' : 'followers']?.growth || 0).toFixed(1)}%
+                        <div className="text-xs sm:text-sm text-green-600 font-medium">
+                          +{dashboardData[platform]?.[platform === 'youtube' ? 'subscribers' : 'followers']?.growth || 0}%
                         </div>
                       </div>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-gray-600">Likes</span>
+                      <span className="text-xs sm:text-sm text-gray-600">Likes</span>
                       <div className="text-right">
-                        <div className="font-semibold">
+                        <div className="font-semibold text-sm sm:text-base">
                           {(dashboardData[platform]?.likes?.current || 0).toLocaleString()}
                         </div>
-                        <div className="text-sm text-green-600">
-                          +{Math.abs(dashboardData[platform]?.likes?.growth || 0).toFixed(1)}%
+                        <div className="text-xs sm:text-sm text-green-600">
+                          +{dashboardData[platform]?.likes?.growth || 0}%
                         </div>
                       </div>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-gray-600">Comments</span>
+                      <span className="text-xs sm:text-sm text-gray-600">Comments</span>
                       <div className="text-right">
-                        <div className="font-semibold">
+                        <div className="font-semibold text-sm sm:text-base">
                           {(dashboardData[platform]?.comments?.current || 0).toLocaleString()}
                         </div>
-                        <div className="text-sm text-green-600">
-                          +{Math.abs(dashboardData[platform]?.comments?.growth || 0).toFixed(1)}%
+                        <div className="text-xs sm:text-sm text-green-600">
+                          +{dashboardData[platform]?.comments?.growth || 0}%
                         </div>
                       </div>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-gray-600">
+                      <span className="text-xs sm:text-sm text-gray-600">
                         {platform === 'youtube' ? 'Views' : 
                          platform === 'linkedin' ? 'Impressions' : 'Shares'}
                       </span>
                       <div className="text-right">
-                        <div className="font-semibold">
+                        <div className="font-semibold text-sm sm:text-base">
                           {platform === 'youtube' 
                             ? (dashboardData[platform]?.views?.current || 0).toLocaleString()
                             : platform === 'linkedin'
@@ -1765,35 +2059,35 @@ const ROIDashboard = () => {
                             : (dashboardData[platform]?.shares?.current || 0).toLocaleString()
                           }
                         </div>
-                        <div className="text-sm text-green-600">
-                          +{Math.abs(platform === 'youtube' 
+                        <div className="text-xs sm:text-sm text-green-600">
+                          +{platform === 'youtube' 
                             ? (dashboardData[platform]?.views?.growth || 0)
                             : platform === 'linkedin'
                             ? (dashboardData[platform]?.impressions?.growth || 0)
                             : (dashboardData[platform]?.shares?.growth || 0)
-                          ).toFixed(1)}%
+                          }%
                         </div>
                       </div>
                     </div>
-                    <div className="pt-4 border-t border-gray-200">
+                    <div className="pt-3 sm:pt-4 border-t border-gray-200">
                       <div className="flex justify-between items-center">
-                        <span className="text-gray-600 font-medium">Engagement Rate</span>
+                        <span className="text-xs sm:text-sm text-gray-600 font-medium">Engagement Rate</span>
                         <div className="text-right">
-                          <div className="font-bold text-lg" style={{ color: platformColors[platform] }}>
-                            {Math.min(100, dashboardData[platform]?.engagement_rate?.current || 0).toFixed(1)}%
+                          <div className="font-bold text-sm sm:text-lg" style={{ color: platformColors[platform] }}>
+                            {dashboardData[platform]?.engagement_rate?.current || 0}%
                           </div>
-                          <div className="text-sm text-green-600 font-medium">
-                            +{Math.abs(dashboardData[platform]?.engagement_rate?.growth || 0).toFixed(1)}%
+                          <div className="text-xs sm:text-sm text-green-600 font-medium">
+                            +{dashboardData[platform]?.engagement_rate?.growth || 0}%
                           </div>
                         </div>
                       </div>
                     </div>
-                    <div className="pt-4">
-                      <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div className="pt-3 sm:pt-4">
+                      <div className="w-full bg-gray-200 rounded-full h-1.5 sm:h-2">
                         <div 
-                          className="h-2 rounded-full transition-all duration-500"
+                          className="h-1.5 sm:h-2 rounded-full transition-all duration-500"
                           style={{ 
-                            width: `${Math.min(dashboardData[platform]?.engagement_rate?.current || 0, 100)}%`,
+                            width: `${Math.min((dashboardData[platform]?.engagement_rate?.current || 0) * 10, 100)}%`,
                             backgroundColor: platformColors[platform]
                           }}
                         ></div>
@@ -1806,31 +2100,31 @@ const ROIDashboard = () => {
         </div>
 
         {/* ROI Analysis Section */}
-        <div className="bg-white rounded-xl shadow-sm border p-6">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6">ROI Analysis Summary</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="text-center p-6 bg-green-50 rounded-lg">
-              <div className="text-3xl font-bold text-green-600 mb-2">
+        <div className="bg-white rounded-xl shadow-sm border p-4 sm:p-6">
+          <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4 sm:mb-6">ROI Analysis Summary</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
+            <div className="text-center p-4 sm:p-6 bg-green-50 rounded-lg">
+              <div className="text-2xl sm:text-3xl font-bold text-green-600 mb-1 sm:mb-2">
                 +{getOverallROI()}%
               </div>
-              <div className="text-lg font-semibold text-gray-800">Overall Growth</div>
-              <div className="text-sm text-gray-600 mt-1">Follower increase</div>
+              <div className="text-base sm:text-lg font-semibold text-gray-800">Overall Growth</div>
+              <div className="text-xs sm:text-sm text-gray-600 mt-0.5 sm:mt-1">Follower increase</div>
             </div>
             
-            <div className="text-center p-6 bg-blue-50 rounded-lg">
-              <div className="text-3xl font-bold text-blue-600 mb-2">
+            <div className="text-center p-4 sm:p-6 bg-blue-50 rounded-lg">
+              <div className="text-2xl sm:text-3xl font-bold text-blue-600 mb-1 sm:mb-2">
                 {getAverageEngagementRate()}%
               </div>
-              <div className="text-lg font-semibold text-gray-800">Avg Engagement</div>
-              <div className="text-sm text-gray-600 mt-1">Across platforms</div>
+              <div className="text-base sm:text-lg font-semibold text-gray-800">Avg Engagement</div>
+              <div className="text-xs sm:text-sm text-gray-600 mt-0.5 sm:mt-1">Across platforms</div>
             </div>
             
-            <div className="text-center p-6 bg-purple-50 rounded-lg">
-              <div className="text-3xl font-bold text-purple-600 mb-2">
+            <div className="text-center p-4 sm:p-6 bg-purple-50 rounded-lg">
+              <div className="text-2xl sm:text-3xl font-bold text-purple-600 mb-1 sm:mb-2">
                 {getTotalEngagement().toLocaleString()}
               </div>
-              <div className="text-lg font-semibold text-gray-800">Total Interactions</div>
-              <div className="text-sm text-gray-600 mt-1">Current period</div>
+              <div className="text-base sm:text-lg font-semibold text-gray-800">Total Interactions</div>
+              <div className="text-xs sm:text-sm text-gray-600 mt-0.5 sm:mt-1">Current period</div>
             </div>
           </div>
         </div>

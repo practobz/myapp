@@ -53,17 +53,17 @@ const platforms = [
     textColor: 'text-pink-600',
     features: ['Media Management', 'Story Analytics', 'Hashtag Tracking', 'Engagement Metrics']
   },
-  { 
-    key: 'instagram-ads', 
-    label: 'Instagram Advertising', 
-    description: 'Create and manage Instagram ad campaigns',
-    route: '/customer/integration/instagram-ads',
-    icon: platformIcons['instagram-ads'],
-    color: 'from-purple-500 to-pink-600',
-    bgColor: 'bg-purple-50',
-    textColor: 'text-purple-600',
-    features: ['Campaign Management', 'Ad Analytics', 'Audience Targeting', 'Budget Optimization']
-  },
+  // {
+  //   key: 'instagram-ads',
+  //   label: 'Instagram Advertising',
+  //   description: 'Create and manage Instagram ad campaigns',
+  //   route: '/customer/integration/instagram-ads',
+  //   icon: platformIcons['instagram-ads'],
+  //   color: 'from-purple-500 to-pink-600',
+  //   bgColor: 'bg-purple-50',
+  //   textColor: 'text-purple-600',
+  //   features: ['Campaign Management', 'Ad Analytics', 'Audience Targeting', 'Budget Optimization']
+  // },
   { 
     key: 'youtube', 
     label: 'YouTube', 

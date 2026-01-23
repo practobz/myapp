@@ -1951,7 +1951,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
       {activeAccount && (
         <div className="bg-white sm:bg-gradient-to-br sm:from-pink-50 sm:to-purple-50 sm:border sm:border-pink-200 sm:rounded-2xl">
           {/* Profile Header - Instagram Style */}
-          <div className="sm:p-6">
+          <div className="px-3 py-4 sm:p-6">
             <div className="flex items-start gap-4 mb-4">
               {activeAccount.profile?.profile_picture_url ? (
                 <img
@@ -2005,7 +2005,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
             </div>
           
             {/* Stats Row - Instagram Style */}
-            <div className="flex justify-around text-center border-t border-b border-gray-200 py-3 sm:mx-0 sm:border sm:rounded-xl sm:bg-white">
+            <div className="flex justify-around text-center border-t border-b sm:border-0 border-gray-200 py-3 sm:mx-0 sm:border sm:rounded-xl sm:bg-white">
               <div>
                 <div className="text-lg sm:text-xl font-bold text-gray-900">
                   {activeAccount.profile?.media_count?.toLocaleString() || activeAccount.media?.length || 0}
@@ -2028,13 +2028,13 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
           </div>
 
           {/* Historical Charts Toggle */}
-          <div className="sm:px-0 mb-4">
+          <div className="px-3 sm:px-0 mb-4">
             <button
               onClick={() => setShowHistoricalCharts(prev => ({ 
                 ...prev, 
                 [activeAccount.id]: !prev[activeAccount.id] 
               }))}
-              className="flex items-center justify-between w-full bg-gradient-to-r from-pink-50 to-purple-50 sm:bg-white border border-gray-200 rounded-lg text-left"
+              className="flex items-center justify-between w-full bg-gradient-to-r from-pink-50 to-purple-50 sm:bg-white sm:border border-gray-200 rounded-lg text-left p-3"
             >
               <div className="flex items-center gap-2">
                 <Calendar className="h-4 w-4 text-pink-600" />
@@ -2063,7 +2063,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
       {/* Show recent posts for active account - Instagram-like grid */}
       {activeAccount && (
         <div className="bg-white sm:rounded-2xl sm:border sm:border-gray-200 sm:shadow-sm">
-          <div className="flex items-center justify-between py-3 border-b border-gray-100">
+          <div className="flex items-center justify-between px-3 py-3 border-b border-gray-100">
             <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
               <LayoutGrid className="h-4 w-4 text-pink-600" />
               Posts
@@ -2258,13 +2258,13 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
           )}
 
           {error && (
-            <div className="bg-red-50 border border-red-200 rounded-2xl sm:p-6 mb-6">
+            <div className="bg-red-50 sm:border border-red-200 rounded-2xl p-4 sm:p-6 mb-6 mx-3 sm:mx-0">
               <div className="flex items-center space-x-3 mb-4">
                 <AlertCircle className="h-6 w-6 text-red-600" />
                 <h3 className="text-lg font-semibold text-red-800">Connection Error</h3>
               </div>
               <p className="text-red-700 mb-4">{error}</p>
-              <div className="bg-blue-50 border border-blue-200 rounded-xl sm:p-4 mb-6 max-w-md mx-auto">
+              <div className="bg-blue-50 sm:border border-blue-200 rounded-xl p-3 sm:p-4 mb-6 max-w-md mx-auto">
                 <h4 className="font-medium text-blue-800 mb-2">📱 Multi-Account Setup Guide</h4>
                 <div className="text-sm text-blue-700 text-left space-y-1">
                   <p>1. Convert Instagram accounts to Business/Creator accounts</p>
@@ -2301,7 +2301,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
               <p className="text-gray-600 mb-6 max-w-md mx-auto">
                 Connect multiple Instagram Business accounts through Facebook. Manage all your accounts from one dashboard with historical data tracking!
               </p>
-              <div className="bg-blue-50 border border-blue-200 rounded-xl sm:p-4 mb-6 max-w-md mx-auto">
+              <div className="bg-blue-50 sm:border border-blue-200 rounded-xl p-3 sm:p-4 mb-6 max-w-md mx-auto">
                 <h4 className="font-medium text-blue-800 mb-2">📱 Multi-Account Setup Guide</h4>
                 <div className="text-sm text-blue-700 text-left space-y-1">
                   <p>1. Convert Instagram accounts to Business/Creator accounts</p>
@@ -2314,7 +2314,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
               </div>
               <button
                 onClick={handleSignIn}
-                className="bg-gradient-to-r from-pink-600 to-purple-600 text-white py-3 rounded-xl hover:from-pink-700 hover:to-purple-700 transition-all duration-200 flex items-center space-x-3 mx-auto font-medium"
+                className="bg-gradient-to-r from-pink-600 to-purple-600 text-white px-6 py-3 rounded-xl hover:from-pink-700 hover:to-purple-700 transition-all duration-200 flex items-center space-x-3 mx-auto font-medium"
                 disabled={loading}
               >
                 <Instagram className="h-5 w-5" />

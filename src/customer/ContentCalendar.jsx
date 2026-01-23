@@ -217,7 +217,7 @@ function ContentCalendar() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       {/* Main Content */}
-      <div className="px-6 sm:px-8 lg:px-12 xl:px-16 2xl:px-24 py-8">
+      <div className="sm:px-8 lg:px-12 xl:px-16 2xl:px-24">
         <div className="flex flex-col lg:flex-row gap-6">
           {/* Calendar Selection Sidebar */}
           <div className="lg:w-1/4">

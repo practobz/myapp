@@ -158,30 +158,30 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
       });
 
       return (
-        <div key={metric} className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h4 className="text-lg font-semibold text-gray-900">
+        <div key={metric} className="bg-white rounded-lg sm:rounded-xl border border-gray-200 p-3 sm:p-4 lg:p-6 shadow-sm">
+          <div className="flex items-center justify-between mb-2 sm:mb-3 lg:mb-4">
+            <div className="min-w-0 flex-1">
+              <h4 className="text-sm sm:text-base lg:text-lg font-semibold text-gray-900 truncate">
                 {metricInfo?.label || metric}
               </h4>
-              <p className="text-sm text-gray-600">
-                Last {selectedPeriod} days • {nonZeroCount} data points
+              <p className="text-[10px] sm:text-xs lg:text-sm text-gray-600">
+                {selectedPeriod}d • {nonZeroCount} pts
               </p>
             </div>
-            <div className="text-right">
-              <div className="text-2xl font-bold" style={{ color: metricInfo?.color }}>
+            <div className="text-right flex-shrink-0 ml-2">
+              <div className="text-base sm:text-lg lg:text-2xl font-bold" style={{ color: metricInfo?.color }}>
                 {data[data.length - 1]?.value?.toLocaleString() || 0}
               </div>
-              <div className="text-xs text-gray-500">Current</div>
+              <div className="text-[10px] sm:text-xs text-gray-500">Current</div>
               {maxValue > 0 && (
-                <div className="text-xs text-gray-400 mt-1">
+                <div className="text-[10px] sm:text-xs text-gray-400 mt-0.5">
                   Peak: {maxValue.toLocaleString()}
                 </div>
               )}
             </div>
           </div>
           
-          <div className="h-64">
+          <div className="h-48 sm:h-56 lg:h-64">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={data}>
                 <defs>
@@ -251,23 +251,23 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
       const displayValue = barData[barData.length - 1]?.value || 0;
 
       return (
-        <div key={metric} className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h4 className="text-lg font-semibold text-gray-900">
+        <div key={metric} className="bg-white rounded-lg sm:rounded-xl border border-gray-200 p-3 sm:p-4 lg:p-6 shadow-sm">
+          <div className="flex items-center justify-between mb-2 sm:mb-3 lg:mb-4">
+            <div className="min-w-0 flex-1">
+              <h4 className="text-sm sm:text-base lg:text-lg font-semibold text-gray-900 truncate">
                 {metricInfo?.label || metric}
               </h4>
-              <p className="text-sm text-gray-600">Last {barsToShow} {barsToShow === 1 ? 'day' : 'days'}</p>
+              <p className="text-[10px] sm:text-xs lg:text-sm text-gray-600">Last {barsToShow} {barsToShow === 1 ? 'day' : 'days'}</p>
             </div>
-            <div className="text-right">
-              <div className="text-2xl font-bold" style={{ color: metricInfo?.color }}>
+            <div className="text-right flex-shrink-0 ml-2">
+              <div className="text-base sm:text-lg lg:text-2xl font-bold" style={{ color: metricInfo?.color }}>
                 {displayValue.toLocaleString()}
               </div>
-              <div className="text-xs text-gray-500">Actual</div>
+              <div className="text-[10px] sm:text-xs text-gray-500">Actual</div>
             </div>
           </div>
           
-          <div className="h-64">
+          <div className="h-48 sm:h-56 lg:h-64">
             <ResponsiveContainer width="100%" height="100%">
               <RechartsBarChart data={barData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
@@ -332,15 +332,15 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
       const subtitle = 'Current values & period totals';
 
       return (
-        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
+        <div className="bg-white rounded-lg sm:rounded-xl border border-gray-200 p-3 sm:p-4 lg:p-6 shadow-sm">
+          <div className="flex items-center justify-between mb-2 sm:mb-3 lg:mb-4">
             <div>
-              <h4 className="text-lg font-semibold text-gray-900">Metrics Distribution</h4>
-              <p className="text-sm text-gray-600">{subtitle}</p>
+              <h4 className="text-sm sm:text-base lg:text-lg font-semibold text-gray-900">Distribution</h4>
+              <p className="text-[10px] sm:text-xs lg:text-sm text-gray-600">{subtitle}</p>
             </div>
           </div>
           
-          <div className="h-64">
+          <div className="h-48 sm:h-56 lg:h-64">
             <ResponsiveContainer width="100%" height="100%">
               <RechartsPieChart>
                 <Pie
@@ -369,14 +369,14 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
             </ResponsiveContainer>
           </div>
           
-          <div className="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-gray-100">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 sm:gap-2 lg:gap-3 mt-2 sm:mt-3 lg:mt-4 pt-2 sm:pt-3 lg:pt-4 border-t border-gray-100">
             {pieData.map((entry, index) => (
-              <div key={entry.name} className="flex items-center space-x-2">
+              <div key={entry.name} className="flex items-center space-x-1.5 sm:space-x-2">
                 <div 
-                  className="w-3 h-3 rounded-full"
+                  className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full flex-shrink-0"
                   style={{ backgroundColor: entry.color }}
                 ></div>
-                <div className="text-xs text-gray-600">
+                <div className="text-[10px] sm:text-xs text-gray-600 truncate">
                   <span className="font-medium">{entry.name}:</span> {entry.value.toLocaleString()}
                 </div>
               </div>
@@ -391,9 +391,9 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {renderPieChart()}
           
-          <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-            <h4 className="text-lg font-semibold text-gray-900 mb-4">Summary Statistics</h4>
-            <div className="space-y-4">
+          <div className="bg-white rounded-lg sm:rounded-xl border border-gray-200 p-3 sm:p-4 lg:p-6 shadow-sm">
+            <h4 className="text-sm sm:text-base lg:text-lg font-semibold text-gray-900 mb-2 sm:mb-3 lg:mb-4">Summary</h4>
+            <div className="space-y-2 sm:space-y-3 lg:space-y-4">
               {selectedMetrics.map(metric => {
                 const data = chartData[metric] || [];
                 
@@ -402,21 +402,21 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
                 const metricInfo = METRICS_OPTIONS.find(m => m.value === metric);
                 
                 return (
-                  <div key={metric} className="p-4 bg-gray-50 rounded-lg">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="font-medium text-gray-700">{metricInfo?.label}</span>
+                  <div key={metric} className="p-2 sm:p-3 lg:p-4 bg-gray-50 rounded-lg">
+                    <div className="flex items-center justify-between mb-1.5 sm:mb-2">
+                      <span className="font-medium text-gray-700 text-xs sm:text-sm truncate">{metricInfo?.label}</span>
                       <div 
-                        className="w-4 h-4 rounded-full"
+                        className="w-3 h-3 sm:w-4 sm:h-4 rounded-full flex-shrink-0"
                         style={{ backgroundColor: metricInfo?.color }}
                       ></div>
                     </div>
-                    <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div className="grid grid-cols-2 gap-2 text-xs sm:text-sm">
                       <div>
-                        <div className="text-gray-500">Latest</div>
+                        <div className="text-gray-500 text-[10px] sm:text-xs">Latest</div>
                         <div className="font-semibold">{latest.toLocaleString()}</div>
                       </div>
                       <div>
-                        <div className="text-gray-500">Actual</div>
+                        <div className="text-gray-500 text-[10px] sm:text-xs">Actual</div>
                         <div className="font-semibold">{latest.toLocaleString()}</div>
                       </div>
                     </div>
@@ -430,7 +430,7 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
     }
 
     return (
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
         {selectedMetrics.map(metric => 
           selectedChart === 'trend' ? renderTrendChart(metric) : renderBarChart(metric)
         )}
@@ -943,56 +943,58 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3 sm:space-y-4 lg:space-y-6">
       {/* Controls */}
-      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center space-x-3">
-            <div className="bg-blue-600 p-2 rounded-lg">
-              <TrendingUp className="h-6 w-6 text-white" />
+      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl sm:rounded-2xl p-3 sm:p-4 lg:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3 sm:mb-4">
+          <div className="flex items-center space-x-2 sm:space-x-3">
+            <div className="bg-blue-600 p-1.5 sm:p-2 rounded-lg flex-shrink-0">
+              <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 text-white" />
             </div>
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
-              <p className="text-sm text-gray-600">
-                Historical analytics with {selectedPeriod} days of data
+            <div className="min-w-0">
+              <h3 className="text-sm sm:text-base lg:text-lg font-semibold text-gray-900 truncate">{title}</h3>
+              <p className="text-xs sm:text-sm text-gray-600 truncate">
+                {selectedPeriod}d data
               </p>
             </div>
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             <button
               onClick={generatePDFReport}
               disabled={generatingPdf || !chartData}
-              className="bg-indigo-600 text-white px-3 py-2 rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 text-sm"
+              className="bg-indigo-600 text-white px-2 py-1.5 sm:px-3 sm:py-2 rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1 sm:space-x-2 text-xs sm:text-sm flex-shrink-0"
               title="Download PDF Report"
             >
               {generatingPdf ? (
-                <RefreshCw className="h-4 w-4 animate-spin" />
+                <RefreshCw className="h-3 w-3 sm:h-4 sm:w-4 animate-spin" />
               ) : (
-                <Download className="h-4 w-4" />
+                <Download className="h-3 w-3 sm:h-4 sm:w-4" />
               )}
-              <span>{generatingPdf ? 'Generating...' : 'Download Report'}</span>
+              <span className="hidden sm:inline">{generatingPdf ? 'Generating...' : 'Download'}</span>
+              <span className="sm:hidden">PDF</span>
             </button>
             <button
               onClick={captureNewSnapshot}
-              className="bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 flex items-center space-x-2 text-sm"
+              className="bg-green-600 text-white px-2 py-1.5 sm:px-3 sm:py-2 rounded-lg hover:bg-green-700 flex items-center space-x-1 sm:space-x-2 text-xs sm:text-sm flex-shrink-0"
               title="Capture current data snapshot"
             >
-              <RefreshCw className="h-4 w-4" />
-              <span>Capture Now</span>
+              <RefreshCw className="h-3 w-3 sm:h-4 sm:w-4" />
+              <span className="hidden sm:inline">Capture</span>
+              <span className="sm:hidden">Snap</span>
             </button>
           </div>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3 lg:gap-4">
           {/* Time Period Selector */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-1.5">
               Time Period
             </label>
             <select
               value={selectedPeriod}
               onChange={(e) => setSelectedPeriod(parseInt(e.target.value))}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border border-gray-300 rounded-lg px-2 py-1.5 sm:px-3 sm:py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs sm:text-sm"
             >
               {TIME_PERIOD_OPTIONS.map(option => (
                 <option key={option.value} value={option.value}>
@@ -1004,13 +1006,13 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
 
           {/* Chart Type Selector */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-1.5">
               Chart Type
             </label>
             <select
               value={selectedChart}
               onChange={(e) => setSelectedChart(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border border-gray-300 rounded-lg px-2 py-1.5 sm:px-3 sm:py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs sm:text-sm"
             >
               {CHART_TYPE_OPTIONS.map(option => (
                 <option key={option.value} value={option.value}>
@@ -1021,9 +1023,9 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
           </div>
 
           {/* Metrics Selector */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Metrics to Show
+          <div className="sm:col-span-2 lg:col-span-1">
+            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-1.5">
+              Metrics
             </label>
             <select
               multiple
@@ -1032,7 +1034,7 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
                 const values = Array.from(e.target.selectedOptions, option => option.value);
                 setSelectedMetrics(values.length > 0 ? values : [defaultMetric]);
               }}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 h-20"
+              className="w-full border border-gray-300 rounded-lg px-2 py-1.5 sm:px-3 sm:py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 h-16 sm:h-20 text-xs sm:text-sm"
             >
               {METRICS_OPTIONS.map(option => (
                 <option key={option.value} value={option.value}>
@@ -1040,20 +1042,20 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
                 </option>
               ))}
             </select>
-            <p className="text-xs text-gray-500 mt-1">Hold Ctrl/Cmd to select multiple</p>
+            <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5 sm:mt-1">Hold Ctrl/Cmd</p>
           </div>
         </div>
 
         {lastUpdated && (
-          <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200">
-            <div className="text-xs text-gray-500">
-              Last updated: {new Date(lastUpdated).toLocaleString()}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mt-2 sm:mt-3 lg:mt-4 pt-2 sm:pt-3 lg:pt-4 border-t border-gray-200">
+            <div className="text-[10px] sm:text-xs text-gray-500 truncate">
+              Updated: {new Date(lastUpdated).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
             </div>
-            <div className="flex items-center space-x-2 text-xs text-gray-500">
-              <div className="bg-blue-100 px-2 py-1 rounded">
-                📊 Stored Data
+            <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-gray-500">
+              <div className="bg-blue-100 px-1.5 py-0.5 sm:px-2 sm:py-1 rounded">
+                📊 Stored
               </div>
-              <div className="bg-green-100 px-2 py-1 rounded">
+              <div className="bg-green-100 px-1.5 py-0.5 sm:px-2 sm:py-1 rounded">
                 {chartData && Object.keys(chartData).length} Metrics
               </div>
             </div>
@@ -1063,61 +1065,60 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
 
       {/* Loading State */}
       {loading && (
-        <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
+        <div className="bg-white rounded-lg sm:rounded-xl border border-gray-200 p-4 sm:p-6 lg:p-8 text-center">
           <div className="inline-flex items-center space-x-2 text-blue-600">
-            <RefreshCw className="h-5 w-5 animate-spin" />
-            <span>Loading historical data...</span>
+            <RefreshCw className="h-4 w-4 sm:h-5 sm:w-5 animate-spin" />
+            <span className="text-xs sm:text-sm">Loading data...</span>
           </div>
         </div>
       )}
 
       {/* Error State */}
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-6">
+        <div className="bg-red-50 border border-red-200 rounded-lg sm:rounded-xl p-3 sm:p-4 lg:p-6">
           <div className="flex items-center space-x-2 text-red-800 mb-2">
-            <Calendar className="h-5 w-5" />
-            <span className="font-medium">Historical Data Error</span>
+            <Calendar className="h-4 w-4 sm:h-5 sm:w-5" />
+            <span className="font-medium text-xs sm:text-sm">Data Error</span>
           </div>
-          <p className="text-red-700 text-sm mb-3">{error}</p>
-          <div className="flex items-center space-x-3">
+          <p className="text-red-700 text-xs sm:text-sm mb-3 line-clamp-2">{error}</p>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
             <button
               onClick={fetchHistoricalData}
-              className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 text-sm"
+              className="bg-red-600 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg hover:bg-red-700 text-xs sm:text-sm"
             >
               Retry
             </button>
             <button
               onClick={captureNewSnapshot}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm flex items-center space-x-2"
+              className="bg-blue-600 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg hover:bg-blue-700 text-xs sm:text-sm flex items-center justify-center space-x-2"
               disabled={loading}
             >
-              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`h-3 w-3 sm:h-4 sm:w-4 ${loading ? 'animate-spin' : ''}`} />
               <span>Capture Data</span>
             </button>
           </div>
-          <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded text-yellow-800 text-sm">
-            <strong>Tip:</strong> If this is a new account, try capturing a snapshot first to establish baseline data.
+          <div className="mt-2 sm:mt-3 p-2 sm:p-3 bg-yellow-50 border border-yellow-200 rounded text-yellow-800 text-xs sm:text-sm">
+            <strong>Tip:</strong> Try capturing a snapshot first.
           </div>
         </div>
       )}
 
       {/* No Data State */}
       {!loading && !error && chartData && Object.keys(chartData).every(key => chartData[key].length === 0) && (
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 text-center">
-          <div className="flex items-center justify-center space-x-2 text-blue-800 mb-3">
-            <Calendar className="h-6 w-6" />
-            <span className="text-lg font-medium">No Historical Data Available</span>
+        <div className="bg-blue-50 border border-blue-200 rounded-lg sm:rounded-xl p-4 sm:p-6 text-center">
+          <div className="flex items-center justify-center space-x-2 text-blue-800 mb-2 sm:mb-3">
+            <Calendar className="h-5 w-5 sm:h-6 sm:w-6" />
+            <span className="text-sm sm:text-base lg:text-lg font-medium">No Data Available</span>
           </div>
-          <p className="text-blue-700 text-sm mb-4">
-            This {platform} account doesn't have any historical data yet. 
-            Start by capturing your first snapshot to begin tracking analytics over time.
+          <p className="text-blue-700 text-xs sm:text-sm mb-3 sm:mb-4">
+            No historical data for this {platform} account. Start tracking now.
           </p>
           <button
             onClick={captureNewSnapshot}
-            className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 flex items-center space-x-2 mx-auto"
+            className="bg-blue-600 text-white px-4 py-2 sm:px-6 sm:py-3 rounded-lg hover:bg-blue-700 flex items-center space-x-2 mx-auto text-xs sm:text-sm"
             disabled={loading}
           >
-            <RefreshCw className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-4 w-4 sm:h-5 sm:w-5 ${loading ? 'animate-spin' : ''}`} />
             <span>Capture First Snapshot</span>
           </button>
         </div>

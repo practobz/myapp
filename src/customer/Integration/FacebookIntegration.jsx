@@ -1282,8 +1282,8 @@ function FacebookIntegration() {
   const renderPageDetails = (page) => (
     <div key={page.id} className="bg-white sm:bg-gradient-to-br sm:from-blue-50 sm:to-indigo-50 sm:border sm:border-blue-200 sm:rounded-2xl mb-4">
       {/* Profile Header - Instagram Style */}
-      <div className="p-4 sm:p-6">
-        <div className="flex items-start gap-4 mb-4">
+      <div className="p-0 sm:p-6">
+        <div className="flex items-start gap-2 sm:gap-4 mb-4">
           {page.picture ? (
             <img 
               src={page.picture.data.url} 
@@ -1309,7 +1309,7 @@ function FacebookIntegration() {
         </div>
         
         {/* Action Button - Compact for mobile */}
-        <div className="flex gap-2 mb-4">
+        <div className="flex mb-4">
           <button
             onClick={() => fetchPagePosts(page.id, page.access_token)}
             disabled={loadingPosts[page.id] || !isFacebookApiReady()}
@@ -1889,7 +1889,7 @@ function FacebookIntegration() {
         </div>
       </header>
       <div className="sm:p-4">
-        <div className="bg-white sm:rounded-lg sm:p-4 sm:shadow-sm">
+        <div className="bg-white sm:rounded-lg sm:shadow-sm">
           {/* Debug info (optional, can remove) */}
           {/* ...existing code... */}
           {renderError()}

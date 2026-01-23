@@ -1383,9 +1383,9 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
     
     return (
       <div className="mt-8 space-y-6">
-        <div className="bg-gradient-to-r from-pink-50 to-purple-50 rounded-2xl p-6">
+        <div className="bg-gradient-to-r from-pink-50 to-purple-50 rounded-2xl sm:p-6">
           <div className="flex items-center space-x-3 mb-4">
-            <div className="bg-pink-600 p-2 rounded-lg">
+            <div className="bg-pink-600 rounded-lg">
               <TrendingUp className="h-6 w-6 text-white" />
             </div>
             <div>
@@ -1448,7 +1448,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
     if (!selectedPostId || !singlePostAnalytics) return null;
 
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4">
+      <div className="fixed inset-0 z-50 flex items-center justify-center sm:p-4">
         {/* Backdrop */}
         <div 
           className="absolute inset-0 bg-black/60 backdrop-blur-sm"
@@ -1461,7 +1461,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
         {/* Modal */}
         <div className="relative bg-white rounded-xl sm:rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
           {/* Modal Header */}
-          <div className="flex items-center justify-between px-3 sm:px-4 py-2.5 sm:py-3 border-b border-gray-200 bg-gradient-to-r from-pink-50 to-purple-50 flex-shrink-0">
+          <div className="flex items-center justify-between sm:px-4 py-2.5 sm:py-3 border-b border-gray-200 bg-gradient-to-r from-pink-50 to-purple-50 flex-shrink-0">
             <h3 className="text-sm sm:text-base font-semibold text-gray-900 flex items-center">
               <BarChart3 className="h-4 w-4 sm:h-5 sm:w-5 mr-1.5 sm:mr-2 text-pink-600" />
               Post Analytics
@@ -1480,10 +1480,10 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
           </div>
 
           {/* Modal Body - Scrollable */}
-          <div className="flex-1 overflow-y-auto p-3 sm:p-4">
+          <div className="flex-1 overflow-y-auto sm:p-4">
             <div className="space-y-4">
               {/* Post Preview */}
-              <div className="bg-pink-50 border border-pink-200 rounded-lg p-2.5 sm:p-3">
+              <div className="bg-pink-50 border border-pink-200 rounded-lg sm:p-3">
                 <div className="flex items-start space-x-2 sm:space-x-3">
                   {(singlePostAnalytics.thumbnail_url || singlePostAnalytics.media_url) && (
                     <img
@@ -1494,7 +1494,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
                   )}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2 mb-1">
-                      <span className="text-[10px] sm:text-xs text-pink-600 bg-pink-100 px-1.5 py-0.5 rounded font-medium">
+                      <span className="text-[10px] sm:text-xs text-pink-600 bg-pink-100 py-0.5 rounded font-medium">
                         {singlePostAnalytics.media_type}
                       </span>
                       <span className="text-[10px] sm:text-xs text-gray-500">
@@ -1520,7 +1520,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
 
               {/* Engagement Metrics Grid */}
               <div className="grid grid-cols-3 gap-2 sm:gap-3">
-                <div className="bg-pink-50 border border-pink-200 rounded-lg p-2.5 sm:p-3 text-center">
+                <div className="bg-pink-50 border border-pink-200 rounded-lg sm:p-3 text-center">
                   <div className="text-base sm:text-lg font-bold text-pink-600 mb-1">
                     {singlePostAnalytics.likes_count?.toLocaleString() || 0}
                   </div>
@@ -1529,7 +1529,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
                   </div>
                 </div>
 
-                <div className="bg-purple-50 border border-purple-200 rounded-lg p-2.5 sm:p-3 text-center">
+                <div className="bg-purple-50 border border-purple-200 rounded-lg sm:p-3 text-center">
                   <div className="text-base sm:text-lg font-bold text-purple-600 mb-1">
                     {singlePostAnalytics.comments_count?.toLocaleString() || 0}
                   </div>
@@ -1538,7 +1538,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
                   </div>
                 </div>
 
-                <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-2.5 sm:p-3 text-center">
+                <div className="bg-indigo-50 border border-indigo-200 rounded-lg sm:p-3 text-center">
                   <div className="text-base sm:text-lg font-bold text-indigo-600 mb-1">
                     {singlePostAnalytics.total_engagement?.toLocaleString() || 0}
                   </div>
@@ -1549,7 +1549,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
               </div>
 
               {/* Engagement Trend Charts */}
-              <div className="bg-gradient-to-br from-pink-50 to-purple-50 border border-pink-200 rounded-lg p-3 sm:p-4">
+              <div className="bg-gradient-to-br from-pink-50 to-purple-50 border border-pink-200 rounded-lg sm:p-4">
                 <h4 className="font-medium text-xs sm:text-sm text-gray-900 mb-3 flex items-center">
                   <TrendingUp className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 text-pink-600" />
                   Engagement Trends
@@ -1557,7 +1557,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
                 
                 <div className="grid grid-cols-2 gap-3 sm:gap-4">
                   {/* Likes Trend */}
-                  <div className="bg-white rounded-lg p-2.5 sm:p-3 border border-pink-100">
+                  <div className="bg-white rounded-lg sm:p-3 border border-pink-100">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-[10px] sm:text-xs font-medium text-gray-700">❤️ Likes</span>
                       <span className="text-[11px] sm:text-xs font-bold text-pink-600">
@@ -1576,7 +1576,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
                   </div>
 
                   {/* Comments Trend */}
-                  <div className="bg-white rounded-lg p-2.5 sm:p-3 border border-purple-100">
+                  <div className="bg-white rounded-lg sm:p-3 border border-purple-100">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-[10px] sm:text-xs font-medium text-gray-700">💬 Comments</span>
                       <span className="text-[11px] sm:text-xs font-bold text-purple-600">
@@ -1597,7 +1597,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
               </div>
 
               {/* Engagement Breakdown */}
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 sm:p-4 mt-1">
+              <div className="bg-gray-50 border border-gray-200 rounded-lg sm:p-4 mt-1">
                 <h4 className="font-medium text-xs sm:text-sm text-gray-900 mb-3 flex items-center">
                   <BarChart3 className="h-3 w-3 sm:h-4 sm:w-4 mr-1.5" />
                   Breakdown
@@ -1697,7 +1697,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
             return (
               <div
                 key={account.id}
-                className={`border rounded-lg p-4 transition-all cursor-pointer ${
+                className={`border rounded-lg sm:p-4 transition-all cursor-pointer ${
                   activeAccountId === account.id
                     ? 'border-pink-500 bg-pink-50 shadow-md'
                     : 'border-gray-200 bg-white hover:border-gray-300'
@@ -1753,7 +1753,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
 
         {/* Token Status Information */}
         {activeAccount && (
-          <div className="mt-4 p-3 bg-pink-50 border border-pink-200 rounded-lg">
+          <div className="mt-4 sm:p-3 bg-pink-50 border border-pink-200 rounded-lg">
             <h6 className="font-medium text-pink-800 mb-2">🔑 Token Management</h6>
             <div className="text-sm text-pink-700 space-y-1">
               <p>📝 <strong>Active Account:</strong> @{activeAccount.profile?.username}</p>
@@ -1779,7 +1779,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
     const isTokenError = error.includes('expired') || error.includes('refresh') || error.includes('reconnect');
 
     return (
-      <div className="bg-red-50 border border-red-200 rounded-2xl p-6 mb-6">
+      <div className="bg-red-50 border border-red-200 rounded-2xl sm:p-6 mb-6">
         <div className="flex items-center space-x-3 mb-4">
           <AlertCircle className="h-6 w-6 text-red-600" />
           <h3 className="text-lg font-semibold text-red-800">
@@ -1789,7 +1789,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
         <p className="text-red-700 mb-4">{error}</p>
         
         {isTokenError && (
-          <div className="bg-yellow-50 border border-yellow-200 rounded p-3 mb-3">
+          <div className="bg-yellow-50 border border-yellow-200 rounded sm:p-3 mb-3">
             <h5 className="font-medium text-yellow-800 text-sm mb-1">Why does this happen?</h5>
             <ul className="text-xs text-yellow-700 space-y-1">
               <li>• Facebook tokens expire after 1-2 hours by default</li>
@@ -1860,7 +1860,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
           {availableAccounts.map((account) => (
             <div
               key={account.id}
-              className="border rounded-lg p-4 bg-white hover:border-pink-400 transition-all cursor-pointer"
+              className="border rounded-lg sm:p-4 bg-white hover:border-pink-400 transition-all cursor-pointer"
             >
               <div className="flex items-center space-x-3">
                 <div className="w-12 h-12 bg-pink-100 rounded-full flex items-center justify-center">
@@ -1897,16 +1897,16 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
       {/* Show account selector if multiple accounts */}
       {connectedAccounts.length > 1 && renderAccountSelector()}
 
-      <div className="flex flex-col gap-3 px-3 sm:px-0">
+      <div className="flex flex-col gap-3 sm:px-0">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-1 bg-green-100 px-2 py-1 rounded-full">
+          <div className="flex items-center gap-1 bg-green-100 py-1 rounded-full">
             <CheckCircle className="h-3 w-3 text-green-600" />
             <span className="text-xs font-medium text-green-700">
               {connectedAccounts.length} Connected
             </span>
           </div>
           {activeAccount && (
-            <div className="flex items-center gap-1 bg-pink-50 px-2 py-1 rounded-full">
+            <div className="flex items-center gap-1 bg-pink-50 py-1 rounded-full">
               {activeAccount.profile?.profile_picture_url ? (
                 <img
                   src={activeAccount.profile.profile_picture_url}
@@ -1926,14 +1926,14 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
           <button
             onClick={handleSignIn}
             disabled={loading || !fbSdkLoaded}
-            className="flex items-center gap-1 px-3 py-1.5 bg-gradient-to-r from-pink-500 to-purple-500 text-white rounded-lg text-xs font-medium disabled:opacity-50 flex-1 sm:flex-initial justify-center"
+            className="flex items-center gap-1 py-1.5 bg-gradient-to-r from-pink-500 to-purple-500 text-white rounded-lg text-xs font-medium disabled:opacity-50 flex-1 sm:flex-initial justify-center"
           >
             <Plus className="h-3 w-3" />
             <span>{loading ? '...' : 'Add'}</span>
           </button>
           <button
             onClick={handleSignOut}
-            className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs font-medium flex-1 sm:flex-initial justify-center"
+            className="flex items-center gap-1 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs font-medium flex-1 sm:flex-initial justify-center"
           >
             <ExternalLink className="h-3 w-3" />
             <span>Disconnect</span>
@@ -1951,7 +1951,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
       {activeAccount && (
         <div className="bg-white sm:bg-gradient-to-br sm:from-pink-50 sm:to-purple-50 sm:border sm:border-pink-200 sm:rounded-2xl">
           {/* Profile Header - Instagram Style */}
-          <div className="p-4 sm:p-6">
+          <div className="sm:p-6">
             <div className="flex items-start gap-4 mb-4">
               {activeAccount.profile?.profile_picture_url ? (
                 <img
@@ -1978,7 +1978,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
               <button
                 onClick={() => refreshAccountData(activeAccount.id)}
                 disabled={loading}
-                className="flex items-center justify-center gap-1 flex-1 px-2 py-1.5 bg-white border border-gray-300 text-gray-700 rounded-lg text-xs font-medium disabled:opacity-50"
+                className="flex items-center justify-center gap-1 flex-1 py-1.5 bg-white border border-gray-300 text-gray-700 rounded-lg text-xs font-medium disabled:opacity-50"
               >
                 <RefreshCw className="h-3 w-3" />
                 <span>Refresh</span>
@@ -1991,34 +1991,34 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
                   totalComments: activeAccount.media?.reduce((sum, m) => sum + (m.comments_count || 0), 0) || 0,
                   postsCount: activeAccount.media?.length || 0
                 })}
-                className="flex items-center justify-center gap-1 flex-1 px-2 py-1.5 bg-pink-500 text-white rounded-lg text-xs font-medium"
+                className="flex items-center justify-center gap-1 flex-1 py-1.5 bg-pink-500 text-white rounded-lg text-xs font-medium"
               >
                 <Settings className="h-3 w-3" />
                 <span>Capture</span>
               </button>
               <button
                 onClick={() => removeAccount(activeAccount.id)}
-                className="flex items-center justify-center px-2 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs"
+                className="flex items-center justify-center py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs"
               >
                 <ExternalLink className="h-3 w-3" />
               </button>
             </div>
           
             {/* Stats Row - Instagram Style */}
-            <div className="flex justify-around text-center border-t border-b border-gray-200 py-3 -mx-4 sm:mx-0 sm:border sm:rounded-xl sm:bg-white">
+            <div className="flex justify-around text-center border-t border-b border-gray-200 py-3 sm:mx-0 sm:border sm:rounded-xl sm:bg-white">
               <div>
                 <div className="text-lg sm:text-xl font-bold text-gray-900">
                   {activeAccount.profile?.media_count?.toLocaleString() || activeAccount.media?.length || 0}
                 </div>
                 <div className="text-xs text-gray-500">Posts</div>
               </div>
-              <div className="border-l border-gray-200 pl-4">
+              <div className="border-l border-gray-200">
                 <div className="text-lg sm:text-xl font-bold text-gray-900">
                   {activeAccount.profile?.followers_count?.toLocaleString() || 'N/A'}
                 </div>
                 <div className="text-xs text-gray-500">Followers</div>
               </div>
-              <div className="border-l border-gray-200 pl-4">
+              <div className="border-l border-gray-200">
                 <div className="text-lg sm:text-xl font-bold text-gray-900">
                   {activeAccount.media?.reduce((sum, media) => sum + (media.like_count || 0), 0).toLocaleString()}
                 </div>
@@ -2028,19 +2028,19 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
           </div>
 
           {/* Historical Charts Toggle */}
-          <div className="px-4 sm:px-0 mb-4">
+          <div className="sm:px-0 mb-4">
             <button
               onClick={() => setShowHistoricalCharts(prev => ({ 
                 ...prev, 
                 [activeAccount.id]: !prev[activeAccount.id] 
               }))}
-              className="flex items-center justify-between w-full bg-gradient-to-r from-pink-50 to-purple-50 sm:bg-white border border-gray-200 rounded-lg p-3 text-left"
+              className="flex items-center justify-between w-full bg-gradient-to-r from-pink-50 to-purple-50 sm:bg-white border border-gray-200 rounded-lg text-left"
             >
               <div className="flex items-center gap-2">
                 <Calendar className="h-4 w-4 text-pink-600" />
                 <span className="text-sm font-medium text-gray-900">Historical Analytics</span>
               </div>
-              <span className="text-xs bg-pink-100 text-pink-700 px-2 py-1 rounded-full">
+              <span className="text-xs bg-pink-100 text-pink-700 py-1 rounded-full">
                 {showHistoricalCharts[activeAccount.id] ? 'Hide' : 'Show'}
               </span>
             </button>
@@ -2063,7 +2063,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
       {/* Show recent posts for active account - Instagram-like grid */}
       {activeAccount && (
         <div className="bg-white sm:rounded-2xl sm:border sm:border-gray-200 sm:shadow-sm">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+          <div className="flex items-center justify-between py-3 border-b border-gray-100">
             <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
               <LayoutGrid className="h-4 w-4 text-pink-600" />
               Posts
@@ -2207,7 +2207,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
       <div className="min-h-screen bg-gray-50">
         <header className="bg-white border-b sticky top-0 z-50">
           <div className="sm:px-4">
-            <div className="flex items-center h-14 sm:h-16 px-3 sm:px-0">
+            <div className="flex items-center h-14 sm:h-16 sm:px-0">
               <div className="w-8 h-8 bg-gradient-to-br from-pink-500 via-purple-500 to-orange-400 rounded-lg flex items-center justify-center">
                 <Instagram className="h-4 w-4 text-white" />
               </div>
@@ -2233,7 +2233,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b sticky top-0 z-50">
         <div className="sm:px-4">
-          <div className="flex items-center justify-between h-14 sm:h-16 px-3 sm:px-0">
+          <div className="flex items-center justify-between h-14 sm:h-16 sm:px-0">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-pink-500 via-purple-500 to-orange-400 rounded-lg flex items-center justify-center">
                 <Instagram className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
@@ -2258,13 +2258,13 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
           )}
 
           {error && (
-            <div className="bg-red-50 border border-red-200 rounded-2xl p-6 mb-6">
+            <div className="bg-red-50 border border-red-200 rounded-2xl sm:p-6 mb-6">
               <div className="flex items-center space-x-3 mb-4">
                 <AlertCircle className="h-6 w-6 text-red-600" />
                 <h3 className="text-lg font-semibold text-red-800">Connection Error</h3>
               </div>
               <p className="text-red-700 mb-4">{error}</p>
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 max-w-md mx-auto">
+              <div className="bg-blue-50 border border-blue-200 rounded-xl sm:p-4 mb-6 max-w-md mx-auto">
                 <h4 className="font-medium text-blue-800 mb-2">📱 Multi-Account Setup Guide</h4>
                 <div className="text-sm text-blue-700 text-left space-y-1">
                   <p>1. Convert Instagram accounts to Business/Creator accounts</p>
@@ -2301,7 +2301,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
               <p className="text-gray-600 mb-6 max-w-md mx-auto">
                 Connect multiple Instagram Business accounts through Facebook. Manage all your accounts from one dashboard with historical data tracking!
               </p>
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 max-w-md mx-auto">
+              <div className="bg-blue-50 border border-blue-200 rounded-xl sm:p-4 mb-6 max-w-md mx-auto">
                 <h4 className="font-medium text-blue-800 mb-2">📱 Multi-Account Setup Guide</h4>
                 <div className="text-sm text-blue-700 text-left space-y-1">
                   <p>1. Convert Instagram accounts to Business/Creator accounts</p>
@@ -2314,7 +2314,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
               </div>
               <button
                 onClick={handleSignIn}
-                className="bg-gradient-to-r from-pink-600 to-purple-600 text-white px-8 py-3 rounded-xl hover:from-pink-700 hover:to-purple-700 transition-all duration-200 flex items-center space-x-3 mx-auto font-medium"
+                className="bg-gradient-to-r from-pink-600 to-purple-600 text-white py-3 rounded-xl hover:from-pink-700 hover:to-purple-700 transition-all duration-200 flex items-center space-x-3 mx-auto font-medium"
                 disabled={loading}
               >
                 <Instagram className="h-5 w-5" />
@@ -2331,7 +2331,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
               <button
                 onClick={() => userAccessToken && loadAvailableAccounts(userAccessToken)}
                 disabled={loadingAccounts}
-                className="bg-pink-600 text-white px-6 py-3 rounded-lg hover:bg-pink-700 transition-colors disabled:opacity-50"
+                className="bg-pink-600 text-white py-3 rounded-lg hover:bg-pink-700 transition-colors disabled:opacity-50"
               >
                 {loadingAccounts ? 'Searching...' : 'Search Again'}
               </button>

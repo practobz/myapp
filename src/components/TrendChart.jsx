@@ -1,11 +1,19 @@
 import React from 'react';
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts';
 
-function TrendChart({ data, title, color, metric = 'value' }) {
+function TrendChart({ data, title, color, metric = 'value', minimal = false }) {
   // Debug: log data received
   // console.log('TrendChart data for', title, data);
 
   if (!data || data.length === 0) {
+    // Minimal mode: just show empty state without wrapper
+    if (minimal) {
+      return (
+        <div className="h-full flex items-center justify-center text-gray-400 text-xs">
+          No data available
+        </div>
+      );
+    }
     return (
       <div className="bg-white p-4 rounded-lg shadow-sm border">
         <h4 className="text-sm font-medium text-gray-700 mb-3">{title}</h4>
@@ -18,6 +26,39 @@ function TrendChart({ data, title, color, metric = 'value' }) {
 
   const total = data.reduce((sum, item) => sum + (item[metric] || 0), 0);
   const average = Math.round(total / data.length);
+
+  // Minimal mode: just the chart, no wrapper or header
+  if (minimal) {
+    return (
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data}>
+          <XAxis 
+            dataKey="date" 
+            hide 
+          />
+          <YAxis hide />
+          <Tooltip 
+            labelFormatter={(value) => new Date(value).toLocaleDateString()}
+            formatter={(value) => [value.toLocaleString(), title || metric]}
+            contentStyle={{
+              backgroundColor: '#f9fafb',
+              border: '1px solid #e5e7eb',
+              borderRadius: '6px',
+              fontSize: '12px'
+            }}
+          />
+          <Line
+            type="monotone"
+            dataKey={metric}
+            stroke={color}
+            strokeWidth={2}
+            dot={false}
+            activeDot={{ r: 3, fill: color }}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    );
+  }
 
   return (
     <div className="bg-white p-4 rounded-lg shadow-sm border">

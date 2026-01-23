@@ -131,8 +131,8 @@ function Dashboard() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       {/* Main Content */}
-      <div className="min-h-screen px-6 sm:px-8 lg:px-12 xl:px-16 2xl:px-24">
-        <div className="w-full mx-auto py-8">
+      <div className="min-h-screen sm:px-8 lg:px-12 xl:px-16 2xl:px-24">
+        <div className="w-full mx-auto py-0">
           <div className="space-y-8">
             {/* Welcome Section - Professional Header */}
             <div className="relative overflow-hidden bg-gradient-to-r from-indigo-600 via-blue-600 to-cyan-500 rounded-2xl shadow-xl">
@@ -162,7 +162,7 @@ function Dashboard() {
             </div>
 
             {/* Stats Grid - Modern Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-3 gap-3 sm:gap-4 md:gap-6">
               {/* Total Posts */}
               <div 
                 className="group relative bg-white rounded-xl shadow-md hover:shadow-2xl transition-all duration-300 cursor-pointer overflow-hidden border border-slate-200"

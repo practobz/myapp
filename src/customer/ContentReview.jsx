@@ -260,15 +260,15 @@ function ContentReview() {
     };
 
     const sizes = {
-      sm: 'px-3 py-1.5 text-xs',
-      md: 'px-4 py-2 text-sm',
-      lg: 'px-6 py-3 text-base'
+      sm: 'px-2 py-1 text-[10px]',
+      md: 'px-2.5 py-1.5 text-xs',
+      lg: 'px-4 py-2 text-sm'
     };
 
     return (
       <button
         onClick={onClick}
-        className={`${variants[variant]} ${sizes[size]} rounded-lg font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-offset-2`}
+        className={`${variants[variant]} ${sizes[size]} rounded-md font-medium transition-all duration-150 shadow-sm hover:shadow focus:outline-none focus:ring-1 focus:ring-offset-1 inline-flex items-center justify-center`}
         style={style}
       >
         {children}
@@ -594,11 +594,11 @@ function ContentReview() {
   // Handle loading state
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center p-4">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-4 border-indigo-200 border-t-indigo-600 mx-auto mb-4"></div>
-          <p className="text-slate-800 font-semibold text-lg">Loading content submissions...</p>
-          <p className="text-slate-500 text-sm mt-2">Please wait</p>
+          <div className="animate-spin rounded-full h-10 w-10 sm:h-12 sm:w-12 border-3 border-indigo-200 border-t-indigo-600 mx-auto mb-3"></div>
+          <p className="text-slate-800 font-semibold text-sm sm:text-base">Loading content...</p>
+          <p className="text-slate-500 text-xs mt-1">Please wait</p>
         </div>
       </div>
     );
@@ -607,13 +607,13 @@ function ContentReview() {
   // Handle error state
   if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
-        <div className="text-center max-w-md mx-auto p-8">
-          <div className="bg-rose-100 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-6 shadow-lg">
-            <AlertCircle className="h-10 w-10 text-rose-600" />
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center p-4">
+        <div className="text-center max-w-sm mx-auto p-4 sm:p-6">
+          <div className="bg-rose-100 rounded-full w-14 h-14 sm:w-16 sm:h-16 flex items-center justify-center mx-auto mb-4">
+            <AlertCircle className="h-7 w-7 sm:h-8 sm:w-8 text-rose-600" />
           </div>
-          <h2 className="text-rose-700 font-bold text-xl mb-3">Error Loading Content</h2>
-          <p className="text-slate-600 text-sm mb-6 leading-relaxed">{error}</p>
+          <h2 className="text-rose-700 font-bold text-base sm:text-lg mb-2">Error Loading</h2>
+          <p className="text-slate-600 text-xs sm:text-sm mb-4 leading-relaxed">{error}</p>
           <Button onClick={fetchContentSubmissions} variant="primary">
             Retry
           </Button>
@@ -625,18 +625,18 @@ function ContentReview() {
   // Handle no content state
   if (contentItems.length === 0) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
-        <div className="text-center max-w-md mx-auto p-8">
-          <div className="bg-gradient-to-br from-indigo-100 to-blue-100 rounded-2xl w-24 h-24 flex items-center justify-center mx-auto mb-6 shadow-xl">
-            <MessageSquare className="h-12 w-12 text-indigo-600" />
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center p-4">
+        <div className="text-center max-w-sm mx-auto p-4 sm:p-6">
+          <div className="bg-gradient-to-br from-indigo-100 to-blue-100 rounded-xl w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center mx-auto mb-4">
+            <MessageSquare className="h-8 w-8 sm:h-10 sm:w-10 text-indigo-600" />
           </div>
-          <h2 className="text-slate-800 font-bold text-2xl mb-3">No Content Submissions</h2>
-          <p className="text-slate-600 text-base mb-6 leading-relaxed">
-            {user ? `No content found for ${user.name || user.email}` : 'Please log in to view content'}
+          <h2 className="text-slate-800 font-bold text-lg sm:text-xl mb-2">No Submissions</h2>
+          <p className="text-slate-600 text-xs sm:text-sm mb-4 leading-relaxed">
+            {user ? `No content for ${user.name || user.email}` : 'Please log in'}
           </p>
           {!user && (
             <Button onClick={() => navigate('/customer/login')} variant="primary">
-              Go to Login
+              Login
             </Button>
           )}
         </div>
@@ -650,66 +650,61 @@ function ContentReview() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       {/* Main Content */}
-      <div className="px-6 sm:px-8 lg:px-12 xl:px-16 2xl:px-24 py-10">
-        <div className="flex flex-col xl:flex-row gap-8 font-sans">
+      <div className="px-2 sm:px-4 lg:px-8 xl:px-16 py-3 sm:py-6 lg:py-10">
+        <div className="flex flex-col xl:flex-row gap-3 sm:gap-6 lg:gap-8 font-sans">
           {/* Left Sidebar - Content List */}
-          <div className="w-full xl:w-96 flex-shrink-0">
-            <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden">
-              <div className="px-6 py-5 border-b border-slate-200 bg-gradient-to-r from-indigo-50 to-blue-50">
-                <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                  <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-blue-500 rounded-lg flex items-center justify-center">
-                    <MessageSquare className="h-5 w-5 text-white" />
+          <div className="w-full xl:w-80 flex-shrink-0">
+            <div className="bg-white rounded-xl sm:rounded-2xl shadow-md sm:shadow-lg border border-slate-200 overflow-hidden">
+              <div className="px-3 sm:px-4 py-3 sm:py-4 border-b border-slate-200 bg-gradient-to-r from-indigo-50 to-blue-50 sticky top-0 z-10">
+                <h3 className="text-base sm:text-lg font-bold text-slate-800 flex items-center gap-2">
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 bg-gradient-to-br from-indigo-500 to-blue-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <MessageSquare className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-white" />
                   </div>
-                  Content Items
-                  <span className="ml-auto px-3 py-1 bg-indigo-600 text-white rounded-full text-sm font-semibold">
+                  <span className="hidden sm:inline">Content Items</span>
+                  <span className="sm:hidden">Items</span>
+                  <span className="ml-auto px-2 py-0.5 sm:px-2.5 sm:py-1 bg-indigo-600 text-white rounded-full text-xs font-semibold">
                     {contentItems.length}
                   </span>
                 </h3>
                 {user && (
-                  <p className="text-sm text-slate-600 mt-2">
-                    Showing content for {user.name || user.email}
+                  <p className="text-xs text-slate-600 mt-1 truncate">
+                    {user.name || user.email}
                   </p>
                 )}
               </div>
               
-              <div className="max-h-96 overflow-y-auto">
+              <div className="max-h-64 sm:max-h-80 lg:max-h-96 overflow-y-auto">
                 {contentItems.map((item, index) => (
                   <div
                     key={item.id}
-                    className={`p-4 cursor-pointer transition-all duration-200 border-b border-slate-100 hover:bg-gradient-to-r hover:from-indigo-50 hover:to-blue-50 ${
+                    className={`p-2.5 sm:p-3 cursor-pointer transition-all duration-200 border-b border-slate-100 hover:bg-gradient-to-r hover:from-indigo-50 hover:to-blue-50 ${
                       selectedContentIndex === index
                         ? 'bg-gradient-to-r from-indigo-50 to-blue-50 border-l-4 border-l-indigo-600'
                         : ''
                     }`}
                     onClick={() => handleContentSelect(item, index)}
                   >
-                    <div className="flex items-start space-x-3">
+                    <div className="flex items-start space-x-2 sm:space-x-3">
                       <div className="flex-shrink-0">
-                        <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-md">
+                        <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-xs sm:text-sm shadow-md">
                           {index + 1}
                         </div>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h4 className="font-bold text-sm text-slate-900 truncate leading-tight">{item.title}</h4>
-                        <p className="text-xs text-slate-600 mt-1.5 line-clamp-2 leading-relaxed">{item.description}</p>
-                        <div className="flex items-center justify-between mt-2">
-                          <div className="flex items-center space-x-2">
-                            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border shadow-sm ${getStatusColor(getDisplayStatus(item))}`}>
-                              {getStatusLabel(getDisplayStatus(item))}
-                            </span>
-                            <span className="text-xs text-slate-600 font-medium">{item.platform}</span>
-                          </div>
-                        </div>
-                        <div className="flex items-center justify-between mt-2">
-                          <span className="text-xs text-slate-500">By {item.createdBy}</span>
-                          <span className="text-xs text-indigo-600 font-semibold bg-indigo-50 px-2 py-0.5 rounded-full">
-                            {item.totalVersions} version{item.totalVersions !== 1 ? 's' : ''}
+                        <h4 className="font-bold text-xs sm:text-sm text-slate-900 truncate leading-tight">{item.title}</h4>
+                        <p className="text-xs text-slate-600 mt-1 line-clamp-1 sm:line-clamp-2 leading-relaxed hidden sm:block">{item.description}</p>
+                        <div className="flex items-center flex-wrap gap-1.5 mt-1.5 sm:mt-2">
+                          <span className={`inline-flex items-center px-1.5 py-0.5 sm:px-2 sm:py-0.5 rounded-full text-[10px] sm:text-xs font-semibold border ${getStatusColor(getDisplayStatus(item))}`}>
+                            {getStatusLabel(getDisplayStatus(item))}
+                          </span>
+                          <span className="text-[10px] sm:text-xs text-slate-600 font-medium">{item.platform}</span>
+                          <span className="text-[10px] sm:text-xs text-indigo-600 font-semibold bg-indigo-50 px-1.5 py-0.5 rounded-full">
+                            v{item.totalVersions}
                           </span>
                         </div>
-                        <div className="text-xs text-slate-400 mt-1">{formatDate(item.createdAt)}</div>
-                        {/* Customer info for debugging */}
-                        <div className="text-xs text-emerald-600 mt-1 font-medium">
-                          Customer: {item.customer_name || item.customer_email}
+                        <div className="flex items-center justify-between mt-1 text-[10px] sm:text-xs text-slate-400">
+                          <span className="truncate">{item.createdBy}</span>
+                          <span>{formatDate(item.createdAt)}</span>
                         </div>
                       </div>
                     </div>
@@ -719,54 +714,51 @@ function ContentReview() {
             </div>
 
             {/* Comments Panel */}
-            <div className="mt-6 bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden">
-              <div className="px-6 py-5 border-b border-slate-200 bg-gradient-to-r from-indigo-50 to-blue-50">
-                <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                  <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-blue-500 rounded-lg flex items-center justify-center">
-                    <MessageSquare className="h-5 w-5 text-white" />
+            <div className="mt-3 sm:mt-4 lg:mt-6 bg-white rounded-xl sm:rounded-2xl shadow-md sm:shadow-lg border border-slate-200 overflow-hidden">
+              <div className="px-3 sm:px-4 py-2.5 sm:py-3 border-b border-slate-200 bg-gradient-to-r from-indigo-50 to-blue-50 sticky top-0 z-10">
+                <h3 className="text-sm sm:text-base font-bold text-slate-800 flex items-center gap-2">
+                  <div className="w-6 h-6 sm:w-7 sm:h-7 bg-gradient-to-br from-indigo-500 to-blue-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <MessageSquare className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-white" />
                   </div>
                   Comments
-                  <span className="text-sm font-medium text-slate-600 ml-auto">Media {selectedMediaIndex + 1}</span>
-                  <span className="px-3 py-1 bg-indigo-600 text-white rounded-full text-sm font-semibold">
+                  <span className="text-[10px] sm:text-xs font-medium text-slate-500 ml-auto">M{selectedMediaIndex + 1}</span>
+                  <span className="px-1.5 py-0.5 sm:px-2 sm:py-0.5 bg-indigo-600 text-white rounded-full text-[10px] sm:text-xs font-semibold">
                     {commentsForCurrentMedia.length}
                   </span>
                 </h3>
               </div>
               
-              <div className="max-h-80 overflow-y-auto p-4">
+              <div className="max-h-48 sm:max-h-64 lg:max-h-80 overflow-y-auto p-2 sm:p-3">
                 {commentsForCurrentMedia.length === 0 ? (
-                  <div className="text-center py-8">
-                    <div className="bg-gradient-to-br from-slate-100 to-blue-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-                      <MessageSquare className="h-8 w-8 text-slate-400" />
+                  <div className="text-center py-4 sm:py-6">
+                    <div className="bg-gradient-to-br from-slate-100 to-blue-100 rounded-full w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center mx-auto mb-2">
+                      <MessageSquare className="h-5 w-5 sm:h-6 sm:w-6 text-slate-400" />
                     </div>
-                    <p className="text-slate-600 font-medium">No comments for this media item</p>
-                    <p className="text-slate-400 text-sm mt-1">Click on the media to add comments</p>
+                    <p className="text-slate-600 font-medium text-xs sm:text-sm">No comments yet</p>
+                    <p className="text-slate-400 text-[10px] sm:text-xs mt-0.5">Tap media to add</p>
                   </div>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     {commentsForCurrentMedia.map((comment, index) => (
                       <div
                         key={comment.id}
-                        className={`p-3 rounded-lg cursor-pointer transition-all duration-200 border ${
+                        className={`p-2 sm:p-2.5 rounded-lg cursor-pointer transition-all duration-200 border ${
                           activeComment === comment.id
-                            ? 'bg-blue-50 border-blue-200 shadow-md'
-                            : 'bg-gray-50/50 hover:bg-gray-100/50 border-gray-200/50 hover:border-gray-300/50'
+                            ? 'bg-blue-50 border-blue-200 shadow-sm'
+                            : 'bg-gray-50/50 hover:bg-gray-100/50 border-gray-200/50'
                         }`}
                         onClick={() => handleCommentListClick(comment.id)}
                       >
-                        <div className="flex items-start space-x-3">
-                          <span className="font-bold text-blue-600 bg-blue-100 rounded-full w-6 h-6 flex items-center justify-center text-xs flex-shrink-0">
+                        <div className="flex items-start space-x-2">
+                          <span className="font-bold text-blue-600 bg-blue-100 rounded-full w-5 h-5 flex items-center justify-center text-[10px] flex-shrink-0">
                             {index + 1}
                           </span>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-900 break-words">
+                            <p className="text-xs font-medium text-gray-900 break-words line-clamp-2">
                               {comment.comment}
                               {comment.done && (
-                                <span className="ml-2 text-green-600 text-xs font-semibold">✓ Done</span>
+                                <span className="ml-1 text-green-600 text-[10px] font-semibold">✓</span>
                               )}
-                            </p>
-                            <p className="text-xs text-gray-500 mt-1">
-                              Position: ({Math.round(comment.x || comment.position?.x || 0)}, {Math.round(comment.y || comment.position?.y || 0)})
                             </p>
                           </div>
                         </div>
@@ -780,26 +772,26 @@ function ContentReview() {
 
           {/* Main Content Area */}
           <div className="flex-1 min-w-0">
-            <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border border-[#0a2342]/10 overflow-hidden">
+            <div className="bg-white/90 backdrop-blur-sm rounded-xl sm:rounded-2xl shadow-md sm:shadow-lg border border-[#0a2342]/10 overflow-hidden">
               {/* Content Header */}
-              <div className="px-8 py-6 border-b border-[#bae6fd] bg-gradient-to-r from-[#e6f2fb] to-[#bae6fd]">
-                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+              <div className="px-3 sm:px-5 lg:px-8 py-3 sm:py-4 lg:py-6 border-b border-[#bae6fd] bg-gradient-to-r from-[#e6f2fb] to-[#bae6fd]">
+                <div className="flex flex-col gap-2 sm:gap-3">
                   <div>
-                    <h2 className="text-3xl font-bold text-slate-900 mb-3 tracking-tight">{selectedContent.title}</h2>
-                    <p className="text-slate-600 text-base leading-relaxed">{selectedContent.description}</p>
-                    <div className="flex items-center mt-3 space-x-4">
-                      <span className="text-sm text-slate-700 font-medium">By {selectedContent.createdBy}</span>
-                      <span className="text-sm text-slate-400">•</span>
-                      <span className="text-sm text-slate-700 font-medium">{selectedContent.platform}</span>
+                    <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-slate-900 tracking-tight line-clamp-2">{selectedContent.title}</h2>
+                    <p className="text-slate-600 text-xs sm:text-sm leading-relaxed mt-1 line-clamp-2 hidden sm:block">{selectedContent.description}</p>
+                    <div className="flex items-center mt-1.5 sm:mt-2 space-x-2 sm:space-x-3 text-[10px] sm:text-xs">
+                      <span className="text-slate-700 font-medium truncate max-w-[100px] sm:max-w-none">{selectedContent.createdBy}</span>
+                      <span className="text-slate-400">•</span>
+                      <span className="text-slate-700 font-medium">{selectedContent.platform}</span>
                     </div>
                   </div>
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    <span className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-semibold border-2 shadow-sm ${getStatusColor(getDisplayStatus(selectedContent))}`}>
+                  <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                    <span className={`inline-flex items-center px-2 py-0.5 sm:px-3 sm:py-1 rounded-full text-[10px] sm:text-xs font-semibold border ${getStatusColor(getDisplayStatus(selectedContent))}`}>
                       {getStatusLabel(getDisplayStatus(selectedContent))}
                     </span>
-                    <span className="inline-flex items-center px-4 py-2 rounded-full text-sm font-semibold bg-indigo-100 text-indigo-800 border-2 border-indigo-300 shadow-sm">
-                      <Image className="h-4 w-4 mr-2" />
-                      {selectedContent.totalVersions} Version{selectedContent.totalVersions !== 1 ? 's' : ''}
+                    <span className="inline-flex items-center px-2 py-0.5 sm:px-3 sm:py-1 rounded-full text-[10px] sm:text-xs font-semibold bg-indigo-100 text-indigo-800 border border-indigo-300">
+                      <Image className="h-3 w-3 sm:h-3.5 sm:w-3.5 mr-1" />
+                      {selectedContent.totalVersions} Ver.
                     </span>
                   </div>
                 </div>
@@ -807,61 +799,61 @@ function ContentReview() {
 
               {/* Version Controls */}
               {selectedContent.totalVersions > 1 && (
-                <div className="px-8 py-5 border-b border-blue-100 bg-gradient-to-r from-blue-50 to-indigo-50">
+                <div className="px-3 sm:px-5 lg:px-8 py-2.5 sm:py-3 lg:py-4 border-b border-blue-100 bg-gradient-to-r from-blue-50 to-indigo-50">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-bold text-slate-800 tracking-tight">
-                      Version {currentVersion?.versionNumber} of {selectedContent.totalVersions}
-                    </h3>
-                    <div className="flex items-center space-x-2">
+                    <div>
+                      <h3 className="text-xs sm:text-sm font-bold text-slate-800">
+                        V{currentVersion?.versionNumber}/{selectedContent.totalVersions}
+                      </h3>
+                      <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5">{formatDate(currentVersion?.createdAt)}</p>
+                    </div>
+                    <div className="flex items-center space-x-1.5">
                       <button
                         onClick={() => handleVersionChange('prev')}
                         disabled={selectedVersionIndex === 0}
-                        className="p-2.5 rounded-lg bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 border border-slate-200 shadow-sm"
+                        className="p-1.5 sm:p-2 rounded-lg bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all border border-slate-200"
                       >
-                        <ChevronLeft className="h-4 w-4 text-slate-700" />
+                        <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-slate-700" />
                       </button>
-                      <span className="px-4 py-2 bg-white rounded-lg border border-slate-200 text-sm font-semibold text-slate-800 shadow-sm">
-                        {selectedVersionIndex + 1} / {selectedContent.totalVersions}
+                      <span className="px-2 py-1 sm:px-3 sm:py-1.5 bg-white rounded-lg border border-slate-200 text-[10px] sm:text-xs font-semibold text-slate-800">
+                        {selectedVersionIndex + 1}/{selectedContent.totalVersions}
                       </span>
                       <button
                         onClick={() => handleVersionChange('next')}
                         disabled={selectedVersionIndex === selectedContent.totalVersions - 1}
-                        className="p-2.5 rounded-lg bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 border border-slate-200 shadow-sm"
+                        className="p-1.5 sm:p-2 rounded-lg bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all border border-slate-200"
                       >
-                        <ChevronRight className="h-4 w-4 text-slate-700" />
+                        <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-slate-700" />
                       </button>
                     </div>
                   </div>
-                  <div className="mt-3 text-sm text-slate-600 font-medium">
-                    Created: {formatDate(currentVersion?.createdAt)}
-                  </div>
                 </div>
-              )})
+              )}
 
               {/* Media with Comments */}
-              <div className="p-8">
-                <div className="flex justify-center mb-8">
-                  <div className="relative inline-block max-w-full">
+              <div className="p-2 sm:p-4 lg:p-6">
+                <div className="flex justify-center mb-3 sm:mb-6">
+                  <div className="relative inline-block max-w-full w-full">
                     {/* Media Navigation for multiple items */}
                     {currentVersion?.media && currentVersion.media.length > 1 && (
-                      <div className="flex items-center justify-between mb-6 bg-slate-50 rounded-xl p-4 border border-slate-200">
-                        <span className="text-sm font-semibold text-slate-700">
-                          Media {selectedMediaIndex + 1} of {currentVersion.media.length}
+                      <div className="flex items-center justify-between mb-3 sm:mb-4 bg-slate-50 rounded-lg p-2 sm:p-3 border border-slate-200">
+                        <span className="text-[10px] sm:text-xs font-semibold text-slate-700">
+                          {selectedMediaIndex + 1}/{currentVersion.media.length}
                         </span>
-                        <div className="flex gap-2">
+                        <div className="flex gap-1.5">
                           <button
                             onClick={() => handleMediaChange('prev')}
                             disabled={selectedMediaIndex === 0}
-                            className="p-2.5 rounded-lg bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 border border-slate-300 shadow-sm"
+                            className="p-1.5 sm:p-2 rounded-lg bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all border border-slate-300"
                           >
-                            <ChevronLeft className="h-4 w-4 text-slate-700" />
+                            <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-slate-700" />
                           </button>
                           <button
                             onClick={() => handleMediaChange('next')}
                             disabled={selectedMediaIndex === currentVersion.media.length - 1}
-                            className="p-2.5 rounded-lg bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 border border-slate-300 shadow-sm"
+                            className="p-1.5 sm:p-2 rounded-lg bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all border border-slate-300"
                           >
-                            <ChevronRight className="h-4 w-4 text-slate-700" />
+                            <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-slate-700" />
                           </button>
                         </div>
                       </div>
@@ -874,7 +866,7 @@ function ContentReview() {
                           <img
                             src={currentMedia.url}
                             alt={`${selectedContent.title} - Version ${currentVersion?.versionNumber} - Media ${selectedMediaIndex + 1}`}
-                            className="max-w-full h-auto max-h-[70vh] rounded-2xl shadow-2xl border-2 border-gray-200/50 object-contain cursor-crosshair"
+                            className="max-w-full w-full sm:w-auto h-auto max-h-[50vh] sm:max-h-[60vh] lg:max-h-[70vh] rounded-lg sm:rounded-xl lg:rounded-2xl shadow-lg sm:shadow-2xl border border-gray-200/50 object-contain cursor-crosshair mx-auto"
                             onClick={handleImageClickWithReposition}
                             onError={(e) => {
                               e.target.style.display = 'none';
@@ -885,7 +877,7 @@ function ContentReview() {
                           <video
                             src={currentMedia.url}
                             controls
-                            className="max-w-full h-auto max-h-[70vh] rounded-2xl shadow-2xl border-2 border-gray-200/50 object-contain cursor-crosshair"
+                            className="max-w-full w-full sm:w-auto h-auto max-h-[50vh] sm:max-h-[60vh] lg:max-h-[70vh] rounded-lg sm:rounded-xl lg:rounded-2xl shadow-lg sm:shadow-2xl border border-gray-200/50 object-contain cursor-crosshair mx-auto"
                             onClick={handleImageClickWithReposition}
                             onError={(e) => {
                               e.target.style.display = 'none';
@@ -898,27 +890,27 @@ function ContentReview() {
                     
                     {/* Fallback for invalid/missing media */}
                     <div 
-                      className="max-w-full h-96 bg-gray-200 rounded-2xl flex items-center justify-center border-2 border-gray-200/50"
+                      className="max-w-full h-48 sm:h-64 lg:h-96 bg-gray-200 rounded-lg sm:rounded-xl lg:rounded-2xl flex items-center justify-center border border-gray-200/50"
                       style={{ 
                         display: (currentMedia?.url && typeof currentMedia.url === 'string') ? 'none' : 'flex' 
                       }}
                     >
                       <div className="text-center">
-                        <Image className="h-12 w-12 text-gray-400 mx-auto mb-2" />
-                        <p className="text-gray-500">No media available</p>
+                        <Image className="h-8 w-8 sm:h-10 sm:w-10 lg:h-12 lg:w-12 text-gray-400 mx-auto mb-2" />
+                        <p className="text-gray-500 text-xs sm:text-sm">No media available</p>
                       </div>
                     </div>
 
                     {/* Media Thumbnails */}
                     {currentVersion?.media && currentVersion.media.length > 1 && (
-                      <div className="flex justify-center gap-2 mt-4">
+                      <div className="flex justify-center gap-1 sm:gap-2 mt-2 sm:mt-3 flex-wrap">
                         {currentVersion.media.map((media, index) => (
                           <button
                             key={index}
                             onClick={() => setSelectedMediaIndex(index)}
-                            className={`w-16 h-16 rounded-lg overflow-hidden border-2 transition-all ${
+                            className={`w-10 h-10 sm:w-12 sm:h-12 lg:w-14 lg:h-14 rounded-md sm:rounded-lg overflow-hidden border-2 transition-all ${
                               selectedMediaIndex === index 
-                                ? 'border-purple-500 ring-2 ring-purple-200' 
+                                ? 'border-purple-500 ring-1 sm:ring-2 ring-purple-200' 
                                 : 'border-gray-200 hover:border-gray-300'
                             }`}
                           >
@@ -934,12 +926,12 @@ function ContentReview() {
                               />
                             ) : (
                               <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-                                <Video className="h-6 w-6 text-gray-400" />
+                                <Video className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400" />
                               </div>
                             )}
                             {/* Fallback for failed thumbnails */}
                             <div className="w-full h-full bg-gray-200 flex items-center justify-center" style={{ display: 'none' }}>
-                              <Video className="h-6 w-6 text-gray-400" />
+                              <Video className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400" />
                             </div>
                           </button>
                         ))}
@@ -950,7 +942,7 @@ function ContentReview() {
                     {currentMedia && (
                       commentsForCurrentMedia.map((comment, index) => {
                         // Calculate floating box position - use a safer approach without querySelector
-                        let boxLeft = 40;
+                        let boxLeft = 30;
                         let boxRight = "auto";
                         
                         // Use a more reliable method to determine position
@@ -959,9 +951,9 @@ function ContentReview() {
                         const commentY = comment.y || comment.position?.y || 0;
                         
                         // Simple heuristic: if comment is more than halfway across, show box on left
-                        if (commentX > 400) { // Assume typical image width, adjust as needed
+                        if (commentX > 200) { // Adjusted for mobile
                           boxLeft = "auto";
-                          boxRight = 40;
+                          boxRight = 30;
                         }
 
                         return (
@@ -969,10 +961,10 @@ function ContentReview() {
                             key={comment.id}
                             style={{
                               position: "absolute",
-                              top: commentY - 16,
-                              left: commentX - 16,
-                              width: 32,
-                              height: 32,
+                              top: commentY - 12,
+                              left: commentX - 12,
+                              width: 24,
+                              height: 24,
                               background: comment.done ? "#10b981" : comment.editing ? "#3b82f6" : "#ef4444",
                               color: "#fff",
                               borderRadius: "50%",
@@ -980,12 +972,12 @@ function ContentReview() {
                               alignItems: "center",
                               justifyContent: "center",
                               fontWeight: "bold",
-                              fontSize: "14px",
-                              boxShadow: "0 4px 12px rgba(0,0,0,0.25)",
+                              fontSize: "11px",
+                              boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
                               cursor: "pointer",
                               zIndex: 2,
-                              border: "3px solid #fff",
-                              transition: "all 0.3s",
+                              border: "2px solid #fff",
+                              transition: "all 0.2s",
                             }}
                             onMouseEnter={() => setHoveredComment(comment.id)}
                             onMouseLeave={() => setHoveredComment(null)}
@@ -1006,13 +998,13 @@ function ContentReview() {
                                   top: "50%",
                                   transform: "translateY(-50%)",
                                   background: "#fff",
-                                  border: "2px solid #3b82f6",
-                                  borderRadius: "12px",
-                                  padding: "16px",
-                                  minWidth: "280px",
-                                  maxWidth: "320px",
+                                  border: "1px solid #3b82f6",
+                                  borderRadius: "8px",
+                                  padding: "10px",
+                                  minWidth: "180px",
+                                  maxWidth: "220px",
                                   zIndex: 10,
-                                  boxShadow: "0 8px 32px rgba(59,130,246,0.2)",
+                                  boxShadow: "0 4px 20px rgba(59,130,246,0.15)",
                                 }}
                                 onClick={(e) => e.stopPropagation()}
                               >
@@ -1021,18 +1013,18 @@ function ContentReview() {
                                     <textarea
                                       value={comment.comment}
                                       onChange={(e) => handleCommentChange(comment.id, e.target.value)}
-                                      placeholder="Add a comment..."
-                                      className="w-full p-3 border-2 border-gray-200 rounded-lg resize-none text-sm text-gray-900 bg-white focus:border-blue-500 focus:outline-none transition-colors"
-                                      rows={3}
+                                      placeholder="Add comment..."
+                                      className="w-full p-2 border border-gray-200 rounded-md resize-none text-xs text-gray-900 bg-white focus:border-blue-500 focus:outline-none"
+                                      rows={2}
                                       autoFocus
                                     />
-                                    <div className="flex gap-2 mt-3">
+                                    <div className="flex gap-1.5 mt-2">
                                       <Button
                                         onClick={() => handleCommentSubmit(comment.id)}
                                         variant="success"
                                         size="sm"
                                       >
-                                        Submit
+                                        Save
                                       </Button>
                                       <Button
                                         onClick={() => handleCommentCancel(comment.id)}
@@ -1045,23 +1037,23 @@ function ContentReview() {
                                   </>
                                 ) : (
                                   <>
-                                    <div className="mb-3">
-                                      <p className="font-semibold text-gray-900 text-sm leading-relaxed break-words">
+                                    <div className="mb-2">
+                                      <p className="font-medium text-gray-900 text-xs leading-relaxed break-words">
                                         {comment.comment}
-                                        {comment.done && <span className="text-green-600 ml-2">✓ Done</span>}
+                                        {comment.done && <span className="text-green-600 ml-1 text-[10px]">✓</span>}
                                         {comment.repositioning && (
-                                          <span className="text-blue-600 italic ml-2">(Repositioning...)</span>
+                                          <span className="text-blue-600 italic ml-1 text-[10px]">(Moving...)</span>
                                         )}
                                       </p>
                                     </div>
-                                    <div className="grid grid-cols-2 gap-2">
+                                    <div className="grid grid-cols-2 gap-1">
                                       {!comment.done && (
                                         <Button
                                           onClick={() => handleMarkDone(comment.id)}
                                           variant="success"
                                           size="sm"
                                         >
-                                          <CheckCircle className="h-3 w-3 mr-1" />
+                                          <CheckCircle className="h-2.5 w-2.5 mr-0.5" />
                                           Done
                                         </Button>
                                       )}
@@ -1070,7 +1062,7 @@ function ContentReview() {
                                         variant="warning"
                                         size="sm"
                                       >
-                                        <Edit3 className="h-3 w-3 mr-1" />
+                                        <Edit3 className="h-2.5 w-2.5 mr-0.5" />
                                         Edit
                                       </Button>
                                       <Button
@@ -1078,15 +1070,15 @@ function ContentReview() {
                                         variant="danger"
                                         size="sm"
                                       >
-                                        <Trash2 className="h-3 w-3 mr-1" />
-                                        Delete
+                                        <Trash2 className="h-2.5 w-2.5 mr-0.5" />
+                                        Del
                                       </Button>
                                       <Button
                                         onClick={() => handleRepositionStart(comment.id)}
                                         variant="info"
                                         size="sm"
                                       >
-                                        <Move className="h-3 w-3 mr-1" />
+                                        <Move className="h-2.5 w-2.5 mr-0.5" />
                                         Move
                                       </Button>
                                     </div>
@@ -1103,17 +1095,17 @@ function ContentReview() {
 
                 {/* Version Details */}
                 {currentVersion && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4 mb-4 sm:mb-6">
                     <div>
-                      <label className="block text-sm font-bold text-slate-700 mb-3 tracking-wide">Caption</label>
-                      <div className="bg-slate-50 rounded-xl p-5 border border-slate-200 shadow-sm">
-                        <p className="text-slate-900 leading-relaxed">{currentVersion.caption || 'No caption provided'}</p>
+                      <label className="block text-[10px] sm:text-xs font-bold text-slate-700 mb-1.5 tracking-wide">Caption</label>
+                      <div className="bg-slate-50 rounded-lg p-2.5 sm:p-3 lg:p-4 border border-slate-200">
+                        <p className="text-slate-900 text-xs sm:text-sm leading-relaxed line-clamp-3 sm:line-clamp-none">{currentVersion.caption || 'No caption'}</p>
                       </div>
                     </div>
                     <div>
-                      <label className="block text-sm font-bold text-slate-700 mb-3 tracking-wide">Notes</label>
-                      <div className="bg-slate-50 rounded-xl p-5 border border-slate-200 shadow-sm">
-                        <p className="text-slate-900 leading-relaxed">{currentVersion.notes || 'No notes provided'}</p>
+                      <label className="block text-[10px] sm:text-xs font-bold text-slate-700 mb-1.5 tracking-wide">Notes</label>
+                      <div className="bg-slate-50 rounded-lg p-2.5 sm:p-3 lg:p-4 border border-slate-200">
+                        <p className="text-slate-900 text-xs sm:text-sm leading-relaxed line-clamp-3 sm:line-clamp-none">{currentVersion.notes || 'No notes'}</p>
                       </div>
                     </div>
                   </div>

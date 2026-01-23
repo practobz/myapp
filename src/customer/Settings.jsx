@@ -53,17 +53,17 @@ const platforms = [
     textColor: 'text-pink-600',
     features: ['Media Management', 'Story Analytics', 'Hashtag Tracking', 'Engagement Metrics']
   },
-  // {
-  //   key: 'instagram-ads',
-  //   label: 'Instagram Advertising',
-  //   description: 'Create and manage Instagram ad campaigns',
-  //   route: '/customer/integration/instagram-ads',
-  //   icon: platformIcons['instagram-ads'],
-  //   color: 'from-purple-500 to-pink-600',
-  //   bgColor: 'bg-purple-50',
-  //   textColor: 'text-purple-600',
-  //   features: ['Campaign Management', 'Ad Analytics', 'Audience Targeting', 'Budget Optimization']
-  // },
+  { 
+    key: 'instagram-ads', 
+    label: 'Instagram Advertising', 
+    description: 'Create and manage Instagram ad campaigns',
+    route: '/customer/integration/instagram-ads',
+    icon: platformIcons['instagram-ads'],
+    color: 'from-purple-500 to-pink-600',
+    bgColor: 'bg-purple-50',
+    textColor: 'text-purple-600',
+    features: ['Campaign Management', 'Ad Analytics', 'Audience Targeting', 'Budget Optimization']
+  },
   { 
     key: 'youtube', 
     label: 'YouTube', 
@@ -468,6 +468,7 @@ function Settings() {
             )}
             {activeIntegration === 'youtube' && (
               <YouTubeIntegration
+                customerId={currentUser?._id}
                 onConnectionStatusChange={status => handleConnectionStatusChange('youtube', status)}
               />
             )}
@@ -549,11 +550,11 @@ function Settings() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-      <div className="px-6 sm:px-8 lg:px-12 xl:px-16 2xl:px-24 py-8">
+      <div className="sm:px-8 lg:px-12 xl:px-16 2xl:px-24">
         {!activeIntegration ? (
           <div className="space-y-8">
             {/* Header */}
-            <div className="bg-gradient-to-r from-indigo-600 via-blue-600 to-cyan-500 rounded-2xl shadow-xl p-8 text-white relative overflow-hidden">
+            <div className="bg-gradient-to-r from-indigo-600 via-blue-600 to-cyan-500 rounded-2xl shadow-xl p-4 sm:p-8 text-white relative overflow-hidden">
               <div className="absolute inset-0 bg-black/10"></div>
               <div className="relative text-center">
                 <h1 className="text-4xl font-bold mb-3">Account Settings</h1>
@@ -562,8 +563,8 @@ function Settings() {
             </div>
 
             {/* Tab Navigation */}
-            <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden">
-              <div className="border-b border-slate-200">
+            <div className="bg-white rounded-2xl shadow-lg sm:border sm:border-slate-200 overflow-hidden">
+              <div className="sm:border-b sm:border-slate-200">
                 <nav className="flex">
                   <button
                     type="button"
@@ -602,7 +603,7 @@ function Settings() {
                 </nav>
               </div>
 
-              <div className="p-8">
+              <div className="p-4 sm:p-8">
                 {activeTab === 'customer' && renderCustomerTab()}
                 {activeTab === 'integrations' && renderIntegrationsOverview()}
               </div>

@@ -228,7 +228,7 @@ function ContentCalendar() {
         <div className="flex flex-col lg:flex-row gap-6">
           {/* Calendar Selection Sidebar */}
           <div className="lg:w-1/4">
-            <div className="bg-white rounded-xl shadow-md p-6 border border-slate-200">
+            <div className="bg-white rounded-xl shadow-md p-6 sm:border sm:border-slate-200">
               <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
                 <CalendarIcon className="h-5 w-5 text-indigo-600" />
                 Content Calendars
@@ -253,7 +253,7 @@ function ContentCalendar() {
 
           {/* Calendar Content */}
           <div className="lg:w-3/4">
-            <div className="bg-white rounded-xl shadow-md p-6 border border-slate-200">
+            <div className="bg-white rounded-xl shadow-md p-6 sm:border sm:border-slate-200">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-4">
                 <div>
                   <h2 className="text-2xl font-bold text-slate-800">{customer.name}'s Content Calendar</h2>
@@ -286,9 +286,9 @@ function ContentCalendar() {
                 {sortedItems.map((item) => (
                   <div 
                     key={item.id} 
-                    className={`border-2 rounded-xl p-5 transition-all duration-200 ${
-                      item.status === 'published' ? 'cursor-pointer hover:shadow-lg hover:border-indigo-300 bg-gradient-to-r from-white to-blue-50/30' : 'bg-white'
-                    } border-slate-200 hover:border-indigo-200`}
+                    className={`sm:border-2 rounded-xl p-5 transition-all duration-200 ${
+                      item.status === 'published' ? 'cursor-pointer hover:shadow-lg sm:hover:border-indigo-300 bg-gradient-to-r from-white to-blue-50/30' : 'bg-white'
+                    } sm:border-slate-200 sm:hover:border-indigo-200`}
                     onClick={() => handleContentClick(item)}
                   >
                     <div className="flex items-center justify-between mb-3">
@@ -313,15 +313,10 @@ function ContentCalendar() {
                         )}
                       </div>
                       <div className="flex items-center gap-4">
-                            <div className="flex items-center gap-1 text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg">
-                              <MessageSquare className="h-4 w-4" />
-                              <span className="font-semibold">{item.commentCount || 0}</span>
-                            </div>
-                            {item.status === 'published' && (
-                              <div className="flex-shrink-0 flex items-center justify-center p-2 bg-slate-100 rounded-lg" style={{ minWidth: '2.5rem', minHeight: '2.5rem' }}>
-                                <Eye className="h-4 w-4 text-slate-600" />
-                              </div>
-                            )}
+                          <div className="flex items-center gap-1 text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg">
+                            <MessageSquare className="h-4 w-4" />
+                            <span className="font-semibold">{item.commentCount || 0}</span>
+                          </div>
                       </div>
                     </div>
                     <p className="text-slate-700 mb-3 font-medium break-words line-clamp-2">{item.description}</p>
@@ -402,7 +397,7 @@ function ContentCalendar() {
                     <h4 className="text-lg font-semibold text-[#0a2342] mb-4">Published Posts ({selectedContent.publishedPosts.length})</h4>
                     <div className="space-y-4">
                       {selectedContent.publishedPosts.map((post, idx) => (
-                        <div key={post._id || idx} className="border-2 border-slate-200 rounded-lg p-4 bg-white hover:border-indigo-300 transition-all">
+                        <div key={post._id || idx} className="sm:border-2 sm:border-slate-200 rounded-lg p-4 bg-white sm:hover:border-indigo-300 transition-all">
                           <div className="flex items-start justify-between mb-3">
                             <div className="flex items-center space-x-3">
                               {getPlatformIcon(post.platform)}

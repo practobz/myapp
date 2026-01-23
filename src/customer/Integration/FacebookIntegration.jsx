@@ -1288,7 +1288,7 @@ function FacebookIntegration() {
             <img 
               src={page.picture.data.url} 
               alt={page.name}
-              className="w-16 h-16 sm:w-20 sm:h-20 rounded-full border-2 border-blue-200 flex-shrink-0"
+              className="w-16 h-16 sm:w-20 sm:h-20 rounded-full sm:border-2 sm:border-blue-200 flex-shrink-0"
             />
           ) : (
             <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-blue-400 to-indigo-600 rounded-full flex items-center justify-center flex-shrink-0">
@@ -1321,20 +1321,20 @@ function FacebookIntegration() {
         </div>
       
         {/* Stats Row - Instagram Style */}
-        <div className="flex justify-around text-center border-t border-b border-gray-200 py-3 -mx-4 sm:mx-0 sm:border sm:rounded-xl sm:bg-white">
+        <div className="flex justify-around text-center sm:border-t sm:border-b sm:border-gray-200 py-3 -mx-4 sm:mx-0 sm:border sm:rounded-xl sm:bg-white">
           <div>
             <div className="text-lg sm:text-xl font-bold text-gray-900">
               {pagePosts[page.id]?.length?.toLocaleString() || '0'}
             </div>
             <div className="text-xs text-gray-500">Posts</div>
           </div>
-          <div className="border-l border-gray-200 pl-4">
+          <div className="sm:border-l sm:border-gray-200 pl-4">
             <div className="text-lg sm:text-xl font-bold text-gray-900">
               {page.fan_count?.toLocaleString() || '0'}
             </div>
             <div className="text-xs text-gray-500">Followers</div>
           </div>
-          <div className="border-l border-gray-200 pl-4">
+          <div className="sm:border-l sm:border-gray-200 pl-4">
             <div className="text-lg sm:text-xl font-bold text-gray-900">
               {pagePosts[page.id]?.reduce((sum, post) => sum + (post.likes?.summary?.total_count || 0), 0).toLocaleString() || '0'}
             </div>
@@ -1850,7 +1850,7 @@ function FacebookIntegration() {
           })}
         </div>
         {activeAccount && (
-          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="mt-4 p-3 bg-blue-50 sm:border sm:border-blue-200 rounded-lg">
               {/*
               <h6 className="font-medium text-blue-800 mb-2">🔑 Token Management</h6>
               <div className="text-sm text-blue-700 space-y-1">
@@ -1955,7 +1955,7 @@ function FacebookIntegration() {
                         <img
                           src={activeAccount.picture.data.url}
                           alt="Profile"
-                          className="w-6 h-6 sm:w-7 sm:h-7 rounded-full border-2 border-slate-300"
+                          className="w-6 h-6 sm:w-7 sm:h-7 rounded-full sm:border-2 sm:border-slate-300"
                         />
                       )}
                       <span className="text-xs sm:text-sm font-semibold text-slate-700 truncate">
@@ -1985,7 +1985,7 @@ function FacebookIntegration() {
                   </button>
                   <button
                     onClick={() => fbLogoutAll()}
-                    className="group flex items-center gap-2 px-3 sm:px-4 py-2 bg-gradient-to-r from-slate-100 to-slate-200 text-slate-700 rounded-xl hover:from-slate-200 hover:to-slate-300 transition-all border border-slate-300 font-medium text-xs sm:text-sm w-full sm:w-auto justify-center"
+                    className="group flex items-center gap-2 px-3 sm:px-4 py-2 bg-gradient-to-r from-slate-100 to-slate-200 text-slate-700 rounded-xl hover:from-slate-200 hover:to-slate-300 transition-all sm:border sm:border-slate-300 font-medium text-xs sm:text-sm w-full sm:w-auto justify-center"
                   >
                     <ExternalLink className="h-4 w-4 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
                     <span>Disconnect All</span>
@@ -2013,7 +2013,7 @@ function FacebookIntegration() {
                       <button
                         onClick={refreshPageTokens}
                         disabled={!fbSdkLoaded || !isFacebookApiReady() || !activeAccount}
-                        className="group flex items-center gap-2 px-3 sm:px-4 py-2 bg-white border-2 border-indigo-200 text-indigo-700 rounded-xl hover:bg-indigo-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-sm text-xs sm:text-sm flex-1 md:flex-initial justify-center"
+                        className="group flex items-center gap-2 px-3 sm:px-4 py-2 bg-white sm:border-2 sm:border-indigo-200 text-indigo-700 rounded-xl hover:bg-indigo-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-sm text-xs sm:text-sm flex-1 md:flex-initial justify-center"
                       >
                         <RefreshCw className="h-4 w-4 group-hover:rotate-180 transition-transform duration-500" />
                         <span>Refresh</span>

@@ -273,7 +273,8 @@ function FacebookIntegration() {
   // Fetch pages for active account (only when SDK is ready and we have an active account)
   useEffect(() => {
     if (activeAccount && fbSdkLoaded && isFacebookApiReady()) {
-      fetchFbPages();
+      // CRITICAL FIX: Load pages from backend first (customer-specific)
+      loadPagesFromBackend();
     }
   }, [activeAccount, fbSdkLoaded]);
   
@@ -605,45 +606,140 @@ function FacebookIntegration() {
 
   // Refresh current session
   const refreshCurrentSession = async () => {
-    return new Promise((resolve) => {
-      if (!isFacebookApiReady()) {
-        resolve(false);
-        return;
-      }
+    if (!activeAccount || !activeAccount.accessToken) {
+      console.error('❌ No active account or access token available');
+      return false;
+    }
 
-      window.FB.getLoginStatus((response) => {
-        if (response.status === 'connected') {
-          // Update token in our storage
-          const newToken = response.authResponse.accessToken;
-          const userId = response.authResponse.userID;
-          
-          if (activeAccount && activeAccount.id === userId) {
-            const updatedAccount = {
-              ...activeAccount,
-              accessToken: newToken,
-              tokenExpiresAt: response.authResponse.expiresIn ? 
-                new Date(Date.now() + (response.authResponse.expiresIn * 1000)).toISOString() : null
-            };
-            
-            setActiveAccount(updatedAccount);
-            
-            // Update in connectedAccounts
-            const updatedAccounts = connectedAccounts.map(acc =>
-              acc.id === userId ? updatedAccount : acc
-            );
-            
-            setConnectedAccounts(updatedAccounts);
-            saveAccountsToStorage(updatedAccounts);
-            
-            resolve(true);
-          } else {
-            resolve(false);
+    try {
+      console.log('🔄 Refreshing Facebook session using Graph API...');
+      
+      // Use the backend token exchange endpoint to get a fresh long-lived token
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/facebook/exchange-token`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          shortLivedToken: activeAccount.accessToken,
+          userId: activeAccount.id
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success && data.longLivedToken) {
+        console.log('✅ Successfully refreshed session token');
+        
+        const updatedAccount = {
+          ...activeAccount,
+          accessToken: data.longLivedToken,
+          tokenExpiresAt: data.expiresIn ? 
+            new Date(Date.now() + (data.expiresIn * 1000)).toISOString() : null,
+          tokenType: data.tokenType || 'long_lived',
+          lastTokenRefresh: new Date().toISOString()
+        };
+        
+        setActiveAccount(updatedAccount);
+        
+        // Update in connectedAccounts
+        const updatedAccounts = connectedAccounts.map(acc =>
+          acc.id === activeAccount.id ? updatedAccount : acc
+        );
+        
+        setConnectedAccounts(updatedAccounts);
+        saveAccountsToStorage(updatedAccounts);
+        
+        // Also update in backend if customerId exists
+        const customerId = getCurrentCustomerId();
+        if (customerId) {
+          try {
+            await fetch(`${process.env.REACT_APP_API_URL}/api/customer-social-links`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                customerId: customerId,
+                platform: 'facebook',
+                platformUserId: updatedAccount.id,
+                name: updatedAccount.name,
+                email: updatedAccount.email,
+                profilePicture: updatedAccount.picture?.data?.url,
+                accessToken: updatedAccount.accessToken,
+                tokenExpiresAt: updatedAccount.tokenExpiresAt,
+                tokenType: updatedAccount.tokenType,
+                lastTokenRefresh: updatedAccount.lastTokenRefresh
+              })
+            });
+            console.log('✅ Updated token in backend database');
+          } catch (err) {
+            console.warn('⚠️ Failed to update token in backend:', err);
           }
-        } else {
-          resolve(false);
         }
-      }, true); // Force fresh status check
-    });
+        
+        return true;
+      } else {
+        console.error('❌ Failed to refresh token:', data.error || 'Unknown error');
+        return false;
+      }
+    } catch (error) {
+      console.error('❌ Error refreshing session:', error);
+      return false;
+    }
+  };
+
+  // CRITICAL FIX: Load pages from backend (customer-specific selected pages)
+  const loadPagesFromBackend = async () => {
+    if (!activeAccount) {
+      console.warn('⚠️ No active account');
+      return;
+    }
+    
+    const customerId = getCurrentCustomerId();
+    if (!customerId) {
+      console.warn('⚠️ No customer ID found, fetching all pages from Facebook');
+      fetchFbPages();
+      return;
+    }
+    
+    try {
+      console.log('📥 Loading pages from backend for customer:', customerId);
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/customer-social-links/${customerId}`);
+      const data = await response.json();
+      
+      if (data.success && data.accounts) {
+        // Find the Facebook account for this customer
+        const fbAccount = data.accounts.find(acc => 
+          acc.platform === 'facebook' && acc.platformUserId === activeAccount.id
+        );
+        
+        if (fbAccount && fbAccount.pages && fbAccount.pages.length > 0) {
+          console.log(`✅ Loaded ${fbAccount.pages.length} customer-specific pages from backend`);
+          // Map backend pages to expected format
+          const pages = fbAccount.pages.map(page => ({
+            id: page.id,
+            name: page.name,
+            access_token: page.accessToken,
+            category: page.category,
+            fan_count: page.fanCount,
+            tokenType: page.tokenType || 'standard',
+            tokenExpiry: page.tokenExpiry || 'unknown',
+            ...page
+          }));
+          setFbPages(pages);
+          setFbError(null);
+          return;
+        }
+      }
+      
+      // No backend data found, fetch from Facebook API
+      console.log('📋 No customer-specific pages found in backend, fetching from Facebook API');
+      fetchFbPages();
+      
+    } catch (error) {
+      console.error('❌ Error loading pages from backend:', error);
+      // Fallback to fetching from Facebook API
+      fetchFbPages();
+    }
   };
 
   // Modified fetchFbPages with error handling (FIXED - don't preemptively block on expiration)
@@ -656,7 +752,7 @@ function FacebookIntegration() {
     // FIXED: Don't check token expiration before making API calls
     // The backend token might be valid even if our local check thinks it's expired
     // Only handle actual API errors (code 190) when they occur
-    console.log('🔍 Fetching pages using Graph API...');
+    console.log('🔍 Fetching ALL pages from Facebook API...');
     
     try {
       // Use direct Graph API call instead of FB.api to avoid SDK session conflicts
@@ -705,24 +801,17 @@ function FacebookIntegration() {
           });
           setFbPages(pagesWithNeverExpiringTokens);
           
-          // Store each page with never-expiring token
-          pagesWithNeverExpiringTokens.forEach(async (page) => {
-            console.log(`📄 Processing page: ${page.name} (${page.id}) - Token: ${page.tokenType || 'standard'}`);
-            await storeConnectedPage(page);
-          });
+          // CRITICAL FIX: Store all pages at once for this customer
+          await storeAllPagesForCustomer(pagesWithNeverExpiringTokens);
         } else {
           // Fallback to regular tokens
           setFbPages(data.data);
-          data.data.forEach(async (page) => {
-            await storeConnectedPage(page);
-          });
+          await storeAllPagesForCustomer(data.data);
         }
       } catch (tokenError) {
         console.warn('⚠️ Failed to get never-expiring tokens, using standard tokens:', tokenError);
         setFbPages(data.data);
-        data.data.forEach(async (page) => {
-          await storeConnectedPage(page);
-        });
+        await storeAllPagesForCustomer(data.data);
       }
       
       setFbError(null); // Clear any previous errors
@@ -847,231 +936,219 @@ function FacebookIntegration() {
     if (!selectedPostId || !singlePostAnalytics) return null;
 
     return (
-      <div className="mt-6 bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-            <BarChart3 className="h-5 w-5 mr-2 text-blue-600" />
-            Facebook Post Analytics
-          </h3>
-          <button
-            onClick={() => {
-              setSelectedPostId(null);
-              setSinglePostAnalytics(null);
-            }}
-            className="text-gray-400 hover:text-gray-600"
-          >
-            ✕
-          </button>
-        </div>
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4">
+        {/* Backdrop */}
+        <div 
+          className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+          onClick={() => {
+            setSelectedPostId(null);
+            setSinglePostAnalytics(null);
+          }}
+        />
+        
+        {/* Modal */}
+        <div className="relative bg-white rounded-xl sm:rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
+          {/* Modal Header */}
+          <div className="flex items-center justify-between px-3 sm:px-4 py-2.5 sm:py-3 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50 flex-shrink-0">
+            <h3 className="text-sm sm:text-base font-semibold text-gray-900 flex items-center">
+              <BarChart3 className="h-4 w-4 sm:h-5 sm:w-5 mr-1.5 sm:mr-2 text-blue-600" />
+              Post Analytics
+            </h3>
+            <button
+              onClick={() => {
+                setSelectedPostId(null);
+                setSinglePostAnalytics(null);
+              }}
+              className="p-1.5 rounded-full hover:bg-blue-100 text-gray-500 hover:text-gray-700 transition-colors"
+            >
+              <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
 
-        <div className="space-y-6">
-          {/* Post Preview */}
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-            <div className="flex items-start space-x-3">
-              {singlePostAnalytics.full_picture && (
-                <img
-                  src={singlePostAnalytics.full_picture}
-                  alt="Post media"
-                  className="w-20 h-20 object-cover rounded-lg"
-                />
-              )}
-              <div className="flex-1">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded font-medium">
-                    Facebook Post
-                  </span>
-                  <span className="text-xs text-gray-500">
-                    {new Date(singlePostAnalytics.created_time).toLocaleDateString('en-US', {
-                      year: 'numeric',
-                      month: 'short',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
-                  </span>
-                </div>
-                {singlePostAnalytics.message && (
-                  <p className="text-sm text-gray-800 mb-2">
-                    {singlePostAnalytics.message.length > 150 
-                      ? `${singlePostAnalytics.message.substring(0, 150)}...` 
-                      : singlePostAnalytics.message
-                    }
-                  </p>
-                )}
-                {singlePostAnalytics.story && !singlePostAnalytics.message && (
-                  <p className="text-sm text-gray-600 mb-2 italic">
-                    {singlePostAnalytics.story}
-                  </p>
-                )}
-                <div className="flex items-center justify-between text-xs text-gray-500">
-                  <span>Facebook Post</span>
-                  {singlePostAnalytics.permalink_url && (
-                    <a 
-                      href={singlePostAnalytics.permalink_url} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="text-blue-600 hover:text-blue-700"
-                    >
-                      View on Facebook →
-                    </a>
+          {/* Modal Body - Scrollable */}
+          <div className="flex-1 overflow-y-auto p-3 sm:p-4">
+            <div className="space-y-4">
+              {/* Post Preview */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-2.5 sm:p-3">
+                <div className="flex items-start space-x-2 sm:space-x-3">
+                  {singlePostAnalytics.full_picture && (
+                    <img
+                      src={singlePostAnalytics.full_picture}
+                      alt="Post media"
+                      className="w-14 h-14 sm:w-16 sm:h-16 object-cover rounded-lg flex-shrink-0"
+                    />
                   )}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Engagement Metrics Grid */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center">
-              <div className="text-2xl font-bold text-blue-600">
-                {singlePostAnalytics.likes_count?.toLocaleString() || 0}
-              </div>
-              <div className="text-sm text-blue-700 font-medium flex items-center justify-center mt-1">
-                <span className="mr-1">👍</span>
-                Likes
-              </div>
-            </div>
-
-            <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
-              <div className="text-2xl font-bold text-green-600">
-                {singlePostAnalytics.comments_count?.toLocaleString() || 0}
-              </div>
-              <div className="text-sm text-green-700 font-medium flex items-center justify-center mt-1">
-                <span className="mr-1">💬</span>
-                Comments
-              </div>
-            </div>
-
-            <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 text-center">
-              <div className="text-2xl font-bold text-purple-600">
-                {singlePostAnalytics.shares_count?.toLocaleString() || 0}
-              </div>
-              <div className="text-sm text-purple-700 font-medium flex items-center justify-center mt-1">
-                <span className="mr-1">🔄</span>
-                Shares
-              </div>
-            </div>
-
-            <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 text-center">
-              <div className="text-2xl font-bold text-orange-600">
-                {singlePostAnalytics.reactions_count?.toLocaleString() || 0}
-              </div>
-              <div className="text-sm text-orange-700 font-medium flex items-center justify-center mt-1">
-                <span className="mr-1">😍</span>
-                Reactions
-              </div>
-            </div>
-          </div>
-
-          {/* Total Engagement */}
-          <div className="bg-gradient-to-br from-indigo-50 to-purple-50 border border-indigo-200 rounded-xl p-6 text-center">
-            <div className="text-3xl font-bold text-indigo-600 mb-2">
-              {singlePostAnalytics.total_engagement?.toLocaleString() || 0}
-            </div>
-            <div className="text-lg text-indigo-700 font-medium flex items-center justify-center">
-              <TrendingUp className="h-4 w-4 mr-2" />
-              Total Engagement
-            </div>
-            <div className="text-sm text-indigo-600 mt-2">
-              Likes + Comments + Shares + Reactions
-            </div>
-          </div>
-
-          {/* Engagement Trend Charts */}
-          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-6">
-            <h4 className="font-medium text-gray-900 mb-4 flex items-center">
-              <TrendingUp className="h-5 w-5 mr-2 text-blue-600" />
-              Engagement Over Time
-            </h4>
-            <p className="text-xs text-gray-600 mb-4">Estimated engagement growth pattern since posting</p>
-            
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {/* Likes Trend */}
-              <div className="bg-white rounded-lg p-4 border border-blue-100">
-                <div className="mb-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-700 flex items-center">
-                      <span className="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
-                      Likes Trend
-                    </span>
-                    <span className="text-lg font-bold text-blue-600">
-                      {singlePostAnalytics.likes_count?.toLocaleString() || 0}
-                    </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <span className="text-[10px] sm:text-xs text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded font-medium">
+                        Facebook
+                      </span>
+                      <span className="text-[10px] sm:text-xs text-gray-500">
+                        {new Date(singlePostAnalytics.created_time).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric'
+                        })}
+                      </span>
+                    </div>
+                    {singlePostAnalytics.message && (
+                      <p className="text-xs sm:text-sm text-gray-800 mb-1 line-clamp-2">
+                        {singlePostAnalytics.message}
+                      </p>
+                    )}
+                    {singlePostAnalytics.story && !singlePostAnalytics.message && (
+                      <p className="text-xs sm:text-sm text-gray-600 mb-1 italic line-clamp-2">
+                        {singlePostAnalytics.story}
+                      </p>
+                    )}
+                    {singlePostAnalytics.permalink_url && (
+                      <a 
+                        href={singlePostAnalytics.permalink_url} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-[10px] sm:text-xs text-blue-600 hover:text-blue-700"
+                      >
+                        View →
+                      </a>
+                    )}
                   </div>
                 </div>
-                <TrendChart
-                  data={generatePostTrendData(singlePostAnalytics.likes_count, 'likes')}
-                  title=""
-                  color="#3B82F6"
-                  metric="value"
-                  style={{ minHeight: 150 }}
-                />
               </div>
 
-              {/* Comments Trend */}
-              <div className="bg-white rounded-lg p-4 border border-green-100">
-                <div className="mb-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-700 flex items-center">
-                      <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
-                      Comments Trend
-                    </span>
-                    <span className="text-lg font-bold text-green-600">
-                      {singlePostAnalytics.comments_count?.toLocaleString() || 0}
-                    </span>
+              {/* Engagement Metrics Grid */}
+              <div className="grid grid-cols-4 gap-2">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 sm:p-2.5 text-center">
+                  <div className="text-base sm:text-lg font-bold text-blue-600 mb-1">
+                    {singlePostAnalytics.likes_count?.toLocaleString() || 0}
+                  </div>
+                  <div className="text-[9px] sm:text-[10px] text-blue-700 font-medium">
+                    👍
                   </div>
                 </div>
-                <TrendChart
-                  data={generatePostTrendData(singlePostAnalytics.comments_count, 'comments')}
-                  title=""
-                  color="#10B981"
-                  metric="value"
-                  style={{ minHeight: 150 }}
-                />
+
+                <div className="bg-green-50 border border-green-200 rounded-lg p-2 sm:p-2.5 text-center">
+                  <div className="text-base sm:text-lg font-bold text-green-600 mb-1">
+                    {singlePostAnalytics.comments_count?.toLocaleString() || 0}
+                  </div>
+                  <div className="text-[9px] sm:text-[10px] text-green-700 font-medium">
+                    💬
+                  </div>
+                </div>
+
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-2 sm:p-2.5 text-center">
+                  <div className="text-base sm:text-lg font-bold text-purple-600 mb-1">
+                    {singlePostAnalytics.shares_count?.toLocaleString() || 0}
+                  </div>
+                  <div className="text-[9px] sm:text-[10px] text-purple-700 font-medium">
+                    🔄
+                  </div>
+                </div>
+
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-2 sm:p-2.5 text-center">
+                  <div className="text-base sm:text-lg font-bold text-orange-600 mb-1">
+                    {singlePostAnalytics.reactions_count?.toLocaleString() || 0}
+                  </div>
+                  <div className="text-[9px] sm:text-[10px] text-orange-700 font-medium">
+                    😍
+                  </div>
+                </div>
               </div>
 
-              {/* Shares Trend */}
-              <div className="bg-white rounded-lg p-4 border border-purple-100">
-                <div className="mb-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-700 flex items-center">
-                      <span className="w-2 h-2 bg-purple-500 rounded-full mr-2"></span>
-                      Shares Trend
-                    </span>
-                    <span className="text-lg font-bold text-purple-600">
-                      {singlePostAnalytics.shares_count?.toLocaleString() || 0}
-                    </span>
-                  </div>
+              {/* Total Engagement */}
+              <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-2.5 sm:p-3 text-center">
+                <div className="text-base sm:text-xl font-bold text-indigo-600 mb-1">
+                  {singlePostAnalytics.total_engagement?.toLocaleString() || 0}
                 </div>
-                <TrendChart
-                  data={generatePostTrendData(singlePostAnalytics.shares_count, 'shares')}
-                  title=""
-                  color="#8B5CF6"
-                  metric="value"
-                  style={{ minHeight: 150 }}
-                />
+                <div className="text-[10px] sm:text-xs text-indigo-700 font-medium">
+                  📊 Total Engagement
+                </div>
               </div>
 
-              {/* Reactions Trend */}
-              <div className="bg-white rounded-lg p-4 border border-orange-100">
-                <div className="mb-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-700 flex items-center">
-                      <span className="w-2 h-2 bg-orange-500 rounded-full mr-2"></span>
-                      Reactions Trend
-                    </span>
-                    <span className="text-lg font-bold text-orange-600">
-                      {singlePostAnalytics.reactions_count?.toLocaleString() || 0}
-                    </span>
+              {/* Engagement Trend Charts */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 sm:p-4">
+                <h4 className="font-medium text-xs sm:text-sm text-gray-900 mb-3 flex items-center">
+                  <TrendingUp className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 text-blue-600" />
+                  Engagement Trends
+                </h4>
+                
+                <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                  {/* Likes Trend */}
+                  <div className="bg-white rounded-lg p-2.5 sm:p-3 border border-blue-100">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] sm:text-xs font-medium text-gray-700">👍 Likes</span>
+                      <span className="text-[11px] sm:text-xs font-bold text-blue-600">
+                        {singlePostAnalytics.likes_count?.toLocaleString() || 0}
+                      </span>
+                    </div>
+                    <div className="h-20 sm:h-24">
+                      <TrendChart
+                        data={generatePostTrendData(singlePostAnalytics.likes_count, 'likes')}
+                        title="Likes"
+                        color="#3B82F6"
+                        metric="value"
+                        minimal={true}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Comments Trend */}
+                  <div className="bg-white rounded-lg p-2.5 sm:p-3 border border-green-100">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] sm:text-xs font-medium text-gray-700">💬 Comments</span>
+                      <span className="text-[11px] sm:text-xs font-bold text-green-600">
+                        {singlePostAnalytics.comments_count?.toLocaleString() || 0}
+                      </span>
+                    </div>
+                    <div className="h-20 sm:h-24">
+                      <TrendChart
+                        data={generatePostTrendData(singlePostAnalytics.comments_count, 'comments')}
+                        title="Comments"
+                        color="#10B981"
+                        metric="value"
+                        minimal={true}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Shares Trend */}
+                  <div className="bg-white rounded-lg p-2.5 sm:p-3 border border-purple-100">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] sm:text-xs font-medium text-gray-700">🔄 Shares</span>
+                      <span className="text-[11px] sm:text-xs font-bold text-purple-600">
+                        {singlePostAnalytics.shares_count?.toLocaleString() || 0}
+                      </span>
+                    </div>
+                    <div className="h-20 sm:h-24">
+                      <TrendChart
+                        data={generatePostTrendData(singlePostAnalytics.shares_count, 'shares')}
+                        title="Shares"
+                        color="#8B5CF6"
+                        metric="value"
+                        minimal={true}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Reactions Trend */}
+                  <div className="bg-white rounded-lg p-2.5 sm:p-3 border border-orange-100">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] sm:text-xs font-medium text-gray-700">😍 Reactions</span>
+                      <span className="text-[11px] sm:text-xs font-bold text-orange-600">
+                        {singlePostAnalytics.reactions_count?.toLocaleString() || 0}
+                      </span>
+                    </div>
+                    <div className="h-20 sm:h-24">
+                      <TrendChart
+                        data={generatePostTrendData(singlePostAnalytics.reactions_count, 'reactions')}
+                        title="Reactions"
+                        color="#F59E0B"
+                        metric="value"
+                        minimal={true}
+                      />
+                    </div>
                   </div>
                 </div>
-                <TrendChart
-                  data={generatePostTrendData(singlePostAnalytics.reactions_count, 'reactions')}
-                  title=""
-                  color="#F59E0B"
-                  metric="value"
-                  style={{ minHeight: 150 }}
-                />
               </div>
             </div>
           </div>
@@ -1143,110 +1220,59 @@ function FacebookIntegration() {
     if (!posts || posts.length === 0) return null;
 
     return (
-      <div className="mt-4 p-4 bg-green-50 rounded-lg">
-        <div className="flex items-center justify-between mb-3">
-          <h5 className="font-medium text-green-700 flex items-center">
-            <Facebook className="h-4 w-4 mr-2" />
-            Facebook Posts ({posts.length})
+      <div className="mt-4 bg-white sm:rounded-2xl sm:border sm:border-gray-200 sm:shadow-sm">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+          <h5 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+            <Facebook className="h-4 w-4 text-blue-600" />
+            Posts
           </h5>
-          <button
-            onClick={() => setShowFacebookPosts(prev => ({ ...prev, [pageId]: !prev[pageId] }))
-            }
-            className="text-sm text-green-600 hover:text-green-800 font-medium"
-          >
-            {isVisible ? 'Hide Posts' : 'Show Posts'}
-          </button>
+          <span className="text-xs text-gray-500">{posts.length} posts</span>
         </div>
         
-        {isVisible && (
-          <div className="space-y-4 max-h-96 overflow-y-auto">
-            {posts.map((post) => (
-              <div key={post.id} className="bg-white p-4 rounded-lg border shadow-sm">
-                <div className="flex items-start space-x-3">
-                  {post.full_picture && (
-                    <img 
-                      src={post.full_picture} 
-                      alt="Post media" 
-                      className="w-20 h-20 object-cover rounded-lg flex-shrink-0"
-                    />
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
-                        {post.type || 'post'}
-                      </span>
-                      <span className="text-xs text-gray-500">
-                        {new Date(post.created_time).toLocaleDateString('en-US', {
-                          year: 'numeric',
-                          month: 'short',
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
-                      </span>
-                    </div>
-                    
-                    {post.message && (
-                      <p className="text-sm text-gray-800 mb-3 leading-relaxed">
-                        {post.message.length > 200 ? (
-                          <>
-                            {post.message.substring(0, 200)}...
-                            <span className="text-blue-600 text-xs ml-1 cursor-pointer">read more</span>
-                          </>
-                        ) : post.message}
-                      </p>
-                    )}
-                    
-                    {post.story && !post.message && (
-                      <p className="text-sm text-gray-600 mb-3 italic">
-                        {post.story}
-                      </p>
-                    )}
-                    
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-4 text-xs text-gray-600">
-                        <span className="flex items-center space-x-1">
-                          <span>👍</span>
-                          <span>{post.likes?.summary?.total_count || 0}</span>
-                        </span>
-                        <span className="flex items-center space-x-1">
-                          <span>💬</span>
-                          <span>{post.comments?.summary?.total_count || 0}</span>
-                        </span>
-                        <span className="flex items-center space-x-1">
-                          <span>🔄</span>
-                          <span>{post.shares?.count || 0}</span>
-                        </span>
-                      </div>
-                      
-                      <div className="flex items-center space-x-2">
-                        <button
-                          className="text-xs text-purple-600 hover:text-purple-800 font-medium px-2 py-1 bg-purple-50 rounded"
-                          onClick={() => {
-                            setSelectedPostId(post.id);
-                            fetchSinglePostAnalytics(post);
-                          }}
-                        >
-                          📊 Analytics
-                        </button>
-                        {post.permalink_url && (
-                          <a 
-                            href={post.permalink_url} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="text-xs text-blue-600 hover:text-blue-800 font-medium"
-                          >
-                            View on Facebook →
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                  </div>
+        {/* Instagram-style 3-column grid */}
+        <div className="grid grid-cols-3 gap-0.5 sm:gap-1">
+          {posts.map((post) => (
+            <div 
+              key={post.id} 
+              className="aspect-square relative group cursor-pointer"
+              onClick={() => {
+                setSelectedPostId(post.id);
+                fetchSinglePostAnalytics(post);
+              }}
+            >
+              {post.full_picture ? (
+                <img
+                  src={post.full_picture}
+                  alt={post.message ? post.message.substring(0, 50) + '...' : 'Facebook post'}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full bg-gradient-to-br from-blue-100 to-blue-200 flex items-center justify-center">
+                  <Facebook className="h-8 w-8 text-blue-400" />
                 </div>
+              )}
+              {/* Video indicator */}
+              {post.type === 'video' && (
+                <div className="absolute top-1 right-1">
+                  <svg className="w-4 h-4 text-white drop-shadow-lg" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z"/>
+                  </svg>
+                </div>
+              )}
+              {/* Hover overlay with engagement stats */}
+              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4 text-white text-sm font-semibold">
+                <span className="flex items-center gap-1">
+                  <span>👍</span>
+                  {post.likes?.summary?.total_count || 0}
+                </span>
+                <span className="flex items-center gap-1">
+                  <span>💬</span>
+                  {post.comments?.summary?.total_count || 0}
+                </span>
               </div>
-            ))}
-          </div>
-        )}
+            </div>
+          ))}
+        </div>
       </div>
     );
   };
@@ -1254,99 +1280,71 @@ function FacebookIntegration() {
   // renderPostModal - REMOVED (Create Post functionality removed)
 
   const renderPageDetails = (page) => (
-    <div key={page.id} className="border-2 border-slate-200 rounded-2xl p-6 mb-6 bg-white shadow-md hover:shadow-lg transition-shadow">
-      <div className="flex items-start gap-4">
-        {page.picture && (
-          <img 
-            src={page.picture.data.url} 
-            alt={page.name}
-            className="w-24 h-24 rounded-2xl border-4 border-blue-100 shadow-md"
-          />
-        )}
-        <div className="flex-1">
-          <div className="flex items-center gap-2 mb-3">
-            <h4 className="font-bold text-2xl text-slate-800">{page.name}</h4>
-            {page.verification_status && (
-              <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
-                <span className="text-white text-sm">✓</span>
-              </div>
-            )}
-          </div>
-          
-          <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 text-blue-700 rounded-lg mb-4">
-            <span className="font-semibold text-sm">Category:</span>
-            <span className="text-sm">{page.category}</span>
-          </div>
-          
-          {page.about && (
-            <p className="text-sm text-slate-700 mb-4 bg-gradient-to-r from-slate-50 to-blue-50 p-4 rounded-xl border border-slate-200">
-              {page.about}
-            </p>
+    <div key={page.id} className="bg-white sm:bg-gradient-to-br sm:from-blue-50 sm:to-indigo-50 sm:border sm:border-blue-200 sm:rounded-2xl mb-4">
+      {/* Profile Header - Instagram Style */}
+      <div className="p-4 sm:p-6">
+        <div className="flex items-start gap-4 mb-4">
+          {page.picture ? (
+            <img 
+              src={page.picture.data.url} 
+              alt={page.name}
+              className="w-16 h-16 sm:w-20 sm:h-20 rounded-full border-2 border-blue-200 flex-shrink-0"
+            />
+          ) : (
+            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-blue-400 to-indigo-600 rounded-full flex items-center justify-center flex-shrink-0">
+              <Facebook className="h-8 w-8 sm:h-10 sm:w-10 text-white" />
+            </div>
           )}
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mb-6">
-            <div className="space-y-3 bg-slate-50 p-4 rounded-xl">
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-slate-700">Page ID:</span>
-                <span className="text-slate-600">{page.id}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-slate-700">Followers:</span>
-                <span className="text-slate-600 font-semibold">{page.fan_count?.toLocaleString() || 'N/A'}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-slate-700">Username:</span>
-                <span className="text-slate-600">@{page.username || 'N/A'}</span>
-              </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <h4 className="text-lg sm:text-xl font-bold text-gray-900 truncate">{page.name}</h4>
+              {page.verification_status && (
+                <div className="w-4 h-4 sm:w-5 sm:h-5 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
+                  <span className="text-white text-xs">✓</span>
+                </div>
+              )}
             </div>
-            <div className="space-y-3 bg-slate-50 p-4 rounded-xl">
-              <div className="flex items-start gap-2">
-                <span className="font-bold text-slate-700">Website:</span>
-                {page.website ? (
-                  <a href={page.website} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 hover:underline transition-colors">
-                    {page.website}
-                  </a>
-                ) : <span className="text-slate-600">N/A</span>}
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-slate-700">Phone:</span>
-                <span className="text-slate-600">{page.phone || 'N/A'}</span>
-              </div>
-              <div className="flex items-start gap-2">
-                <span className="font-bold text-slate-700">Link:</span>
-                {page.link ? (
-                  <a href={page.link} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 hover:underline transition-colors inline-flex items-center gap-1">
-                    View Page <ExternalLink className="h-3 w-3" />
-                  </a>
-                ) : <span className="text-slate-600">N/A</span>}
-              </div>
+            <p className="text-xs sm:text-sm text-gray-500 truncate">Page ID: {page.id}</p>
+          </div>
+        </div>
+        
+        {/* Action Button - Compact for mobile */}
+        <div className="flex gap-2 mb-4">
+          <button
+            onClick={() => fetchPagePosts(page.id, page.access_token)}
+            disabled={loadingPosts[page.id] || !isFacebookApiReady()}
+            className="flex items-center justify-center gap-1 flex-1 px-2 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Facebook className="h-3 w-3" />
+            <span>{loadingPosts[page.id] ? 'Loading...' : 'Load Posts'}</span>
+          </button>
+        </div>
+      
+        {/* Stats Row - Instagram Style */}
+        <div className="flex justify-around text-center border-t border-b border-gray-200 py-3 -mx-4 sm:mx-0 sm:border sm:rounded-xl sm:bg-white">
+          <div>
+            <div className="text-lg sm:text-xl font-bold text-gray-900">
+              {pagePosts[page.id]?.length?.toLocaleString() || '0'}
             </div>
+            <div className="text-xs text-gray-500">Posts</div>
           </div>
-
-          <div className="flex flex-wrap gap-3">
-            <button
-              onClick={() => fetchPageInsights(page.id, page.access_token)}
-              disabled={loadingInsights[page.id] || !isFacebookApiReady()}
-              className="group bg-gradient-to-r from-blue-500 to-indigo-500 text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:from-blue-600 hover:to-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-md hover:shadow-lg transition-all"
-            >
-              <BarChart3 className="h-5 w-5 group-hover:scale-110 transition-transform" />
-              <span>{loadingInsights[page.id] ? 'Loading...' : 'Get Insights'}</span>
-            </button>
-
-            <button
-              onClick={() => fetchPagePosts(page.id, page.access_token)}
-              disabled={loadingPosts[page.id] || !isFacebookApiReady()}
-              className="group bg-gradient-to-r from-emerald-500 to-green-500 text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:from-emerald-600 hover:to-green-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-md hover:shadow-lg transition-all"
-            >
-              <Facebook className="h-5 w-5 group-hover:scale-110 transition-transform" />
-              <span>{loadingPosts[page.id] ? 'Loading...' : 'Show FB Posts'}</span>
-            </button>
+          <div className="border-l border-gray-200 pl-4">
+            <div className="text-lg sm:text-xl font-bold text-gray-900">
+              {page.fan_count?.toLocaleString() || '0'}
+            </div>
+            <div className="text-xs text-gray-500">Followers</div>
           </div>
-
-          {renderPageInsights(page.id)}
-          {renderPagePosts(page.id)}
+          <div className="border-l border-gray-200 pl-4">
+            <div className="text-lg sm:text-xl font-bold text-gray-900">
+              {pagePosts[page.id]?.reduce((sum, post) => sum + (post.likes?.summary?.total_count || 0), 0).toLocaleString() || '0'}
+            </div>
+            <div className="text-xs text-gray-500">Likes</div>
+          </div>
         </div>
       </div>
+
+      {renderPageInsights(page.id)}
+      {renderPagePosts(page.id)}
     </div>
   );
 
@@ -1567,47 +1565,40 @@ function FacebookIntegration() {
         console.log('✅ Stored connected page:', page.name);
       }
 
-      // Store customer social account for admin access
-      await storeCustomerSocialAccount(page);
+      // NOTE: Don't store customer social account here - it should be done once for all pages
       
     } catch (error) {
       console.warn('Failed to store connected page:', error);
     }
   };
 
-  // Store customer social account for admin access
-  const storeCustomerSocialAccount = async (page) => {
+  // CRITICAL FIX: Store all pages at once for this customer
+  const storeAllPagesForCustomer = async (pages) => {
     try {
-      // Get current user/customer ID from auth context or localStorage
-      let customerId = null;
-      
-      // Try multiple ways to get customer ID (similar to contentRoutes.js pattern)
-      const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
-      customerId = currentUser.userId || currentUser.id || currentUser._id || currentUser.customer_id;
-      
-      // If still no customer ID, try getting from other possible sources
-      if (!customerId) {
-        const authUser = JSON.parse(localStorage.getItem('user') || '{}');
-        customerId = authUser.userId || authUser.id || authUser._id || authUser.customer_id;
-      }
-      
-      // Log what we found for debugging
-      console.log('🔍 Customer ID search:', {
-        currentUser,
-        customerId,
-        found: !!customerId
-      });
-      
+      const customerId = getCurrentCustomerId();
       if (!customerId) {
         console.warn('No customer ID found, cannot store social account');
         return;
       }
 
-      // ✅ CRITICAL FIX: Always store the current user access token
       if (!activeAccount?.accessToken) {
         console.error('❌ No user access token available - refresh will not work');
         alert('Warning: User access token is missing. Token refresh may not work. Please reconnect if you experience issues.');
       }
+
+      // Map all pages to backend format
+      const pagesData = pages.map(page => ({
+        id: page.id,
+        name: page.name,
+        accessToken: page.access_token,
+        category: page.category,
+        fanCount: page.fan_count,
+        permissions: ['pages_read_engagement'],
+        tasks: page.tasks || [],
+        tokenValidatedAt: new Date().toISOString(),
+        tokenType: page.tokenType || 'standard',
+        tokenExpiry: page.tokenExpiry || 'unknown'
+      }));
 
       const accountData = {
         customerId: customerId,
@@ -1616,61 +1607,20 @@ function FacebookIntegration() {
         name: activeAccount.name,
         email: activeAccount.email,
         profilePicture: activeAccount.picture?.data?.url,
-        accessToken: activeAccount.accessToken, // ✅ Store user access token for refresh
-        userId: activeAccount.id, // ✅ Store user ID for refresh operations
-        pages: [
-          {
-            id: page.id,
-            name: page.name,
-            accessToken: page.access_token, // ✅ Store page access token (never-expiring)
-            category: page.category,
-            fanCount: page.fan_count,
-            permissions: ['pages_read_engagement'],
-            tasks: page.tasks || [],
-            tokenValidatedAt: new Date().toISOString(),
-            tokenType: page.tokenType || 'standard', // ✅ Track if never-expiring
-            tokenExpiry: page.tokenExpiry || 'unknown' // ✅ 'never' for never-expiring tokens
-          }
-        ],
+        accessToken: activeAccount.accessToken,
+        userId: activeAccount.id,
+        pages: pagesData, // All pages for this customer
         connectedAt: new Date().toISOString(),
-        tokenExpiresAt: activeAccount.tokenExpiresAt || new Date(Date.now() + (60 * 24 * 60 * 60 * 1000)).toISOString(), // User token expiry (default 60 days)
-        // ✅ FORCE RESET - Explicitly set these to false/null
+        tokenExpiresAt: activeAccount.tokenExpiresAt || new Date(Date.now() + (60 * 24 * 60 * 60 * 1000)).toISOString(),
         needsReconnection: false,
         lastTokenValidation: new Date().toISOString(),
         refreshError: null,
         lastRefreshAttempt: null,
-        // ✅ Add validation timestamp to track when tokens were confirmed working
         lastSuccessfulValidation: new Date().toISOString(),
         tokenStatus: 'active'
       };
 
-      // ✅ VALIDATION: Only set error flags if tokens are actually missing
-      const hasUserToken = !!accountData.accessToken;
-      const hasPageToken = !!accountData.pages[0].accessToken;
-
-      if (!hasUserToken) {
-        console.warn('⚠️ Missing user access token - refresh will not work');
-        accountData.needsReconnection = true;
-        accountData.refreshError = 'User access token not available during connection';
-        accountData.tokenStatus = 'invalid_user_token';
-      }
-
-      if (!hasPageToken) {
-        console.warn('⚠️ Missing page access token - posting will not work');
-        accountData.needsReconnection = true;
-        accountData.refreshError = 'Page access token not available during connection';
-        accountData.tokenStatus = 'invalid_page_token';
-      }
-
-      // ✅ Log token validation status
-      console.log('🔑 Token Validation Summary:', {
-        hasUserToken,
-        hasPageToken,
-        userTokenLength: accountData.accessToken?.length || 0,
-        pageTokenLength: accountData.pages[0].accessToken?.length || 0,
-        needsReconnection: accountData.needsReconnection,
-        tokenStatus: accountData.tokenStatus
-      });
+      console.log(`📦 Storing ${pagesData.length} pages for customer ${customerId}`);
 
       const response = await fetch(`${process.env.REACT_APP_API_URL}/api/customer-social-links`, {
         method: 'POST',
@@ -1681,30 +1631,25 @@ function FacebookIntegration() {
       if (!response.ok) {
         const errorText = await response.text();
         console.warn('Failed to store customer social account - server response:', response.status, errorText);
-        
-        // Don't throw error for social account storage failures - it's not critical
-        if (response.status === 409) {
-          console.log('📝 Document conflict detected - this is normal for concurrent updates');
-        }
         return;
       }
       
       const result = await response.json();
       if (result.success) {
-        console.log('✅ Stored customer social account for admin access');
+        console.log('✅ Stored all pages for customer social account');
       } else {
         console.warn('Failed to store customer social account:', result.error);
       }
       
     } catch (error) {
-      console.warn('Failed to store customer social account:', error);
+      console.warn('Failed to store all pages for customer:', error);
     }
   };
 
   // Enhanced token refresh with never-expiring page tokens
   const refreshPageTokens = async () => {
-    if (!activeAccount || !isFacebookApiReady()) {
-      console.warn('Cannot refresh tokens: no active account or FB API not ready');
+    if (!activeAccount) {
+      alert('❌ No active account found. Please connect your Facebook account first.');
       return;
     }
 
@@ -1714,51 +1659,54 @@ function FacebookIntegration() {
       // First refresh the user session
       const sessionRefreshed = await refreshCurrentSession();
       
-      if (sessionRefreshed) {
-        // Get never-expiring page tokens via backend
-        const response = await fetch(`${process.env.REACT_APP_API_URL}/api/facebook/page-tokens`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            userAccessToken: activeAccount.accessToken,
-            userId: activeAccount.id
-          })
+      if (!sessionRefreshed) {
+        console.error('❌ Session refresh failed');
+        alert('❌ Failed to refresh session. Please try reconnecting your Facebook account.');
+        return;
+      }
+      
+      // Get never-expiring page tokens via backend
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/facebook/page-tokens`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userAccessToken: activeAccount.accessToken,
+          userId: activeAccount.id
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success && data.pages) {
+        console.log(`✅ Got never-expiring tokens for ${data.pages.length} pages`);
+        
+        // Update pages with never-expiring tokens
+        setFbPages(prevPages => {
+          return prevPages.map(page => {
+            const updatedPage = data.pages.find(p => p.id === page.id);
+            if (updatedPage) {
+              return {
+                ...page,
+                access_token: updatedPage.access_token,
+                tokenType: 'never_expiring_page_token'
+              };
+            }
+            return page;
+          });
         });
         
-        const data = await response.json();
-        
-        if (data.success && data.pages) {
-          console.log(`✅ Got never-expiring tokens for ${data.pages.length} pages`);
-          
-          // Update pages with never-expiring tokens
-          setFbPages(prevPages => {
-            return prevPages.map(page => {
-              const updatedPage = data.pages.find(p => p.id === page.id);
-              if (updatedPage) {
-                return {
-                  ...page,
-                  access_token: updatedPage.access_token,
-                  tokenType: 'never_expiring_page_token'
-                };
-              }
-              return page;
-            });
-          });
-          
-          alert('✅ Tokens refreshed successfully! Page tokens are now never-expiring.');
-        } else {
-          // Fallback to re-fetching pages normally
-          fetchFbPages();
-          alert('✅ Tokens refreshed successfully!');
-        }
+        alert('✅ Tokens refreshed successfully! Page tokens are now never-expiring.');
       } else {
-        alert('❌ Failed to refresh session. Please try reconnecting your Facebook account.');
+        console.error('❌ Failed to get page tokens:', data.error);
+        // Fallback to re-fetching pages normally
+        fetchFbPages();
+        alert('✅ Session refreshed! Your pages have been reloaded.');
       }
     } catch (error) {
       console.error('❌ Failed to refresh tokens:', error);
-      alert('❌ Failed to refresh tokens. Please try reconnecting your Facebook account.');
+      alert('❌ Failed to refresh tokens. Error: ' + error.message);
     }
   };
 
@@ -1817,57 +1765,58 @@ function FacebookIntegration() {
   const renderAccountSelector = () => {
     if (connectedAccounts.length <= 1) return null;
     return (
-      <div className="mb-4">
-        <div className="flex items-center justify-between mb-2">
-          <h4 className="font-medium text-gray-700 flex items-center">
-            <Users className="h-5 w-5 mr-2" />
-            Connected Facebook Accounts ({connectedAccounts.length})
+      <div className="mb-4 px-3 sm:px-0">
+        <div className="flex items-center justify-between mb-3">
+          <h4 className="font-medium text-gray-700 flex items-center text-sm sm:text-base">
+            <Users className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
+            <span className="hidden sm:inline">Connected Facebook Accounts</span>
+            <span className="sm:hidden">Accounts</span>
+            <span className="ml-1">({connectedAccounts.length})</span>
           </h4>
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={refreshPageTokens}
-              disabled={!fbSdkLoaded || !isFacebookApiReady() || !activeAccount}
-              className="bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center space-x-2 text-sm"
-            >
-              <span>🔄</span>
-              <span>Refresh Tokens</span>
-            </button>
-          </div>
+          <button
+            onClick={refreshPageTokens}
+            disabled={!fbSdkLoaded || !isFacebookApiReady() || !activeAccount}
+            className="bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-1 sm:gap-2 text-xs sm:text-sm"
+          >
+            <RefreshCw className="h-4 w-4" />
+            <span className="hidden sm:inline">Refresh Tokens</span>
+            <span className="sm:hidden">Refresh</span>
+          </button>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="space-y-2">
           {connectedAccounts.map((account) => {
             const expired = isTokenExpired(account);
             return (
               <div
                 key={account.id}
-                className={`border rounded-lg p-4 transition-all cursor-pointer ${
+                className={`rounded-lg p-3 transition-all cursor-pointer ${
                   activeAccountId === account.id
-                    ? 'border-blue-500 bg-blue-50 shadow-md'
-                    : 'border-gray-200 bg-white hover:border-gray-300'
-                } ${expired ? 'border-orange-300 bg-orange-50' : ''}`}
+                    ? 'bg-blue-50 sm:ring-1 sm:ring-blue-300'
+                    : 'bg-gray-50 hover:bg-gray-100'
+                } ${expired ? 'bg-orange-50' : ''}`}
                 onClick={() => switchAccount(account.id)}
               >
-                <div className="flex items-center space-x-3">
+                <div className="flex items-center gap-2 sm:gap-3">
                   {account.picture && (
                     <img
                       src={account.picture.data.url}
                       alt={account.name}
-                      className="w-12 h-12 rounded-full"
+                      className="w-10 h-10 sm:w-12 sm:h-12 rounded-full"
                     />
                   )}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center space-x-2">
-                      <h5 className="font-medium text-gray-900 truncate">{account.name}</h5>
+                    <div className="flex items-center gap-2">
+                      <h5 className="font-medium text-sm sm:text-base text-gray-900 truncate">{account.name}</h5>
                       {activeAccountId === account.id && (
-                        <UserCheck className="h-4 w-4 text-blue-600" />
+                        <UserCheck className="h-3 w-3 sm:h-4 sm:w-4 text-blue-600 flex-shrink-0" />
                       )}
                       {expired && (
-                        <span className="text-xs bg-orange-200 text-orange-800 px-2 py-1 rounded">
+                        <span className="text-xs bg-orange-200 text-orange-800 px-1.5 py-0.5 rounded flex-shrink-0">
                           Expired
                         </span>
                       )}
                     </div>
-                    <p className="text-sm text-gray-600 truncate">{account.email}</p>
+                    <p className="text-xs sm:text-sm text-gray-600 truncate">{account.email}</p>
                     <p className="text-xs text-gray-500">
                       Connected {new Date(account.connectedAt).toLocaleDateString()}
                     </p>
@@ -1890,7 +1839,7 @@ function FacebookIntegration() {
                       e.stopPropagation();
                       removeAccount(account.id);
                     }}
-                    className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                    className="p-1 text-gray-400 hover:text-red-600 transition-colors flex-shrink-0"
                     title="Remove account"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -1925,58 +1874,56 @@ function FacebookIntegration() {
 
   // --- Facebook Main UI (like Instagram) ---
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-      <header className="bg-white/80 backdrop-blur-md shadow-md border-b border-slate-200 sticky top-0 z-50">
-        <div className="px-6 sm:px-8 lg:px-12 xl:px-16 2xl:px-24">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-md">
-                <Facebook className="h-6 w-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-slate-800">Facebook Integration</h1>
-                <p className="text-xs text-slate-500">Manage your Facebook pages and analytics</p>
-              </div>
+    <div className="min-h-screen bg-gray-50">
+      <header className="bg-white border-b sticky top-0 z-50">
+        <div className="sm:px-4">
+          <div className="flex items-center gap-2 sm:gap-3 h-14 sm:h-16">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+              <Facebook className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
+            </div>
+            <div>
+              <h1 className="text-base sm:text-lg font-semibold text-gray-900">Facebook Integration</h1>
+              <p className="text-xs text-gray-500 hidden sm:block">Manage your Facebook pages and analytics</p>
             </div>
           </div>
         </div>
       </header>
-      <div className="px-6 sm:px-8 lg:px-12 xl:px-16 2xl:px-24 py-8">
-        <div className="bg-white rounded-2xl shadow-lg border border-slate-200 p-6 md:p-8">
+      <div className="sm:p-4">
+        <div className="bg-white sm:rounded-lg sm:p-4 sm:shadow-sm">
           {/* Debug info (optional, can remove) */}
           {/* ...existing code... */}
           {renderError()}
           {connectedAccounts.length === 0 ? (
-            <div className="text-center py-12">
-              <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl mb-6 shadow-lg">
-                <Facebook className="h-10 w-10 text-white" />
+            <div className="text-center py-6 sm:py-8">
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-lg mb-4">
+                <Facebook className="h-8 w-8 text-white" />
               </div>
-              <h3 className="text-2xl font-bold text-slate-800 mb-3">Connect Facebook Accounts</h3>
-              <p className="text-slate-600 mb-8 max-w-md mx-auto text-lg">
+              <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-2">Connect Facebook Accounts</h3>
+              <p className="text-sm text-gray-600 mb-6 max-w-md mx-auto">
                 Connect your Facebook accounts to manage your pages and access detailed analytics.
               </p>
-              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-6 mb-8 max-w-md mx-auto">
-                <h4 className="font-bold text-blue-800 mb-4 flex items-center gap-2">
-                  <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
-                    <span className="text-white">📱</span>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 max-w-md mx-auto text-left">
+                <h4 className="font-semibold text-sm text-blue-900 mb-3 flex items-center gap-2">
+                  <div className="w-6 h-6 bg-blue-500 rounded flex items-center justify-center">
+                    <span className="text-white text-sm">📱</span>
                   </div>
                   Multi-Account Setup Guide
                 </h4>
-                <div className="text-sm text-slate-700 text-left space-y-3">
-                  <div className="flex items-start gap-3">
-                    <div className="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center flex-shrink-0 font-semibold text-xs">1</div>
+                <div className="text-xs sm:text-sm text-gray-700 space-y-2">
+                  <div className="flex items-start gap-2">
+                    <div className="w-5 h-5 bg-blue-500 text-white rounded-full flex items-center justify-center flex-shrink-0 font-semibold text-xs">1</div>
                     <p>Log in with your Facebook account</p>
                   </div>
-                  <div className="flex items-start gap-3">
-                    <div className="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center flex-shrink-0 font-semibold text-xs">2</div>
+                  <div className="flex items-start gap-2">
+                    <div className="w-5 h-5 bg-blue-500 text-white rounded-full flex items-center justify-center flex-shrink-0 font-semibold text-xs">2</div>
                     <p>Grant permissions to access your pages</p>
                   </div>
-                  <div className="flex items-start gap-3">
-                    <div className="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center flex-shrink-0 font-semibold text-xs">3</div>
+                  <div className="flex items-start gap-2">
+                    <div className="w-5 h-5 bg-blue-500 text-white rounded-full flex items-center justify-center flex-shrink-0 font-semibold text-xs">3</div>
                     <p>Select which accounts to connect and manage</p>
                   </div>
-                  <div className="flex items-start gap-3">
-                    <div className="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center flex-shrink-0 font-semibold text-xs">4</div>
+                  <div className="flex items-start gap-2">
+                    <div className="w-5 h-5 bg-blue-500 text-white rounded-full flex items-center justify-center flex-shrink-0 font-semibold text-xs">4</div>
                     <p>Historical data will be captured automatically</p>
                   </div>
                 </div>
@@ -1984,9 +1931,9 @@ function FacebookIntegration() {
               <button
                 onClick={fbLogin}
                 disabled={!isFacebookApiReady()}
-                className="group bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-8 py-4 rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 flex items-center gap-3 mx-auto font-semibold shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                className="bg-blue-600 text-white px-4 sm:px-6 py-3 rounded-lg hover:bg-blue-700 flex items-center gap-2 mx-auto font-medium text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed w-auto"
               >
-                <Facebook className="h-6 w-6 group-hover:scale-110 transition-transform" />
+                <Facebook className="h-5 w-5" />
                 <span>Connect Facebook Account</span>
               </button>
             </div>
@@ -1994,49 +1941,51 @@ function FacebookIntegration() {
             <div className="space-y-6">
               {/* Show account selector if multiple accounts */}
               {connectedAccounts.length > 1 && renderAccountSelector()}
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 w-full">
-                  <div className="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-green-500 px-4 py-2 rounded-xl shadow-md">
-                    <span className="text-white font-bold text-lg">●</span>
-                    <span className="text-sm font-semibold text-white">
+              <div className="flex flex-col gap-3 sm:gap-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 w-full">
+                  <div className="flex items-center gap-2 bg-green-600 px-3 py-1.5 rounded-lg w-full sm:w-auto justify-center sm:justify-start">
+                    <span className="text-white font-bold">●</span>
+                    <span className="text-xs sm:text-sm font-semibold text-white">
                       {connectedAccounts.length} Account{connectedAccounts.length !== 1 ? 's' : ''} Connected
                     </span>
                   </div>
                   {activeAccount && (
-                    <div className="flex items-center gap-2 bg-slate-100 px-4 py-2 rounded-xl">
+                    <div className="flex items-center gap-2 bg-slate-100 px-3 sm:px-4 py-2 rounded-xl w-full sm:w-auto justify-center sm:justify-start">
                       {activeAccount.picture && (
                         <img
                           src={activeAccount.picture.data.url}
                           alt="Profile"
-                          className="w-7 h-7 rounded-full border-2 border-slate-300"
+                          className="w-6 h-6 sm:w-7 sm:h-7 rounded-full border-2 border-slate-300"
                         />
                       )}
-                      <span className="text-sm font-semibold text-slate-700">
+                      <span className="text-xs sm:text-sm font-semibold text-slate-700 truncate">
                         {activeAccount.name}
                       </span>
                     </div>
                   )}
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                   <button
                     onClick={refreshPageTokens}
                     disabled={!fbSdkLoaded || !isFacebookApiReady() || !activeAccount}
-                    className="group flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-500 to-green-500 text-white rounded-xl hover:from-emerald-600 hover:to-green-600 transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                    className="group flex items-center gap-2 px-3 sm:px-4 py-2 bg-gradient-to-r from-emerald-500 to-green-500 text-white rounded-xl hover:from-emerald-600 hover:to-green-600 transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed font-medium text-xs sm:text-sm flex-1 sm:flex-initial justify-center"
                   >
                     <RefreshCw className="h-4 w-4 group-hover:rotate-180 transition-transform duration-500" />
-                    <span>Refresh Tokens</span>
+                    <span className="hidden sm:inline">Refresh Tokens</span>
+                    <span className="sm:hidden">Refresh</span>
                   </button>
                   <button
                     onClick={fbLogin}
                     disabled={!fbSdkLoaded || !isFacebookApiReady()}
-                    className="group flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-xl hover:from-blue-600 hover:to-indigo-600 transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                    className="group flex items-center gap-2 px-3 sm:px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-xl hover:from-blue-600 hover:to-indigo-600 transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed font-medium text-xs sm:text-sm flex-1 sm:flex-initial justify-center"
                   >
                     <Plus className="h-4 w-4 group-hover:scale-110 transition-transform" />
-                    <span>Add Account</span>
+                    <span className="hidden sm:inline">Add Account</span>
+                    <span className="sm:hidden">Add</span>
                   </button>
                   <button
                     onClick={() => fbLogoutAll()}
-                    className="group flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-slate-100 to-slate-200 text-slate-700 rounded-xl hover:from-slate-200 hover:to-slate-300 transition-all border border-slate-300 font-medium"
+                    className="group flex items-center gap-2 px-3 sm:px-4 py-2 bg-gradient-to-r from-slate-100 to-slate-200 text-slate-700 rounded-xl hover:from-slate-200 hover:to-slate-300 transition-all border border-slate-300 font-medium text-xs sm:text-sm w-full sm:w-auto justify-center"
                   >
                     <ExternalLink className="h-4 w-4 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
                     <span>Disconnect All</span>
@@ -2045,7 +1994,7 @@ function FacebookIntegration() {
               </div>
               {/* Active account details and pages */}
               {activeAccount && (
-                <div className="bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 border-2 border-indigo-200 rounded-2xl p-6 shadow-lg">
+                <div className="bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 sm:border-2 sm:border-indigo-200 rounded-2xl sm:p-6 shadow-sm sm:shadow-lg">
                   <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 gap-4">
                     <div className="flex items-center gap-4">
                       {activeAccount.picture && (
@@ -2060,18 +2009,18 @@ function FacebookIntegration() {
                         <p className="text-sm text-slate-600 mt-1">{activeAccount.email}</p>
                       </div>
                     </div>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-2 w-full md:w-auto">
                       <button
                         onClick={refreshPageTokens}
                         disabled={!fbSdkLoaded || !isFacebookApiReady() || !activeAccount}
-                        className="group flex items-center gap-2 px-4 py-2 bg-white border-2 border-indigo-200 text-indigo-700 rounded-xl hover:bg-indigo-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-sm"
+                        className="group flex items-center gap-2 px-3 sm:px-4 py-2 bg-white border-2 border-indigo-200 text-indigo-700 rounded-xl hover:bg-indigo-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-sm text-xs sm:text-sm flex-1 md:flex-initial justify-center"
                       >
                         <RefreshCw className="h-4 w-4 group-hover:rotate-180 transition-transform duration-500" />
                         <span>Refresh</span>
                       </button>
                       <button
                         onClick={() => removeAccount(activeAccount.id)}
-                        className="group flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-red-500 to-rose-500 text-white rounded-xl hover:from-red-600 hover:to-rose-600 transition-all font-medium shadow-md hover:shadow-lg"
+                        className="group flex items-center gap-2 px-3 sm:px-4 py-2 bg-gradient-to-r from-red-500 to-rose-500 text-white rounded-xl hover:from-red-600 hover:to-rose-600 transition-all font-medium shadow-md hover:shadow-lg text-xs sm:text-sm flex-1 md:flex-initial justify-center"
                       >
                         <ExternalLink className="h-4 w-4 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
                         <span>Disconnect</span>
@@ -2104,15 +2053,15 @@ function FacebookIntegration() {
                               {renderPageDetails(page)}
                             </div>
                             {/* --- Historical Analytics Toggle and Chart --- */}
-                            <div className="mb-6">
-                              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-gradient-to-r from-indigo-50 to-blue-50 rounded-2xl border-2 border-indigo-200 p-5 gap-4 shadow-sm">
-                                <div className="flex items-center gap-4">
-                                  <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-blue-500 rounded-xl flex items-center justify-center shadow-md">
-                                    <Calendar className="h-6 w-6 text-white" />
+                            <div className="mb-4">
+                              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-indigo-50 rounded-lg sm:border sm:border-indigo-200 sm:p-4 gap-3">
+                                <div className="flex items-center gap-2 sm:gap-3">
+                                  <div className="w-8 h-8 sm:w-10 sm:h-10 bg-indigo-600 rounded-lg flex items-center justify-center">
+                                    <Calendar className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
                                   </div>
                                   <div>
-                                    <h4 className="font-bold text-slate-800">Historical Analytics</h4>
-                                    <p className="text-sm text-slate-600">View long-term trends and growth patterns</p>
+                                    <h4 className="font-semibold text-sm sm:text-base text-gray-900">Historical Analytics</h4>
+                                    <p className="text-xs text-gray-600 hidden sm:block">View long-term trends and growth patterns</p>
                                   </div>
                                 </div>
                                 <button
@@ -2120,9 +2069,9 @@ function FacebookIntegration() {
                                     ...prev,
                                     [page.id]: !prev[page.id]
                                   }))}
-                                  className="group flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-blue-600 text-white px-5 py-3 rounded-xl hover:from-indigo-700 hover:to-blue-700 transition-all shadow-md hover:shadow-lg font-medium"
+                                  className="flex items-center gap-2 bg-indigo-600 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-indigo-700 text-xs sm:text-sm font-medium w-full sm:w-auto justify-center"
                                 >
-                                  <Calendar className="h-5 w-5 group-hover:scale-110 transition-transform" />
+                                  <Calendar className="h-4 w-4" />
                                   <span>
                                     {showHistoricalCharts[page.id] ? 'Hide' : 'Show'} Historical Data
                                   </span>

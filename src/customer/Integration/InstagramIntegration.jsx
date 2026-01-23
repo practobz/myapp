@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Instagram, TrendingUp,BarChart3, ExternalLink, CheckCircle, AlertCircle, Loader2, Users, Heart, MessageCircle, Eye, Plus, Settings, ChevronDown, ChevronRight, UserCheck, Trash2, Calendar, RefreshCw } from 'lucide-react';
+import { Instagram, TrendingUp, BarChart3, ExternalLink, CheckCircle, AlertCircle, Loader2, Users, Heart, MessageCircle, Eye, Plus, Settings, ChevronDown, ChevronRight, UserCheck, Trash2, Calendar, RefreshCw, LayoutGrid } from 'lucide-react';
 import TrendChart from '../../components/TrendChart';
 import TimePeriodChart from '../../components/TimeperiodChart';
 import { subDays, format } from 'date-fns';
@@ -1448,251 +1448,217 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
     if (!selectedPostId || !singlePostAnalytics) return null;
 
     return (
-      <div className="mt-6 bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-            <BarChart3 className="h-5 w-5 mr-2 text-pink-600" />
-            Post Analytics
-          </h3>
-          <button
-            onClick={() => {
-              setSelectedPostId(null);
-              setSinglePostAnalytics(null);
-            }}
-            className="text-gray-400 hover:text-gray-600"
-          >
-            ✕
-          </button>
-        </div>
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4">
+        {/* Backdrop */}
+        <div 
+          className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+          onClick={() => {
+            setSelectedPostId(null);
+            setSinglePostAnalytics(null);
+          }}
+        />
+        
+        {/* Modal */}
+        <div className="relative bg-white rounded-xl sm:rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
+          {/* Modal Header */}
+          <div className="flex items-center justify-between px-3 sm:px-4 py-2.5 sm:py-3 border-b border-gray-200 bg-gradient-to-r from-pink-50 to-purple-50 flex-shrink-0">
+            <h3 className="text-sm sm:text-base font-semibold text-gray-900 flex items-center">
+              <BarChart3 className="h-4 w-4 sm:h-5 sm:w-5 mr-1.5 sm:mr-2 text-pink-600" />
+              Post Analytics
+            </h3>
+            <button
+              onClick={() => {
+                setSelectedPostId(null);
+                setSinglePostAnalytics(null);
+              }}
+              className="p-1.5 rounded-full hover:bg-pink-100 text-gray-500 hover:text-gray-700 transition-colors"
+            >
+              <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
 
-        <div className="space-y-6">
-          {/* Post Preview */}
-          <div className="bg-pink-50 border border-pink-200 rounded-xl p-4">
-            <div className="flex items-start space-x-3">
-              {(singlePostAnalytics.thumbnail_url || singlePostAnalytics.media_url) && (
-                <img
-                  src={singlePostAnalytics.thumbnail_url || singlePostAnalytics.media_url}
-                  alt="Post media"
-                  className="w-20 h-20 object-cover rounded-lg"
-                />
-              )}
-              <div className="flex-1">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs text-pink-600 bg-pink-100 px-2 py-1 rounded font-medium">
-                    {singlePostAnalytics.media_type}
-                  </span>
-                  <span className="text-xs text-gray-500">
-                    {new Date(singlePostAnalytics.timestamp).toLocaleDateString()}
-                  </span>
-                </div>
-                <p className="text-sm text-gray-800 mb-2">
-                  {singlePostAnalytics.caption?.length > 150 
-                    ? `${singlePostAnalytics.caption.substring(0, 150)}...` 
-                    : singlePostAnalytics.caption
-                  }
-                </p>
-                <div className="flex items-center justify-between text-xs text-gray-500">
-                  <span>Instagram Post</span>
-                  {singlePostAnalytics.permalink && (
-                    <a 
-                      href={singlePostAnalytics.permalink} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="text-pink-600 hover:text-pink-700"
-                    >
-                      View Post →
-                    </a>
+          {/* Modal Body - Scrollable */}
+          <div className="flex-1 overflow-y-auto p-3 sm:p-4">
+            <div className="space-y-4">
+              {/* Post Preview */}
+              <div className="bg-pink-50 border border-pink-200 rounded-lg p-2.5 sm:p-3">
+                <div className="flex items-start space-x-2 sm:space-x-3">
+                  {(singlePostAnalytics.thumbnail_url || singlePostAnalytics.media_url) && (
+                    <img
+                      src={singlePostAnalytics.thumbnail_url || singlePostAnalytics.media_url}
+                      alt="Post media"
+                      className="w-14 h-14 sm:w-16 sm:h-16 object-cover rounded-lg flex-shrink-0"
+                    />
                   )}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Engagement Metrics Grid */}
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-            <div className="bg-pink-50 border border-pink-200 rounded-xl p-4 text-center">
-              <div className="text-2xl font-bold text-pink-600">
-                {singlePostAnalytics.likes_count?.toLocaleString() || 0}
-              </div>
-              <div className="text-sm text-pink-700 font-medium flex items-center justify-center mt-1">
-                <span className="mr-1">❤️</span>
-                Likes
-              </div>
-            </div>
-
-            <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 text-center">
-              <div className="text-2xl font-bold text-purple-600">
-                {singlePostAnalytics.comments_count?.toLocaleString() || 0}
-              </div>
-              <div className="text-sm text-purple-700 font-medium flex items-center justify-center mt-1">
-                <span className="mr-1">💬</span>
-                Comments
-              </div>
-            </div>
-
-            <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 text-center col-span-2 lg:col-span-1">
-              <div className="text-2xl font-bold text-indigo-600">
-                {singlePostAnalytics.total_engagement?.toLocaleString() || 0}
-              </div>
-              <div className="text-sm text-indigo-700 font-medium flex items-center justify-center mt-1">
-                <TrendingUp className="h-3 w-3 mr-1" />
-                Total Engagement
-              </div>
-              <div className="text-xs text-indigo-600 mt-1">
-                Likes + Comments
-              </div>
-            </div>
-          </div>
-
-          {/* Engagement Trend Charts */}
-          <div className="bg-gradient-to-br from-pink-50 to-purple-50 border border-pink-200 rounded-xl p-6">
-            <h4 className="font-medium text-gray-900 mb-4 flex items-center">
-              <TrendingUp className="h-5 w-5 mr-2 text-pink-600" />
-              Engagement Over Time
-            </h4>
-            <p className="text-xs text-gray-600 mb-4">Estimated engagement growth pattern since posting</p>
-            
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {/* Likes Trend */}
-              <div className="bg-white rounded-lg p-4 border border-pink-100">
-                <div className="mb-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-700 flex items-center">
-                      <span className="w-2 h-2 bg-pink-500 rounded-full mr-2"></span>
-                      Likes Trend
-                    </span>
-                    <span className="text-lg font-bold text-pink-600">
-                      {singlePostAnalytics.likes_count?.toLocaleString() || 0}
-                    </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <span className="text-[10px] sm:text-xs text-pink-600 bg-pink-100 px-1.5 py-0.5 rounded font-medium">
+                        {singlePostAnalytics.media_type}
+                      </span>
+                      <span className="text-[10px] sm:text-xs text-gray-500">
+                        {new Date(singlePostAnalytics.timestamp).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <p className="text-xs sm:text-sm text-gray-800 mb-1 line-clamp-2">
+                      {singlePostAnalytics.caption || 'No caption'}
+                    </p>
+                    {singlePostAnalytics.permalink && (
+                      <a 
+                        href={singlePostAnalytics.permalink} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-[10px] sm:text-xs text-pink-600 hover:text-pink-700"
+                      >
+                        View Post →
+                      </a>
+                    )}
                   </div>
-                  <div className="text-xs text-gray-500 mt-1">Avg: {Math.round(singlePostAnalytics.likes_count / 10)}</div>
                 </div>
-                <TrendChart
-                  data={generatePostTrendData(singlePostAnalytics.likes_count, 'likes')}
-                  title=""
-                  color="#EC4899"
-                  metric="value"
-                  style={{ minHeight: 150 }}
-                />
               </div>
 
-              {/* Comments Trend */}
-              <div className="bg-white rounded-lg p-4 border border-purple-100">
-                <div className="mb-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-700 flex items-center">
-                      <span className="w-2 h-2 bg-purple-500 rounded-full mr-2"></span>
-                      Comments Trend
-                    </span>
-                    <span className="text-lg font-bold text-purple-600">
-                      {singlePostAnalytics.comments_count?.toLocaleString() || 0}
-                    </span>
-                  </div>
-                  <div className="text-xs text-gray-500 mt-1">Avg: {Math.round(singlePostAnalytics.comments_count / 10)}</div>
-                </div>
-                <TrendChart
-                  data={generatePostTrendData(singlePostAnalytics.comments_count, 'comments')}
-                  title=""
-                  color="#8B5CF6"
-                  metric="value"
-                  style={{ minHeight: 150 }}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Engagement Breakdown Chart */}
-          <div className="bg-gray-50 border border-gray-200 rounded-xl p-6">
-            <h4 className="font-medium text-gray-900 mb-4 flex items-center">
-              <BarChart3 className="h-4 w-4 mr-2" />
-              Engagement Breakdown
-            </h4>
-            <div className="space-y-3">
-              {/* Likes Bar */}
-              <div>
-                <div className="flex items-center justify-between text-sm mb-1">
-                  <span className="font-medium text-gray-700">❤️ Likes</span>
-                  <span className="text-pink-600 font-semibold">
+              {/* Engagement Metrics Grid */}
+              <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                <div className="bg-pink-50 border border-pink-200 rounded-lg p-2.5 sm:p-3 text-center">
+                  <div className="text-base sm:text-lg font-bold text-pink-600 mb-1">
                     {singlePostAnalytics.likes_count?.toLocaleString() || 0}
-                    {singlePostAnalytics.total_engagement > 0 && (
-                      <span className="text-gray-500 ml-1">
-                        ({((singlePostAnalytics.likes_count / singlePostAnalytics.total_engagement) * 100).toFixed(1)}%)
-                      </span>
-                    )}
-                  </span>
+                  </div>
+                  <div className="text-[10px] sm:text-xs text-pink-700 font-medium">
+                    ❤️ Likes
+                  </div>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div 
-                    className="bg-pink-500 h-2 rounded-full" 
-                    style={{ 
-                      width: singlePostAnalytics.total_engagement > 0 
-                        ? `${(singlePostAnalytics.likes_count / singlePostAnalytics.total_engagement) * 100}%` 
-                        : '0%' 
-                    }}
-                  ></div>
-                </div>
-              </div>
 
-              {/* Comments Bar */}
-              <div>
-                <div className="flex items-center justify-between text-sm mb-1">
-                  <span className="font-medium text-gray-700">💬 Comments</span>
-                  <span className="text-purple-600 font-semibold">
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-2.5 sm:p-3 text-center">
+                  <div className="text-base sm:text-lg font-bold text-purple-600 mb-1">
                     {singlePostAnalytics.comments_count?.toLocaleString() || 0}
-                    {singlePostAnalytics.total_engagement > 0 && (
-                      <span className="text-gray-500 ml-1">
-                        ({((singlePostAnalytics.comments_count / singlePostAnalytics.total_engagement) * 100).toFixed(1)}%)
-                      </span>
-                    )}
-                  </span>
+                  </div>
+                  <div className="text-[10px] sm:text-xs text-purple-700 font-medium">
+                    💬 Comments
+                  </div>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div 
-                    className="bg-purple-500 h-2 rounded-full" 
-                    style={{ 
-                      width: singlePostAnalytics.total_engagement > 0 
-                        ? `${(singlePostAnalytics.comments_count / singlePostAnalytics.total_engagement) * 100}%` 
-                        : '0%' 
-                    }}
-                  ></div>
+
+                <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-2.5 sm:p-3 text-center">
+                  <div className="text-base sm:text-lg font-bold text-indigo-600 mb-1">
+                    {singlePostAnalytics.total_engagement?.toLocaleString() || 0}
+                  </div>
+                  <div className="text-[10px] sm:text-xs text-indigo-700 font-medium">
+                    📊 Total
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Performance Insights */}
-            <div className="mt-6 p-4 bg-pink-50 border border-pink-200 rounded-lg">
-              <h5 className="font-medium text-pink-800 mb-2">📊 Performance Insights</h5>
-              <div className="text-sm text-pink-700 space-y-1">
-                <p>
-                  <strong>Engagement Rate:</strong> {singlePostAnalytics.total_engagement > 0 ? 'Good engagement' : 'Low engagement'} 
-                  {singlePostAnalytics.total_engagement > 50 && ' - High performing post! 🔥'}
-                </p>
-                <p>
-                  <strong>Most Popular:</strong> {
-                    singlePostAnalytics.likes_count >= singlePostAnalytics.comments_count ? 'Likes' : 'Comments'
-                  }
-                </p>
-                <p>
-                  <strong>Content Type:</strong> {
-                    singlePostAnalytics.media_type === 'VIDEO' ? 'Video content' :
-                    singlePostAnalytics.media_type === 'IMAGE' ? 'Image content' :
-                    singlePostAnalytics.media_type === 'CAROUSEL_ALBUM' ? 'Carousel content' :
-                    'Mixed content'
-                  } - {
-                    singlePostAnalytics.media_type === 'VIDEO' ? 'Video posts typically get higher engagement!' :
-                    singlePostAnalytics.media_type === 'CAROUSEL_ALBUM' ? 'Carousel posts often perform well!' :
-                    'Great visual content!'
-                  }
-                </p>
-                <p>
-                  <strong>Engagement Quality:</strong> {
-                    singlePostAnalytics.total_engagement > 0 ?
-                      (singlePostAnalytics.comments_count / singlePostAnalytics.total_engagement > 0.3 ? 
-                        'High-quality engagement (lots of comments)' : 
-                        'Standard engagement pattern') :
-                      'Consider using more engaging content'
-                  }
-                </p>
+              {/* Engagement Trend Charts */}
+              <div className="bg-gradient-to-br from-pink-50 to-purple-50 border border-pink-200 rounded-lg p-3 sm:p-4">
+                <h4 className="font-medium text-xs sm:text-sm text-gray-900 mb-3 flex items-center">
+                  <TrendingUp className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 text-pink-600" />
+                  Engagement Trends
+                </h4>
+                
+                <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                  {/* Likes Trend */}
+                  <div className="bg-white rounded-lg p-2.5 sm:p-3 border border-pink-100">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] sm:text-xs font-medium text-gray-700">❤️ Likes</span>
+                      <span className="text-[11px] sm:text-xs font-bold text-pink-600">
+                        {singlePostAnalytics.likes_count?.toLocaleString() || 0}
+                      </span>
+                    </div>
+                    <div className="h-20 sm:h-24">
+                      <TrendChart
+                        data={generatePostTrendData(singlePostAnalytics.likes_count, 'likes')}
+                        title=""
+                        color="#EC4899"
+                        metric="value"
+                        style={{ height: '100%' }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Comments Trend */}
+                  <div className="bg-white rounded-lg p-2.5 sm:p-3 border border-purple-100">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] sm:text-xs font-medium text-gray-700">💬 Comments</span>
+                      <span className="text-[11px] sm:text-xs font-bold text-purple-600">
+                        {singlePostAnalytics.comments_count?.toLocaleString() || 0}
+                      </span>
+                    </div>
+                    <div className="h-20 sm:h-24">
+                      <TrendChart
+                        data={generatePostTrendData(singlePostAnalytics.comments_count, 'comments')}
+                        title=""
+                        color="#8B5CF6"
+                        metric="value"
+                        style={{ height: '100%' }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Engagement Breakdown */}
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 sm:p-4 mt-1">
+                <h4 className="font-medium text-xs sm:text-sm text-gray-900 mb-3 flex items-center">
+                  <BarChart3 className="h-3 w-3 sm:h-4 sm:w-4 mr-1.5" />
+                  Breakdown
+                </h4>
+                <div className="space-y-3">
+                  {/* Likes Bar */}
+                  <div className="pb-1">
+                    <div className="flex items-center justify-between text-[10px] sm:text-xs mb-1">
+                      <span className="font-medium text-gray-700">❤️ Likes</span>
+                      <span className="text-pink-600 font-semibold">
+                        {singlePostAnalytics.likes_count?.toLocaleString() || 0}
+                        {singlePostAnalytics.total_engagement > 0 && (
+                          <span className="text-gray-500 ml-1">
+                            ({((singlePostAnalytics.likes_count / singlePostAnalytics.total_engagement) * 100).toFixed(0)}%)
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div 
+                        className="bg-pink-500 h-2 rounded-full" 
+                        style={{ 
+                          width: singlePostAnalytics.total_engagement > 0 
+                            ? `${(singlePostAnalytics.likes_count / singlePostAnalytics.total_engagement) * 100}%` 
+                            : '0%' 
+                        }}
+                      ></div>
+                    </div>
+                  </div>
+
+                  {/* Comments Bar */}
+                  <div className="pb-1">
+                    <div className="flex items-center justify-between text-[10px] sm:text-xs mb-1">
+                      <span className="font-medium text-gray-700">💬 Comments</span>
+                      <span className="text-purple-600 font-semibold">
+                        {singlePostAnalytics.comments_count?.toLocaleString() || 0}
+                        {singlePostAnalytics.total_engagement > 0 && (
+                          <span className="text-gray-500 ml-1">
+                            ({((singlePostAnalytics.comments_count / singlePostAnalytics.total_engagement) * 100).toFixed(0)}%)
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div 
+                        className="bg-purple-500 h-2 rounded-full" 
+                        style={{ 
+                          width: singlePostAnalytics.total_engagement > 0 
+                            ? `${(singlePostAnalytics.comments_count / singlePostAnalytics.total_engagement) * 100}%` 
+                            : '0%' 
+                        }}
+                      ></div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quick Insights */}
+                <div className="mt-2 pt-2 border-t border-gray-200 text-[10px] sm:text-xs text-gray-600">
+                  <span className="font-medium">Top:</span> {singlePostAnalytics.likes_count >= singlePostAnalytics.comments_count ? 'Likes' : 'Comments'}
+                  {singlePostAnalytics.total_engagement > 50 && <span className="ml-2">🔥 High performing!</span>}
+                </div>
               </div>
             </div>
           </div>
@@ -1927,53 +1893,50 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
   };
 
   const renderConnectedState = () => (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Show account selector if multiple accounts */}
       {connectedAccounts.length > 1 && renderAccountSelector()}
 
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-2">
-            <div className="flex items-center space-x-1 bg-green-100 px-3 py-1 rounded-full">
-              <CheckCircle className="h-4 w-4 text-green-600" />
-              <span className="text-sm font-medium text-green-700">
-                {connectedAccounts.length} Account{connectedAccounts.length !== 1 ? 's' : ''} Connected
-              </span>
-            </div>
+      <div className="flex flex-col gap-3 px-3 sm:px-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1 bg-green-100 px-2 py-1 rounded-full">
+            <CheckCircle className="h-3 w-3 text-green-600" />
+            <span className="text-xs font-medium text-green-700">
+              {connectedAccounts.length} Connected
+            </span>
           </div>
-          {/* Show active account info */}
           {activeAccount && (
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center gap-1 bg-pink-50 px-2 py-1 rounded-full">
               {activeAccount.profile?.profile_picture_url ? (
                 <img
                   src={activeAccount.profile.profile_picture_url}
                   alt="Profile"
-                  className="w-6 h-6 rounded-full"
+                  className="w-4 h-4 rounded-full"
                 />
               ) : (
-                <Instagram className="h-4 w-4 text-pink-600" />
+                <Instagram className="h-3 w-3 text-pink-600" />
               )}
-              <span className="text-sm font-medium text-gray-700">
+              <span className="text-xs font-medium text-pink-700">
                 @{activeAccount.profile?.username || 'Loading...'}
               </span>
             </div>
           )}
         </div>
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center gap-2">
           <button
             onClick={handleSignIn}
             disabled={loading || !fbSdkLoaded}
-            className="flex items-center space-x-2 px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors disabled:opacity-50"
+            className="flex items-center gap-1 px-3 py-1.5 bg-gradient-to-r from-pink-500 to-purple-500 text-white rounded-lg text-xs font-medium disabled:opacity-50 flex-1 sm:flex-initial justify-center"
           >
-            <Plus className="h-4 w-4" />
-            <span>{loading ? 'Connecting...' : 'Add Account'}</span>
+            <Plus className="h-3 w-3" />
+            <span>{loading ? '...' : 'Add'}</span>
           </button>
           <button
             onClick={handleSignOut}
-            className="flex items-center space-x-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+            className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs font-medium flex-1 sm:flex-initial justify-center"
           >
-            <ExternalLink className="h-4 w-4" />
-            <span>Disconnect All</span>
+            <ExternalLink className="h-3 w-3" />
+            <span>Disconnect</span>
           </button>
         </div>
       </div>
@@ -1984,45 +1947,41 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
       {/* Show available accounts */}
       {renderAvailableAccounts()}
 
-      {/* Show active account details */}
+      {/* Show active account details - Instagram-like profile header */}
       {activeAccount && (
-        <div className="bg-gradient-to-br from-pink-50 to-purple-50 border border-pink-200 rounded-2xl p-2 sm:p-6">
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 gap-4">
-            <div className="flex items-center space-x-4">
+        <div className="bg-white sm:bg-gradient-to-br sm:from-pink-50 sm:to-purple-50 sm:border sm:border-pink-200 sm:rounded-2xl">
+          {/* Profile Header - Instagram Style */}
+          <div className="p-4 sm:p-6">
+            <div className="flex items-start gap-4 mb-4">
               {activeAccount.profile?.profile_picture_url ? (
                 <img
                   src={activeAccount.profile.profile_picture_url}
                   alt="Instagram profile"
-                  className="w-20 h-20 rounded-full border-4 border-pink-200"
+                  className="w-16 h-16 sm:w-20 sm:h-20 rounded-full border-2 border-pink-200 flex-shrink-0"
                 />
               ) : (
-                <div className="w-20 h-20 bg-gradient-to-br from-pink-400 to-purple-600 rounded-full flex items-center justify-center">
-                  <Instagram className="h-10 w-10 text-white" />
+                <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-pink-400 to-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
+                  <Instagram className="h-8 w-8 sm:h-10 sm:w-10 text-white" />
                 </div>
               )}
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900">@{activeAccount.profile?.username}</h2>
-                <p className="text-sm text-gray-600">{activeAccount.pageName}</p>
+              <div className="flex-1 min-w-0">
+                <h2 className="text-lg sm:text-xl font-bold text-gray-900 truncate">@{activeAccount.profile?.username}</h2>
+                <p className="text-xs sm:text-sm text-gray-500 truncate">{activeAccount.pageName}</p>
                 {activeAccount.profile?.biography && (
-                  <p className="text-gray-700 text-sm mt-1">{activeAccount.profile.biography}</p>
+                  <p className="text-xs text-gray-600 mt-1 line-clamp-2 hidden sm:block">{activeAccount.profile.biography}</p>
                 )}
               </div>
             </div>
-            <div className="flex flex-wrap space-x-2">
+            
+            {/* Action Buttons - Compact for mobile */}
+            <div className="flex gap-2 mb-4">
               <button
                 onClick={() => refreshAccountData(activeAccount.id)}
                 disabled={loading}
-                className="flex items-center space-x-2 px-3 py-2 bg-white border border-pink-200 text-pink-700 rounded-lg hover:bg-pink-50 transition-colors disabled:opacity-50 text-sm"
+                className="flex items-center justify-center gap-1 flex-1 px-2 py-1.5 bg-white border border-gray-300 text-gray-700 rounded-lg text-xs font-medium disabled:opacity-50"
               >
-                <Settings className="h-4 w-4" />
+                <RefreshCw className="h-3 w-3" />
                 <span>Refresh</span>
-              </button>
-              <button
-                onClick={() => removeAccount(activeAccount.id)}
-                className="flex items-center space-x-2 px-3 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors text-sm"
-              >
-                <ExternalLink className="h-4 w-4" />
-                <span>Disconnect</span>
               </button>
               <button
                 onClick={() => storeHistoricalSnapshot(activeAccount.id, activeAccount.profile?.username || 'Unknown', {
@@ -2032,58 +1991,59 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
                   totalComments: activeAccount.media?.reduce((sum, m) => sum + (m.comments_count || 0), 0) || 0,
                   postsCount: activeAccount.media?.length || 0
                 })}
-                className="flex items-center space-x-2 px-3 py-2 bg-cyan-100 text-cyan-700 rounded-lg hover:bg-cyan-200 transition-colors text-sm"
+                className="flex items-center justify-center gap-1 flex-1 px-2 py-1.5 bg-pink-500 text-white rounded-lg text-xs font-medium"
               >
-                <RefreshCw className="h-4 w-4" />
+                <Settings className="h-3 w-3" />
                 <span>Capture</span>
               </button>
+              <button
+                onClick={() => removeAccount(activeAccount.id)}
+                className="flex items-center justify-center px-2 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs"
+              >
+                <ExternalLink className="h-3 w-3" />
+              </button>
             </div>
-          </div>
           
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 sm:gap-6 text-center mb-6">
-            <div className="bg-white rounded-xl p-4 shadow-sm">
-              <div className="text-2xl font-bold text-pink-600">
-                {activeAccount.profile?.media_count?.toLocaleString() || activeAccount.media?.length || 0}
+            {/* Stats Row - Instagram Style */}
+            <div className="flex justify-around text-center border-t border-b border-gray-200 py-3 -mx-4 sm:mx-0 sm:border sm:rounded-xl sm:bg-white">
+              <div>
+                <div className="text-lg sm:text-xl font-bold text-gray-900">
+                  {activeAccount.profile?.media_count?.toLocaleString() || activeAccount.media?.length || 0}
+                </div>
+                <div className="text-xs text-gray-500">Posts</div>
               </div>
-              <div className="text-sm text-gray-600 font-medium">Posts</div>
-            </div>
-            <div className="bg-white rounded-xl p-4 shadow-sm">
-              <div className="text-2xl font-bold text-pink-600">
-                {activeAccount.profile?.followers_count?.toLocaleString() || 'N/A'}
+              <div className="border-l border-gray-200 pl-4">
+                <div className="text-lg sm:text-xl font-bold text-gray-900">
+                  {activeAccount.profile?.followers_count?.toLocaleString() || 'N/A'}
+                </div>
+                <div className="text-xs text-gray-500">Followers</div>
               </div>
-              <div className="text-sm text-gray-600 font-medium">Followers</div>
-            </div>
-            <div className="bg-white rounded-xl p-4 shadow-sm">
-              <div className="text-2xl font-bold text-pink-600">
-                {activeAccount.media?.reduce((sum, media) => sum + (media.like_count || 0), 0).toLocaleString()}
+              <div className="border-l border-gray-200 pl-4">
+                <div className="text-lg sm:text-xl font-bold text-gray-900">
+                  {activeAccount.media?.reduce((sum, media) => sum + (media.like_count || 0), 0).toLocaleString()}
+                </div>
+                <div className="text-xs text-gray-500">Likes</div>
               </div>
-              <div className="text-sm text-gray-600 font-medium">Total Likes</div>
             </div>
           </div>
 
           {/* Historical Charts Toggle */}
-          <div className="mb-6">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-white rounded-lg border border-gray-200 p-4 gap-2">
-              <div className="flex items-center space-x-3">
-                <Calendar className="h-5 w-5 text-pink-600" />
-                <div>
-                  <h4 className="font-medium text-gray-900">Historical Analytics</h4>
-                  <p className="text-sm text-gray-600">View long-term trends and growth patterns</p>
-                </div>
+          <div className="px-4 sm:px-0 mb-4">
+            <button
+              onClick={() => setShowHistoricalCharts(prev => ({ 
+                ...prev, 
+                [activeAccount.id]: !prev[activeAccount.id] 
+              }))}
+              className="flex items-center justify-between w-full bg-gradient-to-r from-pink-50 to-purple-50 sm:bg-white border border-gray-200 rounded-lg p-3 text-left"
+            >
+              <div className="flex items-center gap-2">
+                <Calendar className="h-4 w-4 text-pink-600" />
+                <span className="text-sm font-medium text-gray-900">Historical Analytics</span>
               </div>
-              <button
-                onClick={() => setShowHistoricalCharts(prev => ({ 
-                  ...prev, 
-                  [activeAccount.id]: !prev[activeAccount.id] 
-                }))}
-                className="flex items-center space-x-2 bg-pink-600 text-white px-4 py-2 rounded-lg hover:bg-pink-700 transition-colors text-sm"
-              >
-                <Calendar className="h-4 w-4" />
-                <span>
-                  {showHistoricalCharts[activeAccount.id] ? 'Hide' : 'Show'} Historical Data
-                </span>
-              </button>
-            </div>
+              <span className="text-xs bg-pink-100 text-pink-700 px-2 py-1 rounded-full">
+                {showHistoricalCharts[activeAccount.id] ? 'Hide' : 'Show'}
+              </span>
+            </button>
           </div>
 
           {/* Show Historical Charts */}
@@ -2100,71 +2060,64 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
         </div>
       )}
 
-      {/* Show recent posts for active account */}
+      {/* Show recent posts for active account - Instagram-like grid */}
       {activeAccount && (
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-2 sm:p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">
-            Recent Posts ({activeAccount.media?.length || 0})
-          </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+        <div className="bg-white sm:rounded-2xl sm:border sm:border-gray-200 sm:shadow-sm">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+            <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+              <LayoutGrid className="h-4 w-4 text-pink-600" />
+              Posts
+            </h3>
+            <span className="text-xs text-gray-500">{activeAccount.media?.length || 0} posts</span>
+          </div>
+          
+          {/* Instagram-style 3-column grid */}
+          <div className="grid grid-cols-3 gap-0.5 sm:gap-1">
             {activeAccount.media && activeAccount.media.length > 0 ? activeAccount.media.map(media => (
-              <div key={media.id} className="bg-gray-50 rounded-xl overflow-hidden hover:shadow-md transition-shadow">
-                <div className="aspect-square relative">
-                  <img
-                    src={media.thumbnail_url || media.media_url}
-                    alt={media.caption ? media.caption.substring(0, 50) + '...' : 'Instagram post'}
-                    className="w-full h-full object-cover"
-                  />
-                  <div className="absolute top-2 right-2 bg-black bg-opacity-50 text-white px-2 py-1 rounded text-xs font-medium">
-                    {media.media_type}
+              <div 
+                key={media.id} 
+                className="aspect-square relative group cursor-pointer"
+                onClick={() => {
+                  setSelectedPostId(media.id);
+                  fetchSinglePostAnalytics(media);
+                }}
+              >
+                <img
+                  src={media.thumbnail_url || media.media_url}
+                  alt={media.caption ? media.caption.substring(0, 50) + '...' : 'Instagram post'}
+                  className="w-full h-full object-cover"
+                />
+                {/* Media type indicator */}
+                {media.media_type === 'VIDEO' && (
+                  <div className="absolute top-1 right-1">
+                    <svg className="w-4 h-4 text-white drop-shadow-lg" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M8 5v14l11-7z"/>
+                    </svg>
                   </div>
-                </div>
-                <div className="p-4">
-                  <p className="text-sm text-gray-800 mb-3 line-clamp-2">
-                    {media.caption ? 
-                      (media.caption.length > 100 ? media.caption.substring(0, 100) + '...' : media.caption)
-                      : 'No caption'
-                    }
-                  </p>
-                  <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
-                    <span>{new Date(media.timestamp).toLocaleDateString()}</span>
-                    <div className="flex items-center space-x-3">
-                      <div className="flex items-center space-x-1">
-                        <Heart className="h-3 w-3 text-red-500" />
-                        <span>{media.like_count || 0}</span>
-                      </div>
-                      <div className="flex items-center space-x-1">
-                        <MessageCircle className="h-3 w-3 text-blue-500" />
-                        <span>{media.comments_count || 0}</span>
-                      </div>
-                    </div>
+                )}
+                {media.media_type === 'CAROUSEL_ALBUM' && (
+                  <div className="absolute top-1 right-1">
+                    <svg className="w-4 h-4 text-white drop-shadow-lg" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>
+                    </svg>
                   </div>
-                  {media.permalink && (
-                    <a 
-                      href={media.permalink} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="text-pink-600 hover:text-pink-700 text-xs font-medium inline-flex items-center space-x-1"
-                    >
-                      <span>View on Instagram</span>
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
-                  )}
-                  <button
-                    className="text-xs text-purple-600 mt-2"
-                    onClick={() => {
-                      setSelectedPostId(media.id);
-                      fetchSinglePostAnalytics(media);
-                    }}
-                  >
-                    Show Analytics
-                  </button>
+                )}
+                {/* Hover overlay with engagement stats */}
+                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4 text-white text-sm font-semibold">
+                  <span className="flex items-center gap-1">
+                    <Heart className="h-4 w-4" fill="white" />
+                    {media.like_count || 0}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <MessageCircle className="h-4 w-4" fill="white" />
+                    {media.comments_count || 0}
+                  </span>
                 </div>
               </div>
             )) : (
-              <div className="col-span-full text-center py-12">
-                <Instagram className="h-16 w-16 mx-auto mb-4 text-gray-400" />
-                <p className="text-gray-500">No posts found</p>
+              <div className="col-span-3 text-center py-12">
+                <Instagram className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                <p className="text-sm text-gray-400">No posts yet</p>
               </div>
             )}
           </div>
@@ -2252,16 +2205,18 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
   if (!fbSdkLoaded) {
     return (
       <div className="min-h-screen bg-gray-50">
-        <header className="bg-white shadow-sm border-b">
-          <div className="max-w-7xl mx-auto px-2 sm:px-4 md:px-6 lg:px-8">
-            <div className="flex items-center h-16">
-              <Instagram className="h-8 w-8 text-pink-600" />
-              <span className="ml-2 text-xl font-bold text-[#1a1f2e]">Instagram Integration</span>
+        <header className="bg-white border-b sticky top-0 z-50">
+          <div className="sm:px-4">
+            <div className="flex items-center h-14 sm:h-16 px-3 sm:px-0">
+              <div className="w-8 h-8 bg-gradient-to-br from-pink-500 via-purple-500 to-orange-400 rounded-lg flex items-center justify-center">
+                <Instagram className="h-4 w-4 text-white" />
+              </div>
+              <span className="ml-2 text-base sm:text-lg font-semibold text-gray-900">Instagram</span>
             </div>
           </div>
         </header>
-        <div className="max-w-7xl mx-auto px-2 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-8">
-          <div className="bg-white rounded-lg shadow-md p-2 sm:p-4 md:p-6">
+        <div className="sm:p-4">
+          <div className="bg-white sm:rounded-lg sm:shadow-md sm:p-4">
             <div className="flex items-center justify-center py-12">
               <div className="text-center">
                 <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-pink-600" />
@@ -2276,16 +2231,23 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-2 sm:px-4 md:px-6 lg:px-8">
-          <div className="flex items-center h-16">
-            <Instagram className="h-8 w-8 text-pink-600" />
-            <span className="ml-2 text-xl font-bold text-[#1a1f2e]">Instagram Integration</span>
+      <header className="bg-white border-b sticky top-0 z-50">
+        <div className="sm:px-4">
+          <div className="flex items-center justify-between h-14 sm:h-16 px-3 sm:px-0">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-pink-500 via-purple-500 to-orange-400 rounded-lg flex items-center justify-center">
+                <Instagram className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
+              </div>
+              <div>
+                <h1 className="text-base sm:text-lg font-semibold text-gray-900">Instagram</h1>
+                <p className="text-xs text-gray-500 hidden sm:block">Manage your accounts</p>
+              </div>
+            </div>
           </div>
         </div>
       </header>
-      <div className="max-w-7xl mx-auto px-2 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-8">
-        <div className="bg-white rounded-lg shadow-md p-2 sm:p-4 md:p-6">
+      <div className="sm:p-4">
+        <div className="bg-white sm:rounded-lg sm:shadow-md sm:p-4">
           {loading && (
             <div className="flex items-center justify-center py-12">
               <div className="text-center">

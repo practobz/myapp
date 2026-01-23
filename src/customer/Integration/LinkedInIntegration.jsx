@@ -395,10 +395,7 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
     fetchLinkedinData();
   }, []);
 
-  // Refetch LinkedIn data after account connect/disconnect
-  useEffect(() => {
-    fetchLinkedinData();
-  }, [connectedAccounts.length]);
+  // ...existing code...
 
   // Fetch LinkedIn analytics on mount and when selectedAccount changes
   useEffect(() => {
@@ -423,7 +420,7 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
       const isConnected = connectedAccounts.length > 0 && connectedAccounts.some(acc => !!acc.token && !isTokenExpired(acc));
       onConnectionStatusChange(isConnected);
     }
-  }, [connectedAccounts, onConnectionStatusChange]);
+  }, [connectedAccounts]); // Removed onConnectionStatusChange from dependencies to prevent infinite loop
 
   // Disconnect all accounts
   const handleDisconnectAll = async () => {
@@ -779,54 +776,57 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
   // Render account management section
   const renderAccountManagement = () => {
     return (
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <h4 className="font-medium text-gray-700 flex items-center">
-            <Users className="h-5 w-5 mr-2" />
-            Connected LinkedIn Accounts ({connectedAccounts.length})
+      <div className="mb-4 sm:mb-6 px-3 sm:px-0">
+        <div className="flex items-center justify-between mb-3 sm:mb-4">
+          <h4 className="font-medium text-gray-700 flex items-center text-sm sm:text-base">
+            <Users className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
+            <span className="hidden sm:inline">Connected LinkedIn Accounts</span>
+            <span className="sm:hidden">Accounts</span>
+            <span className="ml-1">({connectedAccounts.length})</span>
           </h4>
           <button
             onClick={handleLinkedInConnect}
             disabled={loading}
-            className="bg-blue-700 text-white px-4 py-2 rounded-lg hover:bg-blue-800 flex items-center space-x-2 text-sm disabled:opacity-50"
+            className="bg-blue-700 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-blue-800 flex items-center gap-1 sm:gap-2 text-xs sm:text-sm disabled:opacity-50"
           >
             <Plus className="h-4 w-4" />
-            <span>{loading ? 'Connecting...' : 'Add Account'}</span>
+            <span className="hidden sm:inline">{loading ? 'Connecting...' : 'Add Account'}</span>
+            <span className="sm:hidden">{loading ? '...' : 'Add'}</span>
           </button>
         </div>
         
         {connectedAccounts.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
             {connectedAccounts.map((account) => (
               <div
                 key={account.id}
-                className={`border rounded-lg p-4 transition-all cursor-pointer ${
+                className={`border rounded-lg p-3 sm:p-4 transition-all cursor-pointer ${
                   selectedAccountId === account.id
                     ? 'border-blue-500 bg-blue-50 shadow-md'
                     : 'border-gray-200 bg-white hover:border-gray-300'
                 }`}
                 onClick={() => selectAccount(account.id)}
               >
-                <div className="flex items-center space-x-3">
+                <div className="flex items-center gap-2 sm:gap-3">
                   {account.profile?.picture ? (
                     <img
                       src={account.profile.picture}
                       alt={account.profile.name}
-                      className="w-12 h-12 rounded-full"
+                      className="w-10 h-10 sm:w-12 sm:h-12 rounded-full"
                     />
                   ) : (
-                    <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                      <Linkedin className="h-6 w-6 text-blue-700" />
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                      <Linkedin className="h-5 w-5 sm:h-6 sm:w-6 text-blue-700" />
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center space-x-2">
-                      <h5 className="font-medium text-gray-900 truncate">{account.profile?.name}</h5>
+                    <div className="flex items-center gap-1 sm:gap-2">
+                      <h5 className="font-medium text-gray-900 truncate text-sm sm:text-base">{account.profile?.name}</h5>
                       {selectedAccountId === account.id && (
-                        <UserCheck className="h-4 w-4 text-blue-600" />
+                        <UserCheck className="h-4 w-4 text-blue-600 flex-shrink-0" />
                       )}
                     </div>
-                    <p className="text-sm text-gray-600 truncate">{account.profile?.headline || account.profile?.email}</p>
+                    <p className="text-xs sm:text-sm text-gray-600 truncate">{account.profile?.headline || account.profile?.email}</p>
                     <p className="text-xs text-gray-500">
                       {/* Fix: Parse and format the connection date correctly */}
                       Connected {
@@ -868,14 +868,14 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
     if (!selectedAccount) return null;
 
     return (
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 mb-8">
-        <div className="flex items-center space-x-3 mb-4">
+      <div className="bg-white sm:rounded-2xl border-y sm:border border-gray-200 shadow-sm p-4 sm:p-6 mb-4 sm:mb-8">
+        <div className="flex items-center gap-2 sm:gap-3 mb-4">
           <div className="bg-blue-700 p-2 rounded-lg">
-            <Send className="h-5 w-5 text-white" />
+            <Send className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-gray-900">Create LinkedIn Post</h3>
-            <p className="text-sm text-gray-600">Share your thoughts with your professional network</p>
+            <h3 className="text-base sm:text-lg font-semibold text-gray-900">Create LinkedIn Post</h3>
+            <p className="text-xs sm:text-sm text-gray-600 hidden sm:block">Share your thoughts with your professional network</p>
           </div>
         </div>
 
@@ -900,10 +900,10 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
 
           {/* Image upload and bucket browser */}
           <div className="space-y-2">
-            <div className="flex items-center space-x-4">
-              <label className="flex items-center space-x-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 cursor-pointer transition-colors">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-4">
+              <label className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 cursor-pointer transition-colors text-xs sm:text-sm flex-1 sm:flex-initial justify-center">
                 <Image className="h-4 w-4" />
-                <span>Upload Image</span>
+                <span>Upload</span>
                 <input
                   id="post-image-input"
                   type="file"
@@ -919,10 +919,10 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
                   setShowImageBrowser(true);
                   fetchBucketImages();
                 }}
-                className="px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 text-sm"
+                className="px-3 sm:px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 text-xs sm:text-sm flex-1 sm:flex-initial justify-center"
                 disabled={posting}
               >
-                Browse Library
+                Library
               </button>
               {postImagePreview && (
                 <div className="relative">
@@ -1017,16 +1017,16 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
           )}
 
           {/* Post button */}
-          <div className="flex justify-between items-center pt-4 border-t border-gray-200">
-            <div className="flex items-center space-x-2 text-sm text-gray-600">
+          <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center pt-4 border-t border-gray-200 gap-3 sm:gap-0">
+            <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-600">
               <Linkedin className="h-4 w-4" />
-              <span>Posting as {selectedAccount.profile?.name}</span>
+              <span className="truncate">Posting as {selectedAccount.profile?.name}</span>
             </div>
             
             <button
               onClick={handleCreatePost}
               disabled={posting || (!postText.trim() && !postImage)}
-              className="bg-blue-700 text-white px-6 py-2 rounded-lg hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 transition-colors"
+              className="bg-blue-700 text-white px-4 sm:px-6 py-2.5 sm:py-2 rounded-lg hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors text-sm sm:text-base w-full sm:w-auto"
             >
               {posting ? (
                 <>
@@ -1061,43 +1061,52 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
 
   return (
     <div className="min-h-screen bg-gray-50">
-     
+      {/* Sticky Header */}
+      <header className="bg-white border-b sticky top-0 z-50">
+        <div className="px-3 sm:px-4">
+          <div className="flex items-center gap-2 sm:gap-3 h-14 sm:h-16">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-blue-600 to-blue-800 rounded-lg flex items-center justify-center">
+              <Linkedin className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
+            </div>
+            <div>
+              <h1 className="text-base sm:text-lg font-semibold text-gray-900">LinkedIn Integration</h1>
+              <p className="text-xs text-gray-500 hidden sm:block">Manage your professional network</p>
+            </div>
+          </div>
+        </div>
+      </header>
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <div className="flex items-center space-x-3 mb-6">
-            <Linkedin className="h-6 w-6 text-blue-700" />
-            <h3 className="font-medium text-lg">LinkedIn Professional Integration</h3>
-          </div>
+      <div className="sm:p-4">
+        <div className="bg-white sm:rounded-lg sm:shadow-md sm:p-6">
 
           {connectedAccounts.length === 0 ? (
             <>
               {/* Integration content */}
-              <div className="text-center py-8">
-                <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-2xl mb-4">
-                  <Linkedin className="h-8 w-8 text-blue-700" />
+              <div className="text-center py-6 sm:py-8 px-4 sm:px-0">
+                <div className="inline-flex items-center justify-center w-14 h-14 sm:w-16 sm:h-16 bg-gradient-to-br from-blue-600 to-blue-800 rounded-2xl mb-4">
+                  <Linkedin className="h-7 w-7 sm:h-8 sm:w-8 text-white" />
                 </div>
-                <h4 className="text-xl font-semibold text-gray-900 mb-2">Connect LinkedIn Accounts</h4>
-                <p className="text-gray-600 mb-4 max-w-md mx-auto">
+                <h4 className="text-lg sm:text-xl font-semibold text-gray-900 mb-2">Connect LinkedIn Accounts</h4>
+                <p className="text-sm sm:text-base text-gray-600 mb-4 max-w-md mx-auto">
                   Connect multiple LinkedIn profiles to manage all your professional accounts from one dashboard.
                 </p>
-                <p className="text-sm text-gray-500 mb-6">
+                <p className="text-xs sm:text-sm text-gray-500 mb-6">
                   Works with any LinkedIn account - no business account required!
                 </p>
                 <button 
                   onClick={handleLinkedInConnect}
                   disabled={loading}
-                  className="bg-blue-700 text-white px-8 py-3 rounded-xl hover:bg-blue-800 transition-colors disabled:opacity-50 flex items-center space-x-3 mx-auto font-medium"
+                  className="bg-blue-700 text-white px-6 sm:px-8 py-3 rounded-xl hover:bg-blue-800 transition-colors disabled:opacity-50 flex items-center gap-2 sm:space-x-3 mx-auto font-medium text-sm sm:text-base w-full sm:w-auto justify-center"
                 >
                   {loading ? (
                     <>
-                      <Loader2 className="h-5 w-5 animate-spin" />
+                      <Loader2 className="h-4 w-4 sm:h-5 sm:w-5 animate-spin" />
                       <span>Connecting...</span>
                     </>
                   ) : (
                     <>
-                      <Linkedin className="h-5 w-5" />
+                      <Linkedin className="h-4 w-4 sm:h-5 sm:w-5" />
                       <span>Connect LinkedIn Account</span>
                     </>
                   )}
@@ -1105,7 +1114,7 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
               </div>
 
               {/* Simplified Integration Guide */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 sm:p-6 mx-4 sm:mx-0">
                 <h4 className="font-medium text-blue-800 mb-3">How It Works</h4>
                 <div className="space-y-2 text-sm text-blue-700">
                   <p>1. Click "Connect LinkedIn Account" above</p>
@@ -1128,44 +1137,46 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
               
               {selectedAccount && (
                 <>
-                  <div className="flex items-center justify-between p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
-                    <div className="flex items-center space-x-3">
+                  {/* Post creation removed */}
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 sm:p-4 bg-gradient-to-r from-blue-50 to-indigo-50 sm:rounded-lg border-y sm:border border-blue-200 gap-3 sm:gap-4">
+                    <div className="flex items-center gap-3 w-full sm:w-auto">
                       {selectedAccount.profile?.picture ? (
                         <img 
                           src={selectedAccount.profile.picture} 
                           alt="Profile"
-                          className="w-12 h-12 rounded-full border-2 border-blue-200"
+                          className="w-10 h-10 sm:w-12 sm:h-12 rounded-full border-2 border-blue-200"
                         />
                       ) : (
-                        <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                          <Linkedin className="h-6 w-6 text-blue-700" />
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                          <Linkedin className="h-5 w-5 sm:h-6 sm:w-6 text-blue-700" />
                         </div>
                       )}
-                      <div>
-                        <p className="font-medium text-gray-900">Active Account: {selectedAccount.profile?.name}</p>
-                        <p className="text-sm text-gray-600">{selectedAccount.profile?.headline || selectedAccount.profile?.email}</p>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-gray-900 text-sm sm:text-base truncate">{selectedAccount.profile?.name}</p>
+                        <p className="text-xs sm:text-sm text-gray-600 truncate">{selectedAccount.profile?.headline || selectedAccount.profile?.email}</p>
                       </div>
                     </div>
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
                       <button
                         onClick={() => refreshAccountData(selectedAccount.id)}
                         disabled={loading}
-                        className="flex items-center space-x-2 px-3 py-2 bg-white border border-blue-200 text-blue-700 rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-50 text-sm"
+                        className="flex items-center justify-center gap-1 sm:gap-2 px-3 py-2 bg-white border border-blue-200 text-blue-700 rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-50 text-xs sm:text-sm flex-1 sm:flex-initial"
                       >
                         <Settings className="h-4 w-4" />
                         <span>Refresh</span>
                       </button>
                       <button
                         onClick={handleDisconnectAll}
-                        className="flex items-center space-x-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm"
+                        className="flex items-center justify-center gap-1 sm:gap-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-xs sm:text-sm flex-1 sm:flex-initial"
                       >
                         <ExternalLink className="h-4 w-4" />
-                        <span>Disconnect All</span>
+                        <span className="hidden sm:inline">Disconnect All</span>
+                        <span className="sm:hidden">Disconnect</span>
                       </button>
                     </div>
                   </div>
 
-                  {renderPostCreation()}
+                  {/* {renderPostCreation()} - Post creation removed */}
                 </>
               )}
             </div>

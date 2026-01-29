@@ -42,6 +42,13 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
   const [selectedPostId, setSelectedPostId] = useState(null);
   const [singlePostAnalytics, setSinglePostAnalytics] = useState(null);
 
+  // State for post comments
+  const [postComments, setPostComments] = useState({});
+  const [loadingComments, setLoadingComments] = useState(false);
+  const [replyingToComment, setReplyingToComment] = useState(null);
+  const [replyText, setReplyText] = useState('');
+  const [sendingReply, setSendingReply] = useState(false);
+
   // State for followers timeline
   const [followersTimeline, setFollowersTimeline] = useState({});
 
@@ -198,10 +205,90 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
             const profileData = await profileResponse.json();
             
             // Fetch media data
-            const mediaUrl = `https://graph.facebook.com/v18.0/${acc.id}/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count&limit=12&access_token=${pageToken}`;
+            const mediaUrl = `https://graph.facebook.com/v18.0/${acc.id}/media?fields=id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count&limit=12&access_token=${pageToken}`;
             console.log(`📡 Fetching media for ${acc.id}...`);
             const mediaResponse = await fetch(mediaUrl);
             const mediaData = await mediaResponse.json();
+            
+            // Fetch video/reel insights for views count
+            let mediaWithInsights = mediaData.data || [];
+            if (mediaWithInsights.length > 0) {
+              console.log(`🎬 Hydration: Fetching insights for ${mediaWithInsights.length} media items for account ${acc.id}...`);
+              mediaWithInsights = await Promise.all(mediaWithInsights.map(async (media) => {
+                if (media.media_type === 'VIDEO') {
+                  // Check if plays field is already present from the initial query
+                  if (media.plays !== undefined && media.plays !== null) {
+                    console.log(`✅ Hydration: Video ${media.id} already has plays: ${media.plays}`);
+                    return {
+                      ...media,
+                      video_views: media.plays
+                    };
+                  }
+                  
+                  try {
+                    console.log(`📹 Hydration: Fetching insights for video ${media.id} (product_type: ${media.media_product_type})...`);
+                    
+                    // Use the new 'views' metric (available for FEED, REELS, STORY)
+                    const metricsToFetch = 'views,total_interactions,reach';
+                    
+                    // Try insights API first
+                    const insightsUrl = `https://graph.facebook.com/v18.0/${media.id}/insights?metric=${metricsToFetch}&access_token=${pageToken}`;
+                    const insightsResponse = await fetch(insightsUrl);
+                    const insightsData = await insightsResponse.json();
+                    
+                    console.log(`📊 Hydration insights for ${media.id}:`, insightsData);
+                    
+                    let viewsCount = 0;
+                    
+                    if (insightsData.data && !insightsData.error) {
+                      const viewsMetric = insightsData.data.find(m => 
+                        m.name === 'views' ||   // New standard metric
+                        m.name === 'reach'       // Fallback
+                      );
+                      viewsCount = viewsMetric?.values?.[0]?.value || 0;
+                      console.log(`✅ Hydration: Found views for ${media.id}: ${viewsCount} (metric: ${viewsMetric?.name})`);
+                    } else if (insightsData.error) {
+                      const errorMsg = insightsData.error.message || '';
+                      console.warn(`⚠️ Hydration insights error for ${media.id}:`, errorMsg);
+                      
+                      // Check if it's a permissions error
+                      if (errorMsg.includes('permission') || insightsData.error.code === 10) {
+                        console.error(`❌ Missing instagram_manage_insights permission`);
+                        return { ...media, video_views: -1, views_error: 'Missing permissions' };
+                      }
+                      
+                      // If deprecated metric error, try views metric
+                      if (errorMsg.includes('plays metric') || errorMsg.includes('not supported') || errorMsg.includes('clips_replays_count')) {
+                        console.warn(`⚠️ Hydration: Deprecated metric error, trying 'views' metric`);
+                        try {
+                          const altMetricsUrl = `https://graph.facebook.com/v18.0/${media.id}/insights?metric=views,reach&access_token=${pageToken}`;
+                          const altResponse = await fetch(altMetricsUrl);
+                          const altData = await altResponse.json();
+                          
+                          if (altData.data && !altData.error) {
+                            const viewsMetric = altData.data.find(m => m.name === 'views' || m.name === 'reach');
+                            viewsCount = viewsMetric?.values?.[0]?.value || 0;
+                            console.log(`✅ Hydration: Using ${viewsMetric?.name} metric for views: ${viewsCount}`);
+                          }
+                        } catch (altError) {
+                          console.warn(`⚠️ Hydration: Could not fetch alternative metrics`);
+                        }
+                      }
+                    }
+                    
+                    return { ...media, video_views: viewsCount };
+                  } catch (err) {
+                    console.error(`❌ Hydration: Could not fetch insights for media ${media.id}:`, err);
+                    return media;
+                  }
+                }
+                return media;
+              }));
+              
+              console.log(`✅ Hydration insights complete. Videos with views:`, 
+                mediaWithInsights.filter(m => m.video_views > 0).length
+              );
+            }
             
             // Check for API errors
             if (profileData.error) {
@@ -223,7 +310,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
             return {
               ...acc,
               profile: profileData,
-              media: mediaData.data || []
+              media: mediaWithInsights
             };
           } catch (error) {
             console.error(`❌ Failed to hydrate account ${acc.id}:`, error);
@@ -477,6 +564,101 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
     return false;
   };
 
+  // Helper function to fetch video/reel insights (plays/views)
+  const fetchMediaInsights = async (mediaItems, accessToken) => {
+    if (!mediaItems || mediaItems.length === 0) return mediaItems;
+    
+    console.log(`🎬 Fetching insights for ${mediaItems.length} media items...`);
+    
+    const mediaWithInsights = await Promise.all(mediaItems.map(async (media) => {
+      // Only fetch insights for VIDEO type (includes Reels)
+      if (media.media_type === 'VIDEO') {
+        // Check if plays field is already present from the initial query (legacy support)
+        if (media.plays !== undefined && media.plays !== null) {
+          console.log(`✅ Video ${media.id} already has plays: ${media.plays}`);
+          return {
+            ...media,
+            video_views: media.plays
+          };
+        }
+        
+        try {
+          console.log(`📹 Fetching insights for video ${media.id} (product_type: ${media.media_product_type})...`);
+          
+          // Use the new 'views' metric (available for FEED, REELS, STORY)
+          // This replaced the deprecated plays, clips_replays_count, and ig_reels_aggregated_all_plays_count
+          const metricsToFetch = 'views,total_interactions,reach';
+          
+          // Try method 1: Fetch insights API
+          const insightsUrl = `https://graph.facebook.com/v18.0/${media.id}/insights?metric=${metricsToFetch}&access_token=${accessToken}`;
+          const insightsResponse = await fetch(insightsUrl);
+          const insightsData = await insightsResponse.json();
+          
+          console.log(`📊 Insights response for ${media.id}:`, insightsData);
+          
+          let viewsCount = 0;
+          
+          if (insightsData.data && !insightsData.error) {
+            // Look for the 'views' metric (new standard metric for all video types)
+            const viewsMetric = insightsData.data.find(m => 
+              m.name === 'views' ||       // New standard metric
+              m.name === 'reach'          // Fallback
+            );
+            viewsCount = viewsMetric?.values?.[0]?.value || 0;
+            console.log(`✅ Found views for ${media.id}: ${viewsCount} (metric: ${viewsMetric?.name})`);
+          } else if (insightsData.error) {
+            const errorMsg = insightsData.error.message || '';
+            console.warn(`⚠️ Insights API error for ${media.id}:`, errorMsg);
+            
+            // Check if it's a permissions error
+            if (errorMsg.includes('permission') || insightsData.error.code === 10) {
+              console.error(`❌ Missing instagram_manage_insights permission.`);
+              return {
+                ...media,
+                video_views: -1, // Use -1 to indicate permission error
+                views_error: 'Missing permissions'
+              };
+            }
+            
+            // If plays metric deprecated, try reach/impressions
+            if (errorMsg.includes('plays metric') || errorMsg.includes('not supported') || errorMsg.includes('clips_replays_count')) {
+              console.warn(`⚠️ Deprecated metric error, trying 'views' metric`);
+              // Try the new 'views' metric
+              try {
+                const altMetricsUrl = `https://graph.facebook.com/v18.0/${media.id}/insights?metric=views,reach&access_token=${accessToken}`;
+                const altResponse = await fetch(altMetricsUrl);
+                const altData = await altResponse.json();
+                
+                if (altData.data && !altData.error) {
+                  const viewsMetric = altData.data.find(m => m.name === 'views' || m.name === 'reach');
+                  viewsCount = viewsMetric?.values?.[0]?.value || 0;
+                  console.log(`✅ Using ${viewsMetric?.name} metric for views: ${viewsCount}`);
+                }
+              } catch (altError) {
+                console.warn(`⚠️ Could not fetch alternative metrics`);
+              }
+            }
+          }
+          
+          return {
+            ...media,
+            video_views: viewsCount
+          };
+        } catch (error) {
+          console.error(`❌ Error fetching insights for media ${media.id}:`, error);
+          return media;
+        }
+      }
+      return media;
+    }));
+    
+    console.log(`✅ Insights fetch complete. Videos with views:`, 
+      mediaWithInsights.filter(m => m.video_views > 0).length
+    );
+    
+    return mediaWithInsights;
+  };
+
   // Handle API errors and token refresh
   const handleApiError = async (error, accountId = null) => {
     console.error('Instagram/Facebook API Error:', error);
@@ -592,7 +774,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
         setError('Please log in to Facebook to access Instagram features. Regular Facebook accounts can connect Instagram Business accounts.');
       }
     }, {
-      scope: 'email,public_profile,pages_show_list,pages_read_engagement,instagram_basic,instagram_content_publish'
+      scope: 'email,public_profile,pages_show_list,pages_read_engagement,instagram_basic,instagram_content_publish,instagram_manage_insights,instagram_manage_comments'
     });
   };
 
@@ -749,15 +931,18 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
       }
 
       // FIXED: Fetch recent media using direct Graph API
-      const mediaUrl = `https://graph.facebook.com/v18.0/${accountData.id}/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count&limit=12&access_token=${accountData.pageAccessToken}`;
+      const mediaUrl = `https://graph.facebook.com/v18.0/${accountData.id}/media?fields=id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count&limit=12&access_token=${accountData.pageAccessToken}`;
       const mediaResponse = await fetch(mediaUrl);
       const mediaData = await mediaResponse.json();
+      
+      // Fetch video/reel insights for views count
+      const mediaWithInsights = await fetchMediaInsights(mediaData.data || [], accountData.pageAccessToken);
       
       const newAccount = {
         ...accountData,
         connected: true,
         profile: profileData,
-        media: mediaData.data || [],
+        media: mediaWithInsights,
         connectedAt: new Date().toISOString(),
         userAccessToken: userAccessToken,
         pageAccessToken: accountData.pageAccessToken,
@@ -1208,16 +1393,19 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
       }
 
       // Refresh media using direct Graph API
-      const mediaUrl = `https://graph.facebook.com/v18.0/${accountId}/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count&limit=12&access_token=${account.pageAccessToken}`;
+      const mediaUrl = `https://graph.facebook.com/v18.0/${accountId}/media?fields=id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count&limit=12&access_token=${account.pageAccessToken}`;
       const mediaResponse = await fetch(mediaUrl);
       const mediaData = await mediaResponse.json();
+      
+      // Fetch video/reel insights for views count
+      const mediaWithInsights = await fetchMediaInsights(mediaData.data || [], account.pageAccessToken);
       
       const updatedAccounts = connectedAccounts.map(acc => 
         acc.id === accountId 
           ? { 
               ...acc, 
               profile: profileData, 
-              media: mediaData.data || [],
+              media: mediaWithInsights,
               lastRefreshed: new Date().toISOString(),
               lastTokenValidation: new Date().toISOString()
             }
@@ -1234,7 +1422,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
       }
 
       // Store updated historical snapshot
-      const media = mediaData.data || [];
+      const media = mediaWithInsights;
       const totalLikes = media.reduce((sum, m) => sum + (m.like_count || 0), 0);
       const totalComments = media.reduce((sum, m) => sum + (m.comments_count || 0), 0);
       const photosCount = media.filter(m => m.media_type === 'IMAGE').length;
@@ -1321,6 +1509,20 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
     }
   }, [connectedAccounts]);
 
+  // Handle boost post - Opens Instagram's native boost interface
+  const handleBoostPost = (post) => {
+    if (!post || !post.permalink) {
+      alert('Post link not available');
+      return;
+    }
+    
+    // Open Instagram post in new tab where user can click the native Boost button
+    window.open(post.permalink, '_blank');
+    
+    // Alternatively, for mobile apps, you could use deep linking:
+    // window.location.href = `instagram://media?id=${post.id}`;
+  };
+
   // Generate trend data for post analytics
   const generatePostTrendData = (metricValue, metricType) => {
     // Generate simulated trend data showing engagement growth over time
@@ -1355,8 +1557,142 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
     return trendData;
   };
 
+  // --- FETCH COMMENTS FOR A POST ---
+  const fetchPostComments = async (mediaId, accessToken) => {
+    if (!mediaId || !accessToken) {
+      console.warn('Missing mediaId or accessToken for comments fetch');
+      return [];
+    }
+
+    setLoadingComments(true);
+    
+    try {
+      console.log(`🔍 Fetching comments for post ${mediaId}...`);
+      console.log(`🔑 Using access token: ${accessToken.substring(0, 20)}...`);
+      
+      // Fetch comments using direct Graph API call (including replies)
+      const response = await fetch(
+        `https://graph.facebook.com/v18.0/${mediaId}/comments?fields=id,username,text,timestamp,like_count,replies{id,username,text,timestamp,like_count}&access_token=${accessToken}`,
+        { method: 'GET' }
+      );
+      
+      const data = await response.json();
+      
+      if (!response.ok || data.error) {
+        console.error('❌ Failed to fetch comments:', {
+          status: response.status,
+          error: data.error,
+          mediaId,
+          errorMessage: data.error?.message,
+          errorType: data.error?.type,
+          errorCode: data.error?.code
+        });
+        
+        // Store error info for display
+        setPostComments(prev => ({
+          ...prev,
+          [mediaId]: { error: data.error?.message || 'Failed to load comments' }
+        }));
+        
+        return [];
+      }
+      
+      const comments = data.data || [];
+      
+      console.log(`✅ Fetched ${comments.length} comments for post ${mediaId}`);
+      
+      // Store comments in state
+      setPostComments(prev => ({
+        ...prev,
+        [mediaId]: comments
+      }));
+      
+      return comments;
+    } catch (error) {
+      console.error('❌ Error fetching comments:', error);
+      setPostComments(prev => ({
+        ...prev,
+        [mediaId]: { error: error.message || 'Network error' }
+      }));
+      return [];
+    } finally {
+      setLoadingComments(false);
+    }
+  };
+
+  // --- POST REPLY TO COMMENT ---
+  const postReplyToComment = async (commentId, message, mediaId) => {
+    if (!message || !message.trim()) {
+      alert('Please enter a reply message');
+      return;
+    }
+
+    if (!activeAccount || !activeAccount.pageAccessToken) {
+      alert('No active account or access token found');
+      return;
+    }
+
+    setSendingReply(true);
+    
+    try {
+      console.log(`💬 Posting reply to comment ${commentId}...`);
+      
+      const response = await fetch(
+        `https://graph.facebook.com/v18.0/${commentId}/replies?message=${encodeURIComponent(message)}&access_token=${activeAccount.pageAccessToken}`,
+        { method: 'POST' }
+      );
+      
+      const data = await response.json();
+      
+      if (!response.ok || data.error) {
+        console.error('❌ Failed to post reply:', data.error);
+        alert(`Failed to post reply: ${data.error?.message || 'Unknown error'}`);
+        return;
+      }
+      
+      console.log('✅ Reply posted successfully:', data.id);
+      
+      // Clear reply state
+      setReplyText('');
+      setReplyingToComment(null);
+      
+      // Refresh comments to show the new reply
+      await fetchPostComments(mediaId, activeAccount.pageAccessToken);
+      
+    } catch (error) {
+      console.error('❌ Error posting reply:', error);
+      alert(`Error posting reply: ${error.message}`);
+    } finally {
+      setSendingReply(false);
+    }
+  };
+
+  // Helper function to get the correct Instagram URL for reels vs posts
+  const getInstagramPostUrl = (media) => {
+    if (!media || !media.permalink) return null;
+    
+    // If it's a reel (REELS product type), ensure we use the correct URL format
+    if (media.media_product_type === 'REELS' || media.media_type === 'REELS') {
+      // If permalink already contains /reel/ or /reels/, use it as is
+      if (media.permalink.includes('/reel/') || media.permalink.includes('/reels/')) {
+        return media.permalink;
+      }
+      
+      // Otherwise, try to extract the shortcode from permalink and construct reel URL
+      // Instagram permalink format: https://www.instagram.com/p/{shortcode}/
+      // Reel URL format: https://www.instagram.com/reel/{shortcode}/
+      const shortcodeMatch = media.permalink.match(/\/p\/([^\/]+)/);
+      if (shortcodeMatch && shortcodeMatch[1]) {
+        return `https://www.instagram.com/reel/${shortcodeMatch[1]}/`;
+      }
+    }
+    
+    // For regular posts or if we couldn't construct a reel URL, use the original permalink
+    return media.permalink;
+  };
+
   // --- SINGLE POST ANALYTICS LOGIC ---
-  const fetchSinglePostAnalytics = (post) => {
+  const fetchSinglePostAnalytics = async (post) => {
     if (!post) return;
     setSelectedPostId(post.id);
     
@@ -1365,17 +1701,24 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
       id: post.id,
       caption: post.caption || 'No caption',
       timestamp: post.timestamp,
-      permalink: post.permalink,
+      permalink: getInstagramPostUrl(post), // Use helper to get correct URL
       media_url: post.media_url,
       thumbnail_url: post.thumbnail_url,
       media_type: post.media_type,
+      media_product_type: post.media_product_type,
       likes_count: post.like_count || 0,
       comments_count: post.comments_count || 0,
+      video_views: post.video_views || 0,
       total_engagement: (post.like_count || 0) + (post.comments_count || 0),
       engagement_rate: 0 // Will be calculated if we have follower count
     };
     
     setSinglePostAnalytics(analytics);
+    
+    // Fetch comments for this post
+    if (activeAccount && activeAccount.pageAccessToken) {
+      fetchPostComments(post.id, activeAccount.pageAccessToken);
+    }
   };
 
   const renderAnalytics = () => {
@@ -1504,22 +1847,53 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
                     <p className="text-xs sm:text-sm text-gray-800 mb-1 line-clamp-2">
                       {singlePostAnalytics.caption || 'No caption'}
                     </p>
-                    {singlePostAnalytics.permalink && (
-                      <a 
-                        href={singlePostAnalytics.permalink} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="text-[10px] sm:text-xs text-pink-600 hover:text-pink-700"
-                      >
-                        View Post →
-                      </a>
-                    )}
+                    <div className="flex items-center gap-2 mt-1">
+                      {singlePostAnalytics.permalink && (
+                        <>
+                          <a 
+                            href={singlePostAnalytics.permalink} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-[10px] sm:text-xs text-pink-600 hover:text-pink-700"
+                          >
+                            View Post →
+                          </a>
+                          <button
+                            onClick={() => handleBoostPost(singlePostAnalytics)}
+                            className="bg-blue-600 hover:bg-blue-700 text-white px-2 py-0.5 rounded text-[10px] sm:text-xs font-medium flex items-center gap-1"
+                          >
+                            <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
+                              <path d="M13 7H7v6h6V7z"/>
+                              <path fillRule="evenodd" d="M7 2a1 1 0 012 0v1h2V2a1 1 0 112 0v1h2a2 2 0 012 2v2h1a1 1 0 110 2h-1v2h1a1 1 0 110 2h-1v2a2 2 0 01-2 2h-2v1a1 1 0 11-2 0v-1H9v1a1 1 0 11-2 0v-1H5a2 2 0 01-2-2v-2H2a1 1 0 110-2h1V9H2a1 1 0 010-2h1V5a2 2 0 012-2h2V2zM5 5h10v10H5V5z" clipRule="evenodd"/>
+                            </svg>
+                            Boost
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
 
               {/* Engagement Metrics Grid */}
-              <div className="grid grid-cols-3 gap-2 sm:gap-3">
+              <div className={`grid gap-2 sm:gap-3 ${(singlePostAnalytics.media_type === 'VIDEO' || singlePostAnalytics.media_type === 'REELS') ? 'grid-cols-4' : 'grid-cols-3'}`}>
+                {/* Views - Only for Videos/Reels */}
+                {(singlePostAnalytics.media_type === 'VIDEO' || singlePostAnalytics.media_type === 'REELS') && (
+                  <div className={`${singlePostAnalytics.video_views === -1 ? 'bg-yellow-50 border-yellow-200' : 'bg-blue-50 border-blue-200'} border rounded-lg sm:p-3 text-center`}>
+                    <div className={`text-base sm:text-lg font-bold mb-1 ${singlePostAnalytics.video_views === -1 ? 'text-yellow-600' : 'text-blue-600'}`}>
+                      {singlePostAnalytics.video_views === -1 ? 'N/A' : (singlePostAnalytics.video_views?.toLocaleString() || 0)}
+                    </div>
+                    <div className={`text-[10px] sm:text-xs font-medium ${singlePostAnalytics.video_views === -1 ? 'text-yellow-700' : 'text-blue-700'}`}>
+                      👁️ Views
+                    </div>
+                    {singlePostAnalytics.video_views === -1 && (
+                      <div className="text-[8px] sm:text-[10px] text-yellow-600 mt-1">
+                        Missing permission
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className="bg-pink-50 border border-pink-200 rounded-lg sm:p-3 text-center">
                   <div className="text-base sm:text-lg font-bold text-pink-600 mb-1">
                     {singlePostAnalytics.likes_count?.toLocaleString() || 0}
@@ -1659,6 +2033,228 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
                   <span className="font-medium">Top:</span> {singlePostAnalytics.likes_count >= singlePostAnalytics.comments_count ? 'Likes' : 'Comments'}
                   {singlePostAnalytics.total_engagement > 50 && <span className="ml-2">🔥 High performing!</span>}
                 </div>
+              </div>
+
+              {/* Comments Section */}
+              <div className="bg-gray-50 border border-gray-200 rounded-lg sm:p-4 mt-1">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-medium text-xs sm:text-sm text-gray-900 flex items-center">
+                    <MessageCircle className="h-3 w-3 sm:h-4 sm:w-4 mr-1.5 text-purple-600" />
+                    Comments ({singlePostAnalytics.comments_count || 0})
+                  </h4>
+                  {loadingComments && (
+                    <Loader2 className="h-3 w-3 sm:h-4 sm:w-4 animate-spin text-purple-600" />
+                  )}
+                </div>
+                
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {loadingComments ? (
+                    <div className="text-center py-4">
+                      <Loader2 className="h-5 w-5 animate-spin mx-auto text-purple-600" />
+                      <p className="text-xs text-gray-500 mt-2">Loading comments...</p>
+                    </div>
+                  ) : postComments[singlePostAnalytics.id]?.error ? (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-center">
+                      <AlertCircle className="h-8 w-8 mx-auto mb-2 text-red-500" />
+                      <p className="text-xs font-semibold text-red-700 mb-1">Failed to load comments</p>
+                      <p className="text-[10px] text-red-600">{postComments[singlePostAnalytics.id].error}</p>
+                      <button
+                        onClick={() => {
+                          console.log('🔄 Retrying comment fetch...');
+                          if (activeAccount && activeAccount.pageAccessToken) {
+                            fetchPostComments(singlePostAnalytics.id, activeAccount.pageAccessToken);
+                          }
+                        }}
+                        className="mt-2 bg-red-600 text-white px-3 py-1 rounded text-[10px] hover:bg-red-700"
+                      >
+                        Retry
+                      </button>
+                    </div>
+                  ) : postComments[singlePostAnalytics.id] && Array.isArray(postComments[singlePostAnalytics.id]) && postComments[singlePostAnalytics.id].length > 0 ? (
+                    postComments[singlePostAnalytics.id].map((comment) => (
+                      <div key={comment.id} className="bg-white border border-gray-200 rounded-lg p-2 sm:p-3">
+                        <div className="flex items-start gap-2">
+                          <div className="w-6 h-6 sm:w-8 sm:h-8 bg-gradient-to-br from-pink-400 to-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
+                            <span className="text-white text-[10px] sm:text-xs font-bold">
+                              {comment.username ? comment.username.charAt(0).toUpperCase() : '?'}
+                            </span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2 mb-1">
+                              <span className="text-xs sm:text-sm font-semibold text-gray-900 truncate">
+                                @{comment.username || 'Unknown'}
+                              </span>
+                              <span className="text-[9px] sm:text-[10px] text-gray-500 flex-shrink-0">
+                                {new Date(comment.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                              </span>
+                            </div>
+                            <p className="text-[10px] sm:text-xs text-gray-700 break-words">
+                              {comment.text}
+                            </p>
+                            <div className="mt-1 flex items-center gap-2">
+                              {comment.like_count > 0 && (
+                                <div className="flex items-center gap-1">
+                                  <Heart className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-pink-500" fill="currentColor" />
+                                  <span className="text-[9px] sm:text-[10px] text-gray-500">
+                                    {comment.like_count}
+                                  </span>
+                                </div>
+                              )}
+                              <button
+                                onClick={() => {
+                                  setReplyingToComment(comment.id);
+                                  setReplyText('');
+                                }}
+                                className="text-[9px] sm:text-[10px] text-purple-600 hover:text-purple-700 font-medium"
+                              >
+                                💬 Reply
+                              </button>
+                              {comment.replies && comment.replies.data && comment.replies.data.length > 0 && (
+                                <span className="text-[9px] sm:text-[10px] text-gray-500">
+                                  {comment.replies.data.length} {comment.replies.data.length === 1 ? 'reply' : 'replies'}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Reply Input */}
+                        {replyingToComment === comment.id && (
+                          <div className="mt-2 pl-8 sm:pl-10">
+                            <div className="bg-purple-50 border border-purple-200 rounded-lg p-2">
+                              <textarea
+                                value={replyText}
+                                onChange={(e) => setReplyText(e.target.value)}
+                                placeholder="Write a reply..."
+                                className="w-full text-[10px] sm:text-xs bg-white border border-purple-200 rounded p-2 resize-none focus:outline-none focus:border-purple-400"
+                                rows="2"
+                                disabled={sendingReply}
+                              />
+                              <div className="flex items-center gap-2 mt-2">
+                                <button
+                                  onClick={() => postReplyToComment(comment.id, replyText, singlePostAnalytics.id)}
+                                  disabled={sendingReply || !replyText.trim()}
+                                  className="bg-purple-600 text-white px-3 py-1 rounded text-[10px] hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                                >
+                                  {sendingReply ? (
+                                    <>
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                      <span>Sending...</span>
+                                    </>
+                                  ) : (
+                                    <span>Send Reply</span>
+                                  )}
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setReplyingToComment(null);
+                                    setReplyText('');
+                                  }}
+                                  disabled={sendingReply}
+                                  className="bg-gray-200 text-gray-700 px-3 py-1 rounded text-[10px] hover:bg-gray-300 disabled:opacity-50"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Display Replies */}
+                        {comment.replies && comment.replies.data && comment.replies.data.length > 0 && (
+                          <div className="mt-2 pl-8 sm:pl-10 space-y-2">
+                            {comment.replies.data.map((reply) => (
+                              <div key={reply.id} className="bg-purple-50 border border-purple-100 rounded-lg p-2">
+                                <div className="flex items-start gap-2">
+                                  <div className="w-5 h-5 sm:w-6 sm:h-6 bg-gradient-to-br from-purple-400 to-indigo-600 rounded-full flex items-center justify-center flex-shrink-0">
+                                    <span className="text-white text-[9px] sm:text-[10px] font-bold">
+                                      {reply.username ? reply.username.charAt(0).toUpperCase() : '?'}
+                                    </span>
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center justify-between gap-2 mb-0.5">
+                                      <span className="text-[10px] sm:text-xs font-semibold text-gray-900 truncate">
+                                        @{reply.username || 'Unknown'}
+                                      </span>
+                                      <span className="text-[8px] sm:text-[9px] text-gray-500 flex-shrink-0">
+                                        {new Date(reply.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                      </span>
+                                    </div>
+                                    <p className="text-[9px] sm:text-[10px] text-gray-700 break-words">
+                                      {reply.text}
+                                    </p>
+                                    {reply.like_count > 0 && (
+                                      <div className="mt-0.5 flex items-center gap-1">
+                                        <Heart className="h-2 w-2 sm:h-2.5 sm:w-2.5 text-pink-500" fill="currentColor" />
+                                        <span className="text-[8px] sm:text-[9px] text-gray-500">
+                                          {reply.like_count}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-6">
+                      <MessageCircle className="h-8 w-8 mx-auto mb-2 text-gray-300" />
+                      <p className="text-xs text-gray-500">No comments yet</p>
+                      <p className="text-[10px] text-gray-400 mt-1">Be the first to comment!</p>
+                    </div>
+                  )}
+                </div>
+
+                {postComments[singlePostAnalytics.id] && postComments[singlePostAnalytics.id].length >= 50 && (
+                  <div className="mt-2 text-center">
+                    <p className="text-[10px] text-gray-500">
+                      📝 Showing first 50 comments (API limit)
+                    </p>
+                  </div>
+                )}
+
+                {/* Permission notice if no comments loaded but count > 0 */}
+                {!loadingComments && 
+                 singlePostAnalytics.comments_count > 0 && 
+                 (!postComments[singlePostAnalytics.id] || (Array.isArray(postComments[singlePostAnalytics.id]) && postComments[singlePostAnalytics.id].length === 0)) && 
+                 !postComments[singlePostAnalytics.id]?.error && (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                    <div className="flex items-start gap-2 mb-2">
+                      <AlertCircle className="h-4 w-4 text-yellow-600 flex-shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <p className="text-[10px] sm:text-xs font-semibold text-yellow-800 mb-1">
+                          Missing Permission
+                        </p>
+                        <p className="text-[10px] sm:text-xs text-yellow-700 mb-2">
+                          Unable to load comments. The <strong>instagram_manage_comments</strong> permission is required.
+                        </p>
+                        <div className="text-[9px] sm:text-[10px] text-yellow-700 space-y-1">
+                          <p className="font-semibold">To fix this:</p>
+                          <ol className="list-decimal list-inside space-y-0.5 ml-1">
+                            <li>Disconnect your Instagram account</li>
+                            <li>Reconnect and grant all permissions</li>
+                            <li>Check browser console for detailed errors</li>
+                          </ol>
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        console.log('🔍 Debugging info:');
+                        console.log('Post ID:', singlePostAnalytics.id);
+                        console.log('Access Token:', activeAccount?.pageAccessToken?.substring(0, 20) + '...');
+                        console.log('Comments data:', postComments[singlePostAnalytics.id]);
+                        console.log('Active Account:', activeAccount);
+                      }}
+                      className="w-full bg-yellow-600 text-white px-3 py-1.5 rounded text-[10px] hover:bg-yellow-700 mt-2"
+                    >
+                      Show Debug Info (Check Console)
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -1944,6 +2540,26 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
       {/* Show error if any */}
       {renderError()}
 
+      {/* Show permission warning if video views are missing */}
+      {activeAccount && activeAccount.media?.some(m => m.media_type === 'VIDEO' && m.video_views === -1) && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg sm:p-4 mb-4 mx-3 sm:mx-0">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <h4 className="font-semibold text-yellow-800 text-sm mb-1">Missing Insights Permission</h4>
+              <p className="text-xs text-yellow-700 mb-2">
+                Your app doesn't have permission to access video views/plays data. To fix this:
+              </p>
+              <ol className="text-xs text-yellow-700 space-y-1 list-decimal list-inside">
+                <li>Disconnect your Instagram account (click "Disconnect" above)</li>
+                <li>Reconnect and grant the "instagram_manage_insights" permission</li>
+                <li>Or contact your Facebook App administrator to enable this permission</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Show available accounts */}
       {renderAvailableAccounts()}
 
@@ -2102,16 +2718,44 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
                     </svg>
                   </div>
                 )}
-                {/* Hover overlay with engagement stats */}
-                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4 text-white text-sm font-semibold">
-                  <span className="flex items-center gap-1">
-                    <Heart className="h-4 w-4" fill="white" />
-                    {media.like_count || 0}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <MessageCircle className="h-4 w-4" fill="white" />
-                    {media.comments_count || 0}
-                  </span>
+                {/* Hover overlay with engagement stats and boost button */}
+                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white">
+                  <div className="flex items-center gap-4 text-sm font-semibold mb-3">
+                    <span className="flex items-center gap-1">
+                      <Heart className="h-4 w-4" fill="white" />
+                      {media.like_count || 0}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <MessageCircle className="h-4 w-4" fill="white" />
+                      {media.comments_count || 0}
+                    </span>
+                    {(media.media_type === 'VIDEO' || media.media_type === 'REELS') && (
+                      media.video_views > 0 ? (
+                        <span className="flex items-center gap-1">
+                          <Eye className="h-4 w-4" />
+                          {media.video_views?.toLocaleString()}
+                        </span>
+                      ) : media.video_views === -1 ? (
+                        <span className="flex items-center gap-1 text-yellow-300 text-xs">
+                          <Eye className="h-3 w-3" />
+                          N/A
+                        </span>
+                      ) : null
+                    )}
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleBoostPost(media);
+                    }}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors"
+                  >
+                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M13 7H7v6h6V7z"/>
+                      <path fillRule="evenodd" d="M7 2a1 1 0 012 0v1h2V2a1 1 0 112 0v1h2a2 2 0 012 2v2h1a1 1 0 110 2h-1v2h1a1 1 0 110 2h-1v2a2 2 0 01-2 2h-2v1a1 1 0 11-2 0v-1H9v1a1 1 0 11-2 0v-1H5a2 2 0 01-2-2v-2H2a1 1 0 110-2h1V9H2a1 1 0 010-2h1V5a2 2 0 012-2h2V2zM5 5h10v10H5V5z" clipRule="evenodd"/>
+                    </svg>
+                    Boost Post
+                  </button>
                 </div>
               </div>
             )) : (

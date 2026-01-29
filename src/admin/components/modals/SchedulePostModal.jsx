@@ -62,7 +62,7 @@ async function createInstagramMediaContainers(mediaUrls, instagramId, pageAccess
 /**
  * Create Instagram carousel container
  */
-async function createInstagramCarouselContainer(containerIds, caption, instagramId, pageAccessToken) {
+async function createInstagramCarouselContainer(containerIds, caption, instagramId, pageAccessToken, locationId = null) {
   try {
     const params = new URLSearchParams({
       access_token: pageAccessToken,
@@ -70,6 +70,11 @@ async function createInstagramCarouselContainer(containerIds, caption, instagram
       children: containerIds.join(','),
       caption: caption || ''
     });
+    
+    // Add location if provided
+    if (locationId) {
+      params.append('location_id', locationId);
+    }
 
     const response = await fetch(
       `https://graph.facebook.com/v21.0/${instagramId}/media?${params.toString()}`,
@@ -125,7 +130,7 @@ async function publishInstagramCarousel(carouselContainerId, instagramId, pageAc
 /**
  * Complete Instagram carousel flow
  */
-async function createAndPublishInstagramCarousel(mediaUrls, caption, instagramId, pageAccessToken) {
+async function createAndPublishInstagramCarousel(mediaUrls, caption, instagramId, pageAccessToken, locationId = null) {
   try {
     // Validate media count
     if (mediaUrls.length < 2 || mediaUrls.length > 10) {
@@ -146,7 +151,8 @@ async function createAndPublishInstagramCarousel(mediaUrls, caption, instagramId
       containerIds, 
       caption, 
       instagramId, 
-      pageAccessToken
+      pageAccessToken,
+      locationId
     );
 
     // Step 3: Publish carousel
@@ -275,6 +281,49 @@ function SchedulePostModal({
   onRefreshScheduledPosts
 }) {
   const fileInputRef = useRef(null);
+  const isPostingRef = useRef(false); // Prevent duplicate posts immediately
+  const isSchedulingRef = useRef(false); // Prevent duplicate scheduling
+  const lastSubmissionIdRef = useRef(null); // Track last submission to prevent duplicates
+  const submissionLockTimeRef = useRef(0); // Timestamp-based lock
+
+  // Generate unique submission ID to prevent duplicate posts
+  const generateSubmissionId = () => {
+    return `sub_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  };
+
+  // Check if a submission was recently made (within 30 seconds)
+  const isRecentSubmission = (contentId, platforms) => {
+    try {
+      const recentSubmissions = JSON.parse(localStorage.getItem('recentPostSubmissions') || '{}');
+      const key = `${contentId}_${platforms.sort().join('_')}`;
+      const lastSubmission = recentSubmissions[key];
+      if (lastSubmission && Date.now() - lastSubmission.timestamp < 30000) {
+        console.warn(`⚠️ Blocking duplicate submission - last submission was ${Math.floor((Date.now() - lastSubmission.timestamp) / 1000)}s ago`);
+        return true;
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  };
+
+  // Mark a submission as completed
+  const markSubmissionComplete = (contentId, platforms) => {
+    try {
+      const recentSubmissions = JSON.parse(localStorage.getItem('recentPostSubmissions') || '{}');
+      const key = `${contentId}_${platforms.sort().join('_')}`;
+      recentSubmissions[key] = { timestamp: Date.now(), platforms };
+      // Clean up old entries (older than 5 minutes)
+      Object.keys(recentSubmissions).forEach(k => {
+        if (Date.now() - recentSubmissions[k].timestamp > 300000) {
+          delete recentSubmissions[k];
+        }
+      });
+      localStorage.setItem('recentPostSubmissions', JSON.stringify(recentSubmissions));
+    } catch (e) {
+      console.warn('Failed to track submission:', e);
+    }
+  };
 
   // Schedule modal state
   const [scheduleFormData, setScheduleFormData] = useState({
@@ -287,10 +336,17 @@ function SchedulePostModal({
     scheduledDate: '',
     scheduledTime: '',
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    postType: 'feed' // added: 'feed' | 'story' | 'reel'
+    postType: 'feed', // added: 'feed' | 'story' | 'reel'
+    location: null // { id, name, location: { city, country, latitude, longitude } }
   });
   const [submitting, setSubmitting] = useState(false);
   const [isPostingNow, setIsPostingNow] = useState(false);
+  
+  // Location search state
+  const [locationSearchQuery, setLocationSearchQuery] = useState('');
+  const [locationSearchResults, setLocationSearchResults] = useState([]);
+  const [searchingLocation, setSearchingLocation] = useState(false);
+  const [showLocationSearch, setShowLocationSearch] = useState(false);
 
   // Local state for connected accounts
   const [localAccounts, setLocalAccounts] = useState([]);
@@ -573,6 +629,115 @@ function SchedulePostModal({
     return ['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv', 'flv', 'wmv'].includes(ext);
   };
 
+  // Search locations using Facebook Places API
+  const searchLocations = async (query) => {
+    if (!query || query.trim().length < 2) {
+      setLocationSearchResults([]);
+      return;
+    }
+
+    setSearchingLocation(true);
+    
+    try {
+      // Get access token and available pages from Facebook/Instagram account
+      let accessToken = null;
+      let availablePages = [];
+      let tokenSource = '';
+      
+      // Get from selected accounts
+      for (const platform of scheduleFormData.platforms) {
+        if (platform === 'facebook' || platform === 'instagram') {
+          const settings = scheduleFormData.platformSettings[platform];
+          if (settings?.accountId) {
+            const account = getCustomerSocialAccounts(selectedContent.customerId)
+              .find(acc => acc._id === settings.accountId);
+            if (account?.accessToken) {
+              accessToken = account.accessToken;
+              availablePages = account.pages || [];
+              tokenSource = `${platform} account`;
+              break;
+            }
+          }
+        }
+      }
+      
+      // If no token from selected account, try any FB/IG account
+      if (!accessToken) {
+        const allAccounts = getCustomerSocialAccounts(selectedContent.customerId);
+        const fbOrIgAccount = allAccounts.find(acc => 
+          (acc.platform === 'facebook' || acc.platform === 'instagram') && acc.accessToken
+        );
+        if (fbOrIgAccount) {
+          accessToken = fbOrIgAccount.accessToken;
+          availablePages = fbOrIgAccount.pages || [];
+          tokenSource = `${fbOrIgAccount.platform} account (fallback)`;
+        }
+      }
+
+      if (!accessToken) {
+        console.error('❌ No access token available for location search');
+        alert('Please connect and select a Facebook or Instagram account first');
+        setLocationSearchResults([]);
+        setSearchingLocation(false);
+        return;
+      }
+
+      console.log(`🔍 Searching in your managed pages for "${query}"...`);
+      
+      // Filter user's own pages by query (case-insensitive)
+      const matchingPages = availablePages.filter(page => 
+        page.name && page.name.toLowerCase().includes(query.toLowerCase())
+      );
+      
+      // Get full page details with location for matching pages
+      const pagesWithLocation = [];
+      
+      for (const page of matchingPages) {
+        try {
+          const response = await fetch(
+            `https://graph.facebook.com/v18.0/${page.id}?fields=id,name,location,category,is_verified&access_token=${accessToken}`,
+            { method: 'GET' }
+          );
+          
+          const pageData = await response.json();
+          
+          if (!pageData.error && pageData.location) {
+            pagesWithLocation.push(pageData);
+          }
+        } catch (err) {
+          console.warn(`Failed to get location for page ${page.id}:`, err);
+        }
+      }
+      
+      setLocationSearchResults(pagesWithLocation);
+      console.log(`✅ Found ${pagesWithLocation.length} pages with locations matching "${query}"`);
+      
+      if (pagesWithLocation.length === 0) {
+        console.log('💡 Tip: Only your managed Facebook Pages with location data can be used');
+      }
+      
+    } catch (error) {
+      console.error('❌ Location search error:', error);
+      setLocationSearchResults([]);
+    } finally {
+      setSearchingLocation(false);
+    }
+  };
+
+  // Handle location selection
+  const selectLocation = (location) => {
+    setScheduleFormData(prev => ({ ...prev, location }));
+    setShowLocationSearch(false);
+    setLocationSearchQuery('');
+    setLocationSearchResults([]);
+    console.log('📍 Selected location:', location);
+  };
+
+  // Clear selected location
+  const clearLocation = () => {
+    setScheduleFormData(prev => ({ ...prev, location: null }));
+  };
+
   // Common validation function for both schedule and post now
   const validatePostData = (isScheduled = true) => {
     if (!scheduleFormData.caption) {
@@ -718,7 +883,8 @@ function SchedulePostModal({
         calendar_name: selectedContent.calendar_name || selectedContent.calendarName || '',
         item_id: selectedContent.item_id || selectedContent.itemId || selectedContent.id || '',
         item_name: selectedContent.item_name || selectedContent.itemName || selectedContent.title || '',
-        postType: scheduleFormData.postType
+        postType: scheduleFormData.postType,
+        location: scheduleFormData.location // Add location data
       };
 
       // Add scheduled time
@@ -800,6 +966,13 @@ function SchedulePostModal({
   const handleSchedulePost = async () => {
     if (!validatePostData(true)) return;
 
+    // Prevent duplicate submissions
+    if (isSchedulingRef.current) {
+      console.warn('⚠️ Schedule already in progress, ignoring duplicate click');
+      return;
+    }
+    isSchedulingRef.current = true;
+
     setSubmitting(true);
     try {
       const postsData = createPostsData(true);
@@ -855,14 +1028,40 @@ function SchedulePostModal({
       alert(`Failed to schedule posts: ${error.message}`);
     } finally {
       setSubmitting(false);
+      isSchedulingRef.current = false;
     }
   };
 
   const handlePostNow = async () => {
     if (!validatePostData(false)) return;
 
+    // LAYER 1: Ref-based lock (fastest)
+    if (isPostingRef.current) {
+      console.warn('⚠️ Post already in progress (ref lock), ignoring duplicate click');
+      return;
+    }
+
+    // LAYER 2: Timestamp-based lock (prevents rapid clicks even if ref resets)
+    const now = Date.now();
+    if (now - submissionLockTimeRef.current < 5000) {
+      console.warn('⚠️ Post submission too recent (time lock), ignoring duplicate click');
+      return;
+    }
+
+    // LAYER 3: Check localStorage for recent identical submissions
+    if (isRecentSubmission(selectedContent?.id, scheduleFormData.platforms)) {
+      alert('This content was recently posted. Please wait before posting again.');
+      return;
+    }
+
+    // Set all locks
+    isPostingRef.current = true;
+    submissionLockTimeRef.current = now;
+
     // Generate unique request ID to prevent duplicate processing
-    const requestId = `post_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const submissionId = generateSubmissionId();
+    lastSubmissionIdRef.current = submissionId;
+    const requestId = `post_${submissionId}`;
     console.log('🆔 Generated request ID:', requestId);
 
     setIsPostingNow(true);
@@ -923,6 +1122,8 @@ function SchedulePostModal({
       alert(message || 'All posts published successfully!');
       
       if (results.length > 0) {
+        // Mark submission as complete to prevent re-submission
+        markSubmissionComplete(selectedContent?.id, scheduleFormData.platforms);
         onRefreshScheduledPosts();
         onClose();
       }
@@ -931,6 +1132,8 @@ function SchedulePostModal({
       alert(`Failed to publish posts: ${error.message}`);
     } finally {
       setIsPostingNow(false); // Ensure loader always stops
+      isPostingRef.current = false; // Reset the ref
+      // Note: submissionLockTimeRef is intentionally NOT reset - keeps 5 second cooldown
     }
   };
 
@@ -1431,6 +1634,152 @@ function SchedulePostModal({
                   placeholder="#example #hashtags #social"
                 />
               </div>
+
+              {/* Location Selection (Facebook & Instagram only) */}
+              {(scheduleFormData.platforms.includes('facebook') || scheduleFormData.platforms.includes('instagram')) && (
+                <div>
+                  <label className="block text-lg font-semibold text-gray-900 mb-3 flex items-center">
+                    <svg className="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    Add Location (Optional)
+                  </label>
+
+                  {/* Selected Location Display */}
+                  {scheduleFormData.location ? (
+                    <div className="bg-blue-50 border-2 border-blue-300 rounded-xl p-4 mb-3">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center mb-1">
+                            <svg className="h-5 w-5 text-blue-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
+                            </svg>
+                            <span className="font-semibold text-gray-900">{scheduleFormData.location.name}</span>
+                          </div>
+                          {scheduleFormData.location.location && (
+                            <div className="text-sm text-gray-600 ml-7">
+                              {scheduleFormData.location.location.city && `${scheduleFormData.location.location.city}, `}
+                              {scheduleFormData.location.location.country}
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={clearLocation}
+                          className="ml-3 text-red-600 hover:text-red-700 p-1 rounded-full hover:bg-red-100 transition-all"
+                        >
+                          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setShowLocationSearch(!showLocationSearch)}
+                      className="w-full border-2 border-gray-300 rounded-xl px-4 py-3 text-left text-gray-500 hover:border-blue-400 hover:bg-blue-50 transition-all duration-200 flex items-center"
+                    >
+                      <svg className="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                      Search for a location
+                    </button>
+                  )}
+
+                  {/* Location Search Interface */}
+                  {showLocationSearch && !scheduleFormData.location && (
+                    <div className="mt-3 bg-gray-50 border-2 border-gray-300 rounded-xl p-4">
+                      <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <p className="text-xs text-blue-800">
+                          <strong>💡 Tip:</strong> Only <strong>your managed Facebook Pages</strong> with location data can be used as locations. These are the pages you have admin access to.
+                        </p>
+                      </div>
+                      
+                      <div className="relative mb-3">
+                        <input
+                          type="text"
+                          value={locationSearchQuery}
+                          onChange={(e) => {
+                            setLocationSearchQuery(e.target.value);
+                            searchLocations(e.target.value);
+                          }}
+                          placeholder="Search your managed pages (e.g., My Restaurant, My Shop)..."
+                          className="w-full border-2 border-gray-300 rounded-lg px-4 py-2 pr-10 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                        {searchingLocation && (
+                          <div className="absolute right-3 top-3">
+                            <svg className="animate-spin h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Search Results */}
+                      {locationSearchResults.length > 0 && (
+                        <div className="max-h-64 overflow-y-auto space-y-2 mb-3">
+                          {locationSearchResults.map((location) => (
+                            <button
+                              key={location.id}
+                              type="button"
+                              onClick={() => selectLocation(location)}
+                              className="w-full text-left p-3 bg-white border border-gray-200 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-all duration-200"
+                            >
+                              <div className="flex items-center gap-2">
+                                <div className="font-semibold text-gray-900">{location.name}</div>
+                                {location.is_verified && (
+                                  <svg className="h-4 w-4 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                  </svg>
+                                )}
+                              </div>
+                              {location.location && (
+                                <div className="text-sm text-gray-600 mt-1">
+                                  {location.location.street && `${location.location.street}, `}
+                                  {location.location.city && `${location.location.city}, `}
+                                  {location.location.country}
+                                </div>
+                              )}
+                              {location.category && (
+                                <div className="text-xs text-gray-500 mt-1">{location.category}</div>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {locationSearchQuery.length >= 2 && !searchingLocation && locationSearchResults.length === 0 && (
+                        <div className="text-center py-4 text-gray-500 mb-3">
+                          <svg className="h-8 w-8 mx-auto mb-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                          </svg>
+                          <p className="text-sm">No matching pages found in your managed pages</p>
+                          <p className="text-xs text-gray-400 mt-1">Try searching for pages you manage or have admin access to</p>
+                        </div>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowLocationSearch(false);
+                          setLocationSearchQuery('');
+                          setLocationSearchResults([]);
+                        }}
+                        className="mt-3 w-full text-sm text-gray-600 hover:text-gray-800 py-2"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+
+                  <p className="text-xs text-gray-500 mt-2">
+                    📍 Add a location to your post (works for Facebook and Instagram Feed posts)
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Media Selection */}

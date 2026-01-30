@@ -250,6 +250,61 @@ async function createFacebookCarousel(mediaUrls, caption, pageId, pageAccessToke
   }
 }
 
+/**
+ * Validate LinkedIn access token before posting
+ * @param {string} accessToken - The LinkedIn access token to validate
+ * @returns {Promise<{valid: boolean, error?: string, requiresReconnect?: boolean}>}
+ */
+async function validateLinkedInToken(accessToken) {
+  try {
+    const response = await fetch(`${process.env.REACT_APP_API_URL}/api/token-refresh/linkedin/validate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accessToken })
+    });
+    
+    const result = await response.json();
+    
+    if (result.success && result.valid) {
+      return { valid: true };
+    } else {
+      return { 
+        valid: false, 
+        error: result.error || 'LinkedIn token is invalid or expired',
+        requiresReconnect: result.requiresReconnect || true
+      };
+    }
+  } catch (error) {
+    console.error('Error validating LinkedIn token:', error);
+    return { 
+      valid: false, 
+      error: 'Failed to validate LinkedIn token',
+      requiresReconnect: true
+    };
+  }
+}
+
+/**
+ * Check if LinkedIn token is expiring soon (within 7 days)
+ * @param {object} account - The LinkedIn account object with tokenExpiresAt
+ * @returns {{isExpiring: boolean, daysLeft: number|null}}
+ */
+function checkLinkedInTokenExpiry(account) {
+  if (!account.tokenExpiresAt) {
+    return { isExpiring: false, daysLeft: null };
+  }
+  
+  const expiryTime = new Date(account.tokenExpiresAt);
+  const now = new Date();
+  const daysLeft = Math.ceil((expiryTime.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+  
+  return {
+    isExpiring: daysLeft <= 7,
+    isExpired: daysLeft <= 0,
+    daysLeft
+  };
+}
+
 // Accept a callback to update local accounts state
 async function disconnectSocialAccount(accountId, onRefresh, onLocalDisconnect) {
   try {
@@ -975,6 +1030,47 @@ function SchedulePostModal({
 
     setSubmitting(true);
     try {
+      // 🔥 VALIDATE LINKEDIN TOKEN BEFORE SCHEDULING
+      if (scheduleFormData.platforms.includes('linkedin')) {
+        const linkedinSettings = scheduleFormData.platformSettings['linkedin'];
+        const linkedinAccount = getCustomerSocialAccounts(selectedContent.customerId)
+          .find(acc => acc._id === linkedinSettings.accountId);
+        
+        if (linkedinAccount) {
+          console.log('🔍 Validating LinkedIn token before scheduling...');
+          
+          // Check token expiry first
+          const expiryCheck = checkLinkedInTokenExpiry(linkedinAccount);
+          if (expiryCheck.isExpired) {
+            alert(`❌ Your LinkedIn access token has expired. Please ask the customer to reconnect their LinkedIn account in their integration settings.`);
+            setSubmitting(false);
+            isSchedulingRef.current = false;
+            return;
+          }
+          
+          if (expiryCheck.isExpiring) {
+            const proceed = window.confirm(
+              `⚠️ LinkedIn token expires in ${expiryCheck.daysLeft} days. The scheduled post may fail if the token expires before the scheduled time. Would you like to continue anyway?\n\nRecommendation: Ask the customer to reconnect their LinkedIn account to refresh the token.`
+            );
+            if (!proceed) {
+              setSubmitting(false);
+              isSchedulingRef.current = false;
+              return;
+            }
+          }
+          
+          // Validate token is actually working
+          const validation = await validateLinkedInToken(linkedinAccount.accessToken);
+          if (!validation.valid) {
+            alert(`❌ LinkedIn token validation failed: ${validation.error}\n\nPlease ask the customer to reconnect their LinkedIn account in their integration settings.`);
+            setSubmitting(false);
+            isSchedulingRef.current = false;
+            return;
+          }
+          console.log('✅ LinkedIn token validated successfully');
+        }
+      }
+
       const postsData = createPostsData(true);
       const results = [];
       const errors = [];
@@ -1066,6 +1162,36 @@ function SchedulePostModal({
 
     setIsPostingNow(true);
     try {
+      // 🔥 VALIDATE LINKEDIN TOKEN BEFORE POSTING
+      if (scheduleFormData.platforms.includes('linkedin')) {
+        const linkedinSettings = scheduleFormData.platformSettings['linkedin'];
+        const linkedinAccount = getCustomerSocialAccounts(selectedContent.customerId)
+          .find(acc => acc._id === linkedinSettings.accountId);
+        
+        if (linkedinAccount) {
+          console.log('🔍 Validating LinkedIn token before posting...');
+          
+          // Check token expiry first
+          const expiryCheck = checkLinkedInTokenExpiry(linkedinAccount);
+          if (expiryCheck.isExpired) {
+            alert(`❌ Your LinkedIn access token has expired. Please ask the customer to reconnect their LinkedIn account in their integration settings.`);
+            setIsPostingNow(false);
+            isPostingRef.current = false;
+            return;
+          }
+          
+          // Validate token is actually working
+          const validation = await validateLinkedInToken(linkedinAccount.accessToken);
+          if (!validation.valid) {
+            alert(`❌ LinkedIn token validation failed: ${validation.error}\n\nPlease ask the customer to reconnect their LinkedIn account in their integration settings.`);
+            setIsPostingNow(false);
+            isPostingRef.current = false;
+            return;
+          }
+          console.log('✅ LinkedIn token validated successfully');
+        }
+      }
+
       const postsData = createPostsData(false);
       const results = [];
       const errors = [];
@@ -1300,7 +1426,9 @@ function SchedulePostModal({
                           type="button"
                           onClick={async (e) => {
                             e.stopPropagation();
-                            await disconnectSocialAccount(connected[0]._id, null, handleLocalDisconnect);
+                            if (window.confirm(`Are you sure you want to disconnect your Facebook account (${connected[0].name})? This will remove all associated pages and you'll need to reconnect to post again.`)) {
+                              await disconnectSocialAccount(connected[0]._id, null, handleLocalDisconnect);
+                            }
                           }}
                           className="ml-2 bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700"
                         >
@@ -1362,7 +1490,9 @@ function SchedulePostModal({
                           type="button"
                           onClick={async (e) => {
                             e.stopPropagation();
-                            await disconnectSocialAccount(connected[0]._id, null, handleLocalDisconnect);
+                            if (window.confirm(`Are you sure you want to disconnect your Instagram account (${connected[0].name})? This will remove all associated pages and you'll need to reconnect to post again.`)) {
+                              await disconnectSocialAccount(connected[0]._id, null, handleLocalDisconnect);
+                            }
                           }}
                           className="ml-2 bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700"
                         >
@@ -1424,7 +1554,9 @@ function SchedulePostModal({
                           type="button"
                           onClick={async (e) => {
                             e.stopPropagation();
-                            await disconnectSocialAccount(connected[0]._id, null, handleLocalDisconnect);
+                            if (window.confirm(`Are you sure you want to disconnect your YouTube account (${connected[0].name})? This will remove all associated channels and you'll need to reconnect to post again.`)) {
+                              await disconnectSocialAccount(connected[0]._id, null, handleLocalDisconnect);
+                            }
                           }}
                           className="ml-2 bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700"
                         >
@@ -1487,7 +1619,9 @@ function SchedulePostModal({
                           type="button"
                           onClick={async (e) => {
                             e.stopPropagation();
-                            await disconnectSocialAccount(connected[0]._id, null, handleLocalDisconnect);
+                            if (window.confirm(`Are you sure you want to disconnect your LinkedIn account (${connected[0].name})? You'll need to reconnect to post again.`)) {
+                              await disconnectSocialAccount(connected[0]._id, null, handleLocalDisconnect);
+                            }
                           }}
                           className="ml-2 bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700"
                         >

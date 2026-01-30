@@ -14,7 +14,7 @@ function ContentReview() {
         setScheduledPostsLoading(true);
         setScheduledPostsError(null);
         try {
-          const res = await fetch('/api/scheduled-posts');
+          const res = await fetch(`${process.env.REACT_APP_API_URL}/api/scheduled-posts`);
           if (!res.ok) throw new Error('Failed to fetch scheduled posts');
           const data = await res.json();
           setScheduledPosts(Array.isArray(data) ? data : []);

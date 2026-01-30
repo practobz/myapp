@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MessageSquare, CheckCircle, Edit3, Trash2, Move, ChevronLeft, ChevronRight, Image, Video, AlertCircle } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
@@ -14,7 +14,7 @@ function ContentReview() {
         setScheduledPostsLoading(true);
         setScheduledPostsError(null);
         try {
-          const res = await fetch(`${process.env.REACT_APP_API_URL}/api/scheduled-posts`);
+        const res = await fetch(`${process.env.REACT_APP_API_URL}/api/scheduled-posts`);
           if (!res.ok) throw new Error('Failed to fetch scheduled posts');
           const data = await res.json();
           setScheduledPosts(Array.isArray(data) ? data : []);
@@ -41,6 +41,10 @@ function ContentReview() {
   const [hoveredComment, setHoveredComment] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  
+  // Ref for image container to properly position comments
+  const imageContainerRef = useRef(null);
+  const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0, offsetLeft: 0, offsetTop: 0 });
 
   // Get logged-in customer info from localStorage (like in ContentCalendar)
   let user = null;
@@ -52,10 +56,6 @@ function ContentReview() {
 
   const customerId = user?.id || user?._id;
   const customerEmail = user?.email;
-
-  console.log('Current user:', user);
-  console.log('Customer ID:', customerId);
-  console.log('Customer Email:', customerEmail);
 
   useEffect(() => {
     if (customerId || customerEmail) {
@@ -70,8 +70,24 @@ function ContentReview() {
   useEffect(() => {
     if (selectedContent && selectedContent.versions && selectedContent.versions[selectedVersionIndex]) {
       const version = selectedContent.versions[selectedVersionIndex];
-      // Load comments from the version data
-      setComments(version.comments || []);
+      // Load comments from the version data and normalize them
+      const normalizedComments = (version.comments || []).map(comment => ({
+        ...comment,
+        // Ensure x and y are at the top level for positioning
+        x: comment.x ?? comment.position?.x ?? 0,
+        y: comment.y ?? comment.position?.y ?? 0,
+        editing: false,
+        repositioning: false,
+        isNew: false, // Mark as existing comment (already saved)
+        done: comment.done || comment.status === 'completed' || false
+      }));
+      
+      // Remove duplicate comments by ID (in case backend has duplicates)
+      const uniqueComments = normalizedComments.filter((comment, index, self) =>
+        index === self.findIndex((c) => c.id === comment.id)
+      );
+      
+      setComments(uniqueComments);
     } else {
       setComments([]);
     }
@@ -102,7 +118,6 @@ function ContentReview() {
       if (!Array.isArray(submissions)) {
         throw new Error('Invalid data received');
       }
-      console.log('All submissions:', submissions);
 
       // Filter submissions to only those belonging to the logged-in customer
       const filteredSubmissions = submissions.filter(sub => {
@@ -111,24 +126,17 @@ function ContentReview() {
         // Match by customer_id (user._id or user.id)
         if (user && (user._id || user.id) && sub.customer_id && (sub.customer_id === user._id || sub.customer_id === user.id)) {
           matches = true;
-          console.log('✅ Match by customer_id');
         }
         // Match by customer_email
         else if (user && user.email && sub.customer_email && sub.customer_email === user.email) {
           matches = true;
-          console.log('✅ Match by customer_email');
         }
         // Match by created_by (fallback)
         else if (user && user.email && sub.created_by && sub.created_by === user.email && !sub.customer_id && !sub.customer_email) {
           matches = true;
-          console.log('✅ Match by created_by (fallback)');
-        } else {
-          console.log('❌ No match found', { subId: sub._id, sub });
         }
         return matches;
       });
-
-      console.log('Filtered submissions:', filteredSubmissions);
 
       if (filteredSubmissions.length === 0) {
         setContentItems([]);
@@ -179,10 +187,9 @@ function ContentReview() {
         });
       });
 
-      console.log('Final content data:', contentData);
-
       setContentItems(contentData);
-      if (contentData.length > 0) {
+      // Only set initial selection if nothing is currently selected
+      if (contentData.length > 0 && !selectedContent) {
         setSelectedContent(contentData[0]);
         setSelectedVersionIndex(contentData[0].versions.length - 1); // Show latest version by default
       }
@@ -290,6 +297,7 @@ function ContentReview() {
       editing: true,
       done: false,
       repositioning: false,
+      isNew: true, // Mark as new comment (not yet saved)
       versionId: selectedContent.versions[selectedVersionIndex]?.id,
       versionNumber: selectedContent.versions[selectedVersionIndex]?.versionNumber || 1,
       mediaIndex: selectedMediaIndex, // Associate comment with current media item
@@ -309,55 +317,83 @@ function ContentReview() {
     const comment = commentsForCurrentMedia.find(c => c.id === id);
     if (comment && comment.comment.trim()) {
       try {
-        // Prepare comment object to save
-        const newCommentObj = {
-          id: comment.id,
-          comment: comment.comment,
-          position: { x: comment.x, y: comment.y },
-          mediaIndex: selectedMediaIndex, // Include media index
-          timestamp: comment.timestamp,
-          status: 'active'
-        };
-
         // Use the assignment ID directly from selectedContent
         const assignmentId = selectedContent.id;
         const versionId = selectedContent.versions[selectedVersionIndex]?.id;
 
-        console.log('Submitting comment:', { assignmentId, versionId, comment: newCommentObj });
-
-        // Save comment to backend: PATCH the submission to add comment to the correct version
-        const response = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(assignmentId)}/comment`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            versionId: versionId,
-            comment: newCommentObj
-          })
-        });
+        // Check if this is a new comment or an edit (use isNew flag)
+        const isNewComment = comment.isNew === true;
+        
+        let response;
+        
+        if (!isNewComment) {
+          // Update existing comment using PUT
+          response = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(assignmentId)}/comments/${comment.id}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              comment: comment.comment,
+              position: { x: comment.x, y: comment.y },
+              x: comment.x,
+              y: comment.y,
+              mediaIndex: selectedMediaIndex,
+              status: comment.status || 'active'
+            })
+          });
+        } else {
+          // Create new comment using PATCH
+          const newCommentObj = {
+            id: comment.id,
+            comment: comment.comment,
+            position: { x: comment.x, y: comment.y },
+            x: comment.x,
+            y: comment.y,
+            mediaIndex: selectedMediaIndex,
+            timestamp: comment.timestamp || new Date().toISOString(),
+            status: 'active'
+          };
+          
+          response = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(assignmentId)}/comment`, {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              versionId: versionId,
+              comment: newCommentObj
+            })
+          });
+        }
 
         if (response.ok) {
           const result = await response.json();
-          console.log('Comment saved successfully:', result);
           
           // Update the local state to reflect the saved comment
           setComments(comments.map((c) => (c.id === id ? { ...c, editing: false } : c)));
           setCommentsForCurrentMedia(commentsForCurrentMedia.map((c) => (c.id === id ? { ...c, editing: false } : c)));
           setActiveComment(null);
           
-          // Store current selection before refresh
-          const currentIndex = selectedContentIndex;
+          // Store current selection before refresh (use assignment ID, not index)
+          const currentAssignmentId = selectedContent.id;
           const currentVersionIndex = selectedVersionIndex;
           const currentMediaIndex = selectedMediaIndex;
           
           // Refresh the content submissions to get updated data
           await fetchContentSubmissions();
           
-          // Restore the selection after refresh
-          setSelectedContentIndex(currentIndex);
-          setSelectedVersionIndex(currentVersionIndex);
-          setSelectedMediaIndex(currentMediaIndex);
+          // Restore the selection after refresh by finding the item with the same assignment ID
+          setContentItems(prevItems => {
+            const itemIndex = prevItems.findIndex(item => item.id === currentAssignmentId);
+            if (itemIndex !== -1) {
+              setSelectedContent(prevItems[itemIndex]);
+              setSelectedContentIndex(itemIndex);
+              setSelectedVersionIndex(currentVersionIndex);
+              setSelectedMediaIndex(currentMediaIndex);
+            }
+            return prevItems;
+          });
         } else {
           const errorData = await response.json();
           console.error('Failed to save comment:', errorData);
@@ -377,9 +413,86 @@ function ContentReview() {
   };
 
   const handleCommentCancel = (id) => {
-    setComments(comments.filter((c) => c.id !== id));
-    setCommentsForCurrentMedia(commentsForCurrentMedia.filter((c) => c.id !== id));
+    const comment = commentsForCurrentMedia.find(c => c.id === id);
+    // If this is a new comment (no saved comment text), remove it
+    // If it's an existing comment being edited, just stop editing
+    if (comment && comment.comment && comment.comment.trim() !== '') {
+      // Existing comment - just cancel editing mode
+      setComments(comments.map((c) => (c.id === id ? { ...c, editing: false } : c)));
+      setCommentsForCurrentMedia(commentsForCurrentMedia.map((c) => (c.id === id ? { ...c, editing: false } : c)));
+    } else {
+      // New comment - remove it
+      setComments(comments.filter((c) => c.id !== id));
+      setCommentsForCurrentMedia(commentsForCurrentMedia.filter((c) => c.id !== id));
+    }
     setActiveComment(null);
+  };
+
+  // Handle delete comment - removes from backend and local state
+  const handleDeleteComment = async (id) => {
+    const comment = commentsForCurrentMedia.find(c => c.id === id);
+    if (comment) {
+      try {
+        // Delete comment from backend
+        const response = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(selectedContent.id)}/comments/${comment.id}`, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+          }
+        });
+
+        if (response.ok) {
+          
+          // Store current selection before refresh (use assignment ID, not index)
+          const currentAssignmentId = selectedContent.id;
+          const currentVersionIndex = selectedVersionIndex;
+          const currentMediaIndex = selectedMediaIndex;
+          
+          // Refresh the content submissions to get updated data
+          await fetchContentSubmissions();
+          
+          // Restore the selection after refresh by finding the item with the same assignment ID
+          setContentItems(prevItems => {
+            const itemIndex = prevItems.findIndex(item => item.id === currentAssignmentId);
+            if (itemIndex !== -1) {
+              setSelectedContent(prevItems[itemIndex]);
+              setSelectedContentIndex(itemIndex);
+              setSelectedVersionIndex(currentVersionIndex);
+              setSelectedMediaIndex(currentMediaIndex);
+            }
+            return prevItems;
+          });
+        } else {
+          console.error('Failed to delete comment from backend');
+          // Still update local state
+          setComments(comments.filter((c) => c.id !== id));
+          setCommentsForCurrentMedia(commentsForCurrentMedia.filter((c) => c.id !== id));
+        }
+      } catch (error) {
+        console.error('Error deleting comment:', error);
+        // Update local state on error
+        setComments(comments.filter((c) => c.id !== id));
+        setCommentsForCurrentMedia(commentsForCurrentMedia.filter((c) => c.id !== id));
+      }
+      
+      setActiveComment(null);
+    }
+  };
+
+  // Handle image load to get dimensions for proper comment positioning
+  const handleImageLoad = (e) => {
+    const img = e.target;
+    const container = imageContainerRef.current;
+    if (img && container) {
+      const containerRect = container.getBoundingClientRect();
+      const imgRect = img.getBoundingClientRect();
+      setImageDimensions({
+        width: img.offsetWidth,
+        height: img.offsetHeight,
+        offsetLeft: imgRect.left - containerRect.left,
+        offsetTop: imgRect.top - containerRect.top
+      });
+    }
   };
 
   const handleMarkDone = async (id) => {
@@ -427,15 +540,17 @@ function ContentReview() {
   const handleRepositionStart = (id) => {
     setComments(comments.map((c) => (c.id === id ? { ...c, repositioning: true } : c)));
     setCommentsForCurrentMedia(commentsForCurrentMedia.map((c) => (c.id === id ? { ...c, repositioning: true } : c)));
-    setActiveComment(id);
+    setActiveComment(null); // Close the popup when starting repositioning
   };
 
-  const handleImageClickWithReposition = (e) => {
+  const handleImageClickWithReposition = async (e) => {
     const repositioningComment = commentsForCurrentMedia.find((c) => c.repositioning);
     if (repositioningComment) {
       const rect = e.target.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
+      
+      // Update local state first for immediate UI feedback
       setComments(
         comments.map((c) =>
           c.id === repositioningComment.id ? { ...c, x, y, repositioning: false } : c
@@ -447,6 +562,48 @@ function ContentReview() {
         )
       );
       setActiveComment(null);
+      
+      // Save new position to backend
+      try {
+        const response = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(selectedContent.id)}/comments/${repositioningComment.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            position: { x, y },
+            x,
+            y
+          })
+        });
+        
+        if (response.ok) {
+          
+          // Store current selection before refresh (use assignment ID, not index)
+          const currentAssignmentId = selectedContent.id;
+          const currentVersionIndex = selectedVersionIndex;
+          const currentMediaIndex = selectedMediaIndex;
+          
+          // Refresh the content submissions to get updated data
+          await fetchContentSubmissions();
+          
+          // Restore the selection after refresh by finding the item with the same assignment ID
+          setContentItems(prevItems => {
+            const itemIndex = prevItems.findIndex(item => item.id === currentAssignmentId);
+            if (itemIndex !== -1) {
+              setSelectedContent(prevItems[itemIndex]);
+              setSelectedContentIndex(itemIndex);
+              setSelectedVersionIndex(currentVersionIndex);
+              setSelectedMediaIndex(currentMediaIndex);
+            }
+            return prevItems;
+          });
+        } else {
+          console.error('Failed to update comment position');
+        }
+      } catch (error) {
+        console.error('Error updating comment position:', error);
+      }
       return;
     }
     handleImageClick(e);
@@ -462,7 +619,24 @@ function ContentReview() {
     setSelectedContentIndex(index);
     setSelectedVersionIndex(item.versions.length - 1); // Show latest version
     setSelectedMediaIndex(0); // Reset media index
-    setComments(item.versions[item.versions.length - 1].comments || []);
+    // Normalize comments when selecting
+    const version = item.versions[item.versions.length - 1];
+    const normalizedComments = (version.comments || []).map(comment => ({
+      ...comment,
+      x: comment.x ?? comment.position?.x ?? 0,
+      y: comment.y ?? comment.position?.y ?? 0,
+      editing: false,
+      repositioning: false,
+      isNew: false, // Mark as existing comment
+      done: comment.done || comment.status === 'completed' || false
+    }));
+    
+    // Remove duplicate comments by ID
+    const uniqueComments = normalizedComments.filter((comment, index, self) =>
+      index === self.findIndex((c) => c.id === comment.id)
+    );
+    
+    setComments(uniqueComments);
     setActiveComment(null);
   };
 
@@ -476,7 +650,24 @@ function ContentReview() {
     }
     setSelectedVersionIndex(newIndex);
     setSelectedMediaIndex(0); // Reset media index
-    setComments(selectedContent.versions[newIndex].comments || []);
+    // Normalize comments when changing version
+    const version = selectedContent.versions[newIndex];
+    const normalizedComments = (version.comments || []).map(comment => ({
+      ...comment,
+      x: comment.x ?? comment.position?.x ?? 0,
+      y: comment.y ?? comment.position?.y ?? 0,
+      editing: false,
+      repositioning: false,
+      isNew: false, // Mark as existing comment
+      done: comment.done || comment.status === 'completed' || false
+    }));
+    
+    // Remove duplicate comments by ID
+    const uniqueComments = normalizedComments.filter((comment, index, self) =>
+      index === self.findIndex((c) => c.id === comment.id)
+    );
+    
+    setComments(uniqueComments);
     setActiveComment(null);
   };
 
@@ -649,6 +840,13 @@ function ContentReview() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+      {/* Inline styles for animations */}
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(1.1); opacity: 0.8; }
+        }
+      `}</style>
       {/* Main Content */}
       <div className="px-2 sm:px-4 lg:px-8 xl:px-16 py-3 sm:py-6 lg:py-10">
         <div className="flex flex-col xl:flex-row gap-3 sm:gap-6 lg:gap-8 font-sans">
@@ -741,7 +939,7 @@ function ContentReview() {
                   <div className="space-y-2">
                     {commentsForCurrentMedia.map((comment, index) => (
                       <div
-                        key={comment.id}
+                        key={`list-${comment.id}`}
                         className={`p-2 sm:p-2.5 rounded-lg cursor-pointer transition-all duration-200 border ${
                           activeComment === comment.id
                             ? 'bg-blue-50 border-blue-200 shadow-sm'
@@ -832,33 +1030,38 @@ function ContentReview() {
 
               {/* Media with Comments */}
               <div className="p-2 sm:p-4 lg:p-6">
-                <div className="flex justify-center mb-3 sm:mb-6">
-                  <div className="relative inline-block max-w-full w-full">
-                    {/* Media Navigation for multiple items */}
-                    {currentVersion?.media && currentVersion.media.length > 1 && (
-                      <div className="flex items-center justify-between mb-3 sm:mb-4 bg-slate-50 rounded-lg p-2 sm:p-3 border border-slate-200">
-                        <span className="text-[10px] sm:text-xs font-semibold text-slate-700">
-                          {selectedMediaIndex + 1}/{currentVersion.media.length}
-                        </span>
-                        <div className="flex gap-1.5">
-                          <button
-                            onClick={() => handleMediaChange('prev')}
-                            disabled={selectedMediaIndex === 0}
-                            className="p-1.5 sm:p-2 rounded-lg bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all border border-slate-300"
-                          >
-                            <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-slate-700" />
-                          </button>
-                          <button
-                            onClick={() => handleMediaChange('next')}
-                            disabled={selectedMediaIndex === currentVersion.media.length - 1}
-                            className="p-1.5 sm:p-2 rounded-lg bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all border border-slate-300"
-                          >
-                            <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-slate-700" />
-                          </button>
-                        </div>
-                      </div>
-                    )}
+                {/* Media Navigation for multiple items */}
+                {currentVersion?.media && currentVersion.media.length > 1 && (
+                  <div className="flex items-center justify-between mb-3 sm:mb-4 bg-slate-50 rounded-lg p-2 sm:p-3 border border-slate-200 max-w-fit mx-auto">
+                    <span className="text-[10px] sm:text-xs font-semibold text-slate-700">
+                      {selectedMediaIndex + 1}/{currentVersion.media.length}
+                    </span>
+                    <div className="flex gap-1.5 ml-4">
+                      <button
+                        onClick={() => handleMediaChange('prev')}
+                        disabled={selectedMediaIndex === 0}
+                        className="p-1.5 sm:p-2 rounded-lg bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all border border-slate-300"
+                      >
+                        <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-slate-700" />
+                      </button>
+                      <button
+                        onClick={() => handleMediaChange('next')}
+                        disabled={selectedMediaIndex === currentVersion.media.length - 1}
+                        className="p-1.5 sm:p-2 rounded-lg bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all border border-slate-300"
+                      >
+                        <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-slate-700" />
+                      </button>
+                    </div>
+                  </div>
+                )}
 
+                <div className="flex justify-center mb-3 sm:mb-6">
+                  {/* Image container with ref - comments are positioned relative to this */}
+                  <div 
+                    ref={imageContainerRef}
+                    className="relative inline-block"
+                    style={{ position: 'relative' }}
+                  >
                     {/* Current Media Display */}
                     {currentMedia ? (
                       currentMedia.url && typeof currentMedia.url === 'string' ? (
@@ -866,106 +1069,74 @@ function ContentReview() {
                           <img
                             src={currentMedia.url}
                             alt={`${selectedContent.title} - Version ${currentVersion?.versionNumber} - Media ${selectedMediaIndex + 1}`}
-                            className="max-w-full w-full sm:w-auto h-auto max-h-[50vh] sm:max-h-[60vh] lg:max-h-[70vh] rounded-lg sm:rounded-xl lg:rounded-2xl shadow-lg sm:shadow-2xl border border-gray-200/50 object-contain cursor-crosshair mx-auto"
+                            className="max-w-full h-auto max-h-[50vh] sm:max-h-[60vh] lg:max-h-[70vh] rounded-lg sm:rounded-xl lg:rounded-2xl shadow-lg sm:shadow-2xl border border-gray-200/50 object-contain cursor-crosshair"
                             onClick={handleImageClickWithReposition}
+                            onLoad={handleImageLoad}
                             onError={(e) => {
                               e.target.style.display = 'none';
-                              e.target.nextSibling.style.display = 'flex';
+                              if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex';
                             }}
                           />
                         ) : (
                           <video
                             src={currentMedia.url}
                             controls
-                            className="max-w-full w-full sm:w-auto h-auto max-h-[50vh] sm:max-h-[60vh] lg:max-h-[70vh] rounded-lg sm:rounded-xl lg:rounded-2xl shadow-lg sm:shadow-2xl border border-gray-200/50 object-contain cursor-crosshair mx-auto"
+                            className="max-w-full h-auto max-h-[50vh] sm:max-h-[60vh] lg:max-h-[70vh] rounded-lg sm:rounded-xl lg:rounded-2xl shadow-lg sm:shadow-2xl border border-gray-200/50 object-contain cursor-crosshair"
                             onClick={handleImageClickWithReposition}
+                            onLoadedMetadata={handleImageLoad}
                             onError={(e) => {
                               e.target.style.display = 'none';
-                              e.target.nextSibling.style.display = 'flex';
+                              if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex';
                             }}
                           />
                         )
-                      ) : null
-                    ) : null}
-                    
-                    {/* Fallback for invalid/missing media */}
-                    <div 
-                      className="max-w-full h-48 sm:h-64 lg:h-96 bg-gray-200 rounded-lg sm:rounded-xl lg:rounded-2xl flex items-center justify-center border border-gray-200/50"
-                      style={{ 
-                        display: (currentMedia?.url && typeof currentMedia.url === 'string') ? 'none' : 'flex' 
-                      }}
-                    >
-                      <div className="text-center">
-                        <Image className="h-8 w-8 sm:h-10 sm:w-10 lg:h-12 lg:w-12 text-gray-400 mx-auto mb-2" />
-                        <p className="text-gray-500 text-xs sm:text-sm">No media available</p>
-                      </div>
-                    </div>
-
-                    {/* Media Thumbnails */}
-                    {currentVersion?.media && currentVersion.media.length > 1 && (
-                      <div className="flex justify-center gap-1 sm:gap-2 mt-2 sm:mt-3 flex-wrap">
-                        {currentVersion.media.map((media, index) => (
-                          <button
-                            key={index}
-                            onClick={() => setSelectedMediaIndex(index)}
-                            className={`w-10 h-10 sm:w-12 sm:h-12 lg:w-14 lg:h-14 rounded-md sm:rounded-lg overflow-hidden border-2 transition-all ${
-                              selectedMediaIndex === index 
-                                ? 'border-purple-500 ring-1 sm:ring-2 ring-purple-200' 
-                                : 'border-gray-200 hover:border-gray-300'
-                            }`}
-                          >
-                            {media.type === 'image' && media.url && typeof media.url === 'string' ? (
-                              <img
-                                src={media.url}
-                                alt={`Thumbnail ${index + 1}`}
-                                className="w-full h-full object-cover"
-                                onError={(e) => {
-                                  e.target.style.display = 'none';
-                                  e.target.nextSibling.style.display = 'flex';
-                                }}
-                              />
-                            ) : (
-                              <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-                                <Video className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400" />
-                              </div>
-                            )}
-                            {/* Fallback for failed thumbnails */}
-                            <div className="w-full h-full bg-gray-200 flex items-center justify-center" style={{ display: 'none' }}>
-                              <Video className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400" />
-                            </div>
-                          </button>
-                        ))}
+                      ) : (
+                        <div 
+                          className="w-64 sm:w-80 lg:w-96 h-48 sm:h-64 lg:h-96 bg-gray-200 rounded-lg sm:rounded-xl lg:rounded-2xl flex items-center justify-center border border-gray-200/50"
+                        >
+                          <div className="text-center">
+                            <Image className="h-8 w-8 sm:h-10 sm:w-10 lg:h-12 lg:w-12 text-gray-400 mx-auto mb-2" />
+                            <p className="text-gray-500 text-xs sm:text-sm">No media available</p>
+                          </div>
+                        </div>
+                      )
+                    ) : (
+                      <div 
+                        className="w-64 sm:w-80 lg:w-96 h-48 sm:h-64 lg:h-96 bg-gray-200 rounded-lg sm:rounded-xl lg:rounded-2xl flex items-center justify-center border border-gray-200/50"
+                      >
+                        <div className="text-center">
+                          <Image className="h-8 w-8 sm:h-10 sm:w-10 lg:h-12 lg:w-12 text-gray-400 mx-auto mb-2" />
+                          <p className="text-gray-500 text-xs sm:text-sm">No media available</p>
+                        </div>
                       </div>
                     )}
-                    
-                    {/* Comment Markers - Only show on images or videos when they support it */}
-                    {currentMedia && (
+
+                    {/* Comment Markers - Positioned relative to the image container */}
+                    {currentMedia && currentMedia.url && (
                       commentsForCurrentMedia.map((comment, index) => {
-                        // Calculate floating box position - use a safer approach without querySelector
-                        let boxLeft = 30;
-                        let boxRight = "auto";
-                        
-                        // Use a more reliable method to determine position
-                        // Instead of querySelector with potentially invalid selectors, use a default calculation
                         const commentX = comment.x || comment.position?.x || 0;
                         const commentY = comment.y || comment.position?.y || 0;
                         
-                        // Simple heuristic: if comment is more than halfway across, show box on left
-                        if (commentX > 200) { // Adjusted for mobile
+                        // Calculate floating box position based on comment position
+                        let boxLeft = 30;
+                        let boxRight = "auto";
+                        
+                        // If comment is in right half of image, show box on left side
+                        if (commentX > 150) {
                           boxLeft = "auto";
                           boxRight = 30;
                         }
 
                         return (
                           <div
-                            key={comment.id}
+                            key={`marker-${comment.id}`}
                             style={{
                               position: "absolute",
                               top: commentY - 12,
                               left: commentX - 12,
                               width: 24,
                               height: 24,
-                              background: comment.done ? "#10b981" : comment.editing ? "#3b82f6" : "#ef4444",
+                              background: comment.done ? "#10b981" : comment.repositioning ? "#8b5cf6" : comment.editing ? "#3b82f6" : "#ef4444",
                               color: "#fff",
                               borderRadius: "50%",
                               display: "flex",
@@ -973,23 +1144,26 @@ function ContentReview() {
                               justifyContent: "center",
                               fontWeight: "bold",
                               fontSize: "11px",
-                              boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
-                              cursor: "pointer",
-                              zIndex: 2,
+                              boxShadow: comment.repositioning ? "0 0 0 3px rgba(139, 92, 246, 0.3), 0 2px 8px rgba(0,0,0,0.2)" : "0 2px 8px rgba(0,0,0,0.2)",
+                              cursor: comment.repositioning ? "move" : "pointer",
+                              zIndex: 10,
                               border: "2px solid #fff",
                               transition: "all 0.2s",
+                              animation: comment.repositioning ? "pulse 1.5s ease-in-out infinite" : "none",
                             }}
                             onMouseEnter={() => setHoveredComment(comment.id)}
                             onMouseLeave={() => setHoveredComment(null)}
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleCommentListClick(comment.id);
+                              if (!comment.repositioning) {
+                                handleCommentListClick(comment.id);
+                              }
                             }}
                           >
                             {index + 1}
                             
                             {/* Floating Comment Box */}
-                            {(comment.editing || activeComment === comment.id || hoveredComment === comment.id) && (
+                            {(comment.editing || activeComment === comment.id || hoveredComment === comment.id) && !comment.repositioning && (
                               <div
                                 style={{
                                   position: "absolute",
@@ -1003,7 +1177,7 @@ function ContentReview() {
                                   padding: "10px",
                                   minWidth: "180px",
                                   maxWidth: "220px",
-                                  zIndex: 10,
+                                  zIndex: 20,
                                   boxShadow: "0 4px 20px rgba(59,130,246,0.15)",
                                 }}
                                 onClick={(e) => e.stopPropagation()}
@@ -1041,15 +1215,15 @@ function ContentReview() {
                                       <p className="font-medium text-gray-900 text-xs leading-relaxed break-words">
                                         {comment.comment}
                                         {comment.done && <span className="text-green-600 ml-1 text-[10px]">✓</span>}
-                                        {comment.repositioning && (
-                                          <span className="text-blue-600 italic ml-1 text-[10px]">(Moving...)</span>
-                                        )}
                                       </p>
                                     </div>
                                     <div className="grid grid-cols-2 gap-1">
                                       {!comment.done && (
                                         <Button
-                                          onClick={() => handleMarkDone(comment.id)}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleMarkDone(comment.id);
+                                          }}
                                           variant="success"
                                           size="sm"
                                         >
@@ -1058,7 +1232,10 @@ function ContentReview() {
                                         </Button>
                                       )}
                                       <Button
-                                        onClick={() => handleEditComment(comment.id)}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleEditComment(comment.id);
+                                        }}
                                         variant="warning"
                                         size="sm"
                                       >
@@ -1066,7 +1243,10 @@ function ContentReview() {
                                         Edit
                                       </Button>
                                       <Button
-                                        onClick={() => handleCommentCancel(comment.id)}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleDeleteComment(comment.id);
+                                        }}
                                         variant="danger"
                                         size="sm"
                                       >
@@ -1074,7 +1254,10 @@ function ContentReview() {
                                         Del
                                       </Button>
                                       <Button
-                                        onClick={() => handleRepositionStart(comment.id)}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleRepositionStart(comment.id);
+                                        }}
                                         variant="info"
                                         size="sm"
                                       >
@@ -1086,12 +1269,72 @@ function ContentReview() {
                                 )}
                               </div>
                             )}
+                            
+                            {/* Show repositioning indicator */}
+                            {comment.repositioning && (
+                              <div
+                                style={{
+                                  position: "absolute",
+                                  left: 30,
+                                  top: "50%",
+                                  transform: "translateY(-50%)",
+                                  background: "#8b5cf6",
+                                  color: "#fff",
+                                  borderRadius: "6px",
+                                  padding: "6px 10px",
+                                  fontSize: "10px",
+                                  fontWeight: "600",
+                                  whiteSpace: "nowrap",
+                                  zIndex: 20,
+                                  boxShadow: "0 2px 10px rgba(139, 92, 246, 0.3)",
+                                }}
+                              >
+                                Click image to move
+                              </div>
+                            )}
                           </div>
                         );
                       })
                     )}
                   </div>
                 </div>
+
+                {/* Media Thumbnails - Outside the relative container */}
+                {currentVersion?.media && currentVersion.media.length > 1 && (
+                  <div className="flex justify-center gap-1 sm:gap-2 mt-2 sm:mt-3 mb-4 flex-wrap">
+                    {currentVersion.media.map((media, index) => (
+                      <button
+                        key={index}
+                        onClick={() => setSelectedMediaIndex(index)}
+                        className={`w-10 h-10 sm:w-12 sm:h-12 lg:w-14 lg:h-14 rounded-md sm:rounded-lg overflow-hidden border-2 transition-all ${
+                          selectedMediaIndex === index 
+                            ? 'border-purple-500 ring-1 sm:ring-2 ring-purple-200' 
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        {media.type === 'image' && media.url && typeof media.url === 'string' ? (
+                          <img
+                            src={media.url}
+                            alt={`Thumbnail ${index + 1}`}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              e.target.style.display = 'none';
+                              if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex';
+                            }}
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                            <Video className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400" />
+                          </div>
+                        )}
+                        {/* Fallback for failed thumbnails */}
+                        <div className="w-full h-full bg-gray-200 flex items-center justify-center" style={{ display: 'none' }}>
+                          <Video className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400" />
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
 
                 {/* Version Details */}
                 {currentVersion && (
@@ -1125,7 +1368,7 @@ function ContentReview() {
                   </Button>
                   <Button
                     onClick={() => {
-                      console.log('Request changes for:', selectedContent.id);
+                      // Handle request changes
                     }}
                     variant="warning"
                     size="lg"

@@ -94,6 +94,7 @@ function ContentItemModal({
         dueDate,
         priority,
         assignedTo,
+        status: contentItem?.status || 'pending', // Set initial status to 'pending'
         originalDate: contentItem?.originalDate || contentItem?.date,
         originalDescription: contentItem?.originalDescription || contentItem?.description
       });

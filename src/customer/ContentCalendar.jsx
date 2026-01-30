@@ -38,6 +38,8 @@ const getPlatformIcon = (platform) => {
 
 const getStatusColor = (status) => {
   switch (status) {
+    case 'pending':
+      return 'bg-gray-100 text-gray-800';
     case 'published':
       return 'bg-green-100 text-green-800';
     case 'under_review':
@@ -54,10 +56,16 @@ const getStatusColor = (status) => {
 };
 
 const getStatusLabel = (status) => {
-  if (!status) return '';
+  if (!status) return 'Pending';
   switch (status) {
+    case 'pending':
+      return 'Pending';
     case 'published':
       return 'Published';
+    case 'under_review':
+      return 'Under Review';
+    case 'scheduled':
+      return 'Scheduled';
     case 'waiting_input':
       return 'Waiting Input';
     default:
@@ -80,6 +88,7 @@ function ContentCalendar() {
   const [customer, setCustomer] = useState(null);
   const [loading, setLoading] = useState(true);
   const [scheduledPosts, setScheduledPosts] = useState([]);
+  const [submissions, setSubmissions] = useState([]);
 
   // Get logged-in customer info (assume it's stored in localStorage as 'user')
   let user = null;
@@ -117,14 +126,26 @@ function ContentCalendar() {
         const postsRes = await fetch(`${process.env.REACT_APP_API_URL}/api/scheduled-posts`);
         let postsData = await postsRes.json();
         if (!Array.isArray(postsData)) postsData = [];
-        // Only posts for this customer
-        const customerPosts = postsData.filter(p => p.customerId === customerId && p.status === 'published');
+        // Filter posts for this customer
+        const customerPosts = postsData.filter(p => p.customerId === customerId);
         setScheduledPosts(customerPosts);
+        
+        // --- Fetch content submissions for this customer ---
+        const submissionsRes = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions`);
+        let submissionsData = await submissionsRes.json();
+        if (!Array.isArray(submissionsData)) submissionsData = [];
+        // Filter submissions for this customer
+        const customerSubmissions = submissionsData.filter(s => 
+          s.customer_id === customerId || 
+          s.customer_email === user?.email
+        );
+        setSubmissions(customerSubmissions);
         // --- End ---
       } catch (err) {
         setCustomer(null);
         setCalendars([]);
         setScheduledPosts([]);
+        setSubmissions([]);
       } finally {
         setLoading(false);
       }
@@ -135,14 +156,35 @@ function ContentCalendar() {
     }
   }, [customerId]);
 
+  // Helper: check if content has been submitted for an item
+  const hasContentSubmitted = (item) => {
+    return submissions.some(sub =>
+      (sub.item_id && sub.item_id === item.id) ||
+      (sub.assignment_id && sub.assignment_id === item.id) ||
+      (sub.item_name && sub.item_name === item.title)
+    );
+  };
+
+  // Helper: check if item is scheduled (in scheduledPosts but not published)
+  const isItemScheduled = (item) => {
+    return scheduledPosts.some(post =>
+      ((post.item_id && post.item_id === item.id) ||
+       (post.contentId && post.contentId === item.id) ||
+       (post.assignmentId && post.assignmentId === item.id) ||
+       (post.item_name && post.item_name === item.title)) &&
+      (post.status === 'scheduled' || post.status === 'pending' || (post.scheduledDate && !post.publishedAt))
+    );
+  };
+
   // Helper: get published platforms for an item
   const getPublishedPlatformsForItem = (item) => {
     // Try to match by item_id, item_name, or contentId
     return scheduledPosts
       .filter(post =>
-        (post.item_id && post.item_id === item.id) ||
-        (post.contentId && post.contentId === item.id) ||
-        (post.item_name && post.item_name === item.title)
+        ((post.item_id && post.item_id === item.id) ||
+         (post.contentId && post.contentId === item.id) ||
+         (post.item_name && post.item_name === item.title)) &&
+        (post.status === 'published' || post.publishedAt)
       )
       .map(post => post.platform);
   };
@@ -150,10 +192,20 @@ function ContentCalendar() {
   // Helper: check if item is published
   const isItemPublished = (item) => {
     return scheduledPosts.some(post =>
-      (post.item_id && post.item_id === item.id) ||
-      (post.contentId && post.contentId === item.id) ||
-      (post.item_name && post.item_name === item.title)
+      ((post.item_id && post.item_id === item.id) ||
+       (post.contentId && post.contentId === item.id) ||
+       (post.item_name && post.item_name === item.title)) &&
+      (post.status === 'published' || post.publishedAt)
     );
+  };
+
+  // Helper: determine the correct status for an item
+  const getItemStatus = (item) => {
+    // Priority: published > scheduled > under_review > pending
+    if (isItemPublished(item)) return 'published';
+    if (isItemScheduled(item)) return 'scheduled';
+    if (hasContentSubmitted(item)) return 'under_review';
+    return item.status || 'pending';
   };
 
   // Flatten all content items from all calendars for this customer
@@ -163,14 +215,16 @@ function ContentCalendar() {
       // Only add items from selected calendar (or all if none selected)
       if (!selectedCalendarId || calendar._id === selectedCalendarId || calendar.id === selectedCalendarId) {
         calendar.contentItems.forEach(item => {
-          // --- Override status if published in scheduledPosts ---
+          // Determine the correct status based on submissions and scheduled posts
+          const itemStatus = getItemStatus(item);
           const published = isItemPublished(item);
+          
           allItems.push({
             ...item,
             calendarName: calendar.name || '',
             id: item.id || item._id || Math.random().toString(36).slice(2),
             creator: item.assignedToName || item.assignedTo || calendar.assignedToName || calendar.assignedTo || '',
-            status: published ? 'published' : item.status,
+            status: itemStatus,
             publishedPlatforms: published ? getPublishedPlatformsForItem(item) : []
           });
         });

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Instagram, TrendingUp, BarChart3, ExternalLink, CheckCircle, AlertCircle, Loader2, Users, Heart, MessageCircle, Eye, Plus, Settings, ChevronDown, ChevronRight, UserCheck, Trash2, Calendar, RefreshCw, LayoutGrid } from 'lucide-react';
+import { Instagram, TrendingUp, BarChart3, ExternalLink, CheckCircle, AlertCircle, Loader2, Users, Heart, MessageCircle, Eye, Plus, Settings, ChevronDown, ChevronRight, UserCheck, Trash2, Calendar, LayoutGrid } from 'lucide-react';
 import TrendChart from '../../components/TrendChart';
 import TimePeriodChart from '../../components/TimeperiodChart';
 import { subDays, format } from 'date-fns';
@@ -1923,22 +1923,22 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
               </div>
 
               {/* Engagement Trend Charts */}
-              <div className="bg-gradient-to-br from-pink-50 to-purple-50 border border-pink-200 rounded-lg sm:p-4">
+              <div className="bg-gradient-to-br from-pink-50 to-purple-50 border border-pink-200 rounded-lg p-3 sm:p-4">
                 <h4 className="font-medium text-xs sm:text-sm text-gray-900 mb-3 flex items-center">
                   <TrendingUp className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 text-pink-600" />
                   Engagement Trends
                 </h4>
                 
-                <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                <div className="grid grid-cols-2 gap-3 sm:gap-4 items-stretch">
                   {/* Likes Trend */}
-                  <div className="bg-white rounded-lg sm:p-3 border border-pink-100">
+                  <div className="bg-white rounded-lg p-2 sm:p-3 border border-pink-100 flex flex-col">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-[10px] sm:text-xs font-medium text-gray-700">❤️ Likes</span>
                       <span className="text-[11px] sm:text-xs font-bold text-pink-600">
                         {singlePostAnalytics.likes_count?.toLocaleString() || 0}
                       </span>
                     </div>
-                    <div className="h-20 sm:h-24">
+                    <div className="flex-1 min-h-[80px] sm:min-h-[96px]">
                       <TrendChart
                         data={generatePostTrendData(singlePostAnalytics.likes_count, 'likes')}
                         title=""
@@ -1950,14 +1950,14 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
                   </div>
 
                   {/* Comments Trend */}
-                  <div className="bg-white rounded-lg sm:p-3 border border-purple-100">
+                  <div className="bg-white rounded-lg p-2 sm:p-3 border border-purple-100 flex flex-col">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-[10px] sm:text-xs font-medium text-gray-700">💬 Comments</span>
                       <span className="text-[11px] sm:text-xs font-bold text-purple-600">
                         {singlePostAnalytics.comments_count?.toLocaleString() || 0}
                       </span>
                     </div>
-                    <div className="h-20 sm:h-24">
+                    <div className="flex-1 min-h-[80px] sm:min-h-[96px]">
                       <TrendChart
                         data={generatePostTrendData(singlePostAnalytics.comments_count, 'comments')}
                         title=""
@@ -2274,16 +2274,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
             <Users className="h-5 w-5 mr-2" />
             Connected Instagram Accounts ({connectedAccounts.length})
           </h4>
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={refreshAccountTokens}
-              disabled={loading || !activeAccount}
-              className="bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center space-x-2 text-sm"
-            >
-              <span>🔄</span>
-              <span>Refresh Tokens</span>
-            </button>
-          </div>
+
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -2350,8 +2341,8 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
         {/* Token Status Information */}
         {activeAccount && (
           <div className="mt-4 sm:p-3 bg-pink-50 border border-pink-200 rounded-lg">
-            <h6 className="font-medium text-pink-800 mb-2">🔑 Token Management</h6>
-            <div className="text-sm text-pink-700 space-y-1">
+             {/*<h6 className="font-medium text-pink-800 mb-2">🔑 Token Management</h6>*/}
+            {/*<div className="text-sm text-pink-700 space-y-1">
               <p>📝 <strong>Active Account:</strong> @{activeAccount.profile?.username}</p>
               <p>🔄 <strong>Auto-Refresh:</strong> Tokens are automatically refreshed when needed</p>
               <p>⏰ <strong>Session Management:</strong> Persistent connection across browser sessions</p>
@@ -2361,7 +2352,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
               {activeAccount.tokenExpiresAt && (
                 <p>⏳ <strong>Token Expires:</strong> {new Date(activeAccount.tokenExpiresAt).toLocaleString()}</p>
               )}
-            </div>
+            </div>*/}
           </div>
         )}
       </div>
@@ -2399,13 +2390,6 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
         <div className="space-y-2">
           {isTokenError && (
             <div className="flex space-x-2">
-              <button
-                onClick={refreshAccountTokens}
-                disabled={loading}
-                className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 disabled:opacity-50"
-              >
-                🔄 Refresh Tokens
-              </button>
               <button
                 onClick={() => {
                   setError(null);
@@ -2591,14 +2575,6 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
             
             {/* Action Buttons - Compact for mobile */}
             <div className="flex gap-2 mb-4">
-              <button
-                onClick={() => refreshAccountData(activeAccount.id)}
-                disabled={loading}
-                className="flex items-center justify-center gap-1 flex-1 py-1.5 bg-white border border-gray-300 text-gray-700 rounded-lg text-xs font-medium disabled:opacity-50"
-              >
-                <RefreshCw className="h-3 w-3" />
-                <span>Refresh</span>
-              </button>
               <button
                 onClick={() => storeHistoricalSnapshot(activeAccount.id, activeAccount.profile?.username || 'Unknown', {
                   followersCount: activeAccount.profile?.followers_count,

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Facebook, BarChart3, Trash2, TrendingUp, Plus, Users, UserCheck, ExternalLink, Loader2, Calendar, RefreshCw
+  Facebook, BarChart3, Trash2, TrendingUp, Plus, Users, UserCheck, ExternalLink, Loader2, Calendar, RefreshCw, MessageCircle, AlertCircle, Heart
 } from 'lucide-react';
 import TimePeriodChart from '../../components/TimeperiodChart';
 import TrendChart from '../../components/TrendChart';
@@ -35,6 +35,13 @@ function FacebookIntegration() {
   // Post-level analytics state (similar to Instagram)
   const [selectedPostId, setSelectedPostId] = useState(null);
   const [singlePostAnalytics, setSinglePostAnalytics] = useState(null);
+
+  // State for post comments (like Instagram)
+  const [postComments, setPostComments] = useState({});
+  const [loadingComments, setLoadingComments] = useState(false);
+  const [replyingToComment, setReplyingToComment] = useState(null);
+  const [replyText, setReplyText] = useState('');
+  const [sendingReply, setSendingReply] = useState(false);
 
   // Analytics data state for charts
   const [analyticsData, setAnalyticsData] = useState({});
@@ -277,6 +284,18 @@ function FacebookIntegration() {
       loadPagesFromBackend();
     }
   }, [activeAccount, fbSdkLoaded]);
+
+  // Auto-fetch posts when pages are loaded (like Instagram behavior)
+  useEffect(() => {
+    if (fbPages.length > 0 && isFacebookApiReady()) {
+      fbPages.forEach(page => {
+        // Only fetch if not already loaded
+        if (!pagePosts[page.id]) {
+          fetchPagePosts(page.id, page.access_token);
+        }
+      });
+    }
+  }, [fbPages]);
   
   // Auto-upgrade to never-expiring tokens for existing accounts
   useEffect(() => {
@@ -402,7 +421,7 @@ function FacebookIntegration() {
         setFbError({ message: 'Facebook login failed or was cancelled' });
       }
     }, {
-      scope: 'pages_show_list,pages_read_engagement,pages_read_user_content,pages_manage_metadata,instagram_basic,email,public_profile',
+      scope: 'pages_show_list,pages_read_engagement,pages_read_user_content,pages_manage_metadata,pages_manage_engagement,instagram_basic,email,public_profile',
       return_scopes: true,
       auth_type: 'rerequest'
     });
@@ -895,6 +914,157 @@ function FacebookIntegration() {
     };
     
     setSinglePostAnalytics(analytics);
+    
+    // Auto-fetch comments when post is selected
+    if (activeAccount && fbPages.length > 0) {
+      const page = fbPages[0]; // Use first page's access token
+      fetchPostComments(post.id, page.access_token);
+    }
+  };
+
+  // --- FETCH COMMENTS FOR A POST ---
+  const fetchPostComments = async (postId, accessToken) => {
+    if (!postId || !accessToken) {
+      console.warn('Missing postId or accessToken for comments fetch');
+      return [];
+    }
+
+    setLoadingComments(true);
+    
+    try {
+      console.log(`🔍 Fetching comments for Facebook post ${postId}...`);
+      
+      // Fetch comments using direct Graph API call (including replies)
+      // Facebook uses different fields than Instagram
+      const response = await fetch(
+        `https://graph.facebook.com/v18.0/${postId}/comments?fields=id,from{id,name,picture},message,created_time,like_count,comment_count,comments{id,from{id,name,picture},message,created_time,like_count}&limit=50&access_token=${accessToken}`,
+        { method: 'GET' }
+      );
+      
+      const data = await response.json();
+      
+      if (!response.ok || data.error) {
+        console.error('❌ Failed to fetch comments:', {
+          status: response.status,
+          error: data.error,
+          postId,
+          errorMessage: data.error?.message,
+          errorType: data.error?.type,
+          errorCode: data.error?.code
+        });
+        
+        // Store error info for display
+        setPostComments(prev => ({
+          ...prev,
+          [postId]: { error: data.error?.message || 'Failed to load comments' }
+        }));
+        
+        return [];
+      }
+      
+      const comments = data.data || [];
+      
+      console.log(`✅ Fetched ${comments.length} comments for post ${postId}`);
+      
+      // Store comments in state
+      setPostComments(prev => ({
+        ...prev,
+        [postId]: comments
+      }));
+      
+      return comments;
+    } catch (error) {
+      console.error('❌ Error fetching comments:', error);
+      setPostComments(prev => ({
+        ...prev,
+        [postId]: { error: error.message || 'Network error' }
+      }));
+      return [];
+    } finally {
+      setLoadingComments(false);
+    }
+  };
+
+  // --- POST REPLY TO COMMENT ---
+  const postReplyToComment = async (commentId, message, postId) => {
+    if (!message || !message.trim()) {
+      alert('Please enter a reply message');
+      return;
+    }
+
+    if (!fbPages || fbPages.length === 0) {
+      alert('No page access token found');
+      return;
+    }
+
+    setSendingReply(true);
+    
+    try {
+      const pageAccessToken = fbPages[0].access_token;
+      console.log(`💬 Posting reply to comment ${commentId}...`);
+      console.log(`🔑 Using page access token: ${pageAccessToken.substring(0, 20)}...`);
+      
+      const response = await fetch(
+        `https://graph.facebook.com/v18.0/${commentId}/comments?message=${encodeURIComponent(message)}&access_token=${pageAccessToken}`,
+        { method: 'POST' }
+      );
+      
+      const data = await response.json();
+      
+      if (!response.ok || data.error) {
+        console.error('❌ Failed to post reply:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: data.error,
+          errorMessage: data.error?.message,
+          errorType: data.error?.type,
+          errorCode: data.error?.code,
+          errorSubcode: data.error?.error_subcode
+        });
+        
+        let errorMessage = data.error?.message || 'Unknown error';
+        
+        // Add helpful context based on error type
+        if (response.status === 403 || data.error?.code === 200) {
+          if (data.error?.message?.includes('pages_manage_engagement')) {
+            errorMessage = '⚠️ Facebook App Review Required\n\n';
+            errorMessage += 'The "pages_manage_engagement" permission needs Facebook App Review approval.\n\n';
+            errorMessage += '🛠️ DEVELOPMENT MODE WORKAROUND:\n';
+            errorMessage += '1. Go to: https://developers.facebook.com/apps\n';
+            errorMessage += '2. Select your app (ID: ' + FACEBOOK_APP_ID + ')\n';
+            errorMessage += '3. Go to Settings > Basic\n';
+            errorMessage += '4. Ensure "App Mode" is set to "Development"\n';
+            errorMessage += '5. Add your Facebook account as an "Admin" or "Developer" under App Roles\n';
+            errorMessage += '6. Disconnect and reconnect your Facebook account\n\n';
+            errorMessage += '📝 PRODUCTION SOLUTION:\n';
+            errorMessage += 'Submit your app for Facebook App Review to use this feature publicly.\n';
+            errorMessage += 'Review Guide: https://developers.facebook.com/docs/app-review';
+          } else {
+            errorMessage += '\n\n⚠️ Permission Issue: Please disconnect and reconnect your Facebook account to grant required permissions.';
+          }
+        } else if (data.error?.code === 190) {
+          errorMessage += '\n\n⚠️ Token expired. Please refresh your page tokens.';
+        }
+        
+        alert(`Failed to post reply:\n${errorMessage}`);
+        return;
+      }
+      
+      console.log('✅ Reply posted successfully:', data.id);
+      
+      // Clear reply state
+      setReplyText('');
+      setReplyingToComment(null);
+      
+      // Refresh comments to show the new reply
+      await fetchPostComments(postId, pageAccessToken);
+      
+    } catch (error) {
+      console.error('❌ Error posting reply:', error);
+      alert(`Error posting reply: ${error.message}`);
+    } finally {
+      setSendingReply(false);
+    }
   };
 
   // Generate trend data for post analytics
@@ -1150,6 +1320,223 @@ function FacebookIntegration() {
                   </div>
                 </div>
               </div>
+
+              {/* Comments Section */}
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 sm:p-4 mt-1">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-medium text-xs sm:text-sm text-gray-900 flex items-center">
+                    <MessageCircle className="h-3 w-3 sm:h-4 sm:w-4 mr-1.5 text-green-600" />
+                    Comments ({singlePostAnalytics.comments_count || 0})
+                  </h4>
+                  {loadingComments && (
+                    <Loader2 className="h-3 w-3 sm:h-4 sm:w-4 animate-spin text-green-600" />
+                  )}
+                </div>
+
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {loadingComments ? (
+                    <div className="text-center py-4">
+                      <Loader2 className="h-5 w-5 animate-spin mx-auto text-green-600" />
+                      <p className="text-xs text-gray-500 mt-2">Loading comments...</p>
+                    </div>
+                  ) : postComments[singlePostAnalytics.id]?.error ? (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-center">
+                      <AlertCircle className="h-8 w-8 mx-auto mb-2 text-red-500" />
+                      <p className="text-xs font-semibold text-red-700 mb-1">Failed to load comments</p>
+                      <p className="text-[10px] text-red-600">{postComments[singlePostAnalytics.id].error}</p>
+                      <button
+                        onClick={() => {
+                          if (fbPages.length > 0) {
+                            fetchPostComments(singlePostAnalytics.id, fbPages[0].access_token);
+                          }
+                        }}
+                        className="mt-2 bg-red-600 text-white px-3 py-1 rounded text-[10px] hover:bg-red-700"
+                      >
+                        Retry
+                      </button>
+                    </div>
+                  ) : postComments[singlePostAnalytics.id] && Array.isArray(postComments[singlePostAnalytics.id]) && postComments[singlePostAnalytics.id].length > 0 ? (
+                    postComments[singlePostAnalytics.id].map((comment) => (
+                      <div key={comment.id} className="bg-white border border-gray-200 rounded-lg p-2 sm:p-3">
+                        <div className="flex items-start gap-2">
+                          <div className="w-6 h-6 sm:w-8 sm:h-8 bg-gradient-to-br from-blue-400 to-indigo-600 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
+                            {comment.from?.picture?.data?.url ? (
+                              <img src={comment.from.picture.data.url} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                              <span className="text-white text-[10px] sm:text-xs font-bold">
+                                {comment.from?.name ? comment.from.name.charAt(0).toUpperCase() : '?'}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2 mb-1">
+                              <span className="text-xs sm:text-sm font-semibold text-gray-900 truncate">
+                                {comment.from?.name || 'Unknown User'}
+                              </span>
+                              <span className="text-[9px] sm:text-[10px] text-gray-500 flex-shrink-0">
+                                {new Date(comment.created_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                              </span>
+                            </div>
+                            <p className="text-[10px] sm:text-xs text-gray-700 break-words">
+                              {comment.message}
+                            </p>
+                            <div className="mt-1 flex items-center gap-2">
+                              {comment.like_count > 0 && (
+                                <div className="flex items-center gap-1">
+                                  <Heart className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-blue-500" fill="currentColor" />
+                                  <span className="text-[9px] sm:text-[10px] text-gray-500">
+                                    {comment.like_count}
+                                  </span>
+                                </div>
+                              )}
+                              <button
+                                onClick={() => {
+                                  setReplyingToComment(comment.id);
+                                  setReplyText('');
+                                }}
+                                className="text-[9px] sm:text-[10px] text-blue-600 hover:text-blue-700 font-medium"
+                              >
+                                💬 Reply
+                              </button>
+                              {comment.comment_count > 0 && (
+                                <span className="text-[9px] sm:text-[10px] text-gray-500">
+                                  {comment.comment_count} {comment.comment_count === 1 ? 'reply' : 'replies'}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Reply Input */}
+                        {replyingToComment === comment.id && (
+                          <div className="mt-2 pl-8 sm:pl-10">
+                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-2">
+                              <textarea
+                                value={replyText}
+                                onChange={(e) => setReplyText(e.target.value)}
+                                placeholder="Write a reply..."
+                                className="w-full text-[10px] sm:text-xs bg-white border border-blue-200 rounded p-2 resize-none focus:outline-none focus:border-blue-400"
+                                rows="2"
+                                disabled={sendingReply}
+                              />
+                              <div className="flex items-center gap-2 mt-2">
+                                <button
+                                  onClick={() => postReplyToComment(comment.id, replyText, singlePostAnalytics.id)}
+                                  disabled={sendingReply || !replyText.trim()}
+                                  className="bg-blue-600 text-white px-3 py-1 rounded text-[10px] hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                                >
+                                  {sendingReply ? (
+                                    <>
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                      <span>Sending...</span>
+                                    </>
+                                  ) : (
+                                    <span>Send Reply</span>
+                                  )}
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setReplyingToComment(null);
+                                    setReplyText('');
+                                  }}
+                                  disabled={sendingReply}
+                                  className="bg-gray-200 text-gray-700 px-3 py-1 rounded text-[10px] hover:bg-gray-300 disabled:opacity-50"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Display Replies */}
+                        {comment.comments && comment.comments.data && comment.comments.data.length > 0 && (
+                          <div className="mt-2 pl-8 sm:pl-10 space-y-2">
+                            {comment.comments.data.map((reply) => (
+                              <div key={reply.id} className="bg-blue-50 border border-blue-100 rounded-lg p-2">
+                                <div className="flex items-start gap-2">
+                                  <div className="w-5 h-5 sm:w-6 sm:h-6 bg-gradient-to-br from-blue-400 to-indigo-600 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
+                                    {reply.from?.picture?.data?.url ? (
+                                      <img src={reply.from.picture.data.url} alt="" className="w-full h-full object-cover" />
+                                    ) : (
+                                      <span className="text-white text-[9px] sm:text-[10px] font-bold">
+                                        {reply.from?.name ? reply.from.name.charAt(0).toUpperCase() : '?'}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center justify-between gap-2 mb-0.5">
+                                      <span className="text-[10px] sm:text-xs font-semibold text-gray-900 truncate">
+                                        {reply.from?.name || 'Unknown User'}
+                                      </span>
+                                      <span className="text-[8px] sm:text-[9px] text-gray-500 flex-shrink-0">
+                                        {new Date(reply.created_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                      </span>
+                                    </div>
+                                    <p className="text-[9px] sm:text-[10px] text-gray-700 break-words">
+                                      {reply.message}
+                                    </p>
+                                    {reply.like_count > 0 && (
+                                      <div className="mt-0.5 flex items-center gap-1">
+                                        <Heart className="h-2 w-2 sm:h-2.5 sm:w-2.5 text-blue-500" fill="currentColor" />
+                                        <span className="text-[8px] sm:text-[9px] text-gray-500">
+                                          {reply.like_count}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-6">
+                      <MessageCircle className="h-8 w-8 mx-auto mb-2 text-gray-300" />
+                      <p className="text-xs text-gray-500">No comments yet</p>
+                      <p className="text-[10px] text-gray-400 mt-1">Be the first to comment!</p>
+                    </div>
+                  )}
+                </div>
+
+                {postComments[singlePostAnalytics.id] && Array.isArray(postComments[singlePostAnalytics.id]) && postComments[singlePostAnalytics.id].length >= 50 && (
+                  <div className="mt-2 text-center">
+                    <p className="text-[10px] text-gray-500">
+                      📝 Showing first 50 comments (API limit)
+                    </p>
+                  </div>
+                )}
+
+                {/* Permission notice if no comments loaded but count > 0 */}
+                {!loadingComments && 
+                 singlePostAnalytics.comments_count > 0 && 
+                 (!postComments[singlePostAnalytics.id] || (Array.isArray(postComments[singlePostAnalytics.id]) && postComments[singlePostAnalytics.id].length === 0)) && 
+                 !postComments[singlePostAnalytics.id]?.error && (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                    <div className="flex items-start gap-2 mb-2">
+                      <AlertCircle className="h-4 w-4 text-yellow-600 flex-shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <p className="text-[10px] sm:text-xs font-semibold text-yellow-800 mb-1">
+                          Missing Permission
+                        </p>
+                        <p className="text-[10px] sm:text-xs text-yellow-700 mb-2">
+                          Unable to load comments. The <strong>pages_read_user_content</strong> permission may be required.
+                        </p>
+                        <div className="text-[9px] sm:text-[10px] text-yellow-700 space-y-1">
+                          <p className="font-semibold">To fix this:</p>
+                          <ol className="list-decimal list-inside space-y-0.5 ml-1">
+                            <li>Disconnect your Facebook account</li>
+                            <li>Reconnect and grant all permissions</li>
+                            <li>Ensure you have admin/editor access to the page</li>
+                          </ol>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -1215,9 +1602,7 @@ function FacebookIntegration() {
 
   const renderPagePosts = (pageId) => {
     const posts = pagePosts[pageId];
-    const isVisible = showFacebookPosts[pageId];
-    
-    if (!posts || posts.length === 0) return null;
+    const isLoading = loadingPosts[pageId];
 
     return (
       <div className="mt-4 bg-white sm:rounded-2xl sm:border sm:border-gray-200 sm:shadow-sm">
@@ -1226,12 +1611,23 @@ function FacebookIntegration() {
             <Facebook className="h-4 w-4 text-blue-600" />
             Posts
           </h5>
-          <span className="text-xs text-gray-500">{posts.length} posts</span>
+          <span className="text-xs text-gray-500">{posts?.length || 0} posts</span>
         </div>
         
         {/* Instagram-style 3-column grid */}
         <div className="grid grid-cols-3 gap-0.5 sm:gap-1">
-          {posts.map((post) => (
+          {isLoading ? (
+            <div className="col-span-3 text-center py-12">
+              <div className="animate-spin h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full mx-auto mb-3"></div>
+              <p className="text-sm text-gray-400">Loading posts...</p>
+            </div>
+          ) : !posts || posts.length === 0 ? (
+            <div className="col-span-3 text-center py-12">
+              <Facebook className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+              <p className="text-sm text-gray-400">No posts yet</p>
+            </div>
+          ) : (
+          posts.map((post) => (
             <div 
               key={post.id} 
               className="aspect-square relative group cursor-pointer"
@@ -1271,7 +1667,8 @@ function FacebookIntegration() {
                 </span>
               </div>
             </div>
-          ))}
+          ))
+          )}
         </div>
       </div>
     );
@@ -1306,18 +1703,6 @@ function FacebookIntegration() {
             </div>
             <p className="text-xs sm:text-sm text-gray-500 truncate">Page ID: {page.id}</p>
           </div>
-        </div>
-        
-        {/* Action Button - Compact for mobile */}
-        <div className="flex mb-4">
-          <button
-            onClick={() => fetchPagePosts(page.id, page.access_token)}
-            disabled={loadingPosts[page.id] || !isFacebookApiReady()}
-            className="flex items-center justify-center gap-1 flex-1 px-2 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Facebook className="h-3 w-3" />
-            <span>{loadingPosts[page.id] ? 'Loading...' : 'Load Posts'}</span>
-          </button>
         </div>
       
         {/* Stats Row - Instagram Style */}
@@ -1731,22 +2116,14 @@ function FacebookIntegration() {
             {fbError.code === 'SESSION_EXPIRED' && (
               <div className="space-y-2">
                 <p className="text-sm text-red-700">
-                  Your Facebook session has expired. You can try refreshing the tokens or reconnect your account.
+                  Your Facebook session has expired. Please reconnect your account.
                 </p>
-                <div className="flex space-x-2">
-                  <button
-                    onClick={refreshPageTokens}
-                    className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
-                  >
-                    🔄 Refresh Tokens
-                  </button>
-                  <button
-                    onClick={fbLogin}
-                    className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700"
-                  >
-                    🔗 Reconnect Account
-                  </button>
-                </div>
+                <button
+                  onClick={fbLogin}
+                  className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700"
+                >
+                  🔗 Reconnect Account
+                </button>
               </div>
             )}
           </div>
@@ -1773,15 +2150,6 @@ function FacebookIntegration() {
             <span className="sm:hidden">Accounts</span>
             <span className="ml-1">({connectedAccounts.length})</span>
           </h4>
-          <button
-            onClick={refreshPageTokens}
-            disabled={!fbSdkLoaded || !isFacebookApiReady() || !activeAccount}
-            className="bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-1 sm:gap-2 text-xs sm:text-sm"
-          >
-            <RefreshCw className="h-4 w-4" />
-            <span className="hidden sm:inline">Refresh Tokens</span>
-            <span className="sm:hidden">Refresh</span>
-          </button>
         </div>
         <div className="space-y-2">
           {connectedAccounts.map((account) => {
@@ -1966,15 +2334,6 @@ function FacebookIntegration() {
                 </div>
                 <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                   <button
-                    onClick={refreshPageTokens}
-                    disabled={!fbSdkLoaded || !isFacebookApiReady() || !activeAccount}
-                    className="group flex items-center gap-2 px-3 sm:px-4 py-2 bg-gradient-to-r from-emerald-500 to-green-500 text-white rounded-xl hover:from-emerald-600 hover:to-green-600 transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed font-medium text-xs sm:text-sm flex-1 sm:flex-initial justify-center"
-                  >
-                    <RefreshCw className="h-4 w-4 group-hover:rotate-180 transition-transform duration-500" />
-                    <span className="hidden sm:inline">Refresh Tokens</span>
-                    <span className="sm:hidden">Refresh</span>
-                  </button>
-                  <button
                     onClick={fbLogin}
                     disabled={!fbSdkLoaded || !isFacebookApiReady()}
                     className="group flex items-center gap-2 px-3 sm:px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-xl hover:from-blue-600 hover:to-indigo-600 transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed font-medium text-xs sm:text-sm flex-1 sm:flex-initial justify-center"
@@ -2010,14 +2369,6 @@ function FacebookIntegration() {
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2 w-full md:w-auto">
-                      <button
-                        onClick={refreshPageTokens}
-                        disabled={!fbSdkLoaded || !isFacebookApiReady() || !activeAccount}
-                        className="group flex items-center gap-2 px-3 sm:px-4 py-2 bg-white sm:border-2 sm:border-indigo-200 text-indigo-700 rounded-xl hover:bg-indigo-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-sm text-xs sm:text-sm flex-1 md:flex-initial justify-center"
-                      >
-                        <RefreshCw className="h-4 w-4 group-hover:rotate-180 transition-transform duration-500" />
-                        <span>Refresh</span>
-                      </button>
                       <button
                         onClick={() => removeAccount(activeAccount.id)}
                         className="group flex items-center gap-2 px-3 sm:px-4 py-2 bg-gradient-to-r from-red-500 to-rose-500 text-white rounded-xl hover:from-red-600 hover:to-rose-600 transition-all font-medium shadow-md hover:shadow-lg text-xs sm:text-sm flex-1 md:flex-initial justify-center"

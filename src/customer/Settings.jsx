@@ -92,7 +92,7 @@ const platforms = [
 function Settings() {
   const [activeTab, setActiveTab] = useState('customer');
   const [activeIntegration, setActiveIntegration] = useState(null);
-  const { currentUser } = useAuth();
+  const { currentUser, updateCurrentUser } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -104,6 +104,29 @@ function Settings() {
     gstNumber: ''
   });
   const [loading, setLoading] = useState(true);
+  
+  // Edit mode state
+  const [isEditing, setIsEditing] = useState(false);
+  const [editFormData, setEditFormData] = useState({
+    name: '',
+    email: '',
+    mobile: '',
+    address: '',
+    gstNumber: ''
+  });
+  const [saving, setSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState({ type: '', text: '' });
+  
+  // Password change state
+  const [showPasswordChange, setShowPasswordChange] = useState(false);
+  const [passwordData, setPasswordData] = useState({
+    oldPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordSuccess, setPasswordSuccess] = useState('');
+  const [changingPassword, setChangingPassword] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState({
     facebook: false,
     instagram: false,
@@ -242,6 +265,137 @@ function Settings() {
     );
   };
 
+  // Handle edit mode toggle
+  const handleEditClick = () => {
+    setEditFormData({ ...customerData });
+    setIsEditing(true);
+    setSaveMessage({ type: '', text: '' });
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setEditFormData({ ...customerData });
+    setSaveMessage({ type: '', text: '' });
+  };
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setEditFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const handleSaveChanges = async () => {
+    setSaving(true);
+    setSaveMessage({ type: '', text: '' });
+    
+    try {
+      const res = await fetch(`${process.env.REACT_APP_API_URL}/customer/${currentUser._id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(editFormData)
+      });
+      
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || errorData.message || 'Failed to update customer data');
+      }
+      
+      const updatedData = await res.json();
+      setCustomerData(updatedData);
+      
+      // Update the currentUser in AuthContext so header and other components reflect the changes
+      updateCurrentUser({
+        name: updatedData.name,
+        displayName: updatedData.name,
+        email: updatedData.email,
+        mobile: updatedData.mobile
+      });
+      
+      setIsEditing(false);
+      setSaveMessage({ type: 'success', text: 'Your information has been updated successfully!' });
+    } catch (err) {
+      console.error('Error updating customer data:', err);
+      setSaveMessage({ type: 'error', text: err.message || 'Failed to update information. Please try again.' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Password change handlers
+  const handlePasswordInputChange = (e) => {
+    const { name, value } = e.target;
+    setPasswordData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+    setPasswordError('');
+    setPasswordSuccess('');
+  };
+
+  const handlePasswordChange = async () => {
+    setPasswordError('');
+    setPasswordSuccess('');
+    
+    // Validation
+    if (!passwordData.oldPassword) {
+      setPasswordError('Please enter your current password');
+      return;
+    }
+    if (!passwordData.newPassword) {
+      setPasswordError('Please enter a new password');
+      return;
+    }
+    if (passwordData.newPassword.length < 6) {
+      setPasswordError('New password must be at least 6 characters long');
+      return;
+    }
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      setPasswordError('New passwords do not match');
+      return;
+    }
+    if (passwordData.oldPassword === passwordData.newPassword) {
+      setPasswordError('New password must be different from current password');
+      return;
+    }
+    
+    setChangingPassword(true);
+    
+    try {
+      const res = await fetch(`${process.env.REACT_APP_API_URL}/customer/${currentUser._id}/change-password`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          oldPassword: passwordData.oldPassword,
+          newPassword: passwordData.newPassword
+        })
+      });
+      
+      const data = await res.json();
+      
+      if (!res.ok) {
+        throw new Error(data.error || data.message || 'Failed to change password');
+      }
+      
+      setPasswordSuccess('Password changed successfully!');
+      setPasswordData({ oldPassword: '', newPassword: '', confirmPassword: '' });
+      setTimeout(() => {
+        setShowPasswordChange(false);
+        setPasswordSuccess('');
+      }, 2000);
+    } catch (err) {
+      console.error('Error changing password:', err);
+      setPasswordError(err.message || 'Failed to change password. Please try again.');
+    } finally {
+      setChangingPassword(false);
+    }
+  };
+
   const renderCustomerTab = () => (
     <div className="space-y-8">
       <div className="text-center">
@@ -250,13 +404,65 @@ function Settings() {
         </div>
         <h2 className="text-2xl font-bold text-gray-900 mb-2">Customer Information</h2>
         <p className="text-gray-600 max-w-2xl mx-auto">
-          Your account details are securely stored and managed. For any changes, please contact our support team.
+          Manage your account details and security settings.
         </p>
       </div>
 
+      {/* Success/Error Message */}
+      {saveMessage.text && (
+        <div className={`p-4 rounded-lg flex items-center space-x-3 ${
+          saveMessage.type === 'success' 
+            ? 'bg-green-50 border border-green-200 text-green-800' 
+            : 'bg-red-50 border border-red-200 text-red-800'
+        }`}>
+          {saveMessage.type === 'success' ? (
+            <CheckCircle className="h-5 w-5 text-green-600" />
+          ) : (
+            <AlertCircle className="h-5 w-5 text-red-600" />
+          )}
+          <span className="font-medium">{saveMessage.text}</span>
+        </div>
+      )}
+
       <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
-        <div className="bg-gradient-to-r from-blue-50 to-purple-50 px-6 py-4 border-b border-gray-100">
+        <div className="bg-gradient-to-r from-blue-50 to-purple-50 px-6 py-4 border-b border-gray-100 flex justify-between items-center">
           <h3 className="text-lg font-semibold text-gray-900">Account Details</h3>
+          {!isEditing ? (
+            <button
+              onClick={handleEditClick}
+              className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium flex items-center space-x-2"
+            >
+              <SettingsIcon className="h-4 w-4" />
+              <span>Edit Details</span>
+            </button>
+          ) : (
+            <div className="flex space-x-3">
+              <button
+                onClick={handleCancelEdit}
+                className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 transition-colors text-sm font-medium"
+                disabled={saving}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveChanges}
+                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors text-sm font-medium flex items-center space-x-2"
+                disabled={saving}
+              >
+                {saving ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="h-4 w-4" />
+                    <span>Save Changes</span>
+                  </>
+                )}
+              </button>
+            </div>
+          )}
         </div>
         
         <div className="p-6">
@@ -267,9 +473,20 @@ function Settings() {
                   <User className="h-4 w-4 inline mr-2" />
                   Full Name
                 </label>
-                <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 transition-colors hover:bg-gray-100">
-                  <span className="text-gray-900 font-medium">{customerData.name}</span>
-                </div>
+                {isEditing ? (
+                  <input
+                    type="text"
+                    name="name"
+                    value={editFormData.name}
+                    onChange={handleInputChange}
+                    className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                    placeholder="Enter your full name"
+                  />
+                ) : (
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 transition-colors hover:bg-gray-100">
+                    <span className="text-gray-900 font-medium">{customerData.name || '-'}</span>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -277,9 +494,20 @@ function Settings() {
                   <Mail className="h-4 w-4 inline mr-2" />
                   Email Address
                 </label>
-                <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 transition-colors hover:bg-gray-100">
-                  <span className="text-gray-900 font-medium">{customerData.email}</span>
-                </div>
+                {isEditing ? (
+                  <input
+                    type="email"
+                    name="email"
+                    value={editFormData.email}
+                    onChange={handleInputChange}
+                    className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                    placeholder="Enter your email address"
+                  />
+                ) : (
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 transition-colors hover:bg-gray-100">
+                    <span className="text-gray-900 font-medium">{customerData.email || '-'}</span>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -287,9 +515,20 @@ function Settings() {
                   <Smartphone className="h-4 w-4 inline mr-2" />
                   Mobile Number
                 </label>
-                <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 transition-colors hover:bg-gray-100">
-                  <span className="text-gray-900 font-medium">{customerData.mobile}</span>
-                </div>
+                {isEditing ? (
+                  <input
+                    type="tel"
+                    name="mobile"
+                    value={editFormData.mobile}
+                    onChange={handleInputChange}
+                    className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                    placeholder="Enter your mobile number"
+                  />
+                ) : (
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 transition-colors hover:bg-gray-100">
+                    <span className="text-gray-900 font-medium">{customerData.mobile || '-'}</span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -299,9 +538,20 @@ function Settings() {
                   <FileText className="h-4 w-4 inline mr-2" />
                   GST Number
                 </label>
-                <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 transition-colors hover:bg-gray-100">
-                  <span className="text-gray-900 font-medium">{customerData.gstNumber}</span>
-                </div>
+                {isEditing ? (
+                  <input
+                    type="text"
+                    name="gstNumber"
+                    value={editFormData.gstNumber}
+                    onChange={handleInputChange}
+                    className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                    placeholder="Enter your GST number"
+                  />
+                ) : (
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 transition-colors hover:bg-gray-100">
+                    <span className="text-gray-900 font-medium">{customerData.gstNumber || '-'}</span>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -309,9 +559,20 @@ function Settings() {
                   <MapPin className="h-4 w-4 inline mr-2" />
                   Address
                 </label>
-                <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 transition-colors hover:bg-gray-100">
-                  <span className="text-gray-900 font-medium">{customerData.address}</span>
-                </div>
+                {isEditing ? (
+                  <textarea
+                    name="address"
+                    value={editFormData.address}
+                    onChange={handleInputChange}
+                    rows={3}
+                    className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors resize-none"
+                    placeholder="Enter your address"
+                  />
+                ) : (
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 transition-colors hover:bg-gray-100">
+                    <span className="text-gray-900 font-medium">{customerData.address || '-'}</span>
+                  </div>
+                )}
               </div>
 
               <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4">
@@ -320,7 +581,7 @@ function Settings() {
                   <div>
                     <p className="text-sm font-medium text-blue-900 mb-1">Secure Account</p>
                     <p className="text-xs text-blue-700">
-                      Your information is encrypted and protected. Contact support@auremsolutions.com for updates.
+                      Your information is encrypted and protected.
                     </p>
                   </div>
                 </div>
@@ -330,20 +591,123 @@ function Settings() {
         </div>
       </div>
 
-      <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-2xl p-6">
-        <div className="flex items-center space-x-3 mb-3">
-          <Bell className="h-6 w-6 text-green-600" />
-          <h4 className="font-semibold text-green-900">Need to Update Information?</h4>
+      {/* Password Change Section */}
+      <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+        <div className="bg-gradient-to-r from-orange-50 to-red-50 px-6 py-4 border-b border-gray-100 flex justify-between items-center">
+          <div className="flex items-center space-x-3">
+            <Shield className="h-5 w-5 text-orange-600" />
+            <h3 className="text-lg font-semibold text-gray-900">Password & Security</h3>
+          </div>
+          {!showPasswordChange && (
+            <button
+              onClick={() => setShowPasswordChange(true)}
+              className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors text-sm font-medium"
+            >
+              Change Password
+            </button>
+          )}
         </div>
-        <p className="text-sm text-green-800 mb-4">
-          For security reasons, account information changes must be processed by our support team.
-        </p>
-        <button 
-          onClick={() => window.open('mailto:support@auremsolutions.com', '_blank')}
-          className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
-        >
-          Contact Support
-        </button>
+
+        {showPasswordChange && (
+          <div className="p-6">
+            {passwordError && (
+              <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center space-x-3">
+                <AlertCircle className="h-5 w-5 text-red-600" />
+                <span className="text-red-800 font-medium">{passwordError}</span>
+              </div>
+            )}
+            {passwordSuccess && (
+              <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center space-x-3">
+                <CheckCircle className="h-5 w-5 text-green-600" />
+                <span className="text-green-800 font-medium">{passwordSuccess}</span>
+              </div>
+            )}
+
+            <div className="space-y-4 max-w-md">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Current Password <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="password"
+                  name="oldPassword"
+                  value={passwordData.oldPassword}
+                  onChange={handlePasswordInputChange}
+                  className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors"
+                  placeholder="Enter your current password"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  New Password <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="password"
+                  name="newPassword"
+                  value={passwordData.newPassword}
+                  onChange={handlePasswordInputChange}
+                  className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors"
+                  placeholder="Enter your new password"
+                  disabled={!passwordData.oldPassword}
+                />
+                <p className="text-xs text-gray-500 mt-1">Password must be at least 6 characters long</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Confirm New Password <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="password"
+                  name="confirmPassword"
+                  value={passwordData.confirmPassword}
+                  onChange={handlePasswordInputChange}
+                  className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors"
+                  placeholder="Confirm your new password"
+                  disabled={!passwordData.oldPassword}
+                />
+              </div>
+
+              <div className="flex space-x-3 pt-4">
+                <button
+                  onClick={() => {
+                    setShowPasswordChange(false);
+                    setPasswordData({ oldPassword: '', newPassword: '', confirmPassword: '' });
+                    setPasswordError('');
+                    setPasswordSuccess('');
+                  }}
+                  className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 transition-colors text-sm font-medium"
+                  disabled={changingPassword}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handlePasswordChange}
+                  className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors text-sm font-medium flex items-center space-x-2"
+                  disabled={changingPassword}
+                >
+                  {changingPassword ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                      <span>Changing...</span>
+                    </>
+                  ) : (
+                    <span>Change Password</span>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!showPasswordChange && (
+          <div className="p-6">
+            <p className="text-sm text-gray-600">
+              It's a good idea to use a strong password that you don't use elsewhere.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

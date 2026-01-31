@@ -6,6 +6,7 @@ import { Bell, ChevronDown, LogOut, Settings, User, ArrowLeft } from 'lucide-rea
 import { useAuth } from '../admin/contexts/AuthContext';
 
 function getDisplayName(user) {
+  if (user?.name) return user.name;
   if (user?.displayName) return user.displayName;
   if (user?.email) return user.email.split('@')[0];
   return 'Customer User';
@@ -141,7 +142,7 @@ function Layout({ children }) {
         </div>
       </header>
       {/* Main content */}
-      <main className="flex-1 p-4 sm:p-6 lg:p-8 bg-transparent">
+      <main className="flex-1 sm:p-6 lg:p-8 bg-transparent">
         {children}
       </main>
       <Footer />

@@ -176,12 +176,20 @@ export function AuthProvider({ children }) {
     localStorage.removeItem('user');
   }
 
+  // Update current user data (e.g., after profile update)
+  function updateCurrentUser(updatedData) {
+    const updatedUser = { ...currentUser, ...updatedData };
+    setCurrentUser(updatedUser);
+    localStorage.setItem('user', JSON.stringify(updatedUser));
+  }
+
   const value = {
     currentUser,
     isAuthenticated: !!currentUser,
     signup: adminSignup, // This now takes name, email, password
     login, // use this only when passing a role
     logout,
+    updateCurrentUser,
     adminSignup,
     superAdminSignup,
     customerSignup,

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Line, Bar, Doughnut, Area } from 'react-chartjs-2';
 import { ArrowLeft, ExternalLink, RefreshCw, TrendingUp, Globe, Download, FileText } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -38,11 +38,14 @@ const ROIDashboard = () => {
   const navigate = useNavigate();
   const [timeframe, setTimeframe] = useState('last_30_days');
   const [selectedPlatform, setSelectedPlatform] = useState('all');
+  const [selectedAccount, setSelectedAccount] = useState('all'); // 'all' or accountId
   const [isLoading, setIsLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState(null);
   const [analyticsData, setAnalyticsData] = useState(null);
   const [error, setError] = useState(null);
   const [platforms, setPlatforms] = useState([]);
+  const [connectedAccounts, setConnectedAccounts] = useState([]); // All connected accounts with details
+  const [accountsData, setAccountsData] = useState({}); // Per-account analytics data keyed by accountId
   const [lastUpdated, setLastUpdated] = useState(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
@@ -68,7 +71,7 @@ const ROIDashboard = () => {
       console.log('🔍 Fetching analytics data for customer:', customerId);
       
       // Use full URL to backend server
-      const backendUrl = 'https://my-backend-593529385135.asia-south1.run.app';
+      const backendUrl = 'http://localhost:3001';
       
       // First try to get historical data
       try {
@@ -156,12 +159,18 @@ const ROIDashboard = () => {
           
           if (socialLinksResult.success && socialLinksResult.accounts && socialLinksResult.accounts.length > 0) {
             console.log('🔗 Found connected accounts, creating preliminary analytics...');
+            
+            // Process and store all connected accounts with their details
+            const processedAccounts = processConnectedAccounts(socialLinksResult.accounts);
+            setConnectedAccounts(processedAccounts);
+            
             // Create preliminary analytics from connected accounts
             const connectedPlatforms = [...new Set(socialLinksResult.accounts.map(account => account.platform))];
             const preliminaryData = await createPreliminaryAnalytics(socialLinksResult.accounts, timeframe);
             
             console.log('🔗 Preliminary data created:', preliminaryData);
             console.log('🔗 Chart data keys:', Object.keys(preliminaryData.chartData || {}));
+            console.log('🔗 Per-account data:', preliminaryData.perAccountData);
             
             setAnalyticsData({
               customerId: customerId,
@@ -172,6 +181,7 @@ const ROIDashboard = () => {
               accountNames: preliminaryData.accountNames
             });
             setPlatforms(connectedPlatforms);
+            setAccountsData(preliminaryData.perAccountData || {});
             setLastUpdated(new Date().toISOString());
             setDashboardData(preliminaryData.chartData);
             setIsLoading(false);
@@ -215,6 +225,130 @@ const ROIDashboard = () => {
     }
   }, [currentUser?._id, timeframe]);
 
+  // Reset account selection when platform changes
+  useEffect(() => {
+    setSelectedAccount('all');
+  }, [selectedPlatform]);
+
+  // Process connected accounts into a flat list with unique IDs
+  const processConnectedAccounts = (accounts) => {
+    const processed = [];
+    
+    accounts.forEach(account => {
+      if (account.platform === 'facebook' && account.pages && account.pages.length > 0) {
+        // For Facebook, each page is a separate account
+        account.pages.forEach(page => {
+          processed.push({
+            id: `facebook_${page.id}`,
+            platform: 'facebook',
+            accountId: page.id,
+            name: page.name || 'Facebook Page',
+            profilePicture: page.picture?.data?.url || null,
+            type: 'page',
+            hasInstagram: !!page.instagramBusinessAccount,
+            instagramId: page.instagramBusinessAccount?.id,
+            instagramUsername: page.instagramBusinessAccount?.username
+          });
+          
+          // If this page has Instagram Business Account linked
+          if (page.instagramBusinessAccount) {
+            processed.push({
+              id: `instagram_${page.instagramBusinessAccount.id}`,
+              platform: 'instagram',
+              accountId: page.instagramBusinessAccount.id,
+              name: page.instagramBusinessAccount.username || page.instagramBusinessAccount.name || 'Instagram Account',
+              profilePicture: page.instagramBusinessAccount.profile_picture_url || null,
+              type: 'business',
+              linkedFacebookPage: page.name
+            });
+          }
+        });
+      } else if (account.platform === 'instagram') {
+        processed.push({
+          id: `instagram_${account.platformUserId}`,
+          platform: 'instagram',
+          accountId: account.platformUserId,
+          name: account.name || 'Instagram Account',
+          profilePicture: account.profilePicture || null,
+          type: 'personal'
+        });
+      } else if (account.platform === 'youtube' && account.channels && account.channels.length > 0) {
+        // For YouTube, each channel is a separate account
+        account.channels.forEach(channel => {
+          processed.push({
+            id: `youtube_${channel.id}`,
+            platform: 'youtube',
+            accountId: channel.id,
+            name: channel.name || channel.title || 'YouTube Channel',
+            profilePicture: channel.thumbnail || null,
+            type: 'channel',
+            subscriberCount: channel.subscriberCount,
+            videoCount: channel.videoCount,
+            viewCount: channel.viewCount
+          });
+        });
+      } else if (account.platform === 'linkedin') {
+        processed.push({
+          id: `linkedin_${account.platformUserId}`,
+          platform: 'linkedin',
+          accountId: account.platformUserId,
+          name: account.name || 'LinkedIn Profile',
+          profilePicture: account.profilePicture || null,
+          type: account.organizationId ? 'organization' : 'personal'
+        });
+      } else {
+        // Generic fallback
+        processed.push({
+          id: `${account.platform}_${account.platformUserId}`,
+          platform: account.platform,
+          accountId: account.platformUserId,
+          name: account.name || `${account.platform} Account`,
+          profilePicture: account.profilePicture || null,
+          type: 'unknown'
+        });
+      }
+    });
+    
+    return processed;
+  };
+
+  // Get accounts filtered by selected platform
+  const getFilteredAccounts = useMemo(() => {
+    if (selectedPlatform === 'all') {
+      return connectedAccounts;
+    }
+    return connectedAccounts.filter(acc => acc.platform === selectedPlatform);
+  }, [connectedAccounts, selectedPlatform]);
+
+  // Compute filtered data based on selected platform and account
+  const filteredDashboardData = useMemo(() => {
+    if (!dashboardData) return null;
+    
+    // If specific account is selected
+    if (selectedAccount !== 'all') {
+      const account = connectedAccounts.find(acc => acc.id === selectedAccount);
+      if (account && accountsData[selectedAccount]) {
+        return { [account.platform]: accountsData[selectedAccount] };
+      }
+      // Fallback to platform data if no specific account data
+      if (account && dashboardData[account.platform]) {
+        return { [account.platform]: dashboardData[account.platform] };
+      }
+      return null;
+    }
+    
+    // If specific platform is selected
+    if (selectedPlatform !== 'all') {
+      if (dashboardData[selectedPlatform]) {
+        return { [selectedPlatform]: dashboardData[selectedPlatform] };
+      }
+      return null;
+    }
+    
+    // Return all data
+    return dashboardData;
+  }, [dashboardData, selectedPlatform, selectedAccount, connectedAccounts, accountsData]);
+
 
   // Create preliminary analytics from connected social accounts
   const createPreliminaryAnalytics = async (accounts, timeframeKey) => {
@@ -228,7 +362,7 @@ const ROIDashboard = () => {
     // First, try to fetch historical data for each connected account
     try {
       console.log('🔗 Attempting to fetch historical data for connected accounts...');
-      const backendUrl = 'https://my-backend-593529385135.asia-south1.run.app';
+      const backendUrl = 'http://localhost:3001';
       const customerId = currentUser._id;
       
       for (const account of accounts) {
@@ -282,7 +416,7 @@ const ROIDashboard = () => {
     // First, try to fetch real-time metrics from our new API for accounts without historical data
     try {
       console.log('🔗 Attempting to fetch real-time social metrics...');
-      const backendUrl = 'https://my-backend-593529385135.asia-south1.run.app';
+      const backendUrl = 'http://localhost:3001';
       const customerId = currentUser._id;
       
       const metricsResponse = await fetch(`${backendUrl}/api/customer/social-metrics/${customerId}`, {
@@ -613,20 +747,81 @@ const ROIDashboard = () => {
     
     const avgEngagementRate = Object.values(platforms).reduce((sum, platform) => {
       return sum + (platform.engagement_rate?.current || 0);
-    }, 0) / Object.keys(platforms).length;
+    }, 0) / Math.max(1, Object.keys(platforms).length);
     
     const overallGrowth = Object.values(platforms).reduce((sum, platform) => {
       const followerKey = platform.subscribers ? 'subscribers' : 'followers';
       return sum + (platform[followerKey]?.growth || 0);
-    }, 0) / Object.keys(platforms).length;
+    }, 0) / Math.max(1, Object.keys(platforms).length);
+    
+    // Build per-account data for individual account filtering
+    const perAccountData = {};
+    accounts.forEach(account => {
+      if (account.platform === 'facebook' && account.pages) {
+        account.pages.forEach(page => {
+          const accountId = `facebook_${page.id}`;
+          perAccountData[accountId] = platforms['facebook'] ? { ...platforms['facebook'] } : null;
+          
+          if (page.instagramBusinessAccount) {
+            const igAccountId = `instagram_${page.instagramBusinessAccount.id}`;
+            perAccountData[igAccountId] = platforms['instagram'] ? { ...platforms['instagram'] } : null;
+          }
+        });
+      } else if (account.platform === 'youtube' && account.channels) {
+        account.channels.forEach(channel => {
+          const accountId = `youtube_${channel.id}`;
+          // Create channel-specific data if available
+          const subscriberCount = parseInt(channel.subscriberCount) || 0;
+          const viewCount = parseInt(channel.viewCount) || 0;
+          const videoCount = parseInt(channel.videoCount) || 0;
+          
+          if (subscriberCount > 0) {
+            perAccountData[accountId] = {
+              subscribers: { 
+                current: subscriberCount, 
+                previous: Math.max(1, Math.floor(subscriberCount * 0.8)), 
+                growth: 25
+              },
+              views: { 
+                current: viewCount, 
+                previous: Math.max(1, Math.floor(viewCount * 0.7)), 
+                growth: 43
+              },
+              likes: { 
+                current: Math.floor(viewCount * 0.1) || 5, 
+                previous: Math.floor(viewCount * 0.05) || 2, 
+                growth: 50 
+              },
+              comments: { 
+                current: Math.floor(viewCount * 0.05) || 2, 
+                previous: Math.floor(viewCount * 0.02) || 1, 
+                growth: 67 
+              },
+              engagement_rate: { current: 6.2, previous: 5.1, growth: 21.6 },
+              monthlyData: generateGrowthTrend(subscriberCount, 6)
+            };
+          } else {
+            perAccountData[accountId] = platforms['youtube'] ? { ...platforms['youtube'] } : null;
+          }
+        });
+      } else if (account.platform === 'instagram') {
+        const accountId = `instagram_${account.platformUserId}`;
+        perAccountData[accountId] = platforms['instagram'] ? { ...platforms['instagram'] } : null;
+      } else if (account.platform === 'linkedin') {
+        const accountId = `linkedin_${account.platformUserId}`;
+        perAccountData[accountId] = platforms['linkedin'] ? { ...platforms['linkedin'] } : null;
+      }
+    });
     
     console.log('Generated preliminary analytics for platforms:', Object.keys(platforms));
     console.log('Full platforms data:', platforms);
     console.log('Account names:', accountNames);
+    console.log('Per-account data keys:', Object.keys(perAccountData));
     
     return {
       chartData: platforms,
       accountNames,
+      perAccountData,
       summary: {
         totalFollowers,
         totalEngagement,
@@ -1407,23 +1602,40 @@ const ROIDashboard = () => {
   };
 
   const getTotalFollowers = () => {
+    if (!filteredDashboardData) return 0;
+    // If filtering by platform, don't use summary data
+    if (selectedPlatform !== 'all') {
+      return Object.keys(filteredDashboardData).reduce((total, platform) => {
+        const followerKey = platform === 'youtube' ? 'subscribers' : 'followers';
+        return total + (filteredDashboardData[platform]?.[followerKey]?.current || 0);
+      }, 0);
+    }
     if (analyticsData?.summary?.totalFollowers) {
       return analyticsData.summary.totalFollowers;
     }
-    if (!dashboardData) return 0;
-    return Object.keys(dashboardData).reduce((total, platform) => {
+    return Object.keys(filteredDashboardData).reduce((total, platform) => {
       const followerKey = platform === 'youtube' ? 'subscribers' : 'followers';
-      return total + (dashboardData[platform]?.[followerKey]?.current || 0);
+      return total + (filteredDashboardData[platform]?.[followerKey]?.current || 0);
     }, 0);
   };
 
   const getTotalEngagement = () => {
+    if (!filteredDashboardData) return 0;
+    // If filtering by platform, don't use summary data
+    if (selectedPlatform !== 'all') {
+      return Object.keys(filteredDashboardData).reduce((total, platform) => {
+        const data = filteredDashboardData[platform];
+        const likes = data?.likes?.current || 0;
+        const comments = data?.comments?.current || 0;
+        const shares = data?.shares?.current || 0;
+        return total + likes + comments + shares;
+      }, 0);
+    }
     if (analyticsData?.summary?.totalEngagement) {
       return analyticsData.summary.totalEngagement;
     }
-    if (!dashboardData) return 0;
-    return Object.keys(dashboardData).reduce((total, platform) => {
-      const data = dashboardData[platform];
+    return Object.keys(filteredDashboardData).reduce((total, platform) => {
+      const data = filteredDashboardData[platform];
       const likes = data?.likes?.current || 0;
       const comments = data?.comments?.current || 0;
       const shares = data?.shares?.current || 0;
@@ -1432,50 +1644,68 @@ const ROIDashboard = () => {
   };
 
   const getAverageEngagementRate = () => {
+    if (!filteredDashboardData) return 0;
+    // If filtering by platform, don't use summary data
+    if (selectedPlatform !== 'all') {
+      const rates = Object.keys(filteredDashboardData).map(platform => 
+        filteredDashboardData[platform]?.engagement_rate?.current || 0
+      ).filter(rate => rate > 0);
+      return rates.length > 0 ? (rates.reduce((sum, rate) => sum + rate, 0) / rates.length).toFixed(1) : 0;
+    }
     if (analyticsData?.summary?.averageEngagementRate) {
       return analyticsData.summary.averageEngagementRate.toFixed(1);
     }
-    if (!dashboardData) return 0;
-    const rates = Object.keys(dashboardData).map(platform => 
-      dashboardData[platform]?.engagement_rate?.current || 0
+    const rates = Object.keys(filteredDashboardData).map(platform => 
+      filteredDashboardData[platform]?.engagement_rate?.current || 0
     ).filter(rate => rate > 0);
     return rates.length > 0 ? (rates.reduce((sum, rate) => sum + rate, 0) / rates.length).toFixed(1) : 0;
   };
 
   const getOverallROI = () => {
+    if (!filteredDashboardData) return 0;
+    // If filtering by platform, calculate ROI for that platform only
+    if (selectedPlatform !== 'all') {
+      const totalCurrent = getTotalFollowers();
+      const totalPrevious = Object.keys(filteredDashboardData).reduce((total, platform) => {
+        const followerKey = platform === 'youtube' ? 'subscribers' : 'followers';
+        return total + (filteredDashboardData[platform]?.[followerKey]?.previous || 0);
+      }, 0);
+      return totalPrevious > 0 ? ((totalCurrent - totalPrevious) / totalPrevious * 100).toFixed(1) : 0;
+    }
     if (analyticsData?.summary?.overallGrowth) {
       return Math.abs(analyticsData.summary.overallGrowth).toFixed(1);
     }
-    if (!dashboardData) return 0;
     const totalCurrent = getTotalFollowers();
-    const totalPrevious = Object.keys(dashboardData).reduce((total, platform) => {
+    const totalPrevious = Object.keys(filteredDashboardData).reduce((total, platform) => {
       const followerKey = platform === 'youtube' ? 'subscribers' : 'followers';
-      return total + (dashboardData[platform]?.[followerKey]?.previous || 0);
+      return total + (filteredDashboardData[platform]?.[followerKey]?.previous || 0);
     }, 0);
     return totalPrevious > 0 ? ((totalCurrent - totalPrevious) / totalPrevious * 100).toFixed(1) : 0;
   };
 
   // Chart configurations
   const followerGrowthChart = {
-    labels: timeframe === '6months' 
-      ? ['Month 1', 'Month 2', 'Month 3', 'Month 4', 'Month 5', 'Month 6']
+    labels: timeframe === 'last_7_days' 
+      ? ['Day 1', 'Day 2', 'Day 3', 'Day 4', 'Day 5', 'Day 6', 'Day 7']
+      : timeframe === 'last_30_days'
+      ? ['Week 1', 'Week 2', 'Week 3', 'Week 4']
       : ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-    datasets: dashboardData ? Object.keys(dashboardData).map(platform => {
-      let monthlyData = dashboardData[platform].monthlyData;
+    datasets: filteredDashboardData ? Object.keys(filteredDashboardData).map(platform => {
+      let monthlyData = filteredDashboardData[platform].monthlyData;
       // If monthlyData is missing or flat, generate synthetic growth
-      if (!monthlyData || monthlyData.length < 6 || monthlyData.every(v => v === monthlyData[0])) {
+      const dataPoints = timeframe === 'last_7_days' ? 7 : timeframe === 'last_30_days' ? 4 : 12;
+      if (!monthlyData || monthlyData.length < dataPoints || monthlyData.every(v => v === monthlyData[0])) {
         const followerKey = platform === 'youtube' ? 'subscribers' : 'followers';
-        const current = dashboardData[platform][followerKey]?.current || 0;
-        const previous = dashboardData[platform][followerKey]?.previous || 0;
-        const months = timeframe === '6months' ? 6 : 12;
+        const current = filteredDashboardData[platform][followerKey]?.current || 0;
+        const previous = filteredDashboardData[platform][followerKey]?.previous || 0;
         // Linear interpolation from previous to current
-        monthlyData = Array.from({ length: months }, (_, i) =>
-          Math.round(previous + ((current - previous) * (i + 1) / months))
+        monthlyData = Array.from({ length: dataPoints }, (_, i) =>
+          Math.round(previous + ((current - previous) * (i + 1) / dataPoints))
         );
       }
       return {
         label: platform.charAt(0).toUpperCase() + platform.slice(1),
-        data: monthlyData,
+        data: monthlyData.slice(0, dataPoints),
         borderColor: platformColors[platform],
         backgroundColor: platformColors[platform] + '20',
         fill: true,
@@ -1486,14 +1716,14 @@ const ROIDashboard = () => {
 
   const engagementChart = {
     labels: ['Likes', 'Comments', 'Shares/Views/Impressions'],
-    datasets: dashboardData ? Object.keys(dashboardData).map(platform => ({
+    datasets: filteredDashboardData ? Object.keys(filteredDashboardData).map(platform => ({
       label: platform.charAt(0).toUpperCase() + platform.slice(1),
       data: [
-        dashboardData[platform].likes?.current || 0,
-        dashboardData[platform].comments?.current || 0,
-        platform === 'youtube' ? dashboardData[platform].views?.current || 0 : 
-        platform === 'linkedin' ? dashboardData[platform].impressions?.current || 0 :
-        dashboardData[platform].shares?.current || 0
+        filteredDashboardData[platform].likes?.current || 0,
+        filteredDashboardData[platform].comments?.current || 0,
+        platform === 'youtube' ? filteredDashboardData[platform].views?.current || 0 : 
+        platform === 'linkedin' ? filteredDashboardData[platform].impressions?.current || 0 :
+        filteredDashboardData[platform].shares?.current || 0
       ],
       backgroundColor: platformColors[platform],
       borderColor: platformColors[platform],
@@ -1502,33 +1732,26 @@ const ROIDashboard = () => {
   };
 
   const platformDistribution = {
-    labels: ['Facebook', 'Instagram', 'YouTube', 'LinkedIn'],
+    labels: filteredDashboardData ? Object.keys(filteredDashboardData).map(p => p.charAt(0).toUpperCase() + p.slice(1)) : [],
     datasets: [{
-      data: dashboardData ? [
-        dashboardData.facebook?.followers?.current || 0,
-        dashboardData.instagram?.followers?.current || 0,
-        dashboardData.youtube?.subscribers?.current || 0,
-        dashboardData.linkedin?.followers?.current || 0
-      ] : [],
-      backgroundColor: [
-        platformColors.facebook,
-        platformColors.instagram,
-        platformColors.youtube,
-        platformColors.linkedin
-      ],
+      data: filteredDashboardData ? Object.keys(filteredDashboardData).map(platform => {
+        const followerKey = platform === 'youtube' ? 'subscribers' : 'followers';
+        return filteredDashboardData[platform]?.[followerKey]?.current || 0;
+      }) : [],
+      backgroundColor: filteredDashboardData ? Object.keys(filteredDashboardData).map(platform => platformColors[platform]) : [],
       borderWidth: 2
     }]
   };
 
   const growthComparisonChart = {
     labels: ['Followers', 'Likes', 'Comments', 'Engagement Rate'],
-    datasets: dashboardData ? Object.keys(dashboardData).filter(platform => dashboardData[platform]).map(platform => ({
+    datasets: filteredDashboardData ? Object.keys(filteredDashboardData).filter(platform => filteredDashboardData[platform]).map(platform => ({
       label: platform.charAt(0).toUpperCase() + platform.slice(1),
       data: [
-        dashboardData[platform]?.[platform === 'youtube' ? 'subscribers' : 'followers']?.growth || 0,
-        dashboardData[platform]?.likes?.growth || 0,
-        dashboardData[platform]?.comments?.growth || 0,
-        dashboardData[platform]?.engagement_rate?.growth || 0
+        filteredDashboardData[platform]?.[platform === 'youtube' ? 'subscribers' : 'followers']?.growth || 0,
+        filteredDashboardData[platform]?.likes?.growth || 0,
+        filteredDashboardData[platform]?.comments?.growth || 0,
+        filteredDashboardData[platform]?.engagement_rate?.growth || 0
       ],
       backgroundColor: platformColors[platform] + '80',
       borderColor: platformColors[platform],
@@ -1698,7 +1921,7 @@ const ROIDashboard = () => {
         </div>
 
         {/* Connected Accounts Summary */}
-        {analyticsData && platforms.length > 0 && (
+        {analyticsData && connectedAccounts.length > 0 && (
           <div className="bg-white rounded-xl sm:rounded-2xl shadow-lg border border-slate-200 p-4 sm:p-6 mb-6 sm:mb-8">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6 gap-3">
               <h2 className="text-lg sm:text-2xl font-bold text-slate-800 flex items-center gap-2 sm:gap-3">
@@ -1707,30 +1930,106 @@ const ROIDashboard = () => {
                 </div>
                 Connected Accounts
               </h2>
-              <div>
+              <div className="flex flex-wrap items-center gap-2">
                 <div className="text-xs sm:text-sm text-slate-600 bg-slate-100 px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg font-medium">
-                  {platforms.length} Platform{platforms.length !== 1 ? 's' : ''} Connected
+                  {connectedAccounts.length} Account{connectedAccounts.length !== 1 ? 's' : ''} • {platforms.length} Platform{platforms.length !== 1 ? 's' : ''}
                 </div>
-                {/* Removed duplicate sibling text node that caused multiple parents */}
               </div>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-              {platforms.map((platform) => {
-                const platformKey = platform.toLowerCase();
-                return (
-                  <div key={platformKey} className="flex items-center gap-2 sm:gap-3 p-2.5 sm:p-3 bg-gray-50 rounded-lg">
+            
+            {/* Account Cards Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+              {connectedAccounts.map((account) => (
+                <div 
+                  key={account.id} 
+                  className={`relative flex items-start gap-3 p-3 sm:p-4 rounded-xl border-2 transition-all cursor-pointer hover:shadow-md ${
+                    selectedAccount === account.id 
+                      ? 'border-blue-500 bg-blue-50' 
+                      : 'border-gray-100 bg-gray-50 hover:border-gray-200'
+                  }`}
+                  onClick={() => {
+                    setSelectedPlatform(account.platform);
+                    setSelectedAccount(account.id);
+                  }}
+                >
+                  {/* Platform indicator bar */}
+                  <div 
+                    className="absolute top-0 left-0 right-0 h-1 rounded-t-xl"
+                    style={{ backgroundColor: platformColors[account.platform] || '#6B7280' }}
+                  ></div>
+                  
+                  {/* Account Avatar */}
+                  <div className="flex-shrink-0 mt-1">
+                    {account.profilePicture ? (
+                      <img 
+                        src={account.profilePicture} 
+                        alt={account.name}
+                        className="w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover border-2 border-white shadow-sm"
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          e.target.nextSibling.style.display = 'flex';
+                        }}
+                      />
+                    ) : null}
                     <div 
-                      className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: platformColors[platformKey] || '#6B7280' }}
-                    ></div>
-                    <div className="min-w-0">
-                      <div className="font-medium capitalize text-gray-900 text-sm sm:text-base truncate">{platform}</div>
-                      <div className="text-xs sm:text-sm text-green-600">Connected</div>
+                      className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-sm ${account.profilePicture ? 'hidden' : ''}`}
+                      style={{ backgroundColor: platformColors[account.platform] || '#6B7280' }}
+                    >
+                      {account.platform === 'facebook' && '📘'}
+                      {account.platform === 'instagram' && '📸'}
+                      {account.platform === 'youtube' && '🎬'}
+                      {account.platform === 'linkedin' && '💼'}
                     </div>
                   </div>
-                );
-              })}
+                  
+                  {/* Account Info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-gray-900 text-sm sm:text-base truncate" title={account.name}>
+                      {account.name}
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span 
+                        className="w-2 h-2 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: platformColors[account.platform] || '#6B7280' }}
+                      ></span>
+                      <span className="text-xs sm:text-sm text-gray-600 capitalize">{account.platform}</span>
+                      <span className="text-xs text-gray-400">•</span>
+                      <span className="text-xs text-gray-500 capitalize">{account.type}</span>
+                    </div>
+                    {/* Additional info for YouTube channels */}
+                    {account.platform === 'youtube' && account.subscriberCount && (
+                      <div className="text-xs text-gray-500 mt-1">
+                        {parseInt(account.subscriberCount).toLocaleString()} subscribers
+                      </div>
+                    )}
+                    {/* Show linked Instagram for Facebook pages */}
+                    {account.hasInstagram && (
+                      <div className="text-xs text-pink-600 mt-1 flex items-center gap-1">
+                        <span>📸</span> Instagram linked
+                      </div>
+                    )}
+                    {/* Show linked Facebook for Instagram */}
+                    {account.linkedFacebookPage && (
+                      <div className="text-xs text-blue-600 mt-1 flex items-center gap-1 truncate" title={`Via ${account.linkedFacebookPage}`}>
+                        <span>📘</span> Via {account.linkedFacebookPage}
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Selection indicator */}
+                  {selectedAccount === account.id && (
+                    <div className="absolute top-2 right-2">
+                      <div className="w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
+                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                        </svg>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
+            
             {analyticsData.insights && analyticsData.insights.length > 0 && (
               <div className="mt-4 pt-4 border-t border-gray-200">
                 <h3 className="text-sm font-medium text-gray-700 mb-2">Latest Insights</h3>
@@ -1796,34 +2095,99 @@ const ROIDashboard = () => {
 
         {/* Controls */}
         <div className="bg-white rounded-xl shadow-sm border p-4 sm:p-6 mb-6 sm:mb-8">
-          <div className="flex flex-col sm:flex-row sm:flex-wrap gap-4 sm:gap-6 sm:items-center">
-            <div className="flex-1 sm:flex-none">
+          <div className="flex flex-col sm:flex-row sm:flex-wrap gap-4 sm:gap-6 sm:items-end">
+            <div className="flex-1 sm:flex-none min-w-[140px]">
               <label className="block text-sm font-medium text-gray-700 mb-2">Time Period</label>
               <select
                 value={timeframe}
                 onChange={(e) => setTimeframe(e.target.value)}
-                className="w-full sm:w-auto border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full sm:w-auto border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
               >
                 <option value="last_7_days">Last 7 Days</option>
                 <option value="last_30_days">Last 30 Days</option>
                 <option value="last_90_days">Last 90 Days</option>
               </select>
             </div>
-            <div className="flex-1 sm:flex-none">
+            <div className="flex-1 sm:flex-none min-w-[140px]">
               <label className="block text-sm font-medium text-gray-700 mb-2">Platform Filter</label>
               <select
                 value={selectedPlatform}
                 onChange={(e) => setSelectedPlatform(e.target.value)}
-                className="w-full sm:w-auto border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full sm:w-auto border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
               >
                 <option value="all">All Platforms</option>
-                <option value="facebook">Facebook</option>
-                <option value="instagram">Instagram</option>
-                <option value="youtube">YouTube</option>
-                <option value="linkedin">LinkedIn</option>
+                {platforms.includes('facebook') && <option value="facebook">Facebook</option>}
+                {platforms.includes('instagram') && <option value="instagram">Instagram</option>}
+                {platforms.includes('youtube') && <option value="youtube">YouTube</option>}
+                {platforms.includes('linkedin') && <option value="linkedin">LinkedIn</option>}
               </select>
             </div>
+            {/* Account Selector - shows when there are multiple accounts */}
+            {getFilteredAccounts.length > 0 && (
+              <div className="flex-1 sm:flex-none min-w-[200px]">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Account
+                  {getFilteredAccounts.length > 1 && (
+                    <span className="ml-1 text-xs text-gray-500">({getFilteredAccounts.length} accounts)</span>
+                  )}
+                </label>
+                <select
+                  value={selectedAccount}
+                  onChange={(e) => setSelectedAccount(e.target.value)}
+                  className="w-full sm:w-auto border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                >
+                  <option value="all">All Accounts</option>
+                  {getFilteredAccounts.map((account) => (
+                    <option key={account.id} value={account.id}>
+                      {account.name} ({account.platform})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {/* Active filter indicator */}
+            {(selectedPlatform !== 'all' || selectedAccount !== 'all') && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setSelectedPlatform('all');
+                    setSelectedAccount('all');
+                  }}
+                  className="text-sm text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  Clear Filters
+                </button>
+              </div>
+            )}
           </div>
+          {/* Filter summary */}
+          {(selectedPlatform !== 'all' || selectedAccount !== 'all') && (
+            <div className="mt-4 pt-4 border-t border-gray-100">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm text-gray-500">Showing:</span>
+                {selectedAccount !== 'all' ? (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-sm font-medium">
+                    <span 
+                      className="w-2 h-2 rounded-full"
+                      style={{ backgroundColor: platformColors[connectedAccounts.find(a => a.id === selectedAccount)?.platform] || '#6B7280' }}
+                    ></span>
+                    {connectedAccounts.find(a => a.id === selectedAccount)?.name}
+                  </span>
+                ) : selectedPlatform !== 'all' ? (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-sm font-medium capitalize">
+                    <span 
+                      className="w-2 h-2 rounded-full"
+                      style={{ backgroundColor: platformColors[selectedPlatform] || '#6B7280' }}
+                    ></span>
+                    {selectedPlatform}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Summary Cards */}
@@ -1838,7 +2202,13 @@ const ROIDashboard = () => {
               <div className="sm:ml-4">
                 <p className="text-xs sm:text-sm font-medium text-gray-600">Total Followers</p>
                 <p className="text-lg sm:text-2xl font-bold text-gray-900">{getTotalFollowers().toLocaleString()}</p>
-                <p className="text-xs sm:text-sm text-green-600 mt-0.5 sm:mt-1 hidden sm:block">Across all platforms</p>
+                <p className="text-xs sm:text-sm text-green-600 mt-0.5 sm:mt-1 hidden sm:block">
+                  {selectedAccount !== 'all' 
+                    ? connectedAccounts.find(a => a.id === selectedAccount)?.name 
+                    : selectedPlatform !== 'all' 
+                      ? `${selectedPlatform.charAt(0).toUpperCase() + selectedPlatform.slice(1)} only`
+                      : 'Across all platforms'}
+                </p>
               </div>
             </div>
           </div>
@@ -1883,7 +2253,9 @@ const ROIDashboard = () => {
               <div className="sm:ml-4">
                 <p className="text-xs sm:text-sm font-medium text-gray-600">Overall ROI</p>
                 <p className="text-lg sm:text-2xl font-bold text-green-600">+{getOverallROI()}%</p>
-                <p className="text-xs sm:text-sm text-gray-600 mt-0.5 sm:mt-1 hidden sm:block">Growth period</p>
+                <p className="text-xs sm:text-sm text-gray-600 mt-0.5 sm:mt-1 hidden sm:block">
+                  {timeframe === 'last_7_days' ? 'Last 7 days' : timeframe === 'last_30_days' ? 'Last 30 days' : 'Last 90 days'}
+                </p>
               </div>
             </div>
           </div>
@@ -1895,7 +2267,7 @@ const ROIDashboard = () => {
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6 gap-2">
               <h3 className="text-base sm:text-lg font-semibold text-gray-900">Follower Growth Over Time</h3>
               <div className="text-xs sm:text-sm text-gray-500">
-                {timeframe === '6months' ? 'Last 6 Months' : 'Last 12 Months'}
+                {timeframe === 'last_7_days' ? 'Last 7 Days' : timeframe === 'last_30_days' ? 'Last 30 Days' : 'Last 12 Months'}
               </div>
             </div>
             <div className="h-60 sm:h-80">

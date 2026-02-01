@@ -392,7 +392,7 @@ function FacebookIntegration() {
 
     console.log('🔐 Starting Facebook login...');
 
-    window.FB.login(async (response) => {
+    window.FB.login((response) => {
       console.log('📨 Facebook login response:', response.status);
       
       if (response.status === 'connected') {
@@ -405,7 +405,7 @@ function FacebookIntegration() {
         window.FB.api('/me', { 
           fields: 'id,name,email,picture',
           access_token: accessToken 
-        }, async function(userResponse) {
+        }, function(userResponse) {
           if (!userResponse || userResponse.error) {
             console.error('❌ Failed to fetch user data:', userResponse.error);
             setFbError(userResponse.error);
@@ -414,10 +414,13 @@ function FacebookIntegration() {
           
           console.log('👤 User data received:', userResponse.name);
           
-          console.log('🔄 Step 1: Exchanging short-lived token for long-lived token (60 days)...');
-          
-          // 🔥 CRITICAL: Immediately exchange for long-lived token
-          const exchangeResponse = await fetch(`${process.env.REACT_APP_API_URL}/api/facebook/exchange-token`, {
+          // Wrap async operations in an async IIFE
+          (async () => {
+            try {
+              console.log('🔄 Step 1: Exchanging short-lived token for long-lived token (60 days)...');
+              
+              // 🔥 CRITICAL: Immediately exchange for long-lived token
+              const exchangeResponse = await fetch(`${process.env.REACT_APP_API_URL}/api/facebook/exchange-token`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -537,27 +540,37 @@ function FacebookIntegration() {
           
           console.log('📊 Total accounts after update:', updatedAccounts.length);
           
-          // Update state first
+          // Update state and storage
           setConnectedAccounts(updatedAccounts);
-          setActiveAccountId(userId);
-          setActiveAccount(newAccount);
-          
-          // Then save to storage
           saveAccountsToStorage(updatedAccounts);
-          setUserData('fb_active_account_id', userId);
           
-          // Clear any existing error
+          // Set as active if it's the first account or if updating current
+          if (updatedAccounts.length === 1 || existingAccountIndex >= 0) {
+            setActiveAccountId(userId);
+            setActiveAccount(newAccount);
+            setUserData('fb_active_account_id', userId);
+            
+            // Set pages if available
+            if (pagesWithTokens.length > 0) {
+              setFbPages(pagesWithTokens.map(p => ({
+                id: p.id,
+                name: p.name,
+                access_token: p.accessToken,
+                category: p.category,
+                fan_count: p.fanCount,
+                tokenType: p.tokenType,
+                tokenExpiry: p.tokenExpiry
+              })));
+            }
+          }
+          
           setFbError(null);
-
-          console.log('✅ Account setup complete, requesting long-lived token...');
-          
-          // Request long-lived token
-          requestLongLivedToken(accessToken, newAccount).then(() => {
-            // After token exchange, save again to ensure persistence
-            const finalAccounts = [...updatedAccounts];
-            saveAccountsToStorage(finalAccounts);
-            console.log('💾 Final save after token exchange complete');
-          });
+          console.log('✅ Facebook account connected successfully');
+            } catch (error) {
+              console.error('❌ Error during account setup:', error);
+              setFbError({ message: `Failed to setup account: ${error.message}` });
+            }
+          })();
         });
       } else {
         console.error('❌ Facebook login failed:', response);

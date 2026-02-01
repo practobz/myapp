@@ -63,6 +63,8 @@ import ContentPortfolio from './content-creators/ContentPortfolio';
 import ContentUpload from './content-creators/ContentUpload';
 import Profile from './content-creators/Profile';
 import Settings from './content-creators/Settings';
+import ContentCreatorMediaLibrary from './content-creators/MediaLibrary';
+
 import { useAuth } from './admin/contexts/AuthContext';
 import AIImageGenerator from './components/AIImageGenerator';
 import TimePeriodChart from './components/TimeperiodChart';
@@ -560,6 +562,11 @@ function App() {
               <Route path="/content-creator/settings" element={
                 <ProtectedRoutePortal role="content_creator">
                   <Settings />
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/content-creator/media-library" element={
+                <ProtectedRoutePortal role="content_creator">
+                  <ContentCreatorMediaLibrary />
                 </ProtectedRoutePortal>
               } />
               

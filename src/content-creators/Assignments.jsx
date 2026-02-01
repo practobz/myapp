@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
-import { ArrowLeft, Filter, Search, Upload, MessageSquare, CheckCircle, Clock, AlertCircle, Palette, Play, Eye } from 'lucide-react';
+import { ArrowLeft, Filter, Search, Upload, MessageSquare, CheckCircle, Clock, AlertCircle, Palette, Play, Eye, Calendar, User, FileText } from 'lucide-react';
 import Footer from '../admin/components/layout/Footer';
+import Logo from '../admin/components/layout/Logo';
 
 // Helper to get creator email from localStorage
 function getCreatorEmail() {
@@ -30,6 +31,9 @@ function Assignments() {
   const [searchTerm, setSearchTerm] = useState('');
   const [assignments, setAssignments] = useState([]);
   const [customerMap, setCustomerMap] = useState({});
+  
+  // Scheduled posts to check published status
+  const [scheduledPosts, setScheduledPosts] = useState([]);
 
   // Get current creator's email or id
   const creatorEmail = getCreatorEmail();
@@ -70,14 +74,15 @@ function Assignments() {
         let allAssignments = [];
         calendars.forEach(calendar => {
           if (Array.isArray(calendar.contentItems)) {
-            calendar.contentItems.forEach(item => {
+            calendar.contentItems.forEach((item, index) => {
               allAssignments.push({
                 ...item,
                 calendarName: calendar.name || calendar.customerName || calendar.customer || '',
                 calendarId: calendar._id || calendar.id,
                 customerId: calendar.customerId || calendar.customer_id || calendar.customer?._id || '',
                 customerName: customerMap[calendar.customerId || calendar.customer_id || (calendar.customer && calendar.customer._id)] || '',
-                id: item.id || item._id || item.title || Math.random().toString(36).slice(2)
+                id: item.id || item._id || item.title || Math.random().toString(36).slice(2),
+                itemIndex: index
               });
             });
           }
@@ -90,10 +95,39 @@ function Assignments() {
         setAssignments([]);
       }
     };
+    
+    const fetchScheduledPosts = async () => {
+      try {
+        const res = await fetch(`${process.env.REACT_APP_API_URL}/api/scheduled-posts`);
+        if (!res.ok) {
+          throw new Error(`Failed to fetch scheduled posts: ${res.statusText}`);
+        }
+        const data = await res.json();
+        setScheduledPosts(data);
+      } catch (err) {
+        console.error('Failed to fetch scheduled posts:', err);
+        setScheduledPosts([]); // Ensure scheduledPosts is an empty array on error
+      }
+    };
+    
     if (creatorEmail && creatorEmail.length > 0 && Object.keys(customerMap).length > 0) {
       fetchAssignments();
+      fetchScheduledPosts();
     }
   }, [creatorEmail, customerMap]);
+
+  // Helper: check if content is published on any platform
+  const isContentPublished = (assignmentId) => {
+    return scheduledPosts.some(post => post.contentId === assignmentId && post.status === 'published');
+  };
+  
+  // Helper: get actual status considering published posts
+  const getActualStatus = (assignment) => {
+    if (isContentPublished(assignment.id || assignment._id)) {
+      return 'published';
+    }
+    return assignment.status || 'assigned';
+  };
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -143,7 +177,8 @@ function Assignments() {
   };
 
   const filteredAssignments = assignments.filter(assignment => {
-    const matchesFilter = selectedFilter === 'all' || assignment.status === selectedFilter;
+    const actualStatus = getActualStatus(assignment);
+    const matchesFilter = selectedFilter === 'all' || actualStatus === selectedFilter;
     const matchesSearch = (assignment.customer || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                          (assignment.title || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                          (assignment.type || '').toLowerCase().includes(searchTerm.toLowerCase());
@@ -156,7 +191,9 @@ function Assignments() {
   };
 
   const handleStartWork = (assignment) => {
-    navigate(`/content-creator/upload/${assignment.id || assignment._id}`);
+    // Find the index of this item in the calendar's contentItems array
+    const itemIndex = assignment.itemIndex !== undefined ? assignment.itemIndex : 0;
+    navigate(`/content-creator/upload/${assignment.calendarId}/${itemIndex}`);
   };
 
   const handleViewPortfolio = (assignment) => {
@@ -267,9 +304,9 @@ function Assignments() {
                               <span className="text-xs text-gray-400 font-mono">ID: {assignment.id}</span>
                             </div>
                             <div className="flex flex-wrap items-center gap-2 mt-2 sm:mt-0">
-                              <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(assignment.status)}`}>
-                                {getStatusIcon(assignment.status)}
-                                <span className="ml-1 capitalize">{(assignment.status || 'assigned').replace('_', ' ')}</span>
+                              <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(getActualStatus(assignment))}`}>
+                                {getStatusIcon(getActualStatus(assignment))}
+                                <span className="ml-1 capitalize">{getActualStatus(assignment).replace('_', ' ')}</span>
                               </span>
                               <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getPriorityColor(assignment.priority)}`}>
                                 {(assignment.priority || 'Medium').toUpperCase()} PRIORITY

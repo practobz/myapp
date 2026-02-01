@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MessageSquare, CheckCircle, Edit3, Trash2, Move, ChevronLeft, ChevronRight, Image, Video, AlertCircle } from 'lucide-react';
+import { MessageSquare, CheckCircle, Edit3, Trash2, Move, ChevronLeft, ChevronRight, Image, Video, AlertCircle, ThumbsUp } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 function ContentReview() {
@@ -682,6 +682,71 @@ function ContentReview() {
     }
   };
 
+  // State for approve loading
+  const [approvingContent, setApprovingContent] = useState(false);
+
+  // Handle approve content - updates status to 'approved' on backend
+  const handleApproveContent = async () => {
+    if (!selectedContent) return;
+    
+    setApprovingContent(true);
+    try {
+      const response = await fetch(
+        `${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(selectedContent.id)}/status`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            status: 'approved',
+            approvedAt: new Date().toISOString(),
+            approvalNotes: 'Approved by customer'
+          })
+        }
+      );
+
+      if (response.ok) {
+        // Update local state to reflect the approval
+        setSelectedContent(prev => ({
+          ...prev,
+          status: 'approved',
+          versions: prev.versions.map((v, i) => 
+            i === prev.versions.length - 1 
+              ? { ...v, status: 'approved', approvedAt: new Date().toISOString() }
+              : v
+          )
+        }));
+        
+        // Update contentItems to reflect the change
+        setContentItems(prev => prev.map(item => 
+          item.id === selectedContent.id 
+            ? { 
+                ...item, 
+                status: 'approved',
+                versions: item.versions.map((v, i) => 
+                  i === item.versions.length - 1 
+                    ? { ...v, status: 'approved', approvedAt: new Date().toISOString() }
+                    : v
+                )
+              }
+            : item
+        ));
+        
+        alert('Content approved successfully!');
+      } else {
+        const errorData = await response.json();
+        console.error('Failed to approve content:', errorData);
+        alert('Failed to approve content. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error approving content:', error);
+      alert('Error approving content. Please try again.');
+    } finally {
+      setApprovingContent(false);
+    }
+  };
+
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
     try {
@@ -1354,30 +1419,42 @@ function ContentReview() {
                   </div>
                 )}
 
-                {/* Action Buttons */}
-                {/* Removed Approve Content and Request Changes buttons */}
-                {/*
-                <div className="flex flex-col sm:flex-row justify-center gap-4">
-                  <Button
-                    onClick={() => navigate(`/customer/approve/${selectedContent.id}`)}
-                    variant="success"
-                    size="lg"
-                  >
-                    <CheckCircle className="h-5 w-5 mr-2" />
-                    Approve Content
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      // Handle request changes
-                    }}
-                    variant="warning"
-                    size="lg"
-                  >
-                    <Edit3 className="h-5 w-5 mr-2" />
-                    Request Changes
-                  </Button>
-                </div>
-                */}
+                {/* Action Buttons - Approve Content */}
+                {getDisplayStatus(selectedContent) !== 'approved' && getDisplayStatus(selectedContent) !== 'published' && (
+                  <div className="flex flex-col sm:flex-row justify-center gap-3 sm:gap-4 mt-4 sm:mt-6">
+                    <button
+                      onClick={handleApproveContent}
+                      disabled={approvingContent}
+                      className={`inline-flex items-center justify-center px-6 sm:px-8 py-3 sm:py-4 rounded-xl font-bold text-sm sm:text-base transition-all duration-300 shadow-lg hover:shadow-xl ${
+                        approvingContent 
+                          ? 'bg-gray-400 cursor-not-allowed' 
+                          : 'bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white'
+                      }`}
+                    >
+                      {approvingContent ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 sm:h-5 sm:w-5 border-2 border-white border-t-transparent mr-2"></div>
+                          Approving...
+                        </>
+                      ) : (
+                        <>
+                          <ThumbsUp className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
+                          Approve Content
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
+
+                {/* Show approved status if already approved */}
+                {getDisplayStatus(selectedContent) === 'approved' && (
+                  <div className="flex justify-center mt-4 sm:mt-6">
+                    <div className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-emerald-100 to-green-100 border-2 border-emerald-300 rounded-xl">
+                      <CheckCircle className="h-5 w-5 text-emerald-600 mr-2" />
+                      <span className="text-emerald-800 font-bold text-sm sm:text-base">Content Approved</span>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>

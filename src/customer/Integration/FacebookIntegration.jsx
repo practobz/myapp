@@ -392,7 +392,7 @@ function FacebookIntegration() {
 
     console.log('🔐 Starting Facebook login...');
 
-    window.FB.login((response) => {
+    window.FB.login(async (response) => {
       console.log('📨 Facebook login response:', response.status);
       
       if (response.status === 'connected') {
@@ -405,7 +405,7 @@ function FacebookIntegration() {
         window.FB.api('/me', { 
           fields: 'id,name,email,picture',
           access_token: accessToken 
-        }, function(userResponse) {
+        }, async function(userResponse) {
           if (!userResponse || userResponse.error) {
             console.error('❌ Failed to fetch user data:', userResponse.error);
             setFbError(userResponse.error);
@@ -414,36 +414,125 @@ function FacebookIntegration() {
           
           console.log('👤 User data received:', userResponse.name);
           
+          console.log('🔄 Step 1: Exchanging short-lived token for long-lived token (60 days)...');
+          
+          // 🔥 CRITICAL: Immediately exchange for long-lived token
+          const exchangeResponse = await fetch(`${process.env.REACT_APP_API_URL}/api/facebook/exchange-token`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              shortLivedToken: accessToken,
+              clientId: FACEBOOK_APP_ID
+            })
+          });
+          
+          const exchangeData = await exchangeResponse.json();
+          const longLivedToken = exchangeData.success && exchangeData.longLivedToken ? 
+            exchangeData.longLivedToken : accessToken;
+          const tokenExpiresIn = exchangeData.expiresIn || 5183999; // ~60 days
+          const tokenExpiresAt = new Date(Date.now() + (tokenExpiresIn * 1000)).toISOString();
+          
+          if (exchangeData.success) {
+            console.log('✅ Got long-lived user token (expires in', Math.floor(tokenExpiresIn / 86400), 'days)');
+          } else {
+            console.warn('⚠️ Failed to get long-lived token, using short-lived token');
+          }
+          
+          // 🔥 CRITICAL: Immediately get never-expiring page tokens
+          console.log('🔄 Step 2: Getting never-expiring page tokens...');
+          const pageTokenResponse = await fetch(`${process.env.REACT_APP_API_URL}/api/facebook/page-tokens`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userAccessToken: longLivedToken,
+              userId: userId
+            })
+          });
+          
+          const pageTokenData = await pageTokenResponse.json();
+          let pagesWithTokens = [];
+          
+          if (pageTokenData.success && pageTokenData.pages) {
+            console.log(`✅ Got never-expiring tokens for ${pageTokenData.pages.length} pages`);
+            pagesWithTokens = pageTokenData.pages.map(page => ({
+              id: page.id,
+              name: page.name,
+              accessToken: page.access_token,
+              category: page.category,
+              fanCount: page.fan_count,
+              tokenType: 'never_expiring',
+              tokenExpiry: 'never',
+              tokenValidatedAt: new Date().toISOString()
+            }));
+          } else {
+            console.warn('⚠️ Failed to get never-expiring page tokens');
+          }
+          
           const newAccount = {
             id: userId,
             name: userResponse.name,
             email: userResponse.email,
             picture: userResponse.picture,
-            accessToken: accessToken,
+            accessToken: longLivedToken, // ✅ Store long-lived user token
             connectedAt: new Date().toISOString(),
-            tokenExpiresAt: response.authResponse.expiresIn ? 
-              new Date(Date.now() + (response.authResponse.expiresIn * 1000)).toISOString() : null
+            tokenExpiresAt: tokenExpiresAt,
+            tokenType: 'long_lived',
+            pages: pagesWithTokens // ✅ Store never-expiring page tokens
           };
           
-          console.log('🆕 Created new account object:', {
+          console.log('🆕 Created new account object with never-expiring page tokens:', {
             id: newAccount.id,
             name: newAccount.name,
-            email: newAccount.email
+            email: newAccount.email,
+            pagesCount: pagesWithTokens.length
           });
+          
+          // 🔥 CRITICAL: Immediately store to backend to preserve tokens
+          const customerId = getCurrentCustomerId();
+          if (customerId && pagesWithTokens.length > 0) {
+            console.log('💾 Step 3: Storing account with never-expiring tokens to backend...');
+            const storeResponse = await fetch(`${process.env.REACT_APP_API_URL}/api/customer-social-links`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                customerId: customerId,
+                platform: 'facebook',
+                platformUserId: userId,
+                name: userResponse.name,
+                email: userResponse.email,
+                profilePicture: userResponse.picture?.data?.url,
+                accessToken: longLivedToken,
+                userId: userId,
+                pages: pagesWithTokens,
+                connectedAt: new Date().toISOString(),
+                tokenExpiresAt: tokenExpiresAt,
+                needsReconnection: false,
+                lastTokenValidation: new Date().toISOString(),
+                tokenStatus: 'active',
+                tokenType: 'long_lived_with_never_expiring_pages'
+              })
+            });
+            
+            if (storeResponse.ok) {
+              console.log('✅ Account stored to backend with never-expiring page tokens');
+            } else {
+              console.warn('⚠️ Failed to store account to backend:', await storeResponse.text());
+            }
+          }
           
           // Check if account already exists
           const existingAccountIndex = connectedAccounts.findIndex(acc => acc.id === userId);
           let updatedAccounts;
           
           if (existingAccountIndex >= 0) {
-            console.log('🔄 Updating existing account');
+            console.log('🔄 Updating existing account with fresh tokens');
             // Update existing account
             updatedAccounts = [...connectedAccounts];
             updatedAccounts[existingAccountIndex] = { ...updatedAccounts[existingAccountIndex], ...newAccount };
           } else {
-            console.log('➕ Adding new account');
+            console.log('➕ Adding new account with never-expiring page tokens');
             // Add new account
-            updatedAccounts = [...connectedAccounts, newAccount];
+            updatedAccounts = [...connectedAccounts, newAccount ];
           }
           
           console.log('📊 Total accounts after update:', updatedAccounts.length);

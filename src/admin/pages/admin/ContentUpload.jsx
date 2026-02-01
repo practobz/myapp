@@ -97,8 +97,6 @@ const watermarkImage = async (file, logoBase64) => {
   });
 };
 
-const MAX_BASE64_SIZE = 5 * 1024 * 1024; // 5MB - threshold to switch to signed URL uploads
-
 function ContentUpload() {
   const navigate = useNavigate();
   const { calendarId, itemIndex } = useParams();
@@ -122,6 +120,7 @@ function ContentUpload() {
   const [scheduledTime, setScheduledTime] = useState('');
   const [thumbnail, setThumbnail] = useState('');
   const [tags, setTags] = useState('');
+  const [previousSubmissionLoaded, setPreviousSubmissionLoaded] = useState(false);
 
   const creatorEmail = getCreatorEmail();
 
@@ -198,6 +197,106 @@ function ContentUpload() {
       fetchAssignment();
     }
   }, [calendarId, itemIndex]);
+
+  // Fetch previous submission to pre-fill caption and hashtags for revisions
+  useEffect(() => {
+    const fetchPreviousSubmission = async () => {
+      if (!assignment || !assignment.id || previousSubmissionLoaded) {
+        console.log('⏭️ Skipping fetch - assignment:', !!assignment, 'id:', assignment?.id, 'loaded:', previousSubmissionLoaded);
+        return;
+      }
+
+      try {
+        console.log('🔍 Fetching previous submissions for assignment:', assignment.id, 'by admin:', creatorEmail);
+        
+        const response = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions`);
+        
+        if (!response.ok) {
+          console.error('❌ Failed to fetch previous submissions:', response.status);
+          setPreviousSubmissionLoaded(true);
+          return;
+        }
+
+        const data = await response.json();
+        console.log('📦 Received submissions data:', data);
+        
+        // Handle both array response and object with submissions property
+        const submissions = Array.isArray(data) ? data : (data.submissions || []);
+        console.log('📋 Total submissions count:', submissions.length);
+        
+        if (submissions.length > 0) {
+          console.log('🔍 Sample submission structure:', {
+            assignment_id: submissions[0].assignment_id,
+            created_by: submissions[0].created_by,
+            caption: submissions[0].caption?.substring(0, 50),
+            hashtags: submissions[0].hashtags?.substring(0, 50)
+          });
+        }
+        
+        // Filter submissions for this specific assignment (any creator)
+        // Handle various possible field names
+        const previousSubmissions = submissions.filter(sub => {
+          const subAssignmentId = sub.assignment_id || sub.assignmentId || sub.assignmentID;
+          
+          const matchesAssignment = subAssignmentId === assignment.id || 
+                                   subAssignmentId === assignment._id ||
+                                   String(subAssignmentId) === String(assignment.id);
+          
+          console.log('🔎 Checking submission:', {
+            subAssignmentId,
+            assignmentId: assignment.id,
+            matchesAssignment,
+            creator: sub.created_by || sub.createdBy || sub.creator
+          });
+          
+          return matchesAssignment;
+        });
+
+        console.log('✅ Found', previousSubmissions.length, 'previous submissions for this assignment (any creator)');
+
+        // Sort by date to get the most recent submission
+        previousSubmissions.sort((a, b) => 
+          new Date(b.created_at || b.createdAt || 0) - new Date(a.created_at || a.createdAt || 0)
+        );
+
+        if (previousSubmissions.length > 0) {
+          const latestSubmission = previousSubmissions[0];
+          console.log('✅ Pre-filling from latest submission:', {
+            caption: latestSubmission.caption?.substring(0, 50),
+            hashtags: latestSubmission.hashtags?.substring(0, 50),
+            notes: latestSubmission.notes?.substring(0, 50),
+            date: latestSubmission.created_at || latestSubmission.createdAt
+          });
+          
+          // Pre-fill caption and hashtags from previous submission
+          if (latestSubmission.caption) {
+            setCaption(latestSubmission.caption);
+            console.log('📝 Caption set');
+          }
+          if (latestSubmission.hashtags) {
+            setHashtags(latestSubmission.hashtags);
+            console.log('🏷️ Hashtags set');
+          }
+          // Optionally pre-fill notes as well
+          if (latestSubmission.notes) {
+            setNotes(latestSubmission.notes);
+            console.log('📋 Notes set');
+          }
+        } else {
+          console.log('ℹ️ No previous submission found - this is a first-time upload');
+        }
+
+        setPreviousSubmissionLoaded(true);
+      } catch (err) {
+        console.error('❌ Error fetching previous submission:', err);
+        setPreviousSubmissionLoaded(true);
+      }
+    };
+
+    if (assignment && creatorEmail) {
+      fetchPreviousSubmission();
+    }
+  }, [assignment, creatorEmail, previousSubmissionLoaded]);
 
   const handleDrag = (e) => {
     e.preventDefault();
@@ -286,60 +385,17 @@ function ContentUpload() {
     try {
       console.log(`📤 Starting upload for ${fileObj.name} (${formatFileSize(fileObj.size)})`);
       
-      if (!fileObj.file || !fileObj.file.size) {
+      // Validate file object before proceeding
+      if (!fileObj.file || !fileObj.file.size || fileObj.file.size === 0) {
         throw new Error(`Invalid file: ${fileObj.name} has no content or is corrupted`);
       }
 
-      // If file is large, use signed URL upload instead of base64 POST
-      if (fileObj.file.size > MAX_BASE64_SIZE) {
-        console.log(`➡️ File exceeds ${MAX_BASE64_SIZE} bytes, requesting signed URL...`);
-        try {
-          const signed = await getSignedUrl(fileObj.name, fileObj.file.type, fileObj.file.size);
-          if (!signed || !signed.url || !signed.publicUrl) {
-            throw new Error('Signed URL response missing url/publicUrl');
-          }
-          // upload via signed url (XHR used for progress)
-          return await uploadViaSignedUrl(fileObj, signed);
-        } catch (signedErr) {
-          // Improved: Detect CORS/network error and show actionable message
-          const isCORS = signedErr && (
-            /CORS|Network error|Failed to fetch|No 'Access-Control-Allow-Origin'/.test(signedErr.message)
-          );
-          if (isCORS) {
-            setUploadedFiles(prev =>
-              prev.map(f => f.id === fileObj.id
-                ? {
-                    ...f,
-                    uploading: false,
-                    uploaded: false,
-                    error:
-                      "Upload failed due to a network or CORS error with Google Cloud Storage. " +
-                      "This is usually a server configuration issue. Please contact support or try again later."
-                  }
-                : f
-              )
-            );
-            throw new Error(
-              "Signed URL upload failed due to a network or CORS error. " +
-              "Please contact support or try again later."
-            );
-          }
-          // If backend doesn't support signed urls, attempt base64 only for reasonably small files
-          if (fileObj.file.size <= MAX_BASE64_SIZE * 2) {
-            console.warn('Attempting base64 fallback for slightly larger file (may fail)...');
-            // proceed to base64 path below
-          } else {
-            throw new Error(
-              `Signed URL upload failed: ${signedErr.message}. ` +
-              "File too large for base64 fallback. Please contact support or try again later."
-            );
-          }
-        }
-      }
+      // Update file status to uploading
+      setUploadedFiles(prev => 
+        prev.map(f => f.id === fileObj.id ? { ...f, uploading: true, error: null } : f)
+      );
 
-      // Base64 path (kept for small files)
-      setUploadedFiles(prev => prev.map(f => f.id === fileObj.id ? { ...f, uploading: true, error: null } : f));
-
+      // Convert file to base64
       const base64Data = await new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => {
@@ -348,6 +404,7 @@ function ContentUpload() {
             reject(new Error('Failed to read file as base64'));
             return;
           }
+          // Remove the data URL prefix (e.g., "data:image/png;base64,")
           const base64 = result.split(',')[1];
           if (!base64 || base64.length === 0) {
             reject(new Error('Base64 conversion resulted in empty data'));
@@ -359,41 +416,53 @@ function ContentUpload() {
         reader.readAsDataURL(fileObj.file);
       });
 
-      // Validate payload
-      if (!base64Data) throw new Error('Empty base64 data');
-
+      // Validate payload before sending
       const payload = {
         filename: fileObj.name,
         contentType: fileObj.file.type,
         base64Data: base64Data
       };
 
-      // Send to backend
+      // Additional validation
+      if (!payload.filename || !payload.contentType || !payload.base64Data) {
+        throw new Error(`Invalid payload: missing ${!payload.filename ? 'filename' : !payload.contentType ? 'contentType' : 'base64Data'}`);
+      }
+
+      console.log(`📤 Uploading ${fileObj.name} - Type: ${payload.contentType}, Size: ${formatFileSize(fileObj.file.size)}`);
+
+      // Upload using base64 through backend API
       const uploadResponse = await fetch(`${process.env.REACT_APP_API_URL}/api/gcs/upload-base64`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
       });
 
       if (!uploadResponse.ok) {
-        // Give actionable error for CORS / 413
-        if (uploadResponse.status === 413) {
-          throw new Error('Server rejected the payload as too large (413). Use smaller files or enable signed uploads on the backend.');
-        }
-        // Try to parse server body for error message
-        let errText = uploadResponse.statusText;
-        try { const errJson = await uploadResponse.json(); errText = errJson.error || errText; } catch (e) {}
-        throw new Error(`Upload failed: ${errText}`);
+        const errorData = await uploadResponse.json();
+        throw new Error(`Upload failed: ${errorData.error || uploadResponse.statusText}`);
       }
 
       const { publicUrl } = await uploadResponse.json();
-      if (!publicUrl) throw new Error('No public URL returned from upload');
 
-      setUploadedFiles(prev =>
-        prev.map(f => f.id === fileObj.id ? { ...f, uploading: false, uploaded: true, publicUrl: publicUrl, error: null } : f)
-      );
+      if (!publicUrl) {
+        throw new Error('No public URL returned from upload');
+      }
 
       console.log(`✅ Successfully uploaded ${fileObj.name} via base64`);
+
+      // Update file status to uploaded
+      setUploadedFiles(prev => 
+        prev.map(f => f.id === fileObj.id ? { 
+          ...f, 
+          uploading: false, 
+          uploaded: true, 
+          publicUrl: publicUrl,
+          error: null 
+        } : f)
+      );
+
       return {
         url: publicUrl,
         type: fileObj.type,
@@ -401,103 +470,22 @@ function ContentUpload() {
         size: fileObj.file.size,
         originalName: fileObj.name
       };
+
     } catch (error) {
       console.error(`❌ Upload failed for ${fileObj.name}:`, error);
-      setUploadedFiles(prev =>
-        prev.map(f => f.id === fileObj.id ? { ...f, uploading: false, uploaded: false, error: error.message } : f)
+      
+      // Update file status to error
+      setUploadedFiles(prev => 
+        prev.map(f => f.id === fileObj.id ? { 
+          ...f, 
+          uploading: false, 
+          uploaded: false, 
+          error: error.message 
+        } : f)
       );
-      // Surface clearer guidance for CORS issues
-      if (error.message && /Failed to fetch|Network error/.test(error.message)) {
-        console.error('Possible CORS or network error. Ensure backend allows CORS from your front-end origin and that payload limits are configured.');
-      }
+
       throw error;
     }
-  };
-
-  const getSignedUrl = async (filename, contentType, size) => {
-    const res = await fetch(`${process.env.REACT_APP_API_URL}/api/gcs/get-signed-url`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filename, contentType, size })
-    });
-    if (!res.ok) {
-      let errText = res.statusText;
-      try { const errJson = await res.json(); errText = errJson.error || errText; } catch (e) {}
-      throw new Error(`Failed to get signed URL: ${errText}`);
-    }
-    return res.json();
-  };
-
-  const uploadViaSignedUrl = (fileObj, signed) => {
-    return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open('PUT', signed.url);
-      xhr.setRequestHeader('Content-Type', fileObj.file.type);
-
-      xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable) {
-          const pct = Math.round((e.loaded / e.total) * 100);
-          setUploadProgress(prev => ({ ...prev, [fileObj.id]: pct }));
-        }
-      };
-
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          setUploadProgress(prev => {
-            const copy = { ...prev };
-            delete copy[fileObj.id];
-            return copy;
-          });
-          setUploadedFiles(prev =>
-            prev.map(f => f.id === fileObj.id ? { ...f, uploading: false, uploaded: true, publicUrl: signed.publicUrl, error: null } : f)
-          );
-          resolve({
-            url: signed.publicUrl,
-            type: fileObj.type,
-            name: fileObj.name,
-            size: fileObj.size,
-            originalName: fileObj.name
-          });
-        } else {
-          // Improved: Show actionable error for CORS/network
-          setUploadedFiles(prev =>
-            prev.map(f => f.id === fileObj.id
-              ? {
-                  ...f,
-                  uploading: false,
-                  uploaded: false,
-                  error:
-                    "Upload failed (HTTP " + xhr.status + "). " +
-                    "If this is a CORS or network error, please contact support."
-                }
-              : f
-            )
-          );
-          reject(new Error(`Signed upload failed with status ${xhr.status}`));
-        }
-      };
-
-      xhr.onerror = () => {
-        // Improved: Show actionable error for CORS/network
-        setUploadedFiles(prev =>
-          prev.map(f => f.id === fileObj.id
-            ? {
-                ...f,
-                uploading: false,
-                uploaded: false,
-                error:
-                  "Upload failed due to a network or CORS error with Google Cloud Storage. " +
-                  "This is usually a server configuration issue. Please contact support or try again later."
-              }
-            : f
-          )
-        );
-        reject(new Error('Network error during signed upload'));
-      };
-
-      setUploadedFiles(prev => prev.map(f => f.id === fileObj.id ? { ...f, uploading: true, error: null } : f));
-      xhr.send(fileObj.file);
-    });
   };
 
   const handleSubmit = async () => {

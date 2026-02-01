@@ -115,6 +115,7 @@ function ContentUpload() {
   const [contactInfo, setContactInfo] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({});
+  const [previousSubmissionLoaded, setPreviousSubmissionLoaded] = useState(false);
 
   const creatorEmail = getCreatorEmail();
 
@@ -199,6 +200,106 @@ function ContentUpload() {
       fetchAssignment();
     }
   }, [calendarId, itemIndex]);
+
+  // Fetch previous submission to pre-fill caption and hashtags for revisions
+  useEffect(() => {
+    const fetchPreviousSubmission = async () => {
+      if (!assignment || !assignment.id || previousSubmissionLoaded) {
+        console.log('⏭️ Skipping fetch - assignment:', !!assignment, 'id:', assignment?.id, 'loaded:', previousSubmissionLoaded);
+        return;
+      }
+
+      try {
+        console.log('🔍 Fetching previous submissions for assignment:', assignment.id, 'by creator:', creatorEmail);
+        
+        const response = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions`);
+        
+        if (!response.ok) {
+          console.error('❌ Failed to fetch previous submissions:', response.status);
+          setPreviousSubmissionLoaded(true);
+          return;
+        }
+
+        const data = await response.json();
+        console.log('📦 Received submissions data:', data);
+        
+        // Handle both array response and object with submissions property
+        const submissions = Array.isArray(data) ? data : (data.submissions || []);
+        console.log('📋 Total submissions count:', submissions.length);
+        
+        if (submissions.length > 0) {
+          console.log('🔍 Sample submission structure:', {
+            assignment_id: submissions[0].assignment_id,
+            created_by: submissions[0].created_by,
+            caption: submissions[0].caption?.substring(0, 50),
+            hashtags: submissions[0].hashtags?.substring(0, 50)
+          });
+        }
+        
+        // Filter submissions for this specific assignment (any creator)
+        // Handle various possible field names
+        const previousSubmissions = submissions.filter(sub => {
+          const subAssignmentId = sub.assignment_id || sub.assignmentId || sub.assignmentID;
+          
+          const matchesAssignment = subAssignmentId === assignment.id || 
+                                   subAssignmentId === assignment._id ||
+                                   String(subAssignmentId) === String(assignment.id);
+          
+          console.log('🔎 Checking submission:', {
+            subAssignmentId,
+            assignmentId: assignment.id,
+            matchesAssignment,
+            creator: sub.created_by || sub.createdBy || sub.creator
+          });
+          
+          return matchesAssignment;
+        });
+
+        console.log('✅ Found', previousSubmissions.length, 'previous submissions for this assignment (any creator)');
+
+        // Sort by date to get the most recent submission
+        previousSubmissions.sort((a, b) => 
+          new Date(b.created_at || b.createdAt || 0) - new Date(a.created_at || a.createdAt || 0)
+        );
+
+        if (previousSubmissions.length > 0) {
+          const latestSubmission = previousSubmissions[0];
+          console.log('✅ Pre-filling from latest submission:', {
+            caption: latestSubmission.caption?.substring(0, 50),
+            hashtags: latestSubmission.hashtags?.substring(0, 50),
+            notes: latestSubmission.notes?.substring(0, 50),
+            date: latestSubmission.created_at || latestSubmission.createdAt
+          });
+          
+          // Pre-fill caption and hashtags from previous submission
+          if (latestSubmission.caption) {
+            setCaption(latestSubmission.caption);
+            console.log('📝 Caption set');
+          }
+          if (latestSubmission.hashtags) {
+            setHashtags(latestSubmission.hashtags);
+            console.log('🏷️ Hashtags set');
+          }
+          // Optionally pre-fill notes as well
+          if (latestSubmission.notes) {
+            setNotes(latestSubmission.notes);
+            console.log('📋 Notes set');
+          }
+        } else {
+          console.log('ℹ️ No previous submission found - this is a first-time upload');
+        }
+
+        setPreviousSubmissionLoaded(true);
+      } catch (err) {
+        console.error('❌ Error fetching previous submission:', err);
+        setPreviousSubmissionLoaded(true);
+      }
+    };
+
+    if (assignment && creatorEmail) {
+      fetchPreviousSubmission();
+    }
+  }, [assignment, creatorEmail, previousSubmissionLoaded]);
 
   const handleDrag = (e) => {
     e.preventDefault();

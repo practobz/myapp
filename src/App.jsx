@@ -544,6 +544,11 @@ function App() {
                   <ContentPortfolio />
                 </ProtectedRoutePortal>
               } />
+              <Route path="/content-creator/upload/:calendarId/:itemIndex" element={
+                <ProtectedRoutePortal role="content_creator">
+                  <ContentUpload />
+                </ProtectedRoutePortal>
+              } />
               <Route path="/content-creator/upload/:assignmentId" element={
                 <ProtectedRoutePortal role="content_creator">
                   <ContentUpload />

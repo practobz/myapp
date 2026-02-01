@@ -46,6 +46,9 @@ function FacebookIntegration() {
   // Analytics data state for charts
   const [analyticsData, setAnalyticsData] = useState({});
 
+  // Retry tracking to prevent infinite loops
+  const [retryAttempts, setRetryAttempts] = useState({});
+
   // Helper function to check if Facebook API is ready
   const isFacebookApiReady = () => {
     return window.FB && window.FB.api && typeof window.FB.api === 'function';
@@ -117,6 +120,22 @@ function FacebookIntegration() {
       
       return await Promise.all(accounts.map(async (acc) => {
         try {
+          // CRITICAL: If account has never-expiring page tokens stored, they are STILL VALID
+          // even if the user token has expired. Don't mark as needing reconnection.
+          const hasNeverExpiringPageTokens = acc.pages && acc.pages.some(p => 
+            p.accessToken && (p.tokenType === 'never_expiring' || p.tokenExpiry === 'never' || p.tokenType === 'never_expiring_page_token')
+          );
+          
+          if (hasNeverExpiringPageTokens) {
+            console.log(`✅ Account ${acc.name} has never-expiring page tokens - skipping user token validation`);
+            return {
+              ...acc,
+              needsReconnection: false,
+              lastTokenValidation: new Date().toISOString(),
+              tokenStatus: 'active_with_page_tokens'
+            };
+          }
+          
           // Use direct Graph API fetch instead of FB.api to avoid SDK session conflicts
           const profileUrl = `https://graph.facebook.com/v18.0/me?fields=id,name,email,picture&access_token=${acc.accessToken}`;
           const profileResponse = await fetch(profileUrl);
@@ -125,7 +144,20 @@ function FacebookIntegration() {
           // Check for API errors
           if (profileData.error) {
             console.warn(`⚠️ Token validation failed for ${acc.name}:`, profileData.error.message);
-            // Only mark as needing reconnection if error code is 190 (token expired)
+            
+            // CRITICAL: Even if user token is expired, check if we have stored page tokens
+            // Page tokens are independent and may still be valid
+            if (acc.pages && acc.pages.length > 0 && acc.pages.some(p => p.accessToken || p.access_token)) {
+              console.log(`ℹ️ Account ${acc.name} has stored page tokens, keeping account active`);
+              return {
+                ...acc,
+                userTokenExpired: true,
+                needsReconnection: false, // Don't require reconnection if page tokens exist
+                lastError: profileData.error
+              };
+            }
+            
+            // Only mark as needing reconnection if no page tokens AND error code is 190
             if (profileData.error.code === 190) {
               return {
                 ...acc,
@@ -153,7 +185,7 @@ function FacebookIntegration() {
           };
         } catch (error) {
           console.warn(`⚠️ Hydration failed for ${acc.name}:`, error.message);
-          // Keep account as-is if hydration fails
+          // Keep account as-is if hydration fails - stored tokens may still work
           return acc;
         }
       }));
@@ -286,11 +318,12 @@ function FacebookIntegration() {
   }, [activeAccount, fbSdkLoaded]);
 
   // Auto-fetch posts when pages are loaded (like Instagram behavior)
+  // FIXED: Removed isFacebookApiReady() dependency - using direct Graph API instead
   useEffect(() => {
-    if (fbPages.length > 0 && isFacebookApiReady()) {
+    if (fbPages.length > 0) {
       fbPages.forEach(page => {
-        // Only fetch if not already loaded
-        if (!pagePosts[page.id]) {
+        // Only fetch if not already loaded and has access token
+        if (!pagePosts[page.id] && page.access_token) {
           fetchPagePosts(page.id, page.access_token);
         }
       });
@@ -298,21 +331,42 @@ function FacebookIntegration() {
   }, [fbPages]);
   
   // Auto-upgrade to never-expiring tokens for existing accounts
+  // FIXED: Removed SDK dependency - tokens are stored independently per account
   useEffect(() => {
     const upgradeToNeverExpiringTokens = async () => {
-      if (!activeAccount || !fbSdkLoaded || !isFacebookApiReady()) return;
+      if (!activeAccount) return;
       
       // Check if we need to upgrade (only if pages exist but don't have never-expiring tokens)
-      if (fbPages.length > 0 && !fbPages.some(p => p.tokenExpiry === 'never')) {
+      if (fbPages.length > 0 && !fbPages.some(p => p.tokenExpiry === 'never' || p.tokenType === 'never_expiring' || p.tokenType === 'never_expiring_page_token')) {
         console.log('🔄 Auto-upgrading to never-expiring page tokens...');
-        await refreshPageTokens();
+        // Use the stored user token to get never-expiring page tokens
+        try {
+          const response = await fetch(`${process.env.REACT_APP_API_URL}/api/facebook/page-tokens`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userAccessToken: activeAccount.accessToken,
+              userId: activeAccount.id
+            })
+          });
+          const data = await response.json();
+          if (data.success && data.pages) {
+            console.log(`✅ Upgraded to never-expiring tokens for ${data.pages.length} pages`);
+            setFbPages(prevPages => prevPages.map(page => {
+              const upgradedPage = data.pages.find(p => p.id === page.id);
+              return upgradedPage ? { ...page, access_token: upgradedPage.access_token, tokenType: 'never_expiring', tokenExpiry: 'never' } : page;
+            }));
+          }
+        } catch (error) {
+          console.warn('⚠️ Failed to upgrade tokens:', error);
+        }
       }
     };
     
     // Run upgrade after a short delay to let pages load
     const timer = setTimeout(upgradeToNeverExpiringTokens, 2000);
     return () => clearTimeout(timer);
-  }, [fbPages, activeAccount, fbSdkLoaded]);
+  }, [fbPages, activeAccount]);
 
   // Save accounts to localStorage with better error handling
   const saveAccountsToStorage = (accounts) => {
@@ -482,7 +536,8 @@ function FacebookIntegration() {
 
         console.log('💾 Stored long-lived token, expires:', new Date(expirationDate).toLocaleDateString());
         
-        // ✅ NEW: Immediately get never-expiring page tokens
+        // ✅ CRITICAL: Immediately get never-expiring page tokens AND store to backend
+        // This ensures each account's tokens are stored independently and survive SDK session changes
         console.log('🔄 Requesting never-expiring page tokens...');
         try {
           const pageTokenResponse = await fetch(`${process.env.REACT_APP_API_URL}/api/facebook/page-tokens`, {
@@ -500,7 +555,71 @@ function FacebookIntegration() {
           
           if (pageTokenData.success && pageTokenData.pages) {
             console.log(`✅ Got never-expiring tokens for ${pageTokenData.pages.length} pages`);
-            updatedAccount.pages = pageTokenData.pages;
+            
+            // Add token metadata to pages
+            const pagesWithMetadata = pageTokenData.pages.map(page => ({
+              ...page,
+              tokenType: 'never_expiring',
+              tokenExpiry: 'never',
+              tokenValidatedAt: new Date().toISOString()
+            }));
+            
+            updatedAccount.pages = pagesWithMetadata;
+            
+            // CRITICAL: Immediately store to backend to preserve tokens across sessions
+            const customerId = getCurrentCustomerId();
+            if (customerId) {
+              console.log('💾 Immediately storing never-expiring page tokens to backend...');
+              const pagesData = pagesWithMetadata.map(page => ({
+                id: page.id,
+                name: page.name,
+                accessToken: page.access_token,
+                category: page.category,
+                fanCount: page.fan_count,
+                permissions: ['pages_read_engagement'],
+                tasks: page.tasks || [],
+                tokenValidatedAt: new Date().toISOString(),
+                tokenType: 'never_expiring',
+                tokenExpiry: 'never'
+              }));
+
+              const accountData = {
+                customerId: customerId,
+                platform: 'facebook',
+                platformUserId: account.id,
+                name: account.name,
+                email: account.email,
+                profilePicture: account.picture?.data?.url,
+                accessToken: data.longLivedToken,
+                userId: account.id,
+                pages: pagesData,
+                connectedAt: new Date().toISOString(),
+                tokenExpiresAt: expirationDate,
+                needsReconnection: false,
+                lastTokenValidation: new Date().toISOString(),
+                refreshError: null,
+                lastRefreshAttempt: null,
+                lastSuccessfulValidation: new Date().toISOString(),
+                tokenStatus: 'active',
+                tokenType: 'long_lived_with_never_expiring_pages'
+              };
+
+              try {
+                const storeResponse = await fetch(`${process.env.REACT_APP_API_URL}/api/customer-social-links`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(accountData)
+                });
+                
+                if (storeResponse.ok) {
+                  console.log('✅ Stored never-expiring page tokens to backend immediately');
+                } else {
+                  console.warn('⚠️ Failed to store tokens to backend:', await storeResponse.text());
+                }
+              } catch (storeError) {
+                console.warn('⚠️ Failed to store tokens to backend:', storeError);
+              }
+            }
           }
         } catch (pageTokenError) {
           console.warn('⚠️ Failed to get never-expiring page tokens:', pageTokenError);
@@ -519,11 +638,10 @@ function FacebookIntegration() {
     }
   };
 
-  // Check if token is expired or about to expire (FIXED - matching Instagram logic)
+  // Check if token is expired or about to expire (OPTIMIZED - reduced logging)
   const isTokenExpired = (account) => {
     // CRITICAL: If account has never-expiring page tokens, it's NEVER expired
     if (account.pages && account.pages.some(p => p.tokenExpiry === 'never' || p.tokenType === 'never_expiring' || p.tokenType === 'never_expiring_page_token')) {
-      console.log(`✅ Account ${account.name} has never-expiring tokens - never expired`);
       return false; // Never-expiring page tokens mean account is always valid
     }
     
@@ -535,16 +653,14 @@ function FacebookIntegration() {
         const now = new Date();
         const daysUntilExpiry = Math.floor((expiryTime.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
         
-        // Only mark expired if less than 3 days remaining (was 30 minutes)
+        // Only mark expired if less than 3 days remaining
         if (daysUntilExpiry < 3) {
-          console.log(`⚠️ Long-lived token for ${account.name} expires in ${daysUntilExpiry} days`);
+          console.warn(`⚠️ Long-lived token for ${account.name} expires in ${daysUntilExpiry} days`);
           return true;
         }
-        console.log(`✅ Account ${account.name} has long-lived token valid for ${daysUntilExpiry} more days`);
         return false;
       }
-      console.log(`✅ Account ${account.name} has long-lived tokens with no expiry set - not expired`);
-      return false;
+      return false; // Long-lived tokens with no expiry set
     }
     
     // If account has pages with valid tokens, trust them
@@ -554,7 +670,6 @@ function FacebookIntegration() {
         (p.tokenType === 'never_expiring' || p.tokenType === 'never_expiring_page_token' || p.tokenType === 'long_lived_page')
       );
       if (hasValidPageTokens) {
-        console.log(`✅ Account ${account.name} has valid page tokens - not expired`);
         return false;
       }
     }
@@ -570,14 +685,13 @@ function FacebookIntegration() {
         }
       }
       // If no expiry and never validated, assume not expired (benefit of doubt)
-      console.log(`✅ Account ${account.name} has no expiry date - assuming valid`);
       return false;
     }
     
     const expiryTime = new Date(account.tokenExpiresAt);
     const now = new Date();
     
-    // FIXED: Use minimal buffer time for short-lived tokens only (5 minutes instead of 30)
+    // FIXED: Use minimal buffer time for short-lived tokens only (5 minutes)
     const bufferTime = 5 * 60 * 1000; // 5 minutes buffer
     
     const isActuallyExpired = (expiryTime.getTime() - now.getTime()) < bufferTime;
@@ -594,17 +708,102 @@ function FacebookIntegration() {
   const handleApiError = async (error, pageId = null) => {
     console.error('Facebook API Error:', error);
     
-    if (error.code === 190 || error.message?.includes('expired') || error.message?.includes('Session has expired')) {
-      console.log('🔄 Token expired, attempting refresh...');
+    if (error.code === 190 || error.message?.includes('expired') || error.message?.includes('Session has expired') || error.message?.includes('logged out')) {
+      // Check retry attempts to prevent infinite loops
+      const retryKey = pageId || 'general';
+      const currentRetries = retryAttempts[retryKey] || 0;
       
-      // Try to refresh the current session
+      if (currentRetries >= 2) {
+        console.error(`❌ Max retry attempts (${currentRetries}) reached for ${retryKey}. Backend token is likely invalid.`);
+        setFbError({ 
+          message: `Token expired and cannot be refreshed automatically. Please disconnect and reconnect your Facebook account to get fresh tokens.`,
+          code: 'TOKEN_PERMANENTLY_INVALID',
+          action: 'reconnect',
+          pageId: pageId
+        });
+        // Clear loading state
+        if (pageId) {
+          setLoadingPosts(prev => ({ ...prev, [pageId]: false }));
+        }
+        // Don't auto-reset retry counter - only reset when user reconnects or switches accounts
+        return;
+      }
+      
+      console.log(`🔄 Token error detected (attempt ${currentRetries + 1}/2), attempting to recover from backend...`);
+      
+      // Increment retry counter
+      setRetryAttempts(prev => ({ ...prev, [retryKey]: currentRetries + 1 }));
+      
+      // CRITICAL FIX: First try to reload tokens from backend
+      // The backend may have valid never-expiring page tokens stored
+      const customerId = getCurrentCustomerId();
+      if (customerId && activeAccount) {
+        try {
+          console.log('📥 Attempting to reload tokens from backend...');
+          const response = await fetch(`${process.env.REACT_APP_API_URL}/api/customer-social-links/${customerId}`);
+          const data = await response.json();
+          
+          if (data.success && data.accounts) {
+            const fbAccount = data.accounts.find(acc => 
+              acc.platform === 'facebook' && acc.platformUserId === activeAccount.id
+            );
+            
+            if (fbAccount && fbAccount.pages && fbAccount.pages.length > 0) {
+              // Check if pages have valid never-expiring tokens
+              const hasValidTokens = fbAccount.pages.some(p => 
+                p.accessToken && (p.tokenType === 'never_expiring' || p.tokenExpiry === 'never')
+              );
+              
+              if (hasValidTokens) {
+                const pages = fbAccount.pages.map(page => ({
+                  id: page.id,
+                  name: page.name,
+                  access_token: page.accessToken,
+                  category: page.category,
+                  fan_count: page.fanCount,
+                  tokenType: page.tokenType || 'never_expiring',
+                  tokenExpiry: page.tokenExpiry || 'never',
+                  ...page
+                }));
+                
+                // Only retry if we got a DIFFERENT token than before
+                if (pageId) {
+                  const newPage = pages.find(p => p.id === pageId);
+                  const oldPage = fbPages.find(p => p.id === pageId);
+                  
+                  if (newPage && newPage.access_token && (!oldPage || newPage.access_token !== oldPage.access_token)) {
+                    console.log(`✅ Found different token in backend for page ${pageId}, retrying...`);
+                    setFbPages(pages);
+                    setFbError(null);
+                    setTimeout(() => fetchPagePosts(pageId, newPage.access_token), 500);
+                    return;
+                  } else {
+                    console.warn(`⚠️ Backend token for page ${pageId} is the same as the one that failed. Token is likely permanently invalid.`);
+                    // Don't retry - fall through to show error
+                  }
+                } else {
+                  console.log('✅ Found tokens in backend, updating pages...');
+                  setFbPages(pages);
+                  setFbError(null);
+                  return;
+                }
+              }
+            }
+          }
+        } catch (backendError) {
+          console.warn('⚠️ Failed to reload from backend:', backendError);
+        }
+      }
+      
+      // If backend reload failed, try to refresh the session
+      console.log('🔄 Backend reload failed, attempting session refresh...');
       const refreshSuccess = await refreshCurrentSession();
       
       if (refreshSuccess) {
         console.log('✅ Session refreshed successfully');
         setFbError(null);
         
-        // Retry the failed operation if we have a pageId
+        // Retry the failed operation
         if (pageId && activeAccount) {
           setTimeout(() => {
             fetchFbPages();
@@ -1544,34 +1743,42 @@ function FacebookIntegration() {
     );
   };
 
-  const fetchPagePosts = (pageId, pageAccessToken) => {
-    if (!isFacebookApiReady()) {
-      setFbError({ message: 'Facebook API is not ready' });
+  // FIXED: Use direct Graph API instead of FB.api to avoid SDK session conflicts
+  const fetchPagePosts = async (pageId, pageAccessToken) => {
+    if (!pageAccessToken) {
+      console.error('❌ No page access token provided for page:', pageId);
+      setFbError({ message: 'No access token available for this page' });
       return;
     }
 
     setLoadingPosts(prev => ({ ...prev, [pageId]: true }));
 
-    window.FB.api(
-      `/${pageId}/posts`,
-      {
-        fields: 'id,message,created_time,permalink_url,full_picture,likes.summary(true),comments.summary(true),shares,reactions.summary(true)',
-        limit: 10,
-        access_token: pageAccessToken
-      },
-      function(response) {
-        setLoadingPosts(prev => ({ ...prev, [pageId]: false }));
-        if (!response || response.error) {
-          console.error('Facebook posts fetch error:', response.error);
-        } else {
-          setPagePosts(prev => ({
-            ...prev,
-            [pageId]: response.data
-          }));
-          setShowFacebookPosts(prev => ({ ...prev, [pageId]: true }));
+    try {
+      // Use direct Graph API call to avoid SDK session conflicts between multiple accounts
+      const postsUrl = `https://graph.facebook.com/v18.0/${pageId}/posts?fields=id,message,created_time,permalink_url,full_picture,likes.summary(true),comments.summary(true),shares,reactions.summary(true)&limit=10&access_token=${pageAccessToken}`;
+      const response = await fetch(postsUrl);
+      const data = await response.json();
+
+      setLoadingPosts(prev => ({ ...prev, [pageId]: false }));
+
+      if (data.error) {
+        console.error('❌ Facebook posts fetch error:', data.error);
+        // Handle token expiration - try to refresh from stored tokens
+        if (data.error.code === 190) {
+          await handleApiError(data.error, pageId);
         }
+      } else {
+        console.log(`✅ Fetched ${data.data?.length || 0} posts for page ${pageId}`);
+        setPagePosts(prev => ({
+          ...prev,
+          [pageId]: data.data || []
+        }));
+        setShowFacebookPosts(prev => ({ ...prev, [pageId]: true }));
       }
-    );
+    } catch (error) {
+      console.error('❌ Error fetching page posts:', error);
+      setLoadingPosts(prev => ({ ...prev, [pageId]: false }));
+    }
   };
 
   const renderPageInsights = (pageId) => {
@@ -1746,6 +1953,10 @@ function FacebookIntegration() {
       setPageInsights({});
       setPagePosts({});
       setAnalyticsData({});
+      
+      // Reset retry counters when switching accounts
+      setRetryAttempts({});
+      setFbError(null);
     }
   };
 
@@ -2099,6 +2310,8 @@ function FacebookIntegration() {
   const renderError = () => {
     if (!fbError) return null;
 
+    const isTokenError = fbError.code === 'SESSION_EXPIRED' || fbError.code === 'TOKEN_PERMANENTLY_INVALID';
+
     return (
       <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
         <div className="flex items-start space-x-3">
@@ -2107,28 +2320,55 @@ function FacebookIntegration() {
           </div>
           <div className="flex-1">
             <h4 className="font-medium text-red-800 mb-2">
-              {fbError.code === 'SESSION_EXPIRED' ? 'Session Expired' : 'Facebook API Error'}
+              {isTokenError ? 'Token Expired - Reconnection Required' : 'Facebook API Error'}
             </h4>
             <p className="text-red-600 text-sm mb-3">
               <strong>Error:</strong> {fbError.message || JSON.stringify(fbError)}
             </p>
             
-            {fbError.code === 'SESSION_EXPIRED' && (
-              <div className="space-y-2">
-                <p className="text-sm text-red-700">
-                  Your Facebook session has expired. Please reconnect your account.
+            {isTokenError && (
+              <div className="space-y-3 bg-white p-3 rounded border border-red-200">
+                <p className="text-sm text-gray-700">
+                  <strong>What happened:</strong> The Facebook page token stored in the database is no longer valid. 
+                  This usually happens when you log out from Facebook or connect a second account.
                 </p>
-                <button
-                  onClick={fbLogin}
-                  className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700"
-                >
-                  🔗 Reconnect Account
-                </button>
+                <p className="text-sm text-gray-700">
+                  <strong>Solution:</strong> Disconnect and reconnect your Facebook account to get fresh never-expiring page tokens.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => {
+                      if (activeAccount) {
+                        removeAccount(activeAccount.id);
+                      }
+                    }}
+                    className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-red-700 font-medium flex items-center gap-2"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                    Disconnect This Account
+                  </button>
+                  <button
+                    onClick={() => {
+                      setFbError(null);
+                      // Reset retry counter when user manually reconnects
+                      setRetryAttempts({});
+                      fbLogin();
+                    }}
+                    className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 font-medium flex items-center gap-2"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Reconnect Account
+                  </button>
+                </div>
               </div>
             )}
           </div>
           <button
-            onClick={() => setFbError(null)}
+            onClick={() => {
+              setFbError(null);
+              // Reset retry counter when user manually dismisses error
+              setRetryAttempts({});
+            }}
             className="flex-shrink-0 text-red-400 hover:text-red-600"
           >
             ✕

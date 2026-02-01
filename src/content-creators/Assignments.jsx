@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
-import { ArrowLeft, Filter, Search, Upload, MessageSquare, CheckCircle, Clock, AlertCircle, Palette, Play, Eye, Calendar, User, FileText } from 'lucide-react';
+import { ArrowLeft, Filter, Search, Upload, MessageSquare, CheckCircle, Clock, AlertCircle, Palette, Play, Eye, Calendar, User, FileText, ChevronDown, ChevronUp, Building2 } from 'lucide-react';
 import Footer from '../admin/components/layout/Footer';
 import Logo from '../admin/components/layout/Logo';
 
@@ -31,6 +31,7 @@ function Assignments() {
   const [searchTerm, setSearchTerm] = useState('');
   const [assignments, setAssignments] = useState([]);
   const [customerMap, setCustomerMap] = useState({});
+  const [expandedCustomers, setExpandedCustomers] = useState({});
   
   // Scheduled posts to check published status
   const [scheduledPosts, setScheduledPosts] = useState([]);
@@ -185,6 +186,47 @@ function Assignments() {
     return matchesFilter && matchesSearch;
   });
 
+  // Group assignments by customer
+  const groupedAssignments = filteredAssignments.reduce((acc, assignment) => {
+    const customerKey = assignment.customerId || 'unknown';
+    const customerName = assignment.customerName || assignment.customer || 'Unknown Customer';
+    
+    if (!acc[customerKey]) {
+      acc[customerKey] = {
+        customerName,
+        customerId: customerKey,
+        assignments: []
+      };
+    }
+    acc[customerKey].assignments.push(assignment);
+    return acc;
+  }, {});
+
+  // Sort customers alphabetically and expand all by default if not already set
+  const sortedCustomers = Object.values(groupedAssignments).sort((a, b) => 
+    a.customerName.localeCompare(b.customerName)
+  );
+
+  // Initialize expanded state for all customers
+  useEffect(() => {
+    const initialExpandedState = {};
+    sortedCustomers.forEach(customer => {
+      if (expandedCustomers[customer.customerId] === undefined) {
+        initialExpandedState[customer.customerId] = true; // Expand all by default
+      }
+    });
+    if (Object.keys(initialExpandedState).length > 0) {
+      setExpandedCustomers(prev => ({ ...prev, ...initialExpandedState }));
+    }
+  }, [filteredAssignments.length]);
+
+  const toggleCustomer = (customerId) => {
+    setExpandedCustomers(prev => ({
+      ...prev,
+      [customerId]: !prev[customerId]
+    }));
+  };
+
   const handleAssignmentClick = (assignment) => {
     // Navigate to detailed view or portfolio for this specific assignment
     navigate(`/content-creator/portfolio`, { state: { assignmentId: assignment.id } });
@@ -277,83 +319,114 @@ function Assignments() {
               </div>
             </div>
 
-            {/* Assignments List */}
-            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-gray-200/50">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold text-gray-900">
-                  Assignments ({filteredAssignments.length})
-                </h2>
-              </div>
-              
-              <div className="space-y-4">
-                {filteredAssignments.map((assignment, idx) => (
-                  <div
-                    key={assignment.id || assignment._id || idx}
-                    className="bg-white rounded-xl border border-gray-200/50 shadow-sm hover:shadow-lg transition-all duration-300 overflow-hidden group"
-                  >
-                    <div className="p-6">
-                      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-                        {/* Left: Title, Calendar, Status, Priority */}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                            <div className="flex items-center gap-2">
-                              <h3 className="text-xl font-bold text-gray-900">{assignment.title}</h3>
-                              <span className="px-2 py-1 rounded bg-gray-100 text-xs text-gray-700 font-medium">
-                                {assignment.calendarName}
-                              </span>
-                              <span className="text-xs text-gray-400 font-mono">ID: {assignment.id}</span>
-                            </div>
-                            <div className="flex flex-wrap items-center gap-2 mt-2 sm:mt-0">
-                              <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(getActualStatus(assignment))}`}>
-                                {getStatusIcon(getActualStatus(assignment))}
-                                <span className="ml-1 capitalize">{getActualStatus(assignment).replace('_', ' ')}</span>
-                              </span>
-                              <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getPriorityColor(assignment.priority)}`}>
-                                {(assignment.priority || 'Medium').toUpperCase()} PRIORITY
-                              </span>
-                            </div>
+            {/* Assignments List - Grouped by Customer */}
+            <div className="space-y-6">
+              {sortedCustomers.length > 0 ? (
+                sortedCustomers.map((customerGroup) => {
+                  const isExpanded = expandedCustomers[customerGroup.customerId] !== false;
+                  return (
+                    <div
+                      key={customerGroup.customerId}
+                      className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden"
+                    >
+                      {/* Customer Header */}
+                      <div
+                        onClick={() => toggleCustomer(customerGroup.customerId)}
+                        className="flex items-center justify-between p-6 bg-gradient-to-r from-purple-50 to-indigo-50 cursor-pointer hover:from-purple-100 hover:to-indigo-100 transition-all duration-200"
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className="p-3 bg-gradient-to-r from-purple-500 to-indigo-600 rounded-xl shadow-lg">
+                            <Building2 className="h-6 w-6 text-white" />
                           </div>
-                          <div className="flex flex-wrap gap-8 mt-4">
-                            <div>
-                              <span className="text-xs font-medium text-gray-500">Customer</span>
-                              <p className="text-sm text-gray-900 font-semibold">{assignment.customerName || assignment.customer || ''}</p>
-                            </div>
-                            <div>
-                              <span className="text-xs font-medium text-gray-500">Content Type</span>
-                              <p className="text-sm text-gray-900">{assignment.type}</p>
-                            </div>
-                            <div>
-                              <span className="text-xs font-medium text-gray-500">Due Date</span>
-                              <p className="text-sm text-gray-900">{format(new Date(assignment.dueDate), 'MMM dd, yyyy')}</p>
-                            </div>
-                          </div>
-                          <div className="bg-gray-50 rounded-lg p-4 mt-4">
-                            <p className="text-gray-700 text-sm leading-relaxed">{assignment.description}</p>
+                          <div>
+                            <h2 className="text-2xl font-bold text-gray-900">
+                              {customerGroup.customerName}
+                            </h2>
+                            <p className="text-sm text-gray-600 mt-1">
+                              {customerGroup.assignments.length} {customerGroup.assignments.length === 1 ? 'Assignment' : 'Assignments'}
+                            </p>
                           </div>
                         </div>
-                        {/* Right: Action Buttons */}
-                        <div className="flex flex-col gap-3 min-w-[180px]">
-                          <button
-                            onClick={() => handleStartWork(assignment)}
-                            className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-semibold rounded-xl hover:from-purple-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
-                          >
-                            <Play className="h-5 w-5 mr-2" />
-                            Start Work
-                          </button>
-                          <button
-                            onClick={() => handleViewPortfolio(assignment)}
-                            className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-cyan-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
-                          >
-                            <Eye className="h-5 w-5 mr-2" />
-                            View Portfolio
-                          </button>
-                        </div>
+                        <button className="p-2 hover:bg-white/50 rounded-lg transition-colors duration-200">
+                          {isExpanded ? (
+                            <ChevronUp className="h-6 w-6 text-gray-600" />
+                          ) : (
+                            <ChevronDown className="h-6 w-6 text-gray-600" />
+                          )}
+                        </button>
                       </div>
-                    </div>
-                  </div>
-                ))}
 
-                {filteredAssignments.length === 0 && (
+                      {/* Assignments for this customer */}
+                      {isExpanded && (
+                        <div className="p-6 space-y-4">
+                          {customerGroup.assignments.map((assignment, idx) => (
+                            <div
+                              key={assignment.id || assignment._id || idx}
+                              className="bg-white rounded-xl border border-gray-200/50 shadow-sm hover:shadow-lg transition-all duration-300 overflow-hidden group"
+                            >
+                              <div className="p-6">
+                                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+                                  {/* Left: Title, Calendar, Status, Priority */}
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                                      <div className="flex items-center gap-2">
+                                        <h3 className="text-xl font-bold text-gray-900">{assignment.title}</h3>
+                                        <span className="px-2 py-1 rounded bg-gray-100 text-xs text-gray-700 font-medium">
+                                          {assignment.calendarName}
+                                        </span>
+                                      </div>
+                                      <div className="flex flex-wrap items-center gap-2 mt-2 sm:mt-0">
+                                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(getActualStatus(assignment))}`}>
+                                          {getStatusIcon(getActualStatus(assignment))}
+                                          <span className="ml-1 capitalize">{getActualStatus(assignment).replace('_', ' ')}</span>
+                                        </span>
+                                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getPriorityColor(assignment.priority)}`}>
+                                          {(assignment.priority || 'Medium').toUpperCase()} PRIORITY
+                                        </span>
+                                      </div>
+                                    </div>
+                                    <div className="flex flex-wrap gap-8 mt-4">
+                                      <div>
+                                        <span className="text-xs font-medium text-gray-500">Content Type</span>
+                                        <p className="text-sm text-gray-900">{assignment.type}</p>
+                                      </div>
+                                      <div>
+                                        <span className="text-xs font-medium text-gray-500">Due Date</span>
+                                        <p className="text-sm text-gray-900">{format(new Date(assignment.dueDate), 'MMM dd, yyyy')}</p>
+                                      </div>
+                                    </div>
+                                    <div className="bg-gray-50 rounded-lg p-4 mt-4">
+                                      <p className="text-gray-700 text-sm leading-relaxed">{assignment.description}</p>
+                                    </div>
+                                  </div>
+                                  {/* Right: Action Buttons */}
+                                  <div className="flex flex-col gap-3 min-w-[180px]">
+                                    <button
+                                      onClick={() => handleStartWork(assignment)}
+                                      className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-semibold rounded-xl hover:from-purple-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
+                                    >
+                                      <Play className="h-5 w-5 mr-2" />
+                                      Start Work
+                                    </button>
+                                    <button
+                                      onClick={() => handleViewPortfolio(assignment)}
+                                      className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-cyan-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
+                                    >
+                                      <Eye className="h-5 w-5 mr-2" />
+                                      View Portfolio
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-gray-200/50">
                   <div className="text-center py-12">
                     <div className="bg-gray-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
                       <AlertCircle className="h-8 w-8 text-gray-400" />
@@ -361,8 +434,8 @@ function Assignments() {
                     <h3 className="text-lg font-medium text-gray-900 mb-2">No assignments found</h3>
                     <p className="text-gray-500">No assignments match your current search criteria.</p>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

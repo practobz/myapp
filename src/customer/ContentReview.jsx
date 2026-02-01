@@ -156,19 +156,25 @@ function ContentReview() {
       });
 
       // Create content items with versions
-      const contentData = [];
-      Object.keys(groupedSubmissions).forEach(assignmentId => {
-        const versions = groupedSubmissions[assignmentId].sort((a, b) =>
-          new Date(a.created_at) - new Date(b.created_at)
-        );
-        const baseItem = versions[0];
-        contentData.push({
-          id: assignmentId,
-          title: baseItem.caption || 'Untitled Post',
-          description: baseItem.notes || '',
-          createdBy: baseItem.created_by || 'Unknown',
-          createdAt: baseItem.created_at || '',
-          status: baseItem.status || 'under_review',
+      // Create content items with versions
+const contentData = [];
+Object.keys(groupedSubmissions).forEach(assignmentId => {
+  const versions = groupedSubmissions[assignmentId].sort((a, b) =>
+    new Date(a.created_at) - new Date(b.created_at)
+  );
+  const baseItem = versions[0];
+  const latestVersion = versions[versions.length - 1];
+  
+  // Use latest version's status for the overall content status
+  const currentStatus = latestVersion.status || baseItem.status || 'under_review';
+  
+  contentData.push({
+    id: assignmentId,
+    title: baseItem.caption || 'Untitled Post',
+    description: baseItem.notes || '',
+    createdBy: baseItem.created_by || 'Unknown',
+    createdAt: baseItem.created_at || '',
+    status: currentStatus,  // Now uses latest version status
           platform: baseItem.platform || 'Instagram',
           type: baseItem.type || 'Post',
           customer_id: baseItem.customer_id,
@@ -707,33 +713,27 @@ function ContentReview() {
       );
 
       if (response.ok) {
-        // Update local state to reflect the approval
-        setSelectedContent(prev => ({
-          ...prev,
-          status: 'approved',
-          versions: prev.versions.map((v, i) => 
-            i === prev.versions.length - 1 
-              ? { ...v, status: 'approved', approvedAt: new Date().toISOString() }
-              : v
-          )
-        }));
-        
-        // Update contentItems to reflect the change
-        setContentItems(prev => prev.map(item => 
-          item.id === selectedContent.id 
-            ? { 
-                ...item, 
-                status: 'approved',
-                versions: item.versions.map((v, i) => 
-                  i === item.versions.length - 1 
-                    ? { ...v, status: 'approved', approvedAt: new Date().toISOString() }
-                    : v
-                )
-              }
-            : item
-        ));
-        
         alert('Content approved successfully!');
+        
+        // Store current selection before refreshing data
+        const currentAssignmentId = selectedContent.id;
+        const currentVersionIndex = selectedVersionIndex;
+        const currentMediaIndex = selectedMediaIndex;
+        
+        // Refetch all data from backend to ensure consistency
+        await fetchContentSubmissions();
+        
+        // Restore selection after data refresh
+        setContentItems(prevItems => {
+          const itemIndex = prevItems.findIndex(item => item.id === currentAssignmentId);
+          if (itemIndex !== -1) {
+            setSelectedContent(prevItems[itemIndex]);
+            setSelectedContentIndex(itemIndex);
+            setSelectedVersionIndex(currentVersionIndex);
+            setSelectedMediaIndex(currentMediaIndex);
+          }
+          return prevItems;
+        });
       } else {
         const errorData = await response.json();
         console.error('Failed to approve content:', errorData);

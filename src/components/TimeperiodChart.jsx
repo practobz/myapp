@@ -83,6 +83,17 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
           });
         }
         
+        // Check if data is empty for this period
+        const hasData = result.data && Object.keys(result.data).some(key => 
+          result.data[key] && result.data[key].length > 0
+        );
+        
+        if (!hasData && result.snapshotsCount > 0) {
+          // Data exists but not for this period
+          console.warn(`⚠️ No data available for ${selectedPeriod} days period, but ${result.snapshotsCount} snapshots exist`);
+          setError(`No data available for the last ${selectedPeriod} days. Try selecting a longer time period.`);
+        }
+        
         setChartData(result.data);
         setLastUpdated(new Date().toISOString());
       } else {
@@ -973,15 +984,6 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
               <span className="hidden sm:inline">{generatingPdf ? 'Generating...' : 'Download'}</span>
               <span className="sm:hidden">PDF</span>
             </button>
-            <button
-              onClick={captureNewSnapshot}
-              className="bg-green-600 text-white px-2 py-1.5 sm:px-3 sm:py-2 rounded-lg hover:bg-green-700 flex items-center space-x-1 sm:space-x-2 text-xs sm:text-sm flex-shrink-0"
-              title="Capture current data snapshot"
-            >
-              <RefreshCw className="h-3 w-3 sm:h-4 sm:w-4" />
-              <span className="hidden sm:inline">Capture</span>
-              <span className="sm:hidden">Snap</span>
-            </button>
           </div>
         </div>
         
@@ -1088,17 +1090,6 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
             >
               Retry
             </button>
-            <button
-              onClick={captureNewSnapshot}
-              className="bg-blue-600 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg hover:bg-blue-700 text-xs sm:text-sm flex items-center justify-center space-x-2"
-              disabled={loading}
-            >
-              <RefreshCw className={`h-3 w-3 sm:h-4 sm:w-4 ${loading ? 'animate-spin' : ''}`} />
-              <span>Capture Data</span>
-            </button>
-          </div>
-          <div className="mt-2 sm:mt-3 p-2 sm:p-3 bg-yellow-50 border border-yellow-200 rounded text-yellow-800 text-xs sm:text-sm">
-            <strong>Tip:</strong> Try capturing a snapshot first.
           </div>
         </div>
       )}
@@ -1110,17 +1101,9 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
             <Calendar className="h-5 w-5 sm:h-6 sm:w-6" />
             <span className="text-sm sm:text-base lg:text-lg font-medium">No Data Available</span>
           </div>
-          <p className="text-blue-700 text-xs sm:text-sm mb-3 sm:mb-4">
-            No historical data for this {platform} account. Start tracking now.
+          <p className="text-blue-700 text-xs sm:text-sm">
+            No historical data for this {platform} account.
           </p>
-          <button
-            onClick={captureNewSnapshot}
-            className="bg-blue-600 text-white px-4 py-2 sm:px-6 sm:py-3 rounded-lg hover:bg-blue-700 flex items-center space-x-2 mx-auto text-xs sm:text-sm"
-            disabled={loading}
-          >
-            <RefreshCw className={`h-4 w-4 sm:h-5 sm:w-5 ${loading ? 'animate-spin' : ''}`} />
-            <span>Capture First Snapshot</span>
-          </button>
         </div>
       )}
 

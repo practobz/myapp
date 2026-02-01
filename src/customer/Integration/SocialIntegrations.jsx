@@ -257,7 +257,7 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
           setLoading(false);
         }
       }, {
-        scope: 'pages_show_list,pages_read_engagement,pages_manage_posts,pages_manage_metadata,instagram_basic,instagram_content_publish,business_management',
+        scope: 'email,public_profile,pages_show_list,pages_read_engagement,pages_read_user_content,pages_manage_posts,pages_manage_metadata,pages_manage_engagement,instagram_basic,instagram_content_publish,instagram_manage_insights,instagram_manage_comments,business_management',
         return_scopes: true,
         auth_type: 'rerequest'
       });

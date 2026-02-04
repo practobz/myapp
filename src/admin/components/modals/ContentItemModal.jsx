@@ -46,9 +46,8 @@ function ContentItemModal({
       setPriority(contentItem.priority || 'High');
       setAssignedTo(contentItem.assignedTo || '');
     } else {
-      const today = new Date().toISOString().split('T')[0];
-      setDate(today);
-      setDueDate(today);
+      setDate('');
+      setDueDate('');
       setDescription('');
       setContentTitle('');
       setSelectedPlatforms([]);
@@ -71,7 +70,6 @@ function ContentItemModal({
 
   const validate = () => {
     const newErrors = {};
-    if (!date) newErrors.date = 'Date is required';
     if (!description.trim()) newErrors.description = 'Content description is required';
     if (!contentTitle.trim()) newErrors.contentTitle = 'Title is required';
     if (!dueDate) newErrors.dueDate = 'Due date is required';
@@ -87,7 +85,7 @@ function ContentItemModal({
       onSave({
         ...(contentItem || {}),
         id: contentItem?.id || uuidv4(),
-        date,
+        date: dueDate, // Use dueDate for the date field
         description,
         title: contentTitle,
         type: multiPlatform ? selectedPlatforms : selectedPlatforms[0],

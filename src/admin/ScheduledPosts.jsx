@@ -1,105 +1,8 @@
-import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
-import { Calendar, Clock, Facebook, Instagram, Send, Trash2, CheckCircle, XCircle, Loader2, Filter, User, ChevronDown, ChevronRight, Users, Video } from 'lucide-react';
+import React, { useState, useEffect, memo, useMemo, useCallback } from 'react';
+import { Calendar, Clock, Facebook, Instagram, Image, Send, Eye, Edit, Trash2, CheckCircle, XCircle, Loader2, Plus, Filter, ArrowLeft, User, ChevronDown, ChevronRight, Users, Video } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
 import AdminLayout from './components/layout/AdminLayout';
-
-// Memoized PostCard Component
-const PostCard = memo(({ post, onDelete, getStatusColor, getStatusIcon, getPostType, getPlatformIcon, isVideoUrl }) => {
-  return (
-    <div className="bg-white rounded-lg border p-2 sm:p-3 shadow-sm hover:shadow-md transition-shadow">
-      {post.calendar_name && (
-        <div className="text-[10px] text-blue-700 mb-0.5 truncate">
-          <strong>Calendar:</strong> {post.calendar_name}
-        </div>
-      )}
-      {post.item_name && (
-        <div className="text-[10px] text-purple-700 mb-1 truncate">
-          <strong>Item:</strong> {post.item_name}
-        </div>
-      )}
-
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center space-x-1 min-w-0 flex-1">
-          {getPlatformIcon(post.platform)}
-          <span className="text-[10px] sm:text-xs font-medium text-gray-600 truncate">
-            {post.pageName || post.channelName || 'Post'}
-          </span>
-        </div>
-        <div className="flex items-center space-x-1 flex-shrink-0">
-          {(() => {
-            const postType = getPostType(post);
-            return (
-              <span className={`px-1.5 py-0.5 ${postType.color} text-[9px] sm:text-[10px] font-semibold rounded-full flex items-center space-x-0.5`}>
-                <span>{postType.icon}</span>
-                <span className="hidden sm:inline">{postType.type}</span>
-                {postType.type === 'Carousel' && post.imageUrls?.length > 1 && (
-                  <span>({post.imageUrls.length})</span>
-                )}
-              </span>
-            );
-          })()}
-          <span className={`px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-medium flex items-center space-x-0.5 ${getStatusColor(post.status)}`}>
-            {getStatusIcon(post.status)}
-            <span className="hidden sm:inline">{post.status}</span>
-          </span>
-        </div>
-      </div>
-
-      {/* Media Preview */}
-      {post.imageUrls && post.imageUrls.length > 1 ? (
-        <div className="mb-2">
-          <div className="grid grid-cols-3 gap-0.5">
-            {post.imageUrls.slice(0, 3).map((url, idx) => (
-              isVideoUrl(url) ? (
-                <div key={idx} className="relative h-12 sm:h-16 bg-gray-800 rounded flex items-center justify-center">
-                  <Video className="h-4 w-4 text-white" />
-                  <span className="absolute top-0.5 left-0.5 bg-purple-600 text-white text-[8px] px-0.5 rounded">{idx + 1}</span>
-                </div>
-              ) : (
-                <div key={idx} className="relative">
-                  <img src={url} alt={`${idx + 1}`} className="w-full h-12 sm:h-16 object-cover rounded" />
-                  <span className="absolute top-0.5 left-0.5 bg-purple-600 text-white text-[8px] px-0.5 rounded">{idx + 1}</span>
-                </div>
-              )
-            ))}
-          </div>
-        </div>
-      ) : post.imageUrl && isVideoUrl(post.imageUrl) ? (
-        <video src={post.imageUrl} controls className="w-full h-20 sm:h-24 object-cover rounded mb-2" />
-      ) : post.imageUrl ? (
-        <img src={post.imageUrl} alt="Post" className="w-full h-20 sm:h-24 object-cover rounded mb-2" />
-      ) : null}
-
-      <p className="text-gray-800 text-[10px] sm:text-xs mb-1.5 line-clamp-2">{post.caption}</p>
-      
-      <div className="space-y-0.5 text-[9px] sm:text-[10px] text-gray-500 mb-1.5">
-        <div className="flex items-center space-x-1">
-          <Calendar className="h-2.5 w-2.5" />
-          <span>{new Date(post.scheduledAt).toLocaleDateString()}</span>
-        </div>
-        <div className="flex items-center space-x-1">
-          <Clock className="h-2.5 w-2.5" />
-          <span>{new Date(post.scheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-        </div>
-      </div>
-
-      {post.status === 'failed' && post.error && (
-        <div className="bg-red-50 border border-red-200 rounded p-1 mb-1.5">
-          <p className="text-[9px] text-red-600 line-clamp-2">{post.error}</p>
-        </div>
-      )}
-
-      <div className="flex items-center justify-end">
-        <button onClick={() => onDelete(post._id)} className="text-red-600 hover:text-red-800 p-0.5" title="Delete">
-          <Trash2 className="h-3 w-3" />
-        </button>
-      </div>
-    </div>
-  );
-});
-
-PostCard.displayName = 'PostCard';
 
 function ScheduledPosts() {
   const navigate = useNavigate();
@@ -226,7 +129,7 @@ function ScheduledPosts() {
     }
   };
 
-  const handleDeletePost = useCallback(async (postId) => {
+  const handleDeletePost = async (postId) => {
     if (!confirm('Are you sure you want to delete this scheduled post?')) return;
 
     try {
@@ -241,14 +144,14 @@ function ScheduledPosts() {
       console.error('Delete post error:', error);
       alert('Failed to delete post');
     }
-  }, []);
+  };
 
   // Handle post updates from SocialActionManager
-  const handlePostUpdate = useCallback((postId, updates) => {
+  const handlePostUpdate = (postId, updates) => {
     setScheduledPosts(prev => prev.map(post => 
       post._id === postId ? { ...post, ...updates } : post
     ));
-  }, []);
+  };
 
   const getStatusColor = useCallback((status) => {
     switch (status) {
@@ -262,20 +165,27 @@ function ScheduledPosts() {
 
   const getStatusIcon = useCallback((status) => {
     switch (status) {
-      case 'pending': return <Clock className="h-4 w-4" />;
-      case 'published': return <CheckCircle className="h-4 w-4" />;
-      case 'failed': return <XCircle className="h-4 w-4" />;
-      case 'processing': return <Loader2 className="h-4 w-4 animate-spin" />;
-      default: return <Clock className="h-4 w-4" />;
+      case 'pending': return <Clock className="h-3 w-3" />;
+      case 'published': return <CheckCircle className="h-3 w-3" />;
+      case 'failed': return <XCircle className="h-3 w-3" />;
+      case 'processing': return <Loader2 className="h-3 w-3 animate-spin" />;
+      default: return <Clock className="h-3 w-3" />;
     }
   }, []);
 
+  const filteredPosts = Array.isArray(scheduledPosts) ? scheduledPosts.filter(post => {
+    if (filter === 'all') return true;
+    return post.status === filter;
+  }) : [];
+
+  // Helper to detect video URLs
   const isVideoUrl = useCallback((url) => {
     if (!url || typeof url !== 'string') return false;
     const ext = url.split('.').pop().toLowerCase();
     return ['mp4', 'webm', 'ogg', 'mov', 'avi'].includes(ext);
   }, []);
 
+  // Helper to determine post type
   const getPostType = useCallback((post) => {
     if (post.isStory || post.postType === 'story') {
       return { type: 'Story', color: 'bg-orange-100 text-orange-700', icon: '📖' };
@@ -289,27 +199,28 @@ function ScheduledPosts() {
   const getPlatformIcon = useCallback((platform) => {
     switch (platform) {
       case 'facebook':
-        return <Facebook className="h-4 w-4 sm:h-5 sm:w-5 text-[#0066CC]" />;
+        return <Facebook className="h-4 w-4 text-[#0066CC]" />;
       case 'instagram':
-        return <Instagram className="h-4 w-4 sm:h-5 sm:w-5 text-pink-600" />;
+        return <Instagram className="h-4 w-4 text-pink-600" />;
       case 'both':
         return (
           <>
-            <Facebook className="h-3 w-3 sm:h-4 sm:w-4 text-[#0066CC]" />
-            <Instagram className="h-3 w-3 sm:h-4 sm:w-4 text-pink-600" />
+            <Facebook className="h-3 w-3 text-[#0066CC]" />
+            <Instagram className="h-3 w-3 text-pink-600" />
           </>
         );
       case 'youtube':
-        return <div className="h-4 w-4 sm:h-5 sm:w-5 bg-red-600 text-white rounded text-[10px] flex items-center justify-center font-bold">YT</div>;
+        return <div className="h-4 w-4 bg-red-600 text-white rounded text-xs flex items-center justify-center font-bold">YT</div>;
       case 'twitter':
-        return <div className="h-4 w-4 sm:h-5 sm:w-5 bg-blue-400 text-white rounded text-[10px] flex items-center justify-center font-bold">X</div>;
+        return <div className="h-4 w-4 bg-blue-400 text-white rounded text-xs flex items-center justify-center font-bold">X</div>;
       case 'linkedin':
-        return <div className="h-4 w-4 sm:h-5 sm:w-5 bg-blue-700 text-white rounded text-[10px] flex items-center justify-center font-bold">In</div>;
+        return <div className="h-4 w-4 bg-blue-700 text-white rounded text-xs flex items-center justify-center font-bold">In</div>;
       default:
-        return <div className="h-4 w-4 sm:h-5 sm:w-5 bg-gray-400 text-white rounded text-[10px] flex items-center justify-center">?</div>;
+        return <div className="h-4 w-4 bg-gray-400 text-white rounded text-xs flex items-center justify-center">?</div>;
     }
   }, []);
 
+  // Helper function to get customer display name
   const getCustomerDisplayInfo = useCallback((post) => {
     if (post.customerName) {
       return {
@@ -336,6 +247,7 @@ function ScheduledPosts() {
     };
   }, [customers]);
 
+  // Helper to get platform display information
   const getPlatformInfo = useCallback((platform) => {
     const platformData = {
       facebook: {
@@ -343,24 +255,24 @@ function ScheduledPosts() {
         color: 'from-blue-500 to-blue-700',
         bgColor: 'bg-blue-50',
         borderColor: 'border-blue-200',
-        icon: <Facebook className="h-6 w-6 text-[#0066CC]" />
+        icon: <Facebook className="h-5 w-5 text-[#0066CC]" />
       },
       instagram: {
         name: 'Instagram',
         color: 'from-pink-500 via-purple-500 to-orange-500',
         bgColor: 'bg-pink-50',
         borderColor: 'border-pink-200',
-        icon: <Instagram className="h-6 w-6 text-pink-600" />
+        icon: <Instagram className="h-5 w-5 text-pink-600" />
       },
       both: {
-        name: 'Facebook & Instagram',
+        name: 'FB & IG',
         color: 'from-blue-500 via-purple-500 to-pink-500',
         bgColor: 'bg-purple-50',
         borderColor: 'border-purple-200',
         icon: (
           <div className="flex space-x-1">
-            <Facebook className="h-5 w-5 text-[#0066CC]" />
-            <Instagram className="h-5 w-5 text-pink-600" />
+            <Facebook className="h-4 w-4 text-[#0066CC]" />
+            <Instagram className="h-4 w-4 text-pink-600" />
           </div>
         )
       },
@@ -369,21 +281,21 @@ function ScheduledPosts() {
         color: 'from-red-500 to-red-700',
         bgColor: 'bg-red-50',
         borderColor: 'border-red-200',
-        icon: <div className="h-6 w-6 bg-red-600 text-white rounded text-sm flex items-center justify-center font-bold">YT</div>
+        icon: <div className="h-5 w-5 bg-red-600 text-white rounded text-xs flex items-center justify-center font-bold">YT</div>
       },
       twitter: {
-        name: 'X (Twitter)',
+        name: 'X',
         color: 'from-blue-400 to-blue-600',
         bgColor: 'bg-blue-50',
         borderColor: 'border-blue-200',
-        icon: <div className="h-6 w-6 bg-blue-400 text-white rounded text-sm flex items-center justify-center font-bold">𝕏</div>
+        icon: <div className="h-5 w-5 bg-blue-400 text-white rounded text-xs flex items-center justify-center font-bold">𝕏</div>
       },
       linkedin: {
         name: 'LinkedIn',
         color: 'from-blue-600 to-blue-800',
         bgColor: 'bg-blue-50',
         borderColor: 'border-blue-300',
-        icon: <div className="h-6 w-6 bg-blue-700 text-white rounded text-sm flex items-center justify-center font-bold">in</div>
+        icon: <div className="h-5 w-5 bg-blue-700 text-white rounded text-xs flex items-center justify-center font-bold">in</div>
       }
     };
     return platformData[platform] || {
@@ -391,16 +303,11 @@ function ScheduledPosts() {
       color: 'from-gray-400 to-gray-600',
       bgColor: 'bg-gray-50',
       borderColor: 'border-gray-200',
-      icon: <div className="h-6 w-6 bg-gray-400 text-white rounded text-sm flex items-center justify-center">?</div>
+      icon: <div className="h-5 w-5 bg-gray-400 text-white rounded text-xs flex items-center justify-center">?</div>
     };
   }, []);
 
-  const filteredPosts = useMemo(() => {
-    if (!Array.isArray(scheduledPosts)) return [];
-    if (filter === 'all') return scheduledPosts;
-    return scheduledPosts.filter(post => post.status === filter);
-  }, [scheduledPosts, filter]);
-
+  // Group posts by customer - memoized
   const groupedPosts = useMemo(() => filteredPosts.reduce((groups, post) => {
     const customerId = post.customerId || post.userId || 'unknown';
     if (!groups[customerId]) {
@@ -410,6 +317,7 @@ function ScheduledPosts() {
     return groups;
   }, {}), [filteredPosts]);
 
+  // Group posts by platform - memoized
   const platformGroupedPosts = useMemo(() => filteredPosts.reduce((groups, post) => {
     const platform = post.platform || 'unknown';
     if (!groups[platform]) {
@@ -419,11 +327,12 @@ function ScheduledPosts() {
     return groups;
   }, {}), [filteredPosts]);
 
-  const sortedCustomerIds = useMemo(() => 
-    Object.keys(groupedPosts).sort((a, b) => groupedPosts[b].length - groupedPosts[a].length),
-    [groupedPosts]
-  );
+  // Sort customers by number of posts (descending) - memoized
+  const sortedCustomerIds = useMemo(() => Object.keys(groupedPosts).sort((a, b) => {
+    return groupedPosts[b].length - groupedPosts[a].length;
+  }), [groupedPosts]);
 
+  // Sort platforms by priority and number of posts - memoized
   const sortedPlatforms = useMemo(() => {
     const platformPriority = { facebook: 1, instagram: 2, both: 3, youtube: 4, twitter: 5, linkedin: 6 };
     return Object.keys(platformGroupedPosts).sort((a, b) => {
@@ -491,174 +400,219 @@ function ScheduledPosts() {
 
   return (
     <AdminLayout title="Scheduled Posts">
-      <div className="space-y-2 sm:space-y-3">
-        {/* Compact Header */}
-        <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm p-2 sm:p-3 border border-gray-200/50">
-          <h2 className="text-sm sm:text-base font-bold text-gray-900 mb-2">Scheduled Posts</h2>
-          
-          {/* Filters */}
-          <div className="flex items-center gap-1 flex-wrap mb-2">
-            <Filter className="h-3 w-3 text-gray-500" />
-            {['all', 'pending', 'processing', 'published', 'failed'].map(status => (
-              <button
-                key={status}
-                onClick={() => setFilter(status)}
-                className={`px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-medium transition-all ${
-                  filter === status 
-                    ? 'bg-blue-600 text-white' 
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                {status.charAt(0).toUpperCase() + status.slice(1)}
-              </button>
-            ))}
+      <div className="min-h-screen bg-white">
+        <div className="max-w-7xl mx-auto px-1 sm:px-2 py-2 sm:py-3">
+          {/* Filters and View Mode Toggle */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0 mb-2 sm:mb-3">
+            {/* Status Filters */}
+            <div className="flex items-center flex-wrap gap-1">
+              <Filter className="h-3 w-3 text-[#475569]" />
+              {['all', 'pending', 'processing', 'published', 'failed'].map(status => (
+                <button
+                  key={status}
+                  onClick={() => setFilter(status)}
+                  className={`px-2 py-0.5 rounded-full text-xs font-medium transition-all ${
+                    filter === status 
+                      ? 'bg-gradient-to-r from-[#00E5FF] to-[#0066CC] text-white shadow-sm' 
+                      : 'bg-[#F4F9FF] text-[#475569] hover:bg-[#0066CC] hover:text-white'
+                  }`}
+                >
+                  {status.charAt(0).toUpperCase() + status.slice(1)}
+                </button>
+              ))}
+            </div>
+
+            {/* View Mode Toggle */}
+            <div className="flex items-center space-x-1">
+              <span className="text-xs font-medium text-[#0F172A]">View:</span>
+              <div className="flex bg-[#F4F9FF] rounded-lg p-0.5">
+                <button
+                  onClick={() => setViewMode('grouped')}
+                  className={`px-2 py-0.5 rounded text-xs font-medium transition-colors ${
+                    viewMode === 'grouped'
+                      ? 'bg-white text-[#0F172A] shadow-sm'
+                      : 'text-[#475569] hover:text-[#0F172A]'
+                  }`}
+                >
+                  <Users className="h-3 w-3 inline" />
+                </button>
+                <button
+                  onClick={() => setViewMode('platform')}
+                  className={`px-2 py-0.5 rounded text-xs font-medium transition-colors ${
+                    viewMode === 'platform'
+                      ? 'bg-white text-[#0F172A] shadow-sm'
+                      : 'text-[#475569] hover:text-[#0F172A]'
+                  }`}
+                >
+                  <Send className="h-3 w-3 inline" />
+                </button>
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={`px-2 py-0.5 rounded text-xs font-medium transition-colors ${
+                    viewMode === 'list'
+                      ? 'bg-white text-[#0F172A] shadow-sm'
+                      : 'text-[#475569] hover:text-[#0F172A]'
+                  }`}
+                >
+                  List
+                </button>
+              </div>
+            </div>
           </div>
 
-          {/* View Mode */}
-          <div className="flex bg-gray-100 rounded-lg p-0.5">
-            <button
-              onClick={() => setViewMode('grouped')}
-              className={`flex-1 px-2 py-1 rounded-md text-[10px] sm:text-xs font-medium transition-colors ${
-                viewMode === 'grouped' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'
-              }`}
-            >
-              <Users className="h-3 w-3 inline mr-1" />Customers
-            </button>
-            <button
-              onClick={() => setViewMode('platform')}
-              className={`flex-1 px-2 py-1 rounded-md text-[10px] sm:text-xs font-medium transition-colors ${
-                viewMode === 'platform' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'
-              }`}
-            >
-              <Send className="h-3 w-3 inline mr-1" />Platforms
-            </button>
-            <button
-              onClick={() => setViewMode('list')}
-              className={`flex-1 px-2 py-1 rounded-md text-[10px] sm:text-xs font-medium transition-colors ${
-                viewMode === 'list' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'
-              }`}
-            >
-              List
-            </button>
-        </div>
-
-        {/* Expand/Collapse All */}
-        {viewMode === 'grouped' && sortedCustomerIds.length > 0 && (
-          <div className="flex items-center space-x-2 px-2">
-            <button onClick={expandAllCustomers} className="text-blue-600 hover:text-blue-800 text-xs font-medium">
-              Expand All
-            </button>
-            <span className="text-gray-300">|</span>
-            <button onClick={collapseAllCustomers} className="text-blue-600 hover:text-blue-800 text-xs font-medium">
-              Collapse All
-            </button>
+          {/* Customer Overview Header - Compact */}
+          <div className="bg-[#F4F9FF] rounded-lg shadow-sm border border-gray-100 mb-2">
+            <div className="px-2 sm:px-3 py-1.5">
+              <h2 className="text-sm sm:text-base font-bold text-[#0F172A]">Overview</h2>
+              <p className="text-xs text-[#475569]">Track schedules & deadlines</p>
+            </div>
           </div>
-        )}
-        {viewMode === 'platform' && sortedPlatforms.length > 0 && (
-          <div className="flex items-center space-x-2 px-2">
-            <button onClick={expandAllPlatforms} className="text-blue-600 hover:text-blue-800 text-xs font-medium">
-              Expand All
-            </button>
-            <span className="text-gray-300">|</span>
-            <button onClick={collapseAllPlatforms} className="text-blue-600 hover:text-blue-800 text-xs font-medium">
-              Collapse All
-            </button>
-          </div>
-        )}
 
-        {/* Content */}
-        {loading ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 animate-spin text-blue-600" />
-          </div>
-        ) : viewMode === 'platform' ? (
-          /* Platform View */
-          <div className="space-y-2 sm:space-y-3">
-            {sortedPlatforms.map(platform => {
-              const platformPosts = platformGroupedPosts[platform];
-              const platformInfo = getPlatformInfo(platform);
-              const summary = getCustomerSummary(platformPosts);
-              const isExpanded = expandedPlatforms.has(platform);
+          {/* Expand/Collapse All - Compact */}
+          {viewMode === 'grouped' && sortedCustomerIds.length > 0 && (
+            <div className="flex items-center space-x-2 mb-2">
+              <button onClick={expandAllCustomers} className="text-[#0066CC] text-xs font-medium">Expand All</button>
+              <span className="text-gray-300">|</span>
+              <button onClick={collapseAllCustomers} className="text-[#0066CC] text-xs font-medium">Collapse All</button>
+            </div>
+          )}
+          {viewMode === 'platform' && sortedPlatforms.length > 0 && (
+            <div className="flex items-center space-x-2 mb-2">
+              <button onClick={expandAllPlatforms} className="text-[#0066CC] text-xs font-medium">Expand All</button>
+              <span className="text-gray-300">|</span>
+              <button onClick={collapseAllPlatforms} className="text-[#0066CC] text-xs font-medium">Collapse All</button>
+            </div>
+          )}
 
-              return (
-                <div key={platform} className="bg-white rounded-lg shadow-sm border">
-                  <div 
-                    className={`p-3 sm:p-4 border-b cursor-pointer hover:bg-opacity-50 transition-all ${platformInfo.bgColor}`}
+          {/* Content */}
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-[#0066CC]" />
+            </div>
+          ) : viewMode === 'platform' ? (
+            /* Platform View */
+            <div className="space-y-4">
+              {sortedPlatforms.map(platform => {
+                const platformPosts = platformGroupedPosts[platform];
+                const platformInfo = getPlatformInfo(platform);
+                const summary = getCustomerSummary(platformPosts);
+                const isExpanded = expandedPlatforms.has(platform);
+
+                return (
+                  <div key={platform} className="bg-white rounded-lg shadow-sm border overflow-hidden">
+                    {/* Platform Header - Compact */}
+                    <div 
+                      className={`p-2 sm:p-3 border-b cursor-pointer hover:bg-opacity-50 transition-all ${platformInfo.bgColor}`}
                       onClick={() => togglePlatformExpansion(platform)}
                     >
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-4">
-                          <div className="flex items-center space-x-2">
-                            {isExpanded ? (
-                              <ChevronDown className="h-5 w-5 text-gray-400" />
-                            ) : (
-                              <ChevronRight className="h-5 w-5 text-gray-400" />
-                            )}
-                            <div className={`p-2 rounded-lg bg-gradient-to-r ${platformInfo.color} bg-opacity-10`}>
-                              {platformInfo.icon}
-                            </div>
+                        <div className="flex items-center space-x-2">
+                          {isExpanded ? (
+                            <ChevronDown className="h-4 w-4 text-gray-400" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4 text-gray-400" />
+                          )}
+                          <div className={`p-1.5 rounded-lg bg-gradient-to-r ${platformInfo.color} bg-opacity-10`}>
+                            {platformInfo.icon}
                           </div>
                           <div>
-                            <h3 className="text-xl font-bold text-[#0F172A]">
+                            <h3 className="text-sm sm:text-base font-bold text-[#0F172A]">
                               {platformInfo.name}
                             </h3>
-                            <p className="text-sm text-[#475569]">
-                              {summary.total} {summary.total === 1 ? 'post' : 'posts'} scheduled
+                            <p className="text-xs text-[#475569]">
+                              {summary.total} posts
                             </p>
                           </div>
                         </div>
                         
-                        {/* Summary Stats */}
-                        <div className="flex items-center space-x-6">
+                        {/* Summary Stats - Compact */}
+                        <div className="flex items-center space-x-1 sm:space-x-2">
                           <div className="text-center">
-                            <div className="text-3xl font-bold text-[#0F172A]">{summary.total}</div>
-                            <div className="text-xs text-[#475569] uppercase tracking-wide">Total</div>
+                            <div className="text-lg sm:text-xl font-bold text-[#0F172A]">{summary.total}</div>
                           </div>
-                          <div className="flex flex-wrap gap-2">
+                          <div className="hidden sm:flex flex-wrap gap-1">
                             {summary.pending > 0 && (
-                              <div className="text-center px-3 py-2 bg-yellow-100 rounded-lg">
-                                <div className="text-lg font-bold text-yellow-800">{summary.pending}</div>
-                                <div className="text-xs text-yellow-600">Pending</div>
-                              </div>
-                            )}
-                            {summary.processing > 0 && (
-                              <div className="text-center px-3 py-2 bg-blue-100 rounded-lg">
-                                <div className="text-lg font-bold text-blue-800">{summary.processing}</div>
-                                <div className="text-xs text-blue-600">Processing</div>
-                              </div>
+                              <span className="px-1.5 py-0.5 bg-yellow-100 text-yellow-800 text-xs rounded">{summary.pending}P</span>
                             )}
                             {summary.published > 0 && (
-                              <div className="text-center px-3 py-2 bg-green-100 rounded-lg">
-                                <div className="text-lg font-bold text-green-800">{summary.published}</div>
-                                <div className="text-xs text-green-600">Published</div>
-                              </div>
+                              <span className="px-1.5 py-0.5 bg-green-100 text-green-800 text-xs rounded">{summary.published}✓</span>
                             )}
                             {summary.failed > 0 && (
-                              <div className="text-center px-3 py-2 bg-red-100 rounded-lg">
-                                <div className="text-lg font-bold text-red-800">{summary.failed}</div>
-                                <div className="text-xs text-red-600">Failed</div>
-                              </div>
+                              <span className="px-1.5 py-0.5 bg-red-100 text-red-800 text-xs rounded">{summary.failed}✗</span>
                             )}
                           </div>
                         </div>
                       </div>
                     </div>
 
+                    {/* Expanded Content */}
                     {isExpanded && (
-                      <div className="p-3 sm:p-4 bg-gray-50">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                          {platformPosts.map(post => (
-                            <PostCard
-                              key={post._id}
-                              post={post}
-                              onDelete={handleDeletePost}
-                              getStatusColor={getStatusColor}
-                              getStatusIcon={getStatusIcon}
-                              getPostType={getPostType}
-                              getPlatformIcon={getPlatformIcon}
-                              isVideoUrl={isVideoUrl}
-                            />
-                          ))}
+                      <div className="p-2 sm:p-3 bg-gray-50">
+                        <div className="grid grid-cols-3 gap-1 sm:gap-2">
+                          {platformPosts.map(post => {
+                            const customerInfo = getCustomerDisplayInfo(post);
+                            
+                            return (
+                              <div key={post._id} className="bg-white rounded border p-1.5 sm:p-2 shadow-sm">
+                                {/* Status Badge */}
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className={`px-1 py-0.5 rounded text-xs font-medium flex items-center space-x-0.5 ${getStatusColor(post.status)}`}>
+                                    {getStatusIcon(post.status)}
+                                  </span>
+                                  {(() => {
+                                    const postType = getPostType(post);
+                                    return (
+                                      <span className={`text-xs ${postType.color} px-1 rounded`}>
+                                        {postType.icon}
+                                      </span>
+                                    );
+                                  })()}
+                                </div>
+
+                                {/* Media Preview - Small */}
+                                {post.imageUrls && post.imageUrls.length > 1 ? (
+                                  <div className="mb-1">
+                                    <div className="grid grid-cols-2 gap-0.5">
+                                      {post.imageUrls.slice(0, 4).map((url, idx) => (
+                                        isVideoUrl(url) ? (
+                                          <div key={idx} className="h-8 sm:h-12 bg-gray-800 rounded flex items-center justify-center">
+                                            <Video className="h-3 w-3 text-white" />
+                                          </div>
+                                        ) : (
+                                          <img key={idx} src={url} alt="" className="w-full h-8 sm:h-12 object-cover rounded" />
+                                        )
+                                      ))}
+                                    </div>
+                                  </div>
+                                ) : post.imageUrl ? (
+                                  isVideoUrl(post.imageUrl) ? (
+                                    <div className="h-16 sm:h-20 bg-gray-800 rounded flex items-center justify-center mb-1">
+                                      <Video className="h-4 w-4 text-white" />
+                                    </div>
+                                  ) : (
+                                    <img src={post.imageUrl} alt="" className="w-full h-16 sm:h-20 object-cover rounded mb-1" />
+                                  )
+                                ) : null}
+
+                                {/* Caption - Truncated */}
+                                <p className="text-xs text-gray-700 line-clamp-1 mb-1">{post.caption}</p>
+                                
+                                {/* Date/Time - Compact */}
+                                <div className="flex items-center text-xs text-gray-400 space-x-1">
+                                  <Calendar className="h-2.5 w-2.5" />
+                                  <span>{new Date(post.scheduledAt).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})}</span>
+                                </div>
+
+                                {/* Delete */}
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleDeletePost(post._id); }}
+                                  className="text-red-500 hover:text-red-700 mt-1"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </button>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     )}
@@ -667,62 +621,114 @@ function ScheduledPosts() {
               })}
             </div>
           ) : viewMode === 'grouped' ? (
-            /* Grouped View - Customer Groups */
-            <div className="space-y-2 sm:space-y-3">{sortedCustomerIds.map(customerId => {
+            /* Grouped View */
+            <div className="space-y-2">
+              {sortedCustomerIds.map(customerId => {
                 const customerPosts = groupedPosts[customerId];
                 const customerInfo = getCustomerDisplayInfo(customerPosts[0]);
                 const summary = getCustomerSummary(customerPosts);
                 const isExpanded = expandedCustomers.has(customerId);
 
                 return (
-                  <div key={customerId} className="bg-white rounded-lg shadow-sm border">
+                  <div key={customerId} className="bg-white rounded-lg shadow-sm">
+                    {/* Customer Header - Compact */}
                     <div 
-                      className="p-3 sm:p-4 border-b cursor-pointer hover:bg-gray-50 transition-colors"
+                      className="p-2 sm:p-3 border-b cursor-pointer hover:bg-[#F4F9FF] transition-colors"
                       onClick={() => toggleCustomerExpansion(customerId)}
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center space-x-2 min-w-0">
-                          {isExpanded ? <ChevronDown className="h-4 w-4 text-gray-400 flex-shrink-0" /> : <ChevronRight className="h-4 w-4 text-gray-400 flex-shrink-0" />}
-                          <User className="h-4 w-4 text-blue-600 flex-shrink-0" />
-                          <div className="min-w-0">
-                            <h3 className="text-sm font-semibold text-gray-900 truncate">{customerInfo?.name || 'Unknown'}</h3>
-                            <p className="text-xs text-gray-500 truncate">ID: {customerInfo?.id || customerId}</p>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          {isExpanded ? (
+                            <ChevronDown className="h-4 w-4 text-gray-400" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4 text-gray-400" />
+                          )}
+                          <User className="h-4 w-4 text-[#0066CC]" />
+                          <div>
+                            <h3 className="text-sm font-semibold text-[#0F172A] truncate max-w-[120px] sm:max-w-none">
+                              {customerInfo?.name || 'Unknown'}
+                            </h3>
                           </div>
                         </div>
                         
-                        {/* Summary Stats */}
-                        <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+                        {/* Summary Stats - Compact */}
+                        <div className="flex items-center space-x-1 sm:space-x-2">
                           <div className="text-center">
-                            <div className="text-base sm:text-lg font-bold text-gray-900">{summary.total}</div>
-                            <div className="text-[9px] text-gray-500">Posts</div>
+                            <div className="text-lg sm:text-xl font-bold text-[#0F172A]">{summary.total}</div>
                           </div>
-                          {summary.pending > 0 && (
-                            <span className="px-1.5 py-0.5 bg-yellow-100 text-yellow-800 text-[10px] font-medium rounded-full">{summary.pending} Pending</span>
-                          )}
-                          {summary.published > 0 && (
-                            <span className="px-1.5 py-0.5 bg-green-100 text-green-800 text-[10px] font-medium rounded-full hidden sm:inline">{summary.published} Published</span>
-                          )}
-                          {summary.failed > 0 && (
-                            <span className="px-1.5 py-0.5 bg-red-100 text-red-800 text-[10px] font-medium rounded-full">{summary.failed} Failed</span>
-                          )}
+                          <div className="hidden sm:flex space-x-1">
+                            {summary.pending > 0 && (
+                              <span className="px-1.5 py-0.5 bg-yellow-100 text-yellow-800 text-xs rounded">{summary.pending}P</span>
+                            )}
+                            {summary.published > 0 && (
+                              <span className="px-1.5 py-0.5 bg-green-100 text-green-800 text-xs rounded">{summary.published}✓</span>
+                            )}
+                            {summary.failed > 0 && (
+                              <span className="px-1.5 py-0.5 bg-red-100 text-red-800 text-xs rounded">{summary.failed}✗</span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
 
+                    {/* Expanded Content - 3 Column Grid */}
                     {isExpanded && (
-                      <div className="p-3 sm:p-4 bg-gray-50">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                      <div className="p-2 sm:p-3">
+                        <div className="grid grid-cols-3 gap-1 sm:gap-2">
                           {customerPosts.map(post => (
-                            <PostCard
-                              key={post._id}
-                              post={post}
-                              onDelete={handleDeletePost}
-                              getStatusColor={getStatusColor}
-                              getStatusIcon={getStatusIcon}
-                              getPostType={getPostType}
-                              getPlatformIcon={getPlatformIcon}
-                              isVideoUrl={isVideoUrl}
-                            />
+                            <div key={post._id} className="bg-gray-50 rounded border p-1.5 sm:p-2">
+                              {/* Header with platform and status */}
+                              <div className="flex items-center justify-between mb-1">
+                                <div className="flex items-center space-x-1">
+                                  {getPlatformIcon(post.platform)}
+                                </div>
+                                <span className={`px-1 py-0.5 rounded text-xs font-medium flex items-center ${getStatusColor(post.status)}`}>
+                                  {getStatusIcon(post.status)}
+                                </span>
+                              </div>
+
+                              {/* Media Preview - Small */}
+                              {post.imageUrls && post.imageUrls.length > 1 ? (
+                                <div className="mb-1">
+                                  <div className="grid grid-cols-2 gap-0.5">
+                                    {post.imageUrls.slice(0, 4).map((url, idx) => (
+                                      isVideoUrl(url) ? (
+                                        <div key={idx} className="h-8 sm:h-12 bg-gray-800 rounded flex items-center justify-center">
+                                          <Video className="h-3 w-3 text-white" />
+                                        </div>
+                                      ) : (
+                                        <img key={idx} src={url} alt="" className="w-full h-8 sm:h-12 object-cover rounded" />
+                                      )
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : post.imageUrl ? (
+                                isVideoUrl(post.imageUrl) ? (
+                                  <div className="h-16 sm:h-20 bg-gray-800 rounded flex items-center justify-center mb-1">
+                                    <Video className="h-4 w-4 text-white" />
+                                  </div>
+                                ) : (
+                                  <img src={post.imageUrl} alt="" className="w-full h-16 sm:h-20 object-cover rounded mb-1" />
+                                )
+                              ) : null}
+
+                              {/* Caption - Truncated */}
+                              <p className="text-xs text-gray-700 line-clamp-1 mb-1">{post.caption}</p>
+                              
+                              {/* Date/Time - Compact */}
+                              <div className="flex items-center text-xs text-gray-400 space-x-1">
+                                <Calendar className="h-2.5 w-2.5" />
+                                <span>{new Date(post.scheduledAt).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})}</span>
+                              </div>
+
+                              {/* Delete */}
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleDeletePost(post._id); }}
+                                className="text-red-500 hover:text-red-700 mt-1"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </div>
                           ))}
                         </div>
                       </div>
@@ -732,34 +738,94 @@ function ScheduledPosts() {
               })}
             </div>
           ) : (
-            /* List View - 3 Column Grid */
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-              {filteredPosts.map(post => (
-                <PostCard
-                  key={post._id}
-                  post={post}
-                  onDelete={handleDeletePost}
-                  getStatusColor={getStatusColor}
-                  getStatusIcon={getStatusIcon}
-                  getPostType={getPostType}
-                  getPlatformIcon={getPlatformIcon}
-                  isVideoUrl={isVideoUrl}
-                />
-              ))}
+            /* List View - 3 Column Grid for Mobile */
+            <div className="grid grid-cols-3 gap-1 sm:gap-2">
+              {filteredPosts.map(post => {
+                const customerInfo = getCustomerDisplayInfo(post);
+                
+                return (
+                  <div
+                    key={post._id}
+                    className="bg-white rounded border shadow-sm p-1.5 sm:p-2"
+                  >
+                    {/* Header with platform and status */}
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center space-x-1">
+                        {getPlatformIcon(post.platform)}
+                      </div>
+                      <span className={`px-1 py-0.5 rounded text-xs font-medium flex items-center ${getStatusColor(post.status)}`}>
+                        {getStatusIcon(post.status)}
+                      </span>
+                    </div>
+
+                    {/* Customer - Compact */}
+                    {customerInfo && (
+                      <div className="flex items-center space-x-1 mb-1">
+                        <User className="h-2.5 w-2.5 text-[#0066CC]" />
+                        <span className="text-xs text-gray-600 truncate">{customerInfo.name}</span>
+                      </div>
+                    )}
+
+                    {/* Media Preview - Small */}
+                    {post.imageUrls && post.imageUrls.length > 1 ? (
+                      <div className="mb-1">
+                        <div className="grid grid-cols-2 gap-0.5">
+                          {post.imageUrls.slice(0, 4).map((url, idx) => (
+                            isVideoUrl(url) ? (
+                              <div key={idx} className="h-8 sm:h-12 bg-gray-800 rounded flex items-center justify-center">
+                                <Video className="h-3 w-3 text-white" />
+                              </div>
+                            ) : (
+                              <img key={idx} src={url} alt="" className="w-full h-8 sm:h-12 object-cover rounded" />
+                            )
+                          ))}
+                        </div>
+                      </div>
+                    ) : post.imageUrl ? (
+                      isVideoUrl(post.imageUrl) ? (
+                        <div className="h-16 sm:h-20 bg-gray-800 rounded flex items-center justify-center mb-1">
+                          <Video className="h-4 w-4 text-white" />
+                        </div>
+                      ) : (
+                        <img src={post.imageUrl} alt="" className="w-full h-16 sm:h-20 object-cover rounded mb-1" />
+                      )
+                    ) : null}
+
+                    {/* Caption - Truncated */}
+                    <p className="text-xs text-gray-700 line-clamp-1 mb-1">{post.caption}</p>
+                    
+                    {/* Date/Time - Compact */}
+                    <div className="flex items-center text-xs text-gray-400 space-x-1">
+                      <Calendar className="h-2.5 w-2.5" />
+                      <span>{new Date(post.scheduledAt).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})}</span>
+                    </div>
+
+                    {/* Delete */}
+                    <button
+                      onClick={() => handleDeletePost(post._id)}
+                      className="text-red-500 hover:text-red-700 mt-1"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           )}
 
           {filteredPosts.length === 0 && !loading && (
             <div className="text-center py-8">
-              <Calendar className="h-10 w-10 sm:h-12 sm:w-12 mx-auto mb-2 text-gray-400" />
-              <p className="text-sm font-medium text-gray-900">No scheduled posts found</p>
-              <p className="text-xs text-gray-500 mt-1">Posts will appear here when scheduled</p>
+              <Calendar className="h-12 w-12 mx-auto mb-2 text-gray-400" />
+              <p className="text-sm text-[#0F172A]">No scheduled posts found</p>
+              <p className="text-xs text-[#475569] mt-1">
+                Posts will appear here when scheduled
+              </p>
             </div>
           )}
         </div>
-        </div>
-      </AdminLayout>
-    );
-  }
-  
-  export default memo(ScheduledPosts);
+      </div>
+    </AdminLayout>
+  );
+}
+
+export default memo(ScheduledPosts);

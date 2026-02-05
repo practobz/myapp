@@ -1,6 +1,64 @@
-import React, { useEffect, useState } from 'react';
-import { QrCode, Facebook, Instagram, Linkedin, Youtube, Download, ExternalLink, AlertCircle, Loader2, User, Clock, AlertTriangle, Search, Filter, CheckCircle, X, BarChart3, Users } from 'lucide-react';
+import React, { useEffect, useState, useMemo, useCallback, memo } from 'react';
+import { QrCode, Facebook, Instagram, Linkedin, Youtube, Download, ExternalLink, AlertCircle, Loader2, User, Clock, AlertTriangle, Search, CheckCircle, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import AdminLayout from '../../components/layout/AdminLayout';
+
+// Memoized Platform Button Component for better performance
+const PlatformButton = memo(({ platform, isGenerating, loading, onGenerate }) => {
+  const Icon = platform.icon;
+  return (
+    <button
+      onClick={onGenerate}
+      disabled={loading}
+      className={`${platform.color} text-white px-2.5 sm:px-3 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center gap-1 sm:gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md active:scale-95 min-w-[40px] sm:min-w-[44px] justify-center touch-manipulation`}
+      title={platform.label}
+    >
+      {isGenerating ? (
+        <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" />
+      ) : (
+        <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+      )}
+      <span className="hidden lg:inline">{platform.label}</span>
+    </button>
+  );
+});
+
+// Memoized Customer Card Component
+const CustomerCard = memo(({ customer, activeCustomer, loading, onGenerateQr }) => (
+  <div
+    className={`px-3 sm:px-4 lg:px-6 py-3 sm:py-4 transition-colors duration-150 hover:bg-[#F4F9FF] ${
+      activeCustomer?.id === customer._id 
+        ? 'bg-[#F4F9FF] border-l-4 border-l-[#0066CC]' 
+        : ''
+    }`}
+  >
+    <div className="flex flex-col gap-3">
+      {/* Customer Info Row */}
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+        <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-[#00E5FF] to-[#0066CC] rounded-full flex items-center justify-center flex-shrink-0">
+          <User className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="font-semibold text-[#0F172A] truncate text-sm sm:text-base lg:text-lg">{customer.name}</h3>
+          <p className="text-xs sm:text-sm text-[#475569] truncate">{customer.email}</p>
+        </div>
+      </div>
+      
+      {/* Platform Buttons Row */}
+      <div className="flex flex-wrap gap-1.5 sm:gap-2">
+        {PLATFORMS.map(platform => (
+          <PlatformButton
+            key={platform.key}
+            platform={platform}
+            isGenerating={loading && activeCustomer?.id === customer._id}
+            loading={loading}
+            onGenerate={() => onGenerateQr(customer._id, customer.name, platform.key)}
+          />
+        ))}
+      </div>
+    </div>
+  </div>
+));
 
 const PLATFORMS = [
   { key: 'fb', label: 'Facebook', icon: Facebook, color: 'bg-blue-600 hover:bg-blue-700', lightColor: 'bg-blue-50 text-blue-700' },
@@ -9,16 +67,21 @@ const PLATFORMS = [
   { key: 'yt', label: 'YouTube', icon: Youtube, color: 'bg-red-600 hover:bg-red-700', lightColor: 'bg-red-50 text-red-700' }
 ];
 
-// ✅ Replace the complex getApiBaseUrl function with simple hardcoded URLs
-const API_BASE = "https://my-backend-593529385135.asia-south1.run.app";
-
-// ✅ Hardcoded frontend URL for QR codes (always use production)
-const FRONTEND_URL = "https://airspark.storage.googleapis.com/index.html";
+// ✅ Fixed API base URL for deployment
+const getApiBaseUrl = () => {
+  // For production deployment, use the correct backend URL
+  if (process.env.NODE_ENV === 'production') {
+    return 'https://my-backend-593529385135.asia-south1.run.app';
+  }
+  
+  // For local development, use environment variable or fallback
+  return process.env.REACT_APP_API_URL || 'http://localhost:3001';
+};
 
 export default function AdminQrGenerator() {
   const { currentUser } = useAuth();
+  
   const [customers, setCustomers] = useState([]);
-  const [filteredCustomers, setFilteredCustomers] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
   const [fetchingCustomers, setFetchingCustomers] = useState(true);
@@ -29,43 +92,46 @@ export default function AdminQrGenerator() {
   const [timeRemaining, setTimeRemaining] = useState(null);
   const [successMessage, setSuccessMessage] = useState('');
 
-  useEffect(() => {
-    fetchAssignedCustomers();
-  }, [currentUser]);
-
-  const fetchAssignedCustomers = async () => {
-    if (!currentUser || currentUser.role !== 'admin') {
-      setFetchingCustomers(false);
-      return;
-    }
-
+  const fetchCustomers = useCallback(async () => {
     try {
-      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:3001';
-      const response = await fetch(`${apiUrl}/admin/assigned-customers?adminId=${currentUser._id || currentUser.id}`);
+      const apiBaseUrl = getApiBaseUrl();
       
-      if (!response.ok) {
-        throw new Error('Failed to fetch assigned customers');
+      if (currentUser && currentUser.role === 'admin') {
+        const response = await fetch(`${apiBaseUrl}/admin/assigned-customers?adminId=${currentUser._id || currentUser.id}`);
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        setCustomers(data || []);
+      } else {
+        const response = await fetch(`${apiBaseUrl}/api/customers`);
+        const data = await response.json();
+        setCustomers(data.customers || []);
       }
       
-      const data = await response.json();
-      setCustomers(data);
-      setFilteredCustomers(data);
       setFetchingCustomers(false);
     } catch (err) {
-      console.error('Error fetching assigned customers:', err);
-      setError('Failed to load your assigned customers');
+      console.error('Failed to load customers:', err);
+      setError('Failed to load customers');
       setFetchingCustomers(false);
     }
-  };
+  }, [currentUser]);
 
-  // Search and filter functionality
   useEffect(() => {
-    const filtered = customers.filter(customer =>
-      customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      customer.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      customer._id.toLowerCase().includes(searchTerm.toLowerCase())
+    fetchCustomers();
+  }, [fetchCustomers]);
+
+  // Memoized filtered customers for better performance
+  const filteredCustomers = useMemo(() => {
+    if (!searchTerm.trim()) return customers;
+    const term = searchTerm.toLowerCase();
+    return customers.filter(customer =>
+      customer.name.toLowerCase().includes(term) ||
+      customer.email.toLowerCase().includes(term) ||
+      customer._id.toLowerCase().includes(term)
     );
-    setFilteredCustomers(filtered);
   }, [searchTerm, customers]);
 
   // ✅ Add countdown timer for QR expiration
@@ -100,7 +166,7 @@ export default function AdminQrGenerator() {
     }
   }, [qrResult.expiresAt]);
 
-  const handleGenerateQr = async (customerId, customerName, platform) => {
+  const handleGenerateQr = useCallback(async (customerId, customerName, platform) => {
     setLoading(true);
     setError('');
     setSuccessMessage('');
@@ -127,7 +193,8 @@ export default function AdminQrGenerator() {
 
       console.log(`🔒 Generating QR for customer: ${customerId} (${customerName}) - Platform: ${platform}`);
 
-      const res = await fetch(`${API_BASE}/api/generate-qr`, {
+      const apiBaseUrl = getApiBaseUrl();
+      const res = await fetch(`${apiBaseUrl}/api/generate-qr`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json'
@@ -151,14 +218,33 @@ export default function AdminQrGenerator() {
 
         console.log(`✅ QR generated successfully for customer: ${customerId}`);
         
-        // ✅ FIXED: Always use production frontend URL for QR codes
-        const qrCodeUrl = `${FRONTEND_URL}#/configure?customerId=${customerId}&platform=${platform}&t=${Date.now()}`;
-        const viewConfigUrl = qrCodeUrl;
+        // ✅ FIXED: Construct QR URL with correct domain based on environment
+        let qrCodeUrl = '';
+        
+        if (process.env.NODE_ENV === 'production') {
+          // ✅ For production, always use the production domain for QR codes
+          // This ensures QR codes work correctly when scanned from any device
+          qrCodeUrl = `https://airspark.storage.googleapis.com/index.html#/configure?customerId=${customerId}&platform=${platform}&source=admin-qr-generator&autoConnect=1&t=${Date.now()}`;
+        } else {
+          // For development, use localhost
+          qrCodeUrl = `http://localhost:3000/#/configure?customerId=${customerId}&platform=${platform}&source=admin-qr-generator&autoConnect=1&t=${Date.now()}`;
+        }
+
+        // ✅ For "View Configuration" link, use current window origin (admin interface)
+        let viewConfigUrl = '';
+        
+        if (process.env.NODE_ENV === 'production') {
+          // For production admin interface, use the storage bucket URL
+          viewConfigUrl = `https://airspark.storage.googleapis.com/index.html#/configure?customerId=${customerId}&platform=${platform}&t=${Date.now()}`;
+        } else {
+          // For development, use localhost
+          viewConfigUrl = `${window.location.origin}/#/configure?customerId=${customerId}&platform=${platform}&t=${Date.now()}`;
+        }
         
         console.log(`🔗 QR Code URL (for scanning): ${qrCodeUrl}`);
         console.log(`🔗 View Config URL (for admin): ${viewConfigUrl}`);
         
-        // Update the result with both URLs (always use production URL)
+        // Update the result with both URLs
         setQrResult({ 
           ...data, 
           configUrl: viewConfigUrl, // For "View Configuration" button
@@ -181,9 +267,9 @@ export default function AdminQrGenerator() {
       setError('Network error occurred. Please try again.');
     }
     setLoading(false);
-  };
+  }, []);
 
-  const downloadQrCode = async () => {
+  const downloadQrCode = useCallback(async () => {
     if (!qrResult.qrDataUrl) return;
 
     try {
@@ -371,111 +457,51 @@ export default function AdminQrGenerator() {
       link.click();
       document.body.removeChild(link);
     }
-  };
+  });
 
-  const clearError = () => setError('');
-  const clearSuccess = () => setSuccessMessage('');
+  const clearError = useCallback(() => setError(''), []);
+  const clearSuccess = useCallback(() => setSuccessMessage(''), []);
+  const clearSearch = useCallback(() => setSearchTerm(''), []);
 
-  const getExpirationColor = () => {
+  const getExpirationColor = useMemo(() => {
     switch (qrExpiration) {
       case 'expired': return 'text-red-700 bg-red-50 border-red-200';
       case 'warning': return 'text-amber-700 bg-amber-50 border-amber-200';
       case 'valid': return 'text-emerald-700 bg-emerald-50 border-emerald-200';
       default: return 'text-slate-600 bg-slate-50 border-slate-200';
     }
-  };
+  }, [qrExpiration]);
 
-  const getExpirationIcon = () => {
+  const expirationIcon = useMemo(() => {
     switch (qrExpiration) {
       case 'expired': return <AlertTriangle className="w-4 h-4" />;
       case 'warning': return <AlertCircle className="w-4 h-4" />;
       case 'valid': return <CheckCircle className="w-4 h-4" />;
       default: return <Clock className="w-4 h-4" />;
     }
-  };
+  }, [qrExpiration]);
 
-  const getPlatformDetails = (platformKey) => {
+  const getPlatformDetails = useCallback((platformKey) => {
     return PLATFORMS.find(p => p.key === platformKey) || PLATFORMS[0];
-  };
+  }, []);
+
+  const currentPlatformDetails = useMemo(() => 
+    qrResult.platform ? getPlatformDetails(qrResult.platform) : null
+  , [qrResult.platform, getPlatformDetails]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-100/40">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Navigation Header as in screenshot */}
-        <div className="mb-6">
-          <div className="flex items-center gap-3">
-            <button onClick={() => window.history.back()} aria-label="Back" className="p-2 rounded-full hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
-            <div>
-              <h1 className="text-xl sm:text-2xl font-bold text-slate-900 leading-tight">QR Code Generator</h1>
-              <p className="text-slate-600 text-sm">Generate and manage social media QR codes for customers</p>
-            </div>
-          </div>
-        </div>
-        {/* Professional Header */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <nav className="flex items-center space-x-2 text-sm text-slate-500 mb-3">
-                <span>Admin</span>
-                <span>/</span>
-                <span className="font-medium text-slate-900">QR Generator</span>
-              </nav>
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-3 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl shadow-lg">
-                    <QrCode className="w-7 h-7 text-white" />
-                  </div>
-                  <div>
-                    <h1 className="text-3xl font-bold text-slate-900">QR Code Generator</h1>
-                    <p className="text-slate-600">Generate and manage social media QR codes for customers</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Stats Cards */}
-            <div className="hidden lg:flex gap-4">
-              <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-200 min-w-[120px]">
-                <div className="flex items-center gap-2">
-                  <Users className="w-5 h-5 text-blue-600" />
-                  <div>
-                    <p className="text-2xl font-bold text-slate-900">{customers.length}</p>
-                    <p className="text-xs text-slate-600">Total Customers</p>
-                  </div>
-                </div>
-              </div>
-              {qrResult.qrDataUrl && (
-                <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-200 min-w-[120px]">
-                  <div className="flex items-center gap-2">
-                    <BarChart3 className="w-5 h-5 text-emerald-600" />
-                    <div>
-                      <p className="text-2xl font-bold text-slate-900">1</p>
-                      <p className="text-xs text-slate-600">QR Generated</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
+    <AdminLayout title="QR Code Generator">
+      <div className="space-y-3 sm:space-y-4 lg:space-y-6 px-1 sm:px-0">
+        {/* Alerts Section - Compact on mobile */}
+        <div className="space-y-2 sm:space-y-3">
           {/* Success Message */}
           {successMessage && (
-            <div className="mb-6 bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <CheckCircle className="w-5 h-5 text-emerald-600" />
-                <div>
-                  <h3 className="font-semibold text-emerald-900">Success!</h3>
-                  <p className="text-emerald-700 text-sm">{successMessage}</p>
-                </div>
+            <div className="bg-emerald-50 border border-emerald-200 rounded-lg sm:rounded-xl p-3 sm:p-4 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-600 flex-shrink-0" />
+                <p className="text-emerald-700 text-xs sm:text-sm truncate">{successMessage}</p>
               </div>
-              <button
-                onClick={clearSuccess}
-                className="text-emerald-600 hover:text-emerald-700 p-1"
-              >
+              <button onClick={clearSuccess} className="text-emerald-600 p-1 flex-shrink-0">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -483,18 +509,12 @@ export default function AdminQrGenerator() {
 
           {/* Error Alert */}
           {error && (
-            <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <AlertCircle className="w-5 h-5 text-red-600" />
-                <div>
-                  <h3 className="font-semibold text-red-900">Error</h3>
-                  <p className="text-red-700 text-sm">{error}</p>
-                </div>
+            <div className="bg-red-50 border border-red-200 rounded-lg sm:rounded-xl p-3 sm:p-4 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-red-600 flex-shrink-0" />
+                <p className="text-red-700 text-xs sm:text-sm truncate">{error}</p>
               </div>
-              <button
-                onClick={clearError}
-                className="text-red-600 hover:text-red-700 p-1"
-              >
+              <button onClick={clearError} className="text-red-600 p-1 flex-shrink-0">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -502,43 +522,45 @@ export default function AdminQrGenerator() {
 
           {/* Expiration Warning */}
           {qrExpiration === 'expired' && (
-            <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
-              <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-              <div>
-                <h3 className="font-semibold text-red-900">QR Code Expired</h3>
-                <p className="text-red-700 text-sm">The current QR code has expired. Please generate a new one to continue.</p>
+            <div className="bg-red-50 border border-red-200 rounded-lg sm:rounded-xl p-3 sm:p-4 flex items-start gap-2 sm:gap-3">
+              <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <div className="min-w-0">
+                <p className="font-semibold text-red-900 text-sm">QR Code Expired</p>
+                <p className="text-red-700 text-xs sm:text-sm">Please generate a new one.</p>
               </div>
             </div>
           )}
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-          {/* Enhanced Customers List */}
-          <div className="xl:col-span-2">
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-              <div className="px-6 py-5 border-b border-slate-200 bg-slate-50/50">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                  <div>
-                    <h2 className="text-xl font-semibold text-slate-900">Customer Directory</h2>
-                    <p className="text-sm text-slate-600 mt-1">
+        {/* Main Content Grid - Stack on mobile, side by side on xl */}
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
+          {/* Customers List */}
+          <div className="xl:col-span-2 order-2 xl:order-1">
+            <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+              {/* Header */}
+              <div className="px-3 sm:px-4 lg:px-6 py-3 sm:py-4 border-b border-gray-100 bg-[#F4F9FF]">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
+                  <div className="min-w-0">
+                    <h2 className="text-base sm:text-lg lg:text-xl font-semibold text-[#0F172A]">Customer Directory</h2>
+                    <p className="text-xs sm:text-sm text-[#475569]">
                       {filteredCustomers.length} of {customers.length} customers
                     </p>
                   </div>
 
                   {/* Search Bar */}
                   <div className="relative">
-                    <Search className="w-5 h-5 text-slate-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
+                    <Search className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400 absolute left-2.5 sm:left-3 top-1/2 transform -translate-y-1/2" />
                     <input
                       type="text"
-                      placeholder="Search customers..."
+                      placeholder="Search..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors w-full sm:w-64"
+                      className="pl-8 sm:pl-10 pr-8 py-2 sm:py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0066CC] focus:border-[#0066CC] transition-colors w-full sm:w-56 lg:w-64"
                     />
                     {searchTerm && (
                       <button
-                        onClick={() => setSearchTerm('')}
-                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                        onClick={clearSearch}
+                        className="absolute right-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5"
                       >
                         <X className="w-4 h-4" />
                       </button>
@@ -547,267 +569,203 @@ export default function AdminQrGenerator() {
                 </div>
               </div>
 
-              <div className="divide-y divide-slate-100 max-h-[600px] overflow-y-auto">
+              {/* Customer List */}
+              <div className="divide-y divide-gray-100 max-h-[50vh] sm:max-h-[400px] lg:max-h-[500px] xl:max-h-[600px] overflow-y-auto overscroll-contain">
                 {fetchingCustomers ? (
-                  <div className="px-6 py-16 text-center">
-                    <Loader2 className="w-10 h-10 text-blue-600 animate-spin mx-auto mb-4" />
-                    <p className="text-slate-600 font-medium">Loading customers...</p>
-                    <p className="text-sm text-slate-500 mt-1">Please wait a moment</p>
+                  <div className="px-4 py-10 sm:py-16 text-center">
+                    <Loader2 className="w-8 h-8 sm:w-10 sm:h-10 text-[#0066CC] animate-spin mx-auto mb-3" />
+                    <p className="text-[#0F172A] font-medium text-sm sm:text-base">Loading customers...</p>
                   </div>
                 ) : filteredCustomers.length === 0 ? (
-                  <div className="px-6 py-16 text-center">
+                  <div className="px-4 py-10 sm:py-16 text-center">
                     {searchTerm ? (
                       <>
-                        <Search className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                        <p className="text-slate-600 font-medium">No customers found</p>
-                        <p className="text-sm text-slate-500 mt-1">Try adjusting your search terms</p>
-                        <button
-                          onClick={() => setSearchTerm('')}
-                          className="mt-3 text-blue-600 hover:text-blue-700 text-sm font-medium"
-                        >
+                        <Search className="w-10 h-10 sm:w-12 sm:h-12 text-gray-300 mx-auto mb-3" />
+                        <p className="text-[#0F172A] font-medium text-sm">No customers found</p>
+                        <button onClick={clearSearch} className="mt-2 text-[#0066CC] text-sm font-medium">
                           Clear search
                         </button>
                       </>
                     ) : (
                       <>
-                        <User className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                        <p className="text-slate-600 font-medium">No customers available</p>
-                        <p className="text-sm text-slate-500 mt-1">Customers will appear here once added</p>
+                        <User className="w-10 h-10 sm:w-12 sm:h-12 text-gray-300 mx-auto mb-3" />
+                        <p className="text-[#0F172A] font-medium text-sm">No customers available</p>
                       </>
                     )}
                   </div>
                 ) : (
                   filteredCustomers.map(customer => (
-                    <div
+                    <CustomerCard
                       key={customer._id}
-                      className={`px-6 py-5 transition-all duration-200 hover:bg-slate-50 ${
-                        activeCustomer?.id === customer._id 
-                          ? 'bg-blue-50 border-l-4 border-l-blue-500' 
-                          : ''
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-4">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-3 mb-2">
-                            <div className="w-10 h-10 bg-gradient-to-br from-slate-200 to-slate-300 rounded-full flex items-center justify-center">
-                              <User className="w-5 h-5 text-slate-600" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <h3 className="font-semibold text-slate-900 truncate text-lg">{customer.name}</h3>
-                              <p className="text-sm text-slate-600 truncate">{customer.email}</p>
-                            </div>
-                          </div>
-                          <p className="text-xs text-slate-500 font-mono bg-slate-100 px-2 py-1 rounded inline-block">
-                            ID: {customer._id}
-                          </p>
-                        </div>
-
-                        <div className="flex flex-col sm:flex-row gap-2">
-                          {PLATFORMS.map(platform => {
-                            const Icon = platform.icon;
-                            const isGenerating = loading && activeCustomer?.id === customer._id;
-                            return (
-                              <button
-                                key={platform.key}
-                                onClick={() => handleGenerateQr(customer._id, customer.name, platform.key)}
-                                disabled={loading}
-                                className={`${platform.color} text-white px-4 py-2.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md hover:scale-105 min-w-[44px] justify-center`}
-                                title={`Generate ${platform.label} QR for ${customer.name}`}
-                              >
-                                {isGenerating ? (
-                                  <Loader2 className="w-4 h-4 animate-spin" />
-                                ) : (
-                                  <Icon className="w-4 h-4" />
-                                )}
-                                <span className="hidden md:inline">{platform.label}</span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>
+                      customer={customer}
+                      activeCustomer={activeCustomer}
+                      loading={loading}
+                      onGenerateQr={handleGenerateQr}
+                    />
                   ))
-)}
+                )}
               </div>
             </div>
           </div>
 
-          {/* Enhanced QR Code Preview */}
-          <div className="xl:col-span-1">
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 sticky top-8 overflow-hidden">
-              <div className="px-6 py-5 border-b border-slate-200 bg-slate-50/50">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="text-xl font-semibold text-slate-900">QR Code Preview</h2>
+          {/* QR Code Preview - Shows first on mobile when QR is generated */}
+          <div className="xl:col-span-1 order-1 xl:order-2">
+            <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm border border-gray-100 xl:sticky xl:top-4 overflow-hidden">
+              {/* Header */}
+              <div className="px-3 sm:px-4 lg:px-6 py-3 sm:py-4 border-b border-gray-100 bg-[#F4F9FF]">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <h2 className="text-base sm:text-lg lg:text-xl font-semibold text-[#0F172A]">QR Preview</h2>
                     {qrResult.validForHours && (
-                      <p className="text-sm text-slate-600 mt-1">Valid for {qrResult.validForHours} hours</p>
+                      <p className="text-xs sm:text-sm text-[#475569]">Valid for {qrResult.validForHours}h</p>
                     )}
                   </div>
-                  {qrResult.platform && (
-                    <div className={`px-3 py-1.5 rounded-lg text-xs font-medium ${getPlatformDetails(qrResult.platform).lightColor}`}>
-                      {getPlatformDetails(qrResult.platform).label}
+                  {currentPlatformDetails && (
+                    <div className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-xs font-medium ${currentPlatformDetails.lightColor}`}>
+                      {currentPlatformDetails.label}
                     </div>
                   )}
                 </div>
               </div>
 
-              <div className="p-6">
+              {/* Content */}
+              <div className="p-3 sm:p-4 lg:p-6">
                 {loading ? (
-                  <div className="text-center py-12">
-                    <div className="relative">
-                      <div className="w-16 h-16 bg-blue-100 rounded-full mx-auto mb-4 flex items-center justify-center">
-                        <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
-                      </div>
+                  <div className="text-center py-8 sm:py-12">
+                    <div className="w-12 h-12 sm:w-16 sm:h-16 bg-[#F4F9FF] rounded-full mx-auto mb-3 flex items-center justify-center">
+                      <Loader2 className="w-6 h-6 sm:w-8 sm:h-8 text-[#0066CC] animate-spin" />
                     </div>
-                    <p className="text-slate-700 font-semibold mb-1">Generating QR Code</p>
-                    <p className="text-sm text-slate-500">Creating secure QR code...</p>
+                    <p className="text-[#0F172A] font-semibold text-sm sm:text-base">Generating...</p>
                     {activeCustomer && (
-                      <div className="mt-3 p-3 bg-slate-50 rounded-lg">
-                        <p className="text-sm font-medium text-slate-700">{activeCustomer.name}</p>
-                      </div>
+                      <p className="text-xs sm:text-sm text-[#475569] mt-1">{activeCustomer.name}</p>
                     )}
                   </div>
                 ) : qrResult.qrDataUrl ? (
-                  <div className="space-y-6">
-                    {/* Enhanced Expiration Status */}
+                  <div className="space-y-3 sm:space-y-4">
+                    {/* Expiration Status */}
                     {timeRemaining && (
-                      <div className={`border rounded-xl p-4 flex items-center gap-3 ${getExpirationColor()}`}>
-                        <div className="flex-shrink-0">
-                          {getExpirationIcon()}
-                        </div>
-                        <div className="flex-1">
-                          <p className="font-semibold text-sm">
-                            {qrExpiration === 'expired' ? 'QR Code Expired' : 
-                             qrExpiration === 'warning' ? 'Expiring Soon' : 'QR Code Active'}
+                      <div className={`border rounded-lg sm:rounded-xl p-2.5 sm:p-3 flex items-center gap-2 sm:gap-3 ${getExpirationColor}`}>
+                        <div className="flex-shrink-0">{expirationIcon}</div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-xs sm:text-sm">
+                            {qrExpiration === 'expired' ? 'Expired' : 
+                             qrExpiration === 'warning' ? 'Expiring Soon' : 'Active'}
                           </p>
-                          <p className="text-xs mt-1">
-                            {qrExpiration === 'expired' 
-                              ? 'This QR code is no longer valid. Generate a new one.' 
-                              : `Time remaining: ${timeRemaining}`}
+                          <p className="text-xs truncate">
+                            {qrExpiration === 'expired' ? 'Generate new' : timeRemaining}
                           </p>
                         </div>
                       </div>
                     )}
 
-                    {/* QR Code Display */}
-                    <div className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl p-8 flex items-center justify-center relative">
+                    {/* QR Code Display - Compact on mobile */}
+                    <div className="bg-[#F4F9FF] rounded-lg sm:rounded-xl p-4 sm:p-6 lg:p-8 flex items-center justify-center relative">
                       <img
                         src={qrResult.qrDataUrl}
-                        alt="Generated QR Code"
-                        className={`w-full max-w-[200px] h-auto rounded-xl shadow-lg bg-white p-3 transition-all duration-300 ${
-                          qrExpiration === 'expired' ? 'opacity-40 grayscale' : 'hover:scale-105'
+                        alt="QR Code"
+                        className={`w-32 h-32 sm:w-40 sm:h-40 lg:w-48 lg:h-48 rounded-lg sm:rounded-xl shadow-lg bg-white p-2 sm:p-3 ${
+                          qrExpiration === 'expired' ? 'opacity-40 grayscale' : ''
                         }`}
                       />
                       {qrExpiration === 'expired' && (
                         <div className="absolute inset-0 flex items-center justify-center">
-                          <div className="bg-red-500 text-white px-3 py-1 rounded-lg text-sm font-semibold">
+                          <div className="bg-red-500 text-white px-2 py-1 rounded text-xs sm:text-sm font-semibold">
                             EXPIRED
                           </div>
                         </div>
                       )}
                     </div>
 
-                    {/* Customer Information */}
-                    <div className="space-y-4">
-                      <div className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-xl p-4">
-                        <div className="flex items-center gap-3 mb-2">
-                          <User className="w-5 h-5 text-slate-600" />
-                          <p className="text-sm font-semibold text-slate-800 uppercase tracking-wide">Customer Details</p>
+                    {/* Compact Info Grid on Mobile */}
+                    <div className="grid grid-cols-2 gap-2 sm:hidden">
+                      <div className="bg-[#F4F9FF] rounded-lg p-2.5">
+                        <p className="text-xs text-[#475569]">Customer</p>
+                        <p className="font-semibold text-[#0F172A] text-sm truncate">{qrResult.customerName}</p>
+                      </div>
+                      <div className="bg-[#F4F9FF] rounded-lg p-2.5">
+                        <p className="text-xs text-[#475569]">Platform</p>
+                        <p className="font-semibold text-[#0F172A] text-sm capitalize">{currentPlatformDetails?.label}</p>
+                      </div>
+                    </div>
+
+                    {/* Full Info Cards - Hidden on mobile, shown on tablet+ */}
+                    <div className="hidden sm:block space-y-3">
+                      <div className="bg-[#F4F9FF] rounded-xl p-3 lg:p-4">
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <User className="w-4 h-4 text-[#0066CC]" />
+                          <p className="text-xs font-semibold text-[#0F172A] uppercase">Customer</p>
                         </div>
-                        <div className="space-y-2">
-                          <p className="font-bold text-slate-900 text-lg">{qrResult.customerName}</p>
-                          <p className="text-sm text-slate-600 font-mono bg-white px-2 py-1 rounded">
-                            {qrResult.customerId}
-                          </p>
-                        </div>
+                        <p className="font-bold text-[#0F172A] text-base lg:text-lg">{qrResult.customerName}</p>
+                        <p className="text-xs text-[#475569] font-mono bg-white px-2 py-1 rounded mt-1 truncate">
+                          {qrResult.customerId}
+                        </p>
                       </div>
 
-                      {/* Platform Information */}
-                      <div className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-xl p-4">
-                        <div className="flex items-center gap-3 mb-2">
-                          {React.createElement(getPlatformDetails(qrResult.platform).icon, { 
-                            className: "w-5 h-5 text-slate-600" 
+                      <div className="bg-[#F4F9FF] rounded-xl p-3 lg:p-4">
+                        <div className="flex items-center gap-2 mb-1.5">
+                          {currentPlatformDetails && React.createElement(currentPlatformDetails.icon, { 
+                            className: "w-4 h-4 text-[#0066CC]" 
                           })}
-                          <p className="text-sm font-semibold text-slate-800 uppercase tracking-wide">Platform</p>
+                          <p className="text-xs font-semibold text-[#0F172A] uppercase">Platform</p>
                         </div>
-                        <p className="font-bold text-slate-900 capitalize">{getPlatformDetails(qrResult.platform).label}</p>
+                        <p className="font-bold text-[#0F172A] capitalize">{currentPlatformDetails?.label}</p>
                       </div>
 
-                      {/* Enhanced Expiration Details */}
-                      <div className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-xl p-4">
-                        <div className="flex items-center gap-3 mb-3">
-                          <Clock className="w-5 h-5 text-slate-600" />
-                          <p className="text-sm font-semibold text-slate-800 uppercase tracking-wide">Expiration Details</p>
+                      <div className="bg-[#F4F9FF] rounded-xl p-3 lg:p-4">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Clock className="w-4 h-4 text-[#0066CC]" />
+                          <p className="text-xs font-semibold text-[#0F172A] uppercase">Expiration</p>
                         </div>
-                        <div className="space-y-2">
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-slate-600">Expires:</span>
-                            <span className="font-semibold text-slate-900 text-sm">
+                        <div className="space-y-1 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-[#475569]">Expires:</span>
+                            <span className="font-semibold text-[#0F172A] text-xs">
                               {qrResult.expiresAt ? new Date(qrResult.expiresAt).toLocaleString() : 'Not set'}
                             </span>
                           </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-slate-600">Generated:</span>
-                            <span className="text-sm text-slate-700">
-                              {qrResult.generatedAt ? new Date(qrResult.generatedAt).toLocaleString() : 'Unknown'}
-                            </span>
-                          </div>
-                          {qrResult.validForHours && (
-                            <div className="flex justify-between items-center">
-                              <span className="text-sm text-slate-600">Duration:</span>
-                              <span className="text-sm text-slate-700">{qrResult.validForHours} hours</span>
-                            </div>
-                          )}
                         </div>
                       </div>
 
-                      {/* Config URL */}
                       {qrResult.configUrl && (
-                        <div className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-xl p-4">
-                          <div className="flex items-center gap-3 mb-2">
-                            <ExternalLink className="w-5 h-5 text-slate-600" />
-                            <p className="text-sm font-semibold text-slate-800 uppercase tracking-wide">Configuration</p>
-                          </div>
-                          <a
-                            href={qrResult.configUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-600 hover:text-blue-700 text-sm flex items-center gap-2 p-2 bg-white rounded-lg hover:bg-blue-50 transition-colors"
-                          >
-                            <ExternalLink className="w-4 h-4 flex-shrink-0" />
-                            <span className="truncate font-medium">View Configuration</span>
-                          </a>
-                        </div>
+                        <a
+                          href={qrResult.configUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center justify-center gap-2 p-3 bg-[#F4F9FF] rounded-xl text-[#0066CC] hover:bg-blue-100 transition-colors text-sm font-medium"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                          <span>View Configuration</span>
+                        </a>
                       )}
-
-                      {/* Download Button */}
-                      <button
-                        onClick={downloadQrCode}
-                        disabled={qrExpiration === 'expired'}
-                        className={`w-full px-6 py-4 rounded-xl font-semibold transition-all duration-200 flex items-center justify-center gap-3 shadow-sm hover:shadow-md transform hover:scale-105 ${
-                          qrExpiration === 'expired' 
-                            ? 'bg-gray-200 text-gray-500 cursor-not-allowed hover:scale-100' 
-                            : 'bg-gradient-to-r from-slate-800 to-slate-900 hover:from-slate-900 hover:to-black text-white'
-                        }`}
-                      >
-                        <Download className="w-5 h-5" />
-                        {qrExpiration === 'expired' ? 'QR Code Expired' : 'Download QR Code'}
-                      </button>
                     </div>
+
+                    {/* Download Button */}
+                    <button
+                      onClick={downloadQrCode}
+                      disabled={qrExpiration === 'expired'}
+                      className={`w-full px-4 py-3 sm:py-4 rounded-lg sm:rounded-xl font-semibold transition-all flex items-center justify-center gap-2 sm:gap-3 shadow-sm active:scale-95 touch-manipulation ${
+                        qrExpiration === 'expired' 
+                          ? 'bg-gray-200 text-gray-500 cursor-not-allowed' 
+                          : 'bg-gradient-to-r from-[#00E5FF] to-[#0066CC] text-white'
+                      }`}
+                    >
+                      <Download className="w-4 h-4 sm:w-5 sm:h-5" />
+                      <span className="text-sm sm:text-base">{qrExpiration === 'expired' ? 'Expired' : 'Download QR'}</span>
+                    </button>
                   </div>
                 ) : (
-                  <div className="text-center py-16">
-                    <div className="w-20 h-20 bg-slate-100 rounded-full mx-auto mb-6 flex items-center justify-center">
-                      <QrCode className="w-10 h-10 text-slate-400" />
+                  <div className="text-center py-8 sm:py-12 lg:py-16">
+                    <div className="w-14 h-14 sm:w-16 sm:h-16 lg:w-20 lg:h-20 bg-[#F4F9FF] rounded-full mx-auto mb-4 flex items-center justify-center">
+                      <QrCode className="w-7 h-7 sm:w-8 sm:h-8 lg:w-10 lg:h-10 text-[#0066CC]" />
                     </div>
-                    <h3 className="text-lg font-semibold text-slate-700 mb-2">Ready to Generate</h3>
-                    <p className="text-slate-500 text-sm mb-4">Select a customer and platform to create a QR code</p>
-                    <div className="flex justify-center gap-2">
+                    <h3 className="text-base sm:text-lg font-semibold text-[#0F172A] mb-1 sm:mb-2">Ready to Generate</h3>
+                    <p className="text-[#475569] text-xs sm:text-sm mb-3 sm:mb-4">Select a customer and platform</p>
+                    <div className="flex justify-center gap-1.5 sm:gap-2">
                       {PLATFORMS.map(platform => {
                         const Icon = platform.icon;
                         return (
-                          <div key={platform.key} className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center">
-                            <Icon className="w-4 h-4 text-slate-400" />
+                          <div key={platform.key} className="w-7 h-7 sm:w-8 sm:h-8 bg-[#F4F9FF] rounded-lg flex items-center justify-center">
+                            <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#0066CC]" />
                           </div>
                         );
                       })}
@@ -819,6 +777,6 @@ export default function AdminQrGenerator() {
           </div>
         </div>
       </div>
-    </div>
+    </AdminLayout>
   );
 }

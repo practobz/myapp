@@ -2,8 +2,8 @@ import React from 'react';
 
 function Footer() {
   return (
-    <footer className="bg-white border-t">
-      <div className="max-w-7xl mx-auto py-4 px-2 sm:px-4 lg:px-8">
+    <footer className="bg-white border-t mt-auto">
+      <div className="max-w-7xl mx-auto py-2 px-2 sm:px-4 lg:px-6">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-2 md:space-y-0">
           <div className="flex justify-center md:justify-start space-x-4 sm:space-x-6">
             <a href="#" className="text-gray-400 hover:text-gray-500">

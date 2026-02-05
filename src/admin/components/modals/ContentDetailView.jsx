@@ -1,8 +1,77 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { 
   Send, Image, FileText, MessageSquare, Calendar, ChevronLeft, ChevronRight,
-  Play, Video, Trash2 // <-- add Trash2
+  Play, Trash2
 } from 'lucide-react';
+
+// Memoized Comment Marker Component
+const CommentMarker = memo(({ comment, index, onToggle, active, hovered, onHover, onLeave, getBoxPosition }) => {
+  const { left, right } = getBoxPosition(comment);
+  
+  return (
+    <div
+      style={{
+        position: "absolute",
+        top: (comment.y || comment.position?.y || 0) - 12,
+        left: (comment.x || comment.position?.x || 0) - 12,
+        width: 24,
+        height: 24,
+        background: comment.done ? "#10b981" : "#ef4444",
+        color: "#fff",
+        borderRadius: "50%",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontWeight: "bold",
+        fontSize: "11px",
+        boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+        cursor: "pointer",
+        zIndex: 2,
+        border: "2px solid #fff",
+        transition: "all 0.2s",
+      }}
+      onMouseEnter={onHover}
+      onMouseLeave={onLeave}
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle();
+      }}
+    >
+      {index + 1}
+      
+      {(active || hovered) && (
+        <div
+          style={{
+            position: "absolute",
+            left: left,
+            right: right,
+            top: "50%",
+            transform: "translateY(-50%)",
+            background: "#fff",
+            border: "2px solid #3b82f6",
+            borderRadius: "8px",
+            padding: "12px",
+            minWidth: "240px",
+            maxWidth: "280px",
+            zIndex: 10,
+            boxShadow: "0 4px 16px rgba(59,130,246,0.2)",
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <p className="font-medium text-gray-900 text-xs leading-relaxed break-words">
+            {comment.message || comment.comment}
+            {comment.done && <span className="text-green-600 ml-2">✓</span>}
+          </p>
+          <p className="text-[10px] text-gray-500 mt-1">
+            {comment.timestamp ? new Date(comment.timestamp).toLocaleString() : ''}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+});
+
+CommentMarker.displayName = 'CommentMarker';
 
 function ContentDetailView({ 
   selectedContent, 
@@ -16,7 +85,7 @@ function ContentDetailView({
   isVideoUrl,
   calendarName,
   itemName,
-  onDeleteVersion // <-- add prop
+  onDeleteVersion
 }) {
   const [selectedVersionIndex, setSelectedVersionIndex] = useState(0);
   const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
@@ -25,15 +94,50 @@ function ContentDetailView({
   const [activeComment, setActiveComment] = useState(null);
   const [hoveredComment, setHoveredComment] = useState(null);
 
+  // Memoized platform parsing
+  const parsePlatforms = useCallback((val) => {
+    if (!val) return [];
+    if (Array.isArray(val)) return val.map(v => String(v).trim()).filter(Boolean);
+    const s = String(val || '');
+    if (s.includes(',')) return s.split(',').map(v => v.trim()).filter(Boolean);
+    if (s.includes(' ')) return s.split(/\s+/).map(v => v.trim()).filter(Boolean);
+    const matches = s.match(/facebook|instagram|youtube|linkedin|twitter|tiktok|pinterest/ig);
+    if (matches) return matches.map(m => m.toLowerCase());
+    return [s];
+  }, []);
+
+  const platformColor = useCallback((p) => {
+    switch((p||'').toLowerCase()){
+      case 'facebook': return 'bg-blue-100 text-blue-800';
+      case 'instagram': return 'bg-pink-100 text-pink-800';
+      case 'youtube': return 'bg-red-100 text-red-800';
+      case 'linkedin': return 'bg-blue-50 text-blue-800';
+      case 'twitter': return 'bg-sky-100 text-sky-800';
+      case 'tiktok': return 'bg-black text-white';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  }, []);
+
+  const getBoxPosition = useCallback((comment) => {
+    let boxLeft = 40;
+    let boxRight = "auto";
+    const mediaElement = document.querySelector('img[alt*="Version"], video');
+    if (mediaElement && mediaElement.width && (comment.x || comment.position?.x) > mediaElement.width / 2) {
+      boxLeft = "auto";
+      boxRight = 40;
+    }
+    return { left: boxLeft, right: boxRight };
+  }, []);
+
   useEffect(() => {
-    if (selectedContent) {
+    if (selectedContent?.versions?.length) {
       setSelectedVersionIndex(selectedContent.versions.length - 1);
       setSelectedMediaIndex(0);
     }
   }, [selectedContent]);
 
   useEffect(() => {
-    if (selectedContent && selectedContent.versions && selectedContent.versions[selectedVersionIndex]) {
+    if (selectedContent?.versions?.[selectedVersionIndex]) {
       setCommentsForVersion(selectedContent.versions[selectedVersionIndex].comments || []);
     } else {
       setCommentsForVersion([]);
@@ -48,106 +152,131 @@ function ContentDetailView({
     setCommentsForCurrentMedia(filteredComments);
   }, [commentsForVersion, selectedMediaIndex]);
 
+  const currentVersion = useMemo(() => 
+    selectedContent?.versions?.[selectedVersionIndex], 
+    [selectedContent, selectedVersionIndex]
+  );
+
+  const currentMedia = useMemo(() => 
+    currentVersion?.media?.[selectedMediaIndex], 
+    [currentVersion, selectedMediaIndex]
+  );
+
   if (!selectedContent) return null;
 
   return (
-    <div className="space-y-8">
-      <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 p-8">
-        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
-          <div className="flex-1">
-            {/* --- Show calendar and item name at the top --- */}
-            {calendarName && (
-              <div className="mb-2 text-xs text-gray-500">
-                <span className="font-semibold text-blue-700">Calendar:</span> {calendarName}
-              </div>
+    <div className="space-y-3 sm:space-y-4">
+      {/* Compact Header */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200/50 p-3 sm:p-4">
+        <div className="flex flex-col gap-3">
+          {/* Calendar/Item Info */}
+          {(calendarName || itemName) && (
+            <div className="flex flex-col sm:flex-row gap-1 sm:gap-3 text-xs">
+              {calendarName && (
+                <div className="flex items-center gap-1">
+                  <span className="font-medium text-blue-600">📅</span>
+                  <span className="text-gray-600">{calendarName}</span>
+                </div>
+              )}
+              {itemName && (
+                <div className="flex items-center gap-1">
+                  <span className="font-medium text-cyan-600">📝</span>
+                  <span className="text-gray-600">{itemName}</span>
+                </div>
+              )}
+            </div>
+          )}
+          
+          {/* Title & Customer Info */}
+          <div>
+            {selectedContent.title && (
+              <h1 className="text-lg sm:text-xl font-bold text-gray-900 mb-1">{selectedContent.title}</h1>
             )}
-            {itemName && (
-              <div className="mb-2 text-xs text-gray-500">
-                <span className="font-semibold text-purple-700">Item:</span> {itemName}
-              </div>
+            {selectedContent.description && (
+              <p className="text-xs sm:text-sm text-gray-600 line-clamp-2">{selectedContent.description}</p>
             )}
-            {/* --- End calendar/item name --- */}
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">{selectedContent.title}</h1>
-            <p className="text-gray-600 mb-4">{selectedContent.description}</p>
+          </div>
+          
+          {/* Meta Info Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+            <div className="flex items-center gap-1.5">
+              <div className="w-1.5 h-1.5 bg-blue-600 rounded-full"></div>
+              <div>
+                <span className="text-gray-500 block">Customer</span>
+                <span className="font-medium text-gray-900">{getCustomerName(selectedContent.customerId)}</span>
+              </div>
+            </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-              <div className="flex items-center space-x-2">
-                <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                <div>
-                  <span className="text-sm font-medium text-gray-500">Customer</span>
-                  <p className="text-sm text-gray-900 font-semibold">{getCustomerName(selectedContent.customerId)}</p>
+            <div className="flex items-center gap-1.5">
+              <div className="w-1.5 h-1.5 bg-cyan-600 rounded-full"></div>
+              <div>
+                <span className="text-gray-500 block">Platform</span>
+                <div className="flex flex-wrap gap-1 mt-0.5">
+                  {parsePlatforms(selectedContent.platform).map((p, i) => (
+                    <span key={i} className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${platformColor(p)}`}>
+                      {p.charAt(0).toUpperCase() + p.slice(1)}
+                    </span>
+                  ))}
                 </div>
               </div>
-              <div className="flex items-center space-x-2">
-                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                <div>
-                  <span className="text-sm font-medium text-gray-500">Platform</span>
-                  <p className="text-sm text-gray-900">{selectedContent.platform}</p>
-                </div>
-              </div>
-              <div className="flex items-center space-x-2">
-                <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
-                <div>
-                  <span className="text-sm font-medium text-gray-500">Total Versions</span>
-                  <p className="text-sm text-gray-900">{selectedContent.totalVersions}</p>
-                </div>
+            </div>
+            
+            <div className="flex items-center gap-1.5">
+              <div className="w-1.5 h-1.5 bg-blue-600 rounded-full"></div>
+              <div>
+                <span className="text-gray-500 block">Versions</span>
+                <span className="font-medium text-gray-900">{selectedContent.totalVersions}</span>
               </div>
             </div>
           </div>
 
-          <div className="flex flex-col gap-3">
-            {/* Status display logic update */}
-            <span className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-medium border ${
-              getStatusColor(
-                isContentPublished(selectedContent.id)
-                  ? 'published'
-                  : selectedContent.status
-              )
+          {/* Status & Action */}
+          <div className="flex flex-col sm:flex-row gap-2">
+            <span className={`inline-flex items-center px-2 py-1.5 rounded-lg text-xs font-medium ${
+              getStatusColor(isContentPublished(selectedContent.id) ? 'published' : selectedContent.status)
             }`}>
-              {getStatusIcon(
-                isContentPublished(selectedContent.id)
-                  ? 'published'
-                  : selectedContent.status
-              )}
-              <span className="ml-2">
-                {isContentPublished(selectedContent.id)
-                  ? 'PUBLISHED'
-                  : selectedContent.status.replace('_', ' ').toUpperCase()
-                }
+              {getStatusIcon(isContentPublished(selectedContent.id) ? 'published' : selectedContent.status)}
+              <span className="ml-1">
+                {isContentPublished(selectedContent.id) ? 'Published' : selectedContent.status.replace('_', ' ')}
               </span>
               {isContentPublished(selectedContent.id) && (
-                <span className="ml-2 text-xs text-blue-600">
-                  {getPublishedPlatformsForContent(selectedContent.id).map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(', ')}
+                <span className="ml-1 flex flex-wrap gap-1">
+                  {getPublishedPlatformsForContent(selectedContent.id).map((p, idx) => (
+                    <span key={idx} className={`px-1 py-0.5 rounded text-[10px] ${platformColor(p)}`}>
+                      {p.charAt(0).toUpperCase() + p.slice(1)}
+                    </span>
+                  ))}
                 </span>
               )}
             </span>
             
             <button
               onClick={() => handleScheduleContent(selectedContent)}
-              className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-cyan-700 transition-all duration-200"
+              className="inline-flex items-center justify-center px-4 py-2 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors"
             >
-              <Send className="h-5 w-5 mr-2" />
+              <Send className="h-3.5 w-3.5 mr-1.5" />
               Post Content
             </button>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-        {/* Version Display */}
-        <div className="xl:col-span-2">
-          <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-200/50 bg-gradient-to-r from-purple-50 to-pink-50">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+        {/* Version Display - Takes 2 columns on large screens */}
+        <div className="lg:col-span-2">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200/50 overflow-hidden">
+            {/* Header */}
+            <div className="px-3 py-2 sm:px-4 sm:py-3 border-b border-gray-200/50 bg-blue-50/50">
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-bold text-gray-900 flex items-center">
-                  <Image className="h-5 w-5 text-purple-600 mr-2" />
-                  Version {selectedContent.versions[selectedVersionIndex]?.versionNumber}
-                  <span className="ml-2 text-sm font-normal text-gray-500">
-                    of {selectedContent.totalVersions}
+                <h3 className="text-sm sm:text-base font-bold text-gray-900 flex items-center">
+                  <Image className="h-4 w-4 text-blue-600 mr-1.5" />
+                  Version {currentVersion?.versionNumber}
+                  <span className="ml-1.5 text-xs font-normal text-gray-600">
+                    / {selectedContent.totalVersions}
                   </span>
                 </h3>
                 
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center gap-1">
                   <button
                     onClick={() => {
                       if (selectedVersionIndex > 0) {
@@ -156,9 +285,9 @@ function ContentDetailView({
                       }
                     }}
                     disabled={selectedVersionIndex === 0}
-                    className="p-2 rounded-lg bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                    className="p-1.5 rounded-lg bg-white border border-gray-200 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
-                    <ChevronLeft className="h-4 w-4" />
+                    <ChevronLeft className="h-3.5 w-3.5 text-blue-600" />
                   </button>
                   <button
                     onClick={() => {
@@ -168,214 +297,129 @@ function ContentDetailView({
                       }
                     }}
                     disabled={selectedVersionIndex === selectedContent.versions.length - 1}
-                    className="p-2 rounded-lg bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                    className="p-1.5 rounded-lg bg-white border border-gray-200 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
-                    <ChevronRight className="h-4 w-4" />
+                    <ChevronRight className="h-3.5 w-3.5 text-blue-600" />
                   </button>
                 </div>
               </div>
             </div>
 
-            <div className="p-6">
-              {selectedContent.versions[selectedVersionIndex] && (
-                <div className="space-y-6">
+            {/* Content */}
+            <div className="p-3 sm:p-4">
+              {currentVersion && (
+                <div className="space-y-3">
                   {/* Media Display */}
-                  <div className="text-center">
-                    {selectedContent.versions[selectedVersionIndex].media && selectedContent.versions[selectedVersionIndex].media.length > 0 ? (
-                      <div className="relative">
-                        {/* Media Navigation for multiple items */}
-                        {selectedContent.versions[selectedVersionIndex].media.length > 1 && (
-                          <div className="flex items-center justify-between mb-4">
-                            <span className="text-sm text-gray-500">
-                              {selectedMediaIndex + 1} of {selectedContent.versions[selectedVersionIndex].media.length}
+                  <div className="relative">
+                    {currentVersion.media?.length > 0 ? (
+                      <>
+                        {/* Media Navigation */}
+                        {currentVersion.media.length > 1 && (
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs text-gray-600">
+                              {selectedMediaIndex + 1} / {currentVersion.media.length}
                             </span>
-                            <div className="flex gap-2">
+                            <div className="flex gap-1">
                               <button
-                                onClick={() => {
-                                  if (selectedMediaIndex > 0) {
-                                    setSelectedMediaIndex(selectedMediaIndex - 1);
-                                  }
-                                }}
+                                onClick={() => selectedMediaIndex > 0 && setSelectedMediaIndex(selectedMediaIndex - 1)}
                                 disabled={selectedMediaIndex === 0}
-                                className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                                className="p-1.5 rounded-lg bg-blue-50 border border-gray-200 hover:bg-white disabled:opacity-50 transition-colors"
                               >
-                                <ChevronLeft className="h-4 w-4" />
+                                <ChevronLeft className="h-3.5 w-3.5 text-blue-600" />
                               </button>
                               <button
-                                onClick={() => {
-                                  if (selectedMediaIndex < selectedContent.versions[selectedVersionIndex].media.length - 1) {
-                                    setSelectedMediaIndex(selectedMediaIndex + 1);
-                                  }
-                                }}
-                                disabled={selectedMediaIndex === selectedContent.versions[selectedVersionIndex].media.length - 1}
-                                className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                                onClick={() => selectedMediaIndex < currentVersion.media.length - 1 && setSelectedMediaIndex(selectedMediaIndex + 1)}
+                                disabled={selectedMediaIndex === currentVersion.media.length - 1}
+                                className="p-1.5 rounded-lg bg-blue-50 border border-gray-200 hover:bg-white disabled:opacity-50 transition-colors"
                               >
-                                <ChevronRight className="h-4 w-4" />
+                                <ChevronRight className="h-3.5 w-3.5 text-blue-600" />
                               </button>
                             </div>
                           </div>
                         )}
                         
-                        {/* Current Media Item */}
-                        {selectedContent.versions[selectedVersionIndex].media[selectedMediaIndex] && 
-                         selectedContent.versions[selectedVersionIndex].media[selectedMediaIndex].url &&
-                         typeof selectedContent.versions[selectedVersionIndex].media[selectedMediaIndex].url === 'string' ? (
-                          isVideoUrl(selectedContent.versions[selectedVersionIndex].media[selectedMediaIndex].url) ? (
-                            <video
-                              src={selectedContent.versions[selectedVersionIndex].media[selectedMediaIndex].url}
-                              controls
-                              className="max-w-full h-auto max-h-96 mx-auto rounded-xl shadow-lg border border-gray-200"
-                              onError={(e) => {
-                                e.target.style.display = 'none';
-                                e.target.nextSibling.style.display = 'flex';
-                              }}
-                            />
+                        {/* Media Item */}
+                        <div className="relative">
+                          {currentMedia?.url && typeof currentMedia.url === 'string' ? (
+                            isVideoUrl(currentMedia.url) ? (
+                              <video
+                                src={currentMedia.url}
+                                controls
+                                className="max-w-full h-auto max-h-64 sm:max-h-80 mx-auto rounded-lg shadow border border-gray-200"
+                                loading="lazy"
+                              />
+                            ) : (
+                              <img
+                                src={currentMedia.url}
+                                alt={`V${currentVersion.versionNumber} M${selectedMediaIndex + 1}`}
+                                className="max-w-full h-auto max-h-64 sm:max-h-80 mx-auto rounded-lg shadow border border-gray-200"
+                                loading="lazy"
+                              />
+                            )
                           ) : (
-                            <img
-                              src={selectedContent.versions[selectedVersionIndex].media[selectedMediaIndex].url}
-                              alt={`Version ${selectedContent.versions[selectedVersionIndex].versionNumber} - Media ${selectedMediaIndex + 1}`}
-                              className="max-w-full h-auto max-h-96 mx-auto rounded-xl shadow-lg border border-gray-200"
-                              onError={(e) => {
-                                e.target.style.display = 'none';
-                                e.target.nextSibling.style.display = 'flex';
-                              }}
-                            />
-                          )
-                        ) : null}
-                        
-                        {/* Fallback for invalid/missing media */}
-                        <div 
-                          className="max-w-full h-96 bg-gray-200 rounded-xl flex items-center justify-center"
-                          style={{ 
-                            display: (selectedContent.versions[selectedVersionIndex].media[selectedMediaIndex]?.url && 
-                                     typeof selectedContent.versions[selectedVersionIndex].media[selectedMediaIndex].url === 'string') 
-                              ? 'none' : 'flex' 
-                          }}
-                        >
-                          <div className="text-center">
-                            <Image className="h-12 w-12 text-gray-400 mx-auto mb-2" />
-                            <p className="text-gray-500">Media unavailable</p>
-                          </div>
-                        </div>
-
-                        {/* Comment Markers */}
-                        {commentsForCurrentMedia.map((comment, index) => {
-                          let boxLeft = 40;
-                          let boxRight = "auto";
-                          const mediaElement = document.querySelector(`img[alt*="Version ${selectedContent.versions[selectedVersionIndex].versionNumber}"], video`);
-                          if (mediaElement && mediaElement.width && (comment.x || comment.position?.x) > mediaElement.width / 2) {
-                            boxLeft = "auto";
-                            boxRight = 40;
-                          }
-
-                          const commentX = comment.x || comment.position?.x || 0;
-                          const commentY = comment.y || comment.position?.y || 0;
-
-                          return (
-                            <div
-                              key={comment.id}
-                              style={{
-                                position: "absolute",
-                                top: commentY - 16,
-                                left: commentX - 16,
-                                width: 32,
-                                height: 32,
-                                background: comment.done ? "#10b981" : "#ef4444",
-                                color: "#fff",
-                                borderRadius: "50%",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                fontWeight: "bold",
-                                fontSize: "14px",
-                                boxShadow: "0 4px 12px rgba(0,0,0,0.25)",
-                                cursor: "pointer",
-                                zIndex: 2,
-                                border: "3px solid #fff",
-                                transition: "all 0.3s",
-                              }}
-                              onMouseEnter={() => setHoveredComment(comment.id)}
-                              onMouseLeave={() => setHoveredComment(null)}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActiveComment(activeComment === comment.id ? null : comment.id);
-                              }}
-                            >
-                              {index + 1}
-                              
-                              {/* Floating Comment Box */}
-                              {(activeComment === comment.id || hoveredComment === comment.id) && (
-                                <div
-                                  style={{
-                                    position: "absolute",
-                                    left: boxLeft,
-                                    right: boxRight,
-                                    top: "50%",
-                                    transform: "translateY(-50%)",
-                                    background: "#fff",
-                                    border: "2px solid #3b82f6",
-                                    borderRadius: "12px",
-                                    padding: "16px",
-                                    minWidth: "280px",
-                                    maxWidth: "320px",
-                                    zIndex: 10,
-                                    boxShadow: "0 8px 32px rgba(59,130,246,0.2)",
-                                  }}
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <div className="mb-3">
-                                    <p className="font-semibold text-gray-900 text-sm leading-relaxed break-words">
-                                      {comment.message || comment.comment}
-                                      {comment.done && <span className="text-green-600 ml-2">✓ Done</span>}
-                                    </p>
-                                    <p className="text-xs text-gray-500 mt-1">
-                                      {comment.timestamp ? new Date(comment.timestamp).toLocaleString() : ''}
-                                    </p>
-                                  </div>
-                                </div>
-                              )}
+                            <div className="w-full h-48 sm:h-64 bg-gray-50 rounded-lg flex items-center justify-center border border-gray-200">
+                              <div className="text-center">
+                                <Image className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                                <p className="text-xs text-gray-500">Media unavailable</p>
+                              </div>
                             </div>
-                          );
-                        })}
-                      </div>
+                          )}
+
+                          {/* Comment Markers */}
+                          {commentsForCurrentMedia.map((comment, index) => (
+                            <CommentMarker
+                              key={comment.id || index}
+                              comment={comment}
+                              index={index}
+                              active={activeComment === comment.id}
+                              hovered={hoveredComment === comment.id}
+                              onToggle={() => setActiveComment(activeComment === comment.id ? null : comment.id)}
+                              onHover={() => setHoveredComment(comment.id)}
+                              onLeave={() => setHoveredComment(null)}
+                              getBoxPosition={getBoxPosition}
+                            />
+                          ))}
+                        </div>
+                      </>
                     ) : (
-                      <div className="max-w-full h-96 bg-gray-200 rounded-xl flex items-center justify-center">
+                      <div className="w-full h-48 sm:h-64 bg-gray-50 rounded-lg flex items-center justify-center border border-gray-200">
                         <div className="text-center">
-                          <Image className="h-12 w-12 text-gray-400 mx-auto mb-2" />
-                          <p className="text-gray-500">No media available</p>
+                          <Image className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                          <p className="text-xs text-gray-500">No media available</p>
                         </div>
                       </div>
                     )}
                   </div>
 
-                  <div className="space-y-4">
+                  {/* Caption & Details */}
+                  <div className="space-y-2">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Caption</label>
-                      <div className="bg-gray-50 rounded-lg p-4">
-                        <p className="text-gray-900">{selectedContent.versions[selectedVersionIndex].caption || 'No caption'}</p>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Caption</label>
+                      <div className="bg-gray-50 rounded-lg p-2 border border-gray-200">
+                        <p className="text-xs text-gray-900">{currentVersion.caption || 'No caption'}</p>
                       </div>
                     </div>
 
-                    {selectedContent.versions[selectedVersionIndex].hashtags && (
+                    {currentVersion.hashtags && (
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Hashtags</label>
-                        <div className="bg-gray-50 rounded-lg p-4">
-                          <p className="text-gray-900">{selectedContent.versions[selectedVersionIndex].hashtags}</p>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Hashtags</label>
+                        <div className="bg-gray-50 rounded-lg p-2 border border-gray-200">
+                          <p className="text-xs text-gray-900">{currentVersion.hashtags}</p>
                         </div>
                       </div>
                     )}
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
-                      <div className="bg-gray-50 rounded-lg p-4">
-                        <p className="text-gray-900">{selectedContent.versions[selectedVersionIndex].notes || 'No notes'}</p>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Notes</label>
+                      <div className="bg-gray-50 rounded-lg p-2 border border-gray-200">
+                        <p className="text-xs text-gray-900">{currentVersion.notes || 'No notes'}</p>
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between text-sm text-gray-500">
-                      <span>Created: {formatDate(selectedContent.versions[selectedVersionIndex].createdAt)}</span>
-                      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(selectedContent.versions[selectedVersionIndex].status)}`}>
-                        {selectedContent.versions[selectedVersionIndex].status.replace('_', ' ').toUpperCase()}
+                    <div className="flex items-center justify-between text-[10px] text-gray-500">
+                      <span>Created: {formatDate(currentVersion.createdAt)}</span>
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getStatusColor(currentVersion.status)}`}>
+                        {currentVersion.status.replace('_', ' ')}
                       </span>
                     </div>
                   </div>
@@ -386,127 +430,125 @@ function ContentDetailView({
         </div>
 
         {/* Right Side: Version History and Comments */}
-        <div className="space-y-6">
-          {/* Version History Panel */}
-          <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-200/50 bg-gradient-to-r from-green-50 to-emerald-50">
-              <h3 className="text-lg font-bold text-gray-900 flex items-center">
-                <FileText className="h-5 w-5 text-green-600 mr-2" />
+        <div className="space-y-3">
+          {/* Version History */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200/50 overflow-hidden">
+            <div className="px-3 py-2 border-b border-gray-200/50 bg-green-50/50">
+              <h3 className="text-sm font-bold text-gray-900 flex items-center">
+                <FileText className="h-4 w-4 text-green-600 mr-1.5" />
                 Version History
               </h3>
             </div>
-            <div className="max-h-96 overflow-y-auto p-0">
-              <div className="divide-y divide-gray-100">
-                {selectedContent.versions.map((version, index) => {
-                  const versionDate = new Date(version.createdAt);
-                  const formattedDate = versionDate.toLocaleDateString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  });
-                  return (
-                    <div className="relative" key={version.id}>
-                      <button
-                        onClick={() => {
-                          setSelectedVersionIndex(index);
-                          setSelectedMediaIndex(0);
-                        }}
-                        className={`w-full text-left px-6 py-4 flex flex-col border-l-4 transition-all duration-200 hover:bg-gray-50 ${
-                          selectedVersionIndex === index
-                            ? "bg-purple-50 border-l-purple-600"
-                            : "bg-white border-l-transparent"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="font-semibold text-gray-900 text-base">
-                            Version {version.versionNumber}
+            <div className="max-h-64 sm:max-h-80 overflow-y-auto">
+              {selectedContent.versions.map((version, index) => {
+                const versionDate = new Date(version.createdAt);
+                const formattedDate = versionDate.toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                });
+                return (
+                  <div className="relative" key={version.id}>
+                    <button
+                      onClick={() => {
+                        setSelectedVersionIndex(index);
+                        setSelectedMediaIndex(0);
+                      }}
+                      className={`w-full text-left px-3 py-2 flex flex-col border-l-2 transition-colors ${
+                        selectedVersionIndex === index
+                          ? "bg-purple-50 border-l-purple-600"
+                          : "bg-white border-l-transparent hover:bg-gray-50"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-gray-900 text-xs">
+                          V{version.versionNumber}
+                        </span>
+                        {selectedVersionIndex === index && (
+                          <span className="text-[10px] font-medium text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded">
+                            Current
                           </span>
-                          {selectedVersionIndex === index && (
-                            <span className="ml-2 text-xs font-medium text-purple-700 bg-purple-100 px-2 py-1 rounded-full">
-                              Current
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center mt-1 text-xs text-gray-500 gap-2">
+                        )}
+                      </div>
+                      <div className="flex items-center text-[10px] text-gray-500 gap-2 mt-0.5">
+                        <span className="flex items-center">
+                          <Calendar className="h-2.5 w-2.5 mr-0.5" />
+                          {formattedDate}
+                        </span>
+                        {version.media?.length > 0 && (
                           <span className="flex items-center">
-                            <Calendar className="h-3 w-3 mr-1" />
-                            {formattedDate}
+                            <Image className="h-2.5 w-2.5 mr-0.5" />
+                            {version.media.length}
                           </span>
-                          {version.media && version.media.length > 0 && (
-                            <span className="flex items-center ml-2">
-                              <Image className="h-3 w-3 mr-1" />
-                              {version.media.length} media
-                            </span>
-                          )}
-                          {version.comments && version.comments.length > 0 && (
-                            <span className="flex items-center ml-2">
-                              <MessageSquare className="h-3 w-3 mr-1" />
-                              {version.comments.length} comments
-                            </span>
-                          )}
-                        </div>
-                      </button>
-                      {/* Delete icon for version */}
-                      <button
-                        className="absolute top-4 right-4 p-1 bg-white rounded-full shadow hover:bg-red-100 transition"
-                        title="Delete Version"
-                        onClick={() => {
-                          if (window.confirm('Are you sure you want to delete this version?')) {
-                            onDeleteVersion(version.id, selectedContent.id, selectedContent.customerId);
-                          }
-                        }}
-                        style={{ zIndex: 10 }}
-                      >
-                        <Trash2 className="h-4 w-4 text-red-500" />
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
+                        )}
+                        {version.comments?.length > 0 && (
+                          <span className="flex items-center">
+                            <MessageSquare className="h-2.5 w-2.5 mr-0.5" />
+                            {version.comments.length}
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                    <button
+                      className="absolute top-2 right-2 p-1 bg-white rounded-full shadow hover:bg-red-50 transition-colors"
+                      title="Delete Version"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (window.confirm('Delete this version?')) {
+                          onDeleteVersion(version.id, selectedContent.id, selectedContent.customerId);
+                        }
+                      }}
+                    >
+                      <Trash2 className="h-3 w-3 text-red-500" />
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
-          {/* Comments for selected version */}
-          <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-200/50 bg-gradient-to-r from-purple-50 to-pink-50">
-              <h3 className="text-lg font-bold text-gray-900 flex items-center">
-                <MessageSquare className="h-5 w-5 text-purple-600 mr-2" />
-                Comments for Version {selectedContent.versions[selectedVersionIndex]?.versionNumber} - Media {selectedMediaIndex + 1} ({commentsForCurrentMedia.length})
+          {/* Comments */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200/50 overflow-hidden">
+            <div className="px-3 py-2 border-b border-gray-200/50 bg-blue-50/50">
+              <h3 className="text-sm font-bold text-gray-900 flex items-center">
+                <MessageSquare className="h-4 w-4 text-blue-600 mr-1.5" />
+                Comments ({commentsForCurrentMedia.length})
               </h3>
             </div>
-            <div className="max-h-80 overflow-y-auto p-4">
+            <div className="max-h-64 overflow-y-auto p-3">
               {commentsForCurrentMedia.length === 0 ? (
-                <div className="text-center py-8">
-                  <div className="bg-gray-100 rounded-full w-12 h-12 flex items-center justify-center mx-auto mb-3">
-                    <MessageSquare className="h-6 w-6 text-gray-400" />
+                <div className="text-center py-6">
+                  <div className="bg-gray-50 rounded-full w-10 h-10 flex items-center justify-center mx-auto mb-2">
+                    <MessageSquare className="h-5 w-5 text-gray-400" />
                   </div>
-                  <p className="text-gray-500 text-sm">No comments for this media item</p>
+                  <p className="text-gray-500 text-xs">No comments</p>
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-2">
                   {commentsForCurrentMedia.map((comment, idx) => (
-                    <div key={comment.id || idx} className={`p-3 rounded-lg border cursor-pointer transition-all duration-200 ${
-                      activeComment === comment.id
-                        ? 'bg-blue-50 border-blue-200 shadow-md'
-                        : 'bg-gray-50 hover:bg-gray-100/50 border-gray-200 hover:border-gray-300/50'
-                    }`} onClick={() => setActiveComment(activeComment === comment.id ? null : comment.id)}>
-                      <div className="flex items-start space-x-3">
-                        <span className="font-bold text-purple-600 bg-purple-100 rounded-full w-6 h-6 flex items-center justify-center text-xs flex-shrink-0">
+                    <div 
+                      key={comment.id || idx} 
+                      className={`p-2 rounded-lg border cursor-pointer transition-colors ${
+                        activeComment === comment.id
+                          ? 'bg-blue-50 border-blue-200'
+                          : 'bg-gray-50 hover:bg-blue-50/50 border-gray-200 hover:border-blue-200/50'
+                      }`} 
+                      onClick={() => setActiveComment(activeComment === comment.id ? null : comment.id)}
+                    >
+                      <div className="flex items-start gap-2">
+                        <span className="font-bold text-blue-600 bg-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] flex-shrink-0 border border-gray-200">
                           {idx + 1}
                         </span>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900 break-words">
+                          <p className="text-xs font-medium text-gray-900 break-words">
                             {comment.message || comment.comment}
                             {comment.done && (
-                              <span className="ml-2 text-green-600 text-xs font-semibold">✓ Done</span>
+                              <span className="ml-1.5 text-blue-600 text-[10px] font-semibold">✓</span>
                             )}
                           </p>
-                          <p className="text-xs text-gray-500 mt-1">
+                          <p className="text-[10px] text-gray-500 mt-0.5">
                             {comment.timestamp ? new Date(comment.timestamp).toLocaleString() : ''}
-                          </p>
-                          <p className="text-xs text-gray-400 mt-1">
-                            Position: ({Math.round(comment.x || comment.position?.x || 0)}, {Math.round(comment.y || comment.position?.y || 0)})
                           </p>
                         </div>
                       </div>
@@ -522,4 +564,4 @@ function ContentDetailView({
   );
 }
 
-export default ContentDetailView;
+export default memo(ContentDetailView);

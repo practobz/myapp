@@ -1,18 +1,174 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AdminLayout from '../../components/layout/AdminLayout';
 import { 
-  ArrowLeft, Eye, MessageSquare, Calendar, User, Palette, Clock, 
+  ArrowLeft, Eye, MessageSquare, Calendar, Palette, Clock, 
   CheckCircle, AlertCircle, Image, FileText, 
-  Play, Video, Filter, Search, Facebook, Instagram, Send, Plus, 
-  MoreVertical, Edit, Trash2, Users, Grid, List, XCircle, Loader2, Hash,
-  Youtube, Linkedin, Check, X, Zap, Settings, RefreshCw
+  Play, Search, Send, 
+  Trash2, Users, XCircle,
+  Settings
 } from 'lucide-react';
 
 import SchedulePostModal from '../../components/modals/SchedulePostModal';
 import ContentDetailView from '../../components/modals/ContentDetailView';
 import SocialIntegrations from '../../../customer/Integration/SocialIntegrations';
 import { useAuth } from '../../contexts/AuthContext';
+
+// Memoized Customer Card Component
+const CustomerCard = memo(({ customerData, customer, onSelect, getStatusColor, isContentPublished, getPublishedPlatformsForContent }) => {
+  const customerName = customer?.name || `Customer ${customerData.customerId}`;
+  const totalPortfolios = customerData.portfolios.length;
+  const pendingCount = customerData.portfolios.filter(p => p.status === 'under_review' && !isContentPublished(p.id)).length;
+  
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200/50 overflow-hidden hover:shadow-md transition-shadow">
+      <div className="p-3 sm:p-4">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="h-10 w-10 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center flex-shrink-0">
+            <span className="text-white font-bold text-sm">
+              {customerName.charAt(0).toUpperCase()}
+            </span>
+          </div>
+          <div className="min-w-0 flex-1">
+            <h3 className="font-semibold text-sm text-gray-900 truncate">{customerName}</h3>
+            <p className="text-xs text-gray-500 truncate">{customer?.email}</p>
+          </div>
+        </div>
+        
+        <div className="flex items-center justify-between mb-3 text-center">
+          <div className="flex-1">
+            <div className="text-lg font-bold text-blue-600">{totalPortfolios}</div>
+            <div className="text-[10px] text-gray-500">Total</div>
+          </div>
+          <div className="flex-1">
+            <div className="text-lg font-bold text-yellow-600">{pendingCount}</div>
+            <div className="text-[10px] text-gray-500">Pending</div>
+          </div>
+        </div>
+
+        <div className="space-y-1 mb-3 max-h-20 overflow-y-auto">
+          {customerData.portfolios.slice(0, 3).map((portfolio) => (
+            <div key={portfolio.id} className="flex items-center justify-between p-1.5 bg-gray-50 rounded text-xs">
+              <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                <div className="w-1.5 h-1.5 bg-blue-500 rounded-full flex-shrink-0"></div>
+                <span className="truncate">{portfolio.title || portfolio.calendarName || 'Content'}</span>
+              </div>
+              <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getStatusColor(isContentPublished(portfolio.id) ? 'published' : portfolio.status)}`}>
+                {isContentPublished(portfolio.id) ? 'Done' : portfolio.status.replace('_', ' ')}
+              </span>
+            </div>
+          ))}
+          {customerData.portfolios.length > 3 && (
+            <div className="text-center text-[10px] text-gray-400">
+              +{customerData.portfolios.length - 3} more
+            </div>
+          )}
+        </div>
+
+        <button
+          onClick={() => onSelect(customerData)}
+          className="w-full bg-blue-600 text-white py-2 px-3 rounded-lg hover:bg-blue-700 text-xs font-medium transition-colors"
+        >
+          View Portfolio
+        </button>
+      </div>
+    </div>
+  );
+});
+
+CustomerCard.displayName = 'CustomerCard';
+
+// Memoized Portfolio Item Card
+const PortfolioCard = memo(({ item, onView, onSchedule, onDelete, formatDate, getStatusColor, getStatusIcon, isContentPublished, getPublishedPlatformsForContent, isVideoUrl }) => {
+  const latestVersion = item.versions[item.versions.length - 1];
+  const firstMedia = latestVersion?.media?.[0];
+  const published = isContentPublished(item.id);
+  
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200/50 overflow-hidden hover:shadow-md transition-shadow flex flex-col">
+      {/* Media Preview */}
+      <div className="relative h-32 sm:h-40 flex-shrink-0 bg-gray-100">
+        {firstMedia?.url ? (
+          isVideoUrl(firstMedia.url) ? (
+            <div className="relative w-full h-full">
+              <video src={firstMedia.url} className="w-full h-full object-cover" muted />
+              <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                <Play className="h-8 w-8 text-white" />
+              </div>
+            </div>
+          ) : (
+            <img src={firstMedia.url} alt="" className="w-full h-full object-cover" loading="lazy" />
+          )
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <Image className="h-8 w-8 text-gray-300" />
+          </div>
+        )}
+        
+        {/* Status Badge */}
+        <div className="absolute top-2 left-2">
+          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${getStatusColor(published ? 'published' : item.status)}`}>
+            {getStatusIcon(published ? 'published' : item.status)}
+            <span className="ml-1">{published ? 'Published' : item.status.replace('_', ' ')}</span>
+          </span>
+        </div>
+        
+        {/* Version Badge */}
+        <div className="absolute top-2 right-2">
+          <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-100 text-purple-700">
+            V{item.totalVersions}
+          </span>
+        </div>
+        
+        {/* Delete Button */}
+        <button
+          onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          className="absolute bottom-2 right-2 p-1.5 bg-white/90 rounded-full shadow hover:bg-red-50 transition-colors"
+        >
+          <Trash2 className="h-3.5 w-3.5 text-red-500" />
+        </button>
+      </div>
+
+      {/* Content */}
+      <div className="p-3 flex-1 flex flex-col">
+        {item.title && <h3 className="font-medium text-sm text-gray-900 truncate mb-1">{item.title}</h3>}
+        {item.calendarName && <p className="text-[10px] text-gray-500 truncate">📅 {item.calendarName}</p>}
+        {item.itemName && <p className="text-[10px] text-gray-500 truncate mb-2">📝 {item.itemName}</p>}
+        
+        <div className="flex items-center justify-between text-[10px] text-gray-400 mb-2">
+          <span>{item.platform}</span>
+          <span>{formatDate(item.lastUpdated)}</span>
+        </div>
+        
+        {item.customerFeedback?.length > 0 && (
+          <div className="flex items-center text-[10px] text-blue-600 mb-2">
+            <MessageSquare className="h-3 w-3 mr-1" />
+            {item.customerFeedback.length} comments
+          </div>
+        )}
+
+        <div className="flex gap-2 mt-auto">
+          <button
+            onClick={onView}
+            className="flex-1 bg-purple-600 text-white py-1.5 px-2 rounded-lg text-xs font-medium hover:bg-purple-700 transition-colors flex items-center justify-center"
+          >
+            <Eye className="h-3 w-3 mr-1" />
+            View
+          </button>
+          <button
+            onClick={onSchedule}
+            className="flex-1 bg-blue-600 text-white py-1.5 px-2 rounded-lg text-xs font-medium hover:bg-blue-700 transition-colors flex items-center justify-center"
+          >
+            <Send className="h-3 w-3 mr-1" />
+            Post
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+});
+
+PortfolioCard.displayName = 'PortfolioCard';
 
 function AdminContentPortfolio() {
   const navigate = useNavigate();
@@ -50,13 +206,14 @@ function AdminContentPortfolio() {
   const [submissions, setSubmissions] = useState([]); // <-- Add this
 
   useEffect(() => {
-    fetchAssignedCustomers();
-    fetchCustomers();
-    fetchAllCustomerSocialAccounts();
-    fetchScheduledPosts();
-    fetchAllCalendars();
-    fetchAllSubmissions(); // <-- Fetch submissions separately
-    // Remove fetchAllPortfolioItems from here!
+    if (currentUser) {
+      fetchAssignedCustomers();
+      fetchCustomers();
+      fetchAllCustomerSocialAccounts();
+      fetchScheduledPosts();
+      fetchAllCalendars();
+      fetchAllSubmissions();
+    }
   }, [currentUser]);
 
   // Add this effect to re-map portfolios when calendars or submissions are loaded
@@ -341,53 +498,79 @@ function AdminContentPortfolio() {
     return allFeedback.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
   };
 
-  const getStatusColor = (status) => {
+  const getStatusColor = useCallback((status) => {
     switch (status) {
       case 'under_review':
-        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+        return 'bg-yellow-100 text-yellow-800';
       case 'approved':
-        return 'bg-green-100 text-green-800 border-green-200';
+        return 'bg-green-100 text-green-800';
       case 'published':
-        return 'bg-blue-100 text-blue-800 border-blue-200';
+        return 'bg-blue-100 text-blue-800';
       case 'revision_requested':
-        return 'bg-orange-100 text-orange-800 border-orange-200';
+        return 'bg-orange-100 text-orange-800';
       case 'rejected':
-        return 'bg-red-100 text-red-800 border-red-200';
+        return 'bg-red-100 text-red-800';
       default:
-        return 'bg-gray-100 text-gray-800 border-gray-200';
+        return 'bg-gray-100 text-gray-800';
     }
-  };
+  }, []);
 
-  const getStatusIcon = (status) => {
+  const getStatusIcon = useCallback((status) => {
     switch (status) {
       case 'approved':
       case 'published':
-        return <CheckCircle className="h-4 w-4" />;
+        return <CheckCircle className="h-3 w-3" />;
       case 'revision_requested':
-        return <AlertCircle className="h-4 w-4" />;
+        return <AlertCircle className="h-3 w-3" />;
       default:
-        return <Clock className="h-4 w-4" />;
+        return <Clock className="h-3 w-3" />;
     }
-  };
+  }, []);
 
-  const getCustomerName = (customerId) => {
+  const getCustomerName = useCallback((customerId) => {
     const customer = customers.find(c => c._id === customerId);
     return customer ? customer.name : `Customer ${customerId}`;
-  };
+  }, [customers]);
 
-  const handleViewContent = (item) => {
-    // Make sure calendarName and itemName are set on selectedContent
+  const formatDate = useCallback((dateString) => {
+    try {
+      return new Date(dateString).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric'
+      });
+    } catch {
+      return 'N/A';
+    }
+  }, []);
+
+  const isVideoUrl = useCallback((url) => {
+    if (!url) return false;
+    const ext = url.split('.').pop().toLowerCase();
+    return ['mp4', 'webm', 'ogg', 'mov', 'avi'].includes(ext);
+  }, []);
+
+  const isContentPublished = useCallback((contentId) => {
+    return scheduledPosts.some(post => post.contentId === contentId && post.status === 'published');
+  }, [scheduledPosts]);
+
+  const getPublishedPlatformsForContent = useCallback((contentId) => {
+    return scheduledPosts
+      .filter(post => post.contentId === contentId && post.status === 'published')
+      .map(post => post.platform);
+  }, [scheduledPosts]);
+
+  const handleViewContent = useCallback((item) => {
     setSelectedContent({
       ...item,
       calendarName: item.calendarName || '',
       itemName: item.itemName || ''
     });
-  };
+  }, []);
 
-  const handleScheduleContent = (item) => {
+  const handleScheduleContent = useCallback((item) => {
     setSelectedContentForSchedule(item);
     setShowScheduleModal(true);
-  };
+  }, []);
 
   // Delete portfolio handler with confirmation
   const handleDeletePortfolio = async (portfolioId, customerId) => {
@@ -476,79 +659,42 @@ function AdminContentPortfolio() {
     }
   };
 
-  const formatDate = (dateString) => {
-    try {
-      return new Date(dateString).toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
-    } catch {
-      return 'Invalid Date';
-    }
-  };
+  // Memoized filtered customer portfolios with sorting
+  const filteredCustomerPortfolios = useMemo(() => {
+    return allPortfolioItems
+      .filter(customerData => {
+        const isAssigned = assignedCustomers.some(c => c._id === customerData.customerId);
+        if (!isAssigned) return false;
 
-  // Helper to detect video URLs
-  const isVideoUrl = (url) => {
-    if (!url) return false;
-    const ext = url.split('.').pop().toLowerCase();
-    return ['mp4', 'webm', 'ogg', 'mov', 'avi'].includes(ext);
-  };
-
-  // Helper: get published platforms for a contentId
-  const getPublishedPlatformsForContent = (contentId) => {
-    return scheduledPosts
-      .filter(post => post.contentId === contentId && post.status === 'published')
-      .map(post => post.platform);
-  };
-
-  // Helper: check if content is published on any platform
-  const isContentPublished = (contentId) => {
-    return scheduledPosts.some(post => post.contentId === contentId && post.status === 'published');
-  };
-
-  // When displaying portfolios, override status if published
-  const publishedStatus = (item) => {
-    if (isContentPublished(item.id)) {
-      return 'published';
-    }
-    return item.status;
-  };
-
-  // Filter portfolios to only assigned customers
-  const filteredCustomerPortfolios = allPortfolioItems.filter(customerData => {
-    // Only show if customer is assigned to this admin
-    const isAssigned = assignedCustomers.some(c => c._id === customerData.customerId);
-    if (!isAssigned) return false;
-
-    const customer = customers.find(c => c._id === customerData.customerId);
-    const customerName = customer ? customer.name : `Customer ${customerData.customerId}`;
-    if (searchTerm && !customerName.toLowerCase().includes(searchTerm.toLowerCase())) {
-      return false;
-    }
-    if (customerFilter !== 'all' && customerData.customerId !== customerFilter) {
-      return false;
-    }
-
-    // --- FIX: Add status filter logic ---
-    if (statusFilter !== 'all') {
-      // Only include customers with at least one portfolio matching the status filter
-      const hasMatchingPortfolio = customerData.portfolios.some(p => {
-        // If statusFilter is 'published', use isContentPublished
-        if (statusFilter === 'published') {
-          return isContentPublished(p.id);
+        const customer = customers.find(c => c._id === customerData.customerId);
+        const customerName = customer ? customer.name : `Customer ${customerData.customerId}`;
+        if (searchTerm && !customerName.toLowerCase().includes(searchTerm.toLowerCase())) {
+          return false;
         }
-        // For other statuses, check status directly and not published
-        return p.status === statusFilter && !isContentPublished(p.id);
-      });
-      if (!hasMatchingPortfolio) return false;
-    }
-    // --- END FIX ---
+        if (customerFilter !== 'all' && customerData.customerId !== customerFilter) {
+          return false;
+        }
 
-    return true;
-  });
+        if (statusFilter !== 'all') {
+          const hasMatchingPortfolio = customerData.portfolios.some(p => {
+            if (statusFilter === 'published') {
+              return isContentPublished(p.id);
+            }
+            return p.status === statusFilter && !isContentPublished(p.id);
+          });
+          if (!hasMatchingPortfolio) return false;
+        }
+
+        return true;
+      })
+      .map(customerData => ({
+        ...customerData,
+        // Sort portfolios by lastUpdated descending (recent first)
+        portfolios: [...customerData.portfolios].sort((a, b) => 
+          new Date(b.lastUpdated) - new Date(a.lastUpdated)
+        )
+      }));
+  }, [allPortfolioItems, assignedCustomers, customers, searchTerm, customerFilter, statusFilter, isContentPublished]);
 
   // Update portfolio status after successful posting
   const updatePortfolioStatus = (contentId, customerId) => {
@@ -612,356 +758,141 @@ function AdminContentPortfolio() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 font-medium">Loading portfolios...</p>
+      <AdminLayout>
+        <div className="flex items-center justify-center h-48">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
+            <p className="text-gray-500 text-sm">Loading...</p>
+          </div>
         </div>
-      </div>
+      </AdminLayout>
     );
   }
 
   return (
     <AdminLayout>
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-        {/* Header */}
-        <header className="bg-white/80 backdrop-blur-sm shadow-sm border-b border-gray-200/50 sticky top-0 z-10">
-          <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-gray-200/50">
-                <div className="flex flex-col sm:flex-row gap-4">
-               
-              <button
-                onClick={() => selectedContent ? setSelectedContent(null) : (selectedCustomer ? setSelectedCustomer(null) : navigate('/admin'))}
-                className="mr-4 p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all duration-200"
-              >
-                <ArrowLeft className="h-5 w-5" />
-              </button>
-              <div className="flex items-center">
-                <div className="p-2 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-xl shadow-lg">
-                  <Palette className="h-6 w-6 text-white" />
-                </div>
-                <div className="ml-3">
-                  <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-                    Admin Content Portfolio
-                  </span>
-                  <p className="text-sm text-gray-500">
-                    {selectedContent ? 'Content Details' : selectedCustomer ? 'Customer Portfolio' : 'All Customer Portfolios'}
-                  </p>
-                </div>
-              </div>
+      <div className="space-y-3 sm:space-y-4">
+        {/* Compact Header */}
+        <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm p-3 sm:p-4 border border-gray-200/50">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => selectedContent ? setSelectedContent(null) : (selectedCustomer ? setSelectedCustomer(null) : navigate('/admin'))}
+              className="p-1.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </button>
+            <div className="p-2 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-lg">
+              <Palette className="h-5 w-5 text-white" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h1 className="text-base sm:text-lg font-bold text-gray-900 truncate">
+                {selectedContent ? 'Content Details' : selectedCustomer ? getCustomerName(selectedCustomer.customerId) : 'Content Portfolio'}
+              </h1>
+              <p className="text-xs text-gray-500">
+                {selectedContent ? 'View & manage' : selectedCustomer ? `${selectedCustomer.portfolios.length} items` : 'All customers'}
+              </p>
             </div>
           </div>
-        </header>
+        </div>
 
-        {/* Main Content */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          {!selectedContent && !selectedCustomer ? (
-            // Customer Portfolio Overview
-            <div className="space-y-8">
-              <div className="text-center">
-                <h1 className="text-4xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
-                  Customer Content Portfolios
-                </h1>
-                <p className="text-gray-600 mt-3 text-lg">View and manage all customer content portfolios</p>
-              </div>
-
-              {/* Search and Filters */}
-              <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-gray-200/50">
-                <div className="flex flex-col sm:flex-row gap-4">
+        {!selectedContent && !selectedCustomer ? (
+            // Customer Portfolio Overview - Compact
+            <>
+              {/* Search and Filters - Combined */}
+              <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm p-3 border border-gray-200/50">
+                <div className="flex flex-col sm:flex-row gap-2">
                   <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                     <input
                       type="text"
-                      placeholder="Search customers..."
+                      placeholder="Search..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full pl-8 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                   </div>
-                  <select
-                    value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
-                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="all">All Status</option>
-                    <option value="under_review">Under Review</option>
-                    <option value="published">Published</option>
-                  </select>
-                  <select
-                    value={customerFilter}
-                    onChange={(e) => setCustomerFilter(e.target.value)}
-                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="all">All Customers</option>
-                    {customers.map(customer => (
-                      <option key={customer._id} value={customer._id}>
-                        {customer.name}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="flex gap-2">
+                    <select
+                      value={statusFilter}
+                      onChange={(e) => setStatusFilter(e.target.value)}
+                      className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 flex-1 sm:flex-none"
+                    >
+                      <option value="all">All Status</option>
+                      <option value="under_review">Pending</option>
+                      <option value="published">Published</option>
+                    </select>
+                    <select
+                      value={customerFilter}
+                      onChange={(e) => setCustomerFilter(e.target.value)}
+                      className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 flex-1 sm:flex-none"
+                    >
+                      <option value="all">All Customers</option>
+                      {customers.map(customer => (
+                        <option key={customer._id} value={customer._id}>
+                          {customer.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
 
-              {/* Customer Cards */}
+              {/* Customer Cards Grid */}
               {filteredCustomerPortfolios.length === 0 ? (
-                <div className="text-center py-16">
-                  <div className="bg-gray-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-                    <Users className="h-8 w-8 text-gray-400" />
+                <div className="text-center py-12">
+                  <div className="bg-gray-100 rounded-full w-12 h-12 flex items-center justify-center mx-auto mb-3">
+                    <Users className="h-6 w-6 text-gray-400" />
                   </div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No portfolios found</h3>
-                  <p className="text-gray-500">No customer portfolios match your current filters.</p>
+                  <h3 className="text-sm font-medium text-gray-900 mb-1">No portfolios found</h3>
+                  <p className="text-xs text-gray-500">No customer portfolios match filters.</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {filteredCustomerPortfolios.map((customerData) => {
-                    const customer = customers.find(c => c._id === customerData.customerId);
-                    const customerName = customer ? customer.name : `Customer ${customerData.customerId}`;
-                    const totalPortfolios = customerData.portfolios.length;
-                    const publishedCount = customerData.portfolios.filter(p => isContentPublished(p.id)).length;
-                    const pendingCount = customerData.portfolios.filter(p => p.status === 'under_review' && !isContentPublished(p.id)).length;
-                    
-                    return (
-                      <div
-                        key={customerData.customerId}
-                        className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden hover:shadow-xl transition-all duration-300 group flex flex-col h-[420px]"
-                      >
-                        <div className="p-6 flex-1 flex flex-col">
-                          <div className="flex items-start justify-between mb-4">
-                            <div className="flex items-center space-x-3">
-                              <div className="h-12 w-12 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
-                                <span className="text-white font-bold text-lg">
-                                  {customerName.charAt(0).toUpperCase()}
-                                </span>
-                              </div>
-                              <div>
-                                <h3 className="font-bold text-lg text-gray-900">{customerName}</h3>
-                                <p className="text-sm text-gray-600 truncate">{customer?.email}</p>
-                              </div>
-                            </div>
-                          </div>
-                          
-                          <div className="grid grid-cols-2 gap-4 mb-4">
-                            <div className="text-center">
-                              <div className="text-2xl font-bold text-blue-600">{totalPortfolios}</div>
-                              <div className="text-xs text-gray-500">Total</div>
-                            </div>
-                            <div className="text-center">
-                              <div className="text-2xl font-bold text-yellow-600">{pendingCount}</div>
-                              <div className="text-xs text-gray-500">Pending</div>
-                            </div>
-                          </div>
-
-                          <div
-                            className="space-y-2 mb-4"
-                            style={{ maxHeight: '100px', overflowY: 'auto', minHeight: 0 }}
-                          >
-                            {customerData.portfolios.slice(0, 10).map((portfolio, index) => (
-                              <div key={portfolio.id} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
-                                <div className="flex flex-col min-w-0 flex-1">
-                                  <div className="flex items-center space-x-2">
-                                    <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></div>
-                                    {/* Only show title if it exists */}
-                                    {portfolio.title ? (
-                                      <span className="text-sm font-medium truncate">{portfolio.title}</span>
-                                    ) : null}
-                                  </div>
-                                  {/* --- Show calendar and item name --- */}
-                                  {portfolio.calendarName && (
-                                    <span className="text-xs text-gray-500">Calendar: {portfolio.calendarName}</span>
-                                  )}
-                                  {portfolio.itemName && (
-                                    <span className="text-xs text-gray-500">Item: {portfolio.itemName}</span>
-                                  )}
-                                </div>
-                                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(isContentPublished(portfolio.id) ? 'published' : portfolio.status)} flex-shrink-0`}>
-                                  {isContentPublished(portfolio.id) ? 'published' : portfolio.status.replace('_', ' ')}
-                                  {isContentPublished(portfolio.id) && (
-                                    <span className="ml-2 text-xs text-blue-600">
-                                      Published on: {getPublishedPlatformsForContent(portfolio.id).map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(', ')}
-                                    </span>
-                                  )}
-                                </span>
-                              </div>
-                            ))}
-                            {customerData.portfolios.length > 10 && (
-                              <div className="text-center text-sm text-gray-500">
-                                +{customerData.portfolios.length - 10} more items
-                              </div>
-                            )}
-                          </div>
-
-                          <button
-                            onClick={() => setSelectedCustomer(customerData)}
-                            className="w-full mt-auto bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-2 px-4 rounded-xl hover:from-blue-700 hover:to-indigo-700 text-sm font-medium transition-all duration-200"
-                          >
-                            View Portfolio
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
+                <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-3">
+                  {filteredCustomerPortfolios.map((customerData) => (
+                    <CustomerCard
+                      key={customerData.customerId}
+                      customerData={customerData}
+                      customer={customers.find(c => c._id === customerData.customerId)}
+                      onSelect={setSelectedCustomer}
+                      getStatusColor={getStatusColor}
+                      isContentPublished={isContentPublished}
+                      getPublishedPlatformsForContent={getPublishedPlatformsForContent}
+                    />
+                  ))}
                 </div>
               )}
-            </div>
+            </>
           ) : selectedCustomer && !selectedContent ? (
-            // Individual Customer Portfolio View
-            <div className="space-y-8">
-              <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 p-8">
-                <div className="flex items-center justify-between mb-6">
-                  <div className="flex items-center space-x-4">
-                    <div className="h-16 w-16 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
-                      <span className="text-white font-bold text-2xl">
-                        {getCustomerName(selectedCustomer.customerId).charAt(0).toUpperCase()}
-                      </span>
-                    </div>
-                    <div>
-                      <h1 className="text-3xl font-bold text-gray-900">{getCustomerName(selectedCustomer.customerId)}</h1>
-                      <p className="text-gray-600">Content Portfolio ({selectedCustomer.portfolios.length} items)</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
+            // Individual Customer Portfolio - Grid View
+            <>
               {selectedCustomer.portfolios.length === 0 ? (
-                <div className="text-center py-16">
-                  <div className="bg-gray-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-                    <FileText className="h-8 w-8 text-gray-400" />
+                <div className="text-center py-12">
+                  <div className="bg-gray-100 rounded-full w-12 h-12 flex items-center justify-center mx-auto mb-3">
+                    <FileText className="h-6 w-6 text-gray-400" />
                   </div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No content created yet</h3>
-                  <p className="text-gray-500">This customer doesn't have any content in their portfolio.</p>
+                  <h3 className="text-sm font-medium text-gray-900 mb-1">No content yet</h3>
+                  <p className="text-xs text-gray-500">This customer has no portfolio items.</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-                  {selectedCustomer.portfolios.map((item) => {
-                    const latestVersion = item.versions[item.versions.length - 1];
-                    const firstMedia = latestVersion?.media?.[0];
-                    
-                    return (
-                      <div key={item.id} className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden hover:shadow-xl transition-all duration-300 group h-[500px] flex flex-col">
-                        {/* Content Preview */}
-                        <div className="relative h-48 flex-shrink-0">
-                          {firstMedia && firstMedia.url && typeof firstMedia.url === 'string' ? (
-                            isVideoUrl(firstMedia.url) ? (
-                              <div className="relative w-full h-full">
-                                <video
-                                  src={firstMedia.url}
-                                  className="w-full h-full object-cover"
-                                  muted
-                                  controls
-                                  onError={(e) => {
-                                    e.target.style.display = 'none';
-                                    e.target.nextSibling.style.display = 'flex';
-                                  }}
-                                />
-                                <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30">
-                                  <Play className="h-12 w-12 text-white" />
-                                </div>
-                              </div>
-                            ) : (
-                              <img 
-                                src={firstMedia.url} 
-                                alt={item.title}
-                                className="w-full h-full object-cover"
-                                onError={(e) => {
-                                  e.target.style.display = 'none';
-                                  e.target.nextSibling.style.display = 'flex';
-                                }}
-                              />
-                            )
-                          ) : null}
-                          
-                          <div className="w-full h-full bg-gray-200 flex items-center justify-center" style={{ display: firstMedia?.url ? 'none' : 'flex' }}>
-                            <Image className="h-12 w-12 text-gray-400" />
-                          </div>
-                          
-                          <div className="absolute top-4 right-4 flex gap-2">
-                            <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(isContentPublished(item.id) ? 'published' : item.status)}`}>
-                              {getStatusIcon(isContentPublished(item.id) ? 'published' : item.status)}
-                              <span className="ml-1">{isContentPublished(item.id) ? 'PUBLISHED' : item.status.replace('_', ' ').toUpperCase()}</span>
-                              {isContentPublished(item.id) && (
-                                <span className="ml-2 text-xs text-blue-600">
-                                  {getPublishedPlatformsForContent(item.id).map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(', ')}
-                                </span>
-                              )}
-                            </span>
-                          </div>
-                          
-                          <div className="absolute top-4 left-4 flex gap-2">
-                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200">
-                              <Image className="h-3 w-3 mr-1" />
-                              {item.totalVersions} Version{item.totalVersions !== 1 ? 's' : ''}
-                            </span>
-                            {latestVersion?.media && latestVersion.media.length > 1 && (
-                              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200">
-                                {latestVersion.media.length} Media
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Add delete icon in top right corner */}
-                          <button
-                            onClick={() => handleDeletePortfolio(item.id, selectedCustomer.customerId)}
-                            className="absolute top-4 right-4 z-10 p-2 bg-white rounded-full shadow hover:bg-red-100 transition"
-                            title="Delete Portfolio"
-                          >
-                            <Trash2 className="h-5 w-5 text-red-500" />
-                          </button>
-                        </div>
-
-                        {/* Content Details */}
-                        <div className="p-6 flex-1 flex flex-col">
-                          <h3 className="font-bold text-lg text-gray-900 mb-2 line-clamp-2">
-                            {item.title ? item.title : null}
-                          </h3>
-                          {/* --- Show calendar and item name --- */}
-                          {item.calendarName && (
-                            <div className="text-xs text-gray-500 mb-1">Calendar: {item.calendarName}</div>
-                          )}
-                          {item.itemName && (
-                            <div className="text-xs text-gray-500 mb-1">Item: {item.itemName}</div>
-                          )}
-                          <p className="text-sm text-gray-600 mb-4 line-clamp-2 flex-1">{item.description}</p>
-                          
-                          <div className="space-y-3 mb-4">
-                            <div className="flex items-center justify-between text-sm">
-                              <span className="text-gray-500">Platform: {item.platform}</span>
-                              <span className="text-gray-500">
-                                Updated: {formatDate(item.lastUpdated)}
-                              </span>
-                            </div>
-
-                            {item.customerFeedback.length > 0 && (
-                              <div className="flex items-center text-sm text-blue-600">
-                                <MessageSquare className="h-4 w-4 mr-1" />
-                                {item.customerFeedback.length} Comment{item.customerFeedback.length !== 1 ? 's' : ''}
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Action Buttons */}
-                          <div className="flex gap-2 mt-auto">
-                            <button
-                              onClick={() => handleViewContent(item)}
-                              className="flex-1 bg-gradient-to-r from-purple-600 to-indigo-600 text-white py-2 px-4 rounded-xl hover:from-purple-700 hover:to-indigo-700 text-sm font-medium flex items-center justify-center transition-all duration-200"
-                            >
-                              <Eye className="h-4 w-4 mr-2" />
-                              View Details
-                            </button>
-                            
-                            <button
-                              onClick={() => handleScheduleContent(item)}
-                              className="flex-1 bg-gradient-to-r from-blue-600 to-cyan-600 text-white py-2 px-4 rounded-xl hover:from-blue-700 hover:to-cyan-700 text-sm font-medium flex items-center justify-center transition-all duration-200"
-                            >
-                              <Send className="h-4 w-4 mr-2" />
-                              Post
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-3">
+                  {selectedCustomer.portfolios.map((item) => (
+                    <PortfolioCard
+                      key={item.id}
+                      item={item}
+                      onView={() => handleViewContent(item)}
+                      onSchedule={() => handleScheduleContent(item)}
+                      onDelete={() => handleDeletePortfolio(item.id, selectedCustomer.customerId)}
+                      formatDate={formatDate}
+                      getStatusColor={getStatusColor}
+                      getStatusIcon={getStatusIcon}
+                      isContentPublished={isContentPublished}
+                      getPublishedPlatformsForContent={getPublishedPlatformsForContent}
+                      isVideoUrl={isVideoUrl}
+                    />
+                  ))}
                 </div>
               )}
-            </div>
+            </>
           ) : (
             // Individual Content Detail View
             <ContentDetailView
@@ -976,10 +907,10 @@ function AdminContentPortfolio() {
               isVideoUrl={isVideoUrl}
               calendarName={selectedContent?.calendarName}
               itemName={selectedContent?.itemName}
-              onDeleteVersion={handleDeleteVersion} // <-- pass handler
+              onDeleteVersion={handleDeleteVersion}
             />
           )}
-        </div>
+      </div>
 
         {/* Schedule Post Modal */}
         {showScheduleModal && (
@@ -1000,24 +931,24 @@ function AdminContentPortfolio() {
 
         {/* Integration Modal */}
         {showIntegrationModal && (
-          <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-              <div className="p-6">
-                <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-200">
-                  <div className="flex items-center space-x-3">
-                    <div className="p-2 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-xl">
-                      <Settings className="h-6 w-6 text-white" />
+          <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-3">
+            <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[85vh] overflow-y-auto">
+              <div className="p-4">
+                <div className="flex items-center justify-between mb-4 pb-3 border-b">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 bg-blue-600 rounded-lg">
+                      <Settings className="h-4 w-4 text-white" />
                     </div>
                     <div>
-                      <h2 className="text-2xl font-bold text-gray-900">Connect Social Media Account</h2>
-                      <p className="text-sm text-gray-500">Connect {integrationPlatform} for {integrationCustomer?.name}</p>
+                      <h2 className="text-base font-bold text-gray-900">Connect Account</h2>
+                      <p className="text-xs text-gray-500">{integrationPlatform} for {integrationCustomer?.name}</p>
                     </div>
                   </div>
                   <button
                     onClick={() => setShowIntegrationModal(false)}
-                    className="text-gray-400 hover:text-gray-600 p-2 rounded-lg hover:bg-gray-100 transition-all duration-200"
+                    className="text-gray-400 hover:text-gray-600 p-1.5 rounded-lg hover:bg-gray-100"
                   >
-                    <XCircle className="h-6 w-6" />
+                    <XCircle className="h-5 w-5" />
                   </button>
                 </div>
 
@@ -1032,9 +963,8 @@ function AdminContentPortfolio() {
             </div>
           </div>
         )}
-      </div>
     </AdminLayout>
   );
 }
 
-export default AdminContentPortfolio;
+export default memo(AdminContentPortfolio);

@@ -1,8 +1,149 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, memo, useMemo, useCallback } from 'react';
 import { 
-  Send, XCircle, Image, Video, Facebook, Instagram, Youtube, Linkedin, 
-  Check, Hash, Loader2, Zap, AlertCircle, Upload, Trash2, MoveVertical
+  Send, XCircle, Video, Facebook, Instagram, Youtube, Linkedin, 
+  Check, Hash, Loader2, Zap, AlertCircle, Upload, Trash2, MoveVertical, X
 } from 'lucide-react';
+
+// ========================================
+// MEMOIZED COMPONENTS FOR PERFORMANCE
+// ========================================
+
+// Memoized Platform Card Component
+const PlatformCard = memo(({ platform, icon: Icon, iconColor, borderColor, bgColor, isSelected, isConnected, onToggle, onConnect, onDisconnect, accountName }) => (
+  <label className={`flex flex-col sm:flex-row items-start sm:items-center p-2 sm:p-3 border-2 rounded-lg cursor-pointer transition-all ${
+    isSelected 
+      ? `${borderColor} ${bgColor} shadow-sm` 
+      : isConnected
+      ? 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+      : 'border-gray-200 bg-gray-50/50 cursor-not-allowed opacity-60'
+  }`}>
+    <input
+      type="checkbox"
+      checked={isSelected}
+      onChange={onToggle}
+      disabled={!isConnected}
+      className="sr-only"
+    />
+    <div className="flex items-center w-full sm:w-auto">
+      <Icon className={`h-5 w-5 ${iconColor} mr-2 flex-shrink-0`} />
+      <div className="flex-1 min-w-0">
+        <span className="font-medium text-gray-900 text-sm capitalize">{platform}</span>
+        {!isConnected && <div className="text-[10px] text-orange-600">Not connected</div>}
+        {isConnected && (
+          <div className="flex items-center">
+            <span className="text-[10px] text-green-700 font-medium flex items-center">
+              <Check className="h-3 w-3 text-green-600 mr-0.5" />
+              Connected
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
+    <div className="flex items-center gap-1 mt-1 sm:mt-0 sm:ml-auto">
+      {isSelected && <Check className={`h-4 w-4 ${iconColor}`} />}
+      {!isConnected ? (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onConnect(); }}
+          className={`${bgColor.replace('bg-', 'bg-').replace('-50', '-600')} text-white px-2 py-0.5 rounded text-[10px] hover:opacity-90`}
+        >
+          Connect
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onDisconnect(); }}
+          className="bg-red-500 text-white px-2 py-0.5 rounded text-[10px] hover:bg-red-600"
+        >
+          Disconnect
+        </button>
+      )}
+    </div>
+  </label>
+));
+
+// Memoized Media Card Component
+const MediaCard = memo(({ media, index, isSelected, selectionOrder, onToggle, isVideoUrl }) => (
+  <div 
+    className={`relative border-2 rounded-lg overflow-hidden cursor-pointer transition-all ${
+      isSelected 
+        ? 'border-blue-500 shadow-md ring-1 ring-blue-200 scale-[1.02]' 
+        : 'border-gray-300 hover:border-blue-400 hover:shadow-sm'
+    }`}
+    onClick={onToggle}
+  >
+    {media.type === 'video' || isVideoUrl(media.url) ? (
+      <div className="w-full h-16 sm:h-20 bg-gray-200 flex items-center justify-center">
+        <Video className="h-5 w-5 text-gray-500" />
+        <span className="ml-1 text-[10px] text-gray-600">Video</span>
+      </div>
+    ) : (
+      <img 
+        src={media.url} 
+        alt={`Media ${index + 1}`}
+        className="w-full h-16 sm:h-20 object-cover"
+        loading="lazy"
+      />
+    )}
+    
+    {/* Selection Indicator */}
+    <div className={`absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold transition-all ${
+      isSelected 
+        ? 'bg-blue-500 text-white shadow' 
+        : 'bg-white/80 text-gray-600 border border-gray-300'
+    }`}>
+      {isSelected ? <Check className="h-3 w-3" /> : <span>{index + 1}</span>}
+    </div>
+    
+    {/* Selection Order */}
+    {isSelected && selectionOrder !== null && (
+      <div className="absolute top-1 left-1 bg-blue-500 text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shadow">
+        {selectionOrder + 1}
+      </div>
+    )}
+  </div>
+));
+
+// Memoized Carousel Item Component
+const CarouselItem = memo(({ media, index, isDragging, onDragStart, onDragOver, onDragEnd, onRemove, isVideoUrl }) => (
+  <div
+    draggable
+    onDragStart={(e) => onDragStart(e, index)}
+    onDragOver={(e) => onDragOver(e, index)}
+    onDragEnd={onDragEnd}
+    className={`relative border-2 rounded-lg overflow-hidden cursor-move transition-all ${
+      isDragging ? 'opacity-50 scale-95' : 'hover:shadow-md'
+    } border-blue-400 bg-white`}
+  >
+    {isVideoUrl(media.url) ? (
+      <div className="w-full h-14 sm:h-16 bg-gray-800 flex items-center justify-center">
+        <Video className="h-4 w-4 text-white" />
+      </div>
+    ) : (
+      <img 
+        src={media.url} 
+        alt={`Carousel item ${index + 1}`}
+        className="w-full h-14 sm:h-16 object-cover"
+        loading="lazy"
+      />
+    )}
+    
+    {/* Order number */}
+    <div className="absolute top-0.5 left-0.5 bg-blue-600 text-white w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold">
+      {index + 1}
+    </div>
+    
+    {/* Remove button */}
+    <button
+      type="button"
+      onClick={() => onRemove(index)}
+      className="absolute top-0.5 right-0.5 bg-red-500 text-white w-4 h-4 rounded-full flex items-center justify-center hover:bg-red-600 transition-colors"
+    >
+      <X className="h-2.5 w-2.5" />
+    </button>
+  </div>
+));
+
 // ========================================
 // CAROUSEL FUNCTIONS (Instagram & Facebook)
 // ========================================
@@ -331,6 +472,7 @@ function SchedulePostModal({
   extractHashtags, 
   getCustomerSocialAccounts, 
   getCustomerName, 
+  getCustomer,
   showIntegration,
   updatePortfolioStatus,
   onRefreshScheduledPosts
@@ -346,13 +488,13 @@ function SchedulePostModal({
     return `sub_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   };
 
-  // Check if a submission was recently made (within 30 seconds)
+  // Check if a submission was recently made (within 5 minutes - increased for slow uploads)
   const isRecentSubmission = (contentId, platforms) => {
     try {
       const recentSubmissions = JSON.parse(localStorage.getItem('recentPostSubmissions') || '{}');
       const key = `${contentId}_${platforms.sort().join('_')}`;
       const lastSubmission = recentSubmissions[key];
-      if (lastSubmission && Date.now() - lastSubmission.timestamp < 30000) {
+      if (lastSubmission && Date.now() - lastSubmission.timestamp < 300000) { // 5 minutes
         console.warn(`⚠️ Blocking duplicate submission - last submission was ${Math.floor((Date.now() - lastSubmission.timestamp) / 1000)}s ago`);
         return true;
       }
@@ -462,10 +604,29 @@ function SchedulePostModal({
     return localAccounts.filter(account => account.platform === platform);
   };
 
-  // Check if customer has any accounts for a platform
+  // Check if platform is enabled in customer's settings
+  const isPlatformEnabled = useCallback((customerId, platform) => {
+    if (!getCustomer) return true; // If no getCustomer function, allow all platforms
+    const customer = getCustomer(customerId);
+    if (!customer || !customer.platformAccess) return true; // If no platformAccess, allow all
+    
+    // Map platform names to platformAccess keys
+    const platformMap = {
+      'facebook': 'facebook',
+      'instagram': 'instagram',
+      'linkedin': 'linkedin',
+      'youtube': 'youtube'
+    };
+    
+    const accessKey = platformMap[platform];
+    return customer.platformAccess[accessKey] !== false;
+  }, [getCustomer]);
+
+  // Check if customer has any accounts for a platform AND platform is enabled
   const hasAccountsForPlatform = (customerId, platform) => {
     const accounts = getAvailableAccountsForPlatform(customerId, platform);
-    return accounts.length > 0;
+    const platformEnabled = isPlatformEnabled(customerId, platform);
+    return accounts.length > 0 && platformEnabled;
   };
 
   // Handle platform selection (checkbox)
@@ -1348,41 +1509,41 @@ function SchedulePostModal({
   if (!selectedContent) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="p-6">
-          {/* Modal Header */}
-          <div className="flex items-center justify-between mb-4 pb-3 border-b border-[#E2E8F0]">
-            <div className="flex items-center space-x-3">
-              <div className="p-2 bg-gradient-to-r from-[#00E5FF] to-[#0066CC] rounded-xl shadow">
-                <Send className="h-6 w-6 text-white" />
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="bg-white rounded-t-xl sm:rounded-xl shadow-2xl w-full sm:max-w-4xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
+        <div className="p-3 sm:p-4">
+          {/* Modal Header - Compact */}
+          <div className="flex items-center justify-between mb-3 pb-2 border-b border-gray-200 sticky top-0 bg-white z-10">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 sm:p-2 bg-gradient-to-r from-[#00E5FF] to-[#0066CC] rounded-lg shadow">
+                <Send className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
               </div>
               <div>
-                <h2 className="text-2xl font-bold text-[#0F172A]">Post to Multiple Platforms</h2>
-                <p className="text-sm text-[#475569]">Select platforms, schedule for later or publish immediately</p>
+                <h2 className="text-base sm:text-lg font-bold text-gray-900">Post to Platforms</h2>
+                <p className="text-[10px] sm:text-xs text-gray-500 hidden sm:block">Schedule or publish immediately</p>
               </div>
             </div>
             <button
               onClick={onClose}
-              className="text-[#475569] hover:text-[#0F172A] p-2 rounded-lg hover:bg-[#F4F9FF] transition-all duration-200"
+              className="text-gray-500 hover:text-gray-900 p-1.5 rounded-lg hover:bg-gray-100 transition-all"
             >
-              <XCircle className="h-6 w-6" />
+              <XCircle className="h-5 w-5 sm:h-6 sm:w-6" />
             </button>
           </div>
 
-          <div className="space-y-4">
-            {/* Platform Selection */}
-            <div className="bg-gradient-to-r from-gray-50 to-blue-50 p-6 rounded-xl border border-gray-200">
-              <label className="block text-lg font-semibold text-gray-900 mb-4">Select Platforms (Multi-Select)</label>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="space-y-3">
+            {/* Platform Selection - Compact */}
+            <div className="bg-gradient-to-r from-gray-50 to-blue-50 p-3 sm:p-4 rounded-lg border border-gray-200">
+              <label className="block text-sm font-semibold text-gray-900 mb-2">Select Platforms</label>
+              <div className="grid grid-cols-2 gap-2">
                 {/* Facebook */}
-                <label className={`flex items-center p-3 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
+                <label className={`flex flex-col sm:flex-row items-start sm:items-center p-2 sm:p-3 border-2 rounded-lg transition-all ${
                   scheduleFormData.platforms.includes('facebook') 
-                    ? 'border-[#0066CC] bg-white shadow-sm' 
+                    ? 'border-blue-500 bg-blue-50 shadow-sm cursor-pointer' 
                     : hasAccountsForPlatform(selectedContent?.customerId, 'facebook')
-                    ? 'border-[#E2E8F0] hover:border-[#0066CC] hover:bg-white'
-                    : 'border-[#E2E8F0] bg-[#F4F9FF]/50 cursor-not-allowed opacity-60'
-                }`}>
+                    ? 'border-gray-200 hover:border-blue-400 hover:bg-blue-50/50 cursor-pointer'
+                    : 'border-gray-200 bg-gray-50/50 cursor-not-allowed opacity-60'
+                }`} title={!isPlatformEnabled(selectedContent?.customerId, 'facebook') ? 'Platform disabled by admin' : ''}>
                   <input
                     type="checkbox"
                     name="platforms"
@@ -1392,125 +1553,137 @@ function SchedulePostModal({
                     disabled={!hasAccountsForPlatform(selectedContent?.customerId, 'facebook')}
                     className="sr-only"
                   />
-                  <Facebook className="h-6 w-6 text-blue-600 mr-3" />
-                  <div className="flex-1">
-                    <span className="font-medium text-gray-900">Facebook</span>
-                    {!hasAccountsForPlatform(selectedContent?.customerId, 'facebook') && (
-                      <div className="text-xs text-orange-600 mt-1">No account connected</div>
-                    )}
-                    {hasAccountsForPlatform(selectedContent?.customerId, 'facebook') && (
-                      <div className="flex items-center mt-1">
-                        <span className="text-xs text-green-700 font-semibold flex items-center">
-                          <Check className="h-4 w-4 text-green-600 mr-1" />
-                          Connected
-                        </span>
-                      </div>
+                  <div className="flex items-center w-full">
+                    <Facebook className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 mr-2 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <span className="font-medium text-gray-900 text-xs sm:text-sm">Facebook</span>
+                      {!isPlatformEnabled(selectedContent?.customerId, 'facebook') && (
+                        <div className="text-[10px] text-red-600">Disabled by admin</div>
+                      )}
+                      {isPlatformEnabled(selectedContent?.customerId, 'facebook') && !hasAccountsForPlatform(selectedContent?.customerId, 'facebook') && (
+                        <div className="text-[10px] text-orange-600">Not connected</div>
+                      )}
+                      {hasAccountsForPlatform(selectedContent?.customerId, 'facebook') && (
+                        <div className="flex items-center">
+                          <span className="text-[10px] text-green-700 font-medium flex items-center">
+                            <Check className="h-3 w-3 text-green-600 mr-0.5" />Connected
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    {scheduleFormData.platforms.includes('facebook') && (
+                      <Check className="h-4 w-4 text-blue-600 ml-1" />
                     )}
                   </div>
-                  {scheduleFormData.platforms.includes('facebook') && (
-                    <Check className="h-5 w-5 text-blue-600 ml-auto" />
-                  )}
-                  {!hasAccountsForPlatform(selectedContent?.customerId, 'facebook') ? (
-                    <button
-                      type="button"
-                      onClick={() => showIntegration('facebook', selectedContent?.customerId, getCustomerName(selectedContent?.customerId))}
-                      className="ml-2 bg-blue-600 text-white px-2 py-1 rounded text-xs hover:bg-blue-700"
-                    >
-                      Connect
-                    </button>
-                  ) : (
-                    (() => {
-                      const connected = getAvailableAccountsForPlatform(selectedContent?.customerId, 'facebook');
-                      return connected.length > 0 ? (
-                        <button
-                          type="button"
-                          onClick={async (e) => {
-                            e.stopPropagation();
-                            if (window.confirm(`Are you sure you want to disconnect your Facebook account (${connected[0].name})? This will remove all associated pages and you'll need to reconnect to post again.`)) {
-                              await disconnectSocialAccount(connected[0]._id, null, handleLocalDisconnect);
-                            }
-                          }}
-                          className="ml-2 bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700"
-                        >
-                          Disconnect
-                        </button>
-                      ) : null;
-                    })()
-                  )}
+                  <div className="flex items-center gap-1 mt-1 sm:mt-0">
+                    {!hasAccountsForPlatform(selectedContent?.customerId, 'facebook') ? (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); showIntegration('facebook', selectedContent?.customerId, getCustomerName(selectedContent?.customerId)); }}
+                        className="bg-blue-600 text-white px-2 py-0.5 rounded text-[10px] hover:bg-blue-700"
+                      >
+                        Connect
+                      </button>
+                    ) : (
+                      (() => {
+                        const connected = getAvailableAccountsForPlatform(selectedContent?.customerId, 'facebook');
+                        return connected.length > 0 ? (
+                          <button
+                            type="button"
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              if (window.confirm(`Disconnect Facebook (${connected[0].name})?`)) {
+                                await disconnectSocialAccount(connected[0]._id, null, handleLocalDisconnect);
+                              }
+                            }}
+                            className="bg-red-500 text-white px-2 py-0.5 rounded text-[10px] hover:bg-red-600"
+                          >
+                            Disconnect
+                          </button>
+                        ) : null;
+                      })()
+                    )}
+                  </div>
                 </label>
 
                 {/* Instagram */}
-                <label className={`flex items-center p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
+                <label className={`flex flex-col sm:flex-row items-start sm:items-center p-2 sm:p-3 border-2 rounded-lg transition-all ${
                   scheduleFormData.platforms.includes('instagram') 
-                    ? 'border-pink-500 bg-pink-50 shadow-md' 
-                    : getAvailableAccountsForPlatform(selectedContent?.customerId, 'instagram').length > 0
-                    ? 'border-gray-300 hover:border-pink-400 hover:bg-pink-50'
-                    : 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-60'
-                }`}>
+                    ? 'border-pink-500 bg-pink-50 shadow-sm cursor-pointer' 
+                    : getAvailableAccountsForPlatform(selectedContent?.customerId, 'instagram').length > 0 && isPlatformEnabled(selectedContent?.customerId, 'instagram')
+                    ? 'border-gray-200 hover:border-pink-400 hover:bg-pink-50/50 cursor-pointer'
+                    : 'border-gray-200 bg-gray-50/50 cursor-not-allowed opacity-60'
+                }`} title={!isPlatformEnabled(selectedContent?.customerId, 'instagram') ? 'Platform disabled by admin' : ''}>
                   <input
                     type="checkbox"
                     name="platforms"
                     value="instagram"
                     checked={scheduleFormData.platforms.includes('instagram')}
-                    onChange={() => getAvailableAccountsForPlatform(selectedContent?.customerId, 'instagram').length > 0 && handlePlatformToggle('instagram')}
-                    disabled={getAvailableAccountsForPlatform(selectedContent?.customerId, 'instagram').length === 0}
+                    onChange={() => getAvailableAccountsForPlatform(selectedContent?.customerId, 'instagram').length > 0 && isPlatformEnabled(selectedContent?.customerId, 'instagram') && handlePlatformToggle('instagram')}
+                    disabled={getAvailableAccountsForPlatform(selectedContent?.customerId, 'instagram').length === 0 || !isPlatformEnabled(selectedContent?.customerId, 'instagram')}
                     className="sr-only"
                   />
-                  <Instagram className="h-6 w-6 text-pink-600 mr-3" />
-                  <div className="flex-1">
-                    <span className="font-medium text-gray-900">Instagram</span>
-                    {getAvailableAccountsForPlatform(selectedContent?.customerId, 'instagram').length === 0 && (
-                      <div className="text-xs text-orange-600 mt-1">No account connected</div>
-                    )}
-                    {getAvailableAccountsForPlatform(selectedContent?.customerId, 'instagram').length > 0 && (
-                      <div className="flex items-center mt-1">
-                        <span className="text-xs text-green-700 font-semibold flex items-center">
-                          <Check className="h-4 w-4 text-green-600 mr-1" />
-                          Connected
-                        </span>
-                      </div>
+                  <div className="flex items-center w-full">
+                    <Instagram className="h-4 w-4 sm:h-5 sm:w-5 text-pink-600 mr-2 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <span className="font-medium text-gray-900 text-xs sm:text-sm">Instagram</span>
+                      {!isPlatformEnabled(selectedContent?.customerId, 'instagram') && (
+                        <div className="text-[10px] text-red-600">Disabled by admin</div>
+                      )}
+                      {isPlatformEnabled(selectedContent?.customerId, 'instagram') && getAvailableAccountsForPlatform(selectedContent?.customerId, 'instagram').length === 0 && (
+                        <div className="text-[10px] text-orange-600">Not connected</div>
+                      )}
+                      {getAvailableAccountsForPlatform(selectedContent?.customerId, 'instagram').length > 0 && isPlatformEnabled(selectedContent?.customerId, 'instagram') && (
+                        <div className="flex items-center">
+                          <span className="text-[10px] text-green-700 font-medium flex items-center">
+                            <Check className="h-3 w-3 text-green-600 mr-0.5" />Connected
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    {scheduleFormData.platforms.includes('instagram') && (
+                      <Check className="h-4 w-4 text-pink-600 ml-1" />
                     )}
                   </div>
-                  {scheduleFormData.platforms.includes('instagram') && (
-                    <Check className="h-5 w-5 text-pink-600 ml-auto" />
-                  )}
-                  {getAvailableAccountsForPlatform(selectedContent?.customerId, 'instagram').length === 0 ? (
-                    <button
-                      type="button"
-                      onClick={() => showIntegration('instagram', selectedContent?.customerId, getCustomerName(selectedContent?.customerId))}
-                      className="ml-2 bg-pink-600 text-white px-2 py-1 rounded text-xs hover:bg-pink-700"
-                    >
-                      Connect
-                    </button>
-                  ) : (
-                    (() => {
-                      const connected = getAvailableAccountsForPlatform(selectedContent?.customerId, 'instagram');
-                      return connected.length > 0 ? (
-                        <button
-                          type="button"
-                          onClick={async (e) => {
-                            e.stopPropagation();
-                            if (window.confirm(`Are you sure you want to disconnect your Instagram account (${connected[0].name})? This will remove all associated pages and you'll need to reconnect to post again.`)) {
-                              await disconnectSocialAccount(connected[0]._id, null, handleLocalDisconnect);
-                            }
-                          }}
-                          className="ml-2 bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700"
-                        >
-                          Disconnect
-                        </button>
-                      ) : null;
-                    })()
-                  )}
+                  <div className="flex items-center gap-1 mt-1 sm:mt-0">
+                    {getAvailableAccountsForPlatform(selectedContent?.customerId, 'instagram').length === 0 ? (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); showIntegration('instagram', selectedContent?.customerId, getCustomerName(selectedContent?.customerId)); }}
+                        className="bg-pink-600 text-white px-2 py-0.5 rounded text-[10px] hover:bg-pink-700"
+                      >
+                        Connect
+                      </button>
+                    ) : (
+                      (() => {
+                        const connected = getAvailableAccountsForPlatform(selectedContent?.customerId, 'instagram');
+                        return connected.length > 0 ? (
+                          <button
+                            type="button"
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              if (window.confirm(`Disconnect Instagram (${connected[0].name})?`)) {
+                                await disconnectSocialAccount(connected[0]._id, null, handleLocalDisconnect);
+                              }
+                            }}
+                            className="bg-red-500 text-white px-2 py-0.5 rounded text-[10px] hover:bg-red-600"
+                          >
+                            Disconnect
+                          </button>
+                        ) : null;
+                      })()
+                    )}
+                  </div>
                 </label>
 
                 {/* YouTube */}
-                <label className={`flex items-center p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
+                <label className={`flex flex-col sm:flex-row items-start sm:items-center p-2 sm:p-3 border-2 rounded-lg transition-all ${
                   scheduleFormData.platforms.includes('youtube') 
-                    ? 'border-red-500 bg-red-50 shadow-md' 
+                    ? 'border-red-500 bg-red-50 shadow-sm cursor-pointer' 
                     : hasAccountsForPlatform(selectedContent?.customerId, 'youtube')
-                    ? 'border-gray-300 hover:border-red-400 hover:bg-red-50'
-                    : 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-60'
-                }`}>
+                    ? 'border-gray-200 hover:border-red-400 hover:bg-red-50/50 cursor-pointer'
+                    : 'border-gray-200 bg-gray-50/50 cursor-not-allowed opacity-60'
+                }`} title={!isPlatformEnabled(selectedContent?.customerId, 'youtube') ? 'Platform disabled by admin' : ''}>
                   <input
                     type="checkbox"
                     name="platforms"
@@ -1520,61 +1693,67 @@ function SchedulePostModal({
                     disabled={!hasAccountsForPlatform(selectedContent?.customerId, 'youtube')}
                     className="sr-only"
                   />
-                  <Youtube className="h-6 w-6 text-red-600 mr-3" />
-                  <div className="flex-1">
-                    <span className="font-medium text-gray-900">YouTube</span>
-                    {!hasAccountsForPlatform(selectedContent?.customerId, 'youtube') && (
-                      <div className="text-xs text-orange-600 mt-1">Not available</div>
-                    )}
-                    {hasAccountsForPlatform(selectedContent?.customerId, 'youtube') && (
-                      <div className="flex items-center mt-1">
-                        <span className="text-xs text-green-700 font-semibold flex items-center">
-                          <Check className="h-4 w-4 text-green-600 mr-1" />
-                          Connected
-                        </span>
-                      </div>
+                  <div className="flex items-center w-full">
+                    <Youtube className="h-4 w-4 sm:h-5 sm:w-5 text-red-600 mr-2 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <span className="font-medium text-gray-900 text-xs sm:text-sm">YouTube</span>
+                      {!isPlatformEnabled(selectedContent?.customerId, 'youtube') && (
+                        <div className="text-[10px] text-red-600">Disabled by admin</div>
+                      )}
+                      {isPlatformEnabled(selectedContent?.customerId, 'youtube') && !hasAccountsForPlatform(selectedContent?.customerId, 'youtube') && (
+                        <div className="text-[10px] text-orange-600">Not available</div>
+                      )}
+                      {hasAccountsForPlatform(selectedContent?.customerId, 'youtube') && (
+                        <div className="flex items-center">
+                          <span className="text-[10px] text-green-700 font-medium flex items-center">
+                            <Check className="h-3 w-3 text-green-600 mr-0.5" />Connected
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    {scheduleFormData.platforms.includes('youtube') && (
+                      <Check className="h-4 w-4 text-red-600 ml-1" />
                     )}
                   </div>
-                  {scheduleFormData.platforms.includes('youtube') && (
-                    <Check className="h-5 w-5 text-red-600 ml-auto" />
-                  )}
-                  {!hasAccountsForPlatform(selectedContent?.customerId, 'youtube') ? (
-                    <button
-                      type="button"
-                      onClick={() => showIntegration('youtube', selectedContent?.customerId, getCustomerName(selectedContent?.customerId))}
-                      className="ml-2 bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700"
-                    >
-                      Connect
-                    </button>
-                  ) : (
-                    (() => {
-                      const connected = getAvailableAccountsForPlatform(selectedContent?.customerId, 'youtube');
-                      return connected.length > 0 ? (
-                        <button
-                          type="button"
-                          onClick={async (e) => {
-                            e.stopPropagation();
-                            if (window.confirm(`Are you sure you want to disconnect your YouTube account (${connected[0].name})? This will remove all associated channels and you'll need to reconnect to post again.`)) {
-                              await disconnectSocialAccount(connected[0]._id, null, handleLocalDisconnect);
-                            }
-                          }}
-                          className="ml-2 bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700"
-                        >
-                          Disconnect
-                        </button>
-                      ) : null;
-                    })()
-                  )}
+                  <div className="flex items-center gap-1 mt-1 sm:mt-0">
+                    {!hasAccountsForPlatform(selectedContent?.customerId, 'youtube') ? (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); showIntegration('youtube', selectedContent?.customerId, getCustomerName(selectedContent?.customerId)); }}
+                        className="bg-red-600 text-white px-2 py-0.5 rounded text-[10px] hover:bg-red-700"
+                      >
+                        Connect
+                      </button>
+                    ) : (
+                      (() => {
+                        const connected = getAvailableAccountsForPlatform(selectedContent?.customerId, 'youtube');
+                        return connected.length > 0 ? (
+                          <button
+                            type="button"
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              if (window.confirm(`Disconnect YouTube (${connected[0].name})?`)) {
+                                await disconnectSocialAccount(connected[0]._id, null, handleLocalDisconnect);
+                              }
+                            }}
+                            className="bg-red-500 text-white px-2 py-0.5 rounded text-[10px] hover:bg-red-600"
+                          >
+                            Disconnect
+                          </button>
+                        ) : null;
+                      })()
+                    )}
+                  </div>
                 </label>
 
                 {/* LinkedIn */}
-                <label className={`flex items-center p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
+                <label className={`flex flex-col sm:flex-row items-start sm:items-center p-2 sm:p-3 border-2 rounded-lg transition-all ${
                   scheduleFormData.platforms.includes('linkedin') 
-                    ? 'border-blue-500 bg-blue-50 shadow-md' 
+                    ? 'border-blue-500 bg-blue-50 shadow-sm cursor-pointer' 
                     : hasAccountsForPlatform(selectedContent?.customerId, 'linkedin')
-                    ? 'border-gray-300 hover:border-blue-400 hover:bg-blue-50'
-                    : 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-60'
-                }`}>
+                    ? 'border-gray-200 hover:border-blue-400 hover:bg-blue-50/50 cursor-pointer'
+                    : 'border-gray-200 bg-gray-50/50 cursor-not-allowed opacity-60'
+                }`} title={!isPlatformEnabled(selectedContent?.customerId, 'linkedin') ? 'Platform disabled by admin' : ''}>
                   <input
                     type="checkbox"
                     name="platforms"
@@ -1584,97 +1763,102 @@ function SchedulePostModal({
                     disabled={!hasAccountsForPlatform(selectedContent?.customerId, 'linkedin')}
                     className="sr-only"
                   />
-                  <Linkedin className="h-6 w-6 text-blue-600 mr-3" />
-                  <div className="flex-1">
-                    <span className="font-medium text-gray-900">LinkedIn</span>
-                    {!hasAccountsForPlatform(selectedContent?.customerId, 'linkedin') && (
-                      <div className="text-xs text-orange-600 mt-1">No account connected</div>
-                    )}
-                    {/* Add Connected indicator for LinkedIn */}
-                    {hasAccountsForPlatform(selectedContent?.customerId, 'linkedin') && (
-                      <div className="flex items-center mt-1">
-                        <span className="text-xs text-green-700 font-semibold flex items-center">
-                          <Check className="h-4 w-4 text-green-600 mr-1" />
-                          Connected
-                        </span>
-                      </div>
+                  <div className="flex items-center w-full">
+                    <Linkedin className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 mr-2 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <span className="font-medium text-gray-900 text-xs sm:text-sm">LinkedIn</span>
+                      {!isPlatformEnabled(selectedContent?.customerId, 'linkedin') && (
+                        <div className="text-[10px] text-red-600">Disabled by admin</div>
+                      )}
+                      {isPlatformEnabled(selectedContent?.customerId, 'linkedin') && !hasAccountsForPlatform(selectedContent?.customerId, 'linkedin') && (
+                        <div className="text-[10px] text-orange-600">Not connected</div>
+                      )}
+                      {hasAccountsForPlatform(selectedContent?.customerId, 'linkedin') && (
+                        <div className="flex items-center">
+                          <span className="text-[10px] text-green-700 font-medium flex items-center">
+                            <Check className="h-3 w-3 text-green-600 mr-0.5" />Connected
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    {scheduleFormData.platforms.includes('linkedin') && (
+                      <Check className="h-4 w-4 text-blue-600 ml-1" />
                     )}
                   </div>
-                  {scheduleFormData.platforms.includes('linkedin') && (
-                    <Check className="h-5 w-5 text-blue-600 ml-auto" />
-                  )}
-                  {!hasAccountsForPlatform(selectedContent?.customerId, 'linkedin') ? (
-                    <button
-                      type="button"
-                      onClick={() => showIntegration('linkedin', selectedContent?.customerId, getCustomerName(selectedContent?.customerId))}
-                      className="ml-2 bg-blue-600 text-white px-2 py-1 rounded text-xs hover:bg-blue-700"
-                    >
-                      Connect
-                    </button>
-                  ) : (
-                    (() => {
-                      const connected = getAvailableAccountsForPlatform(selectedContent?.customerId, 'linkedin');
-                      return connected.length > 0 ? (
-                        <button
-                          type="button"
-                          onClick={async (e) => {
-                            e.stopPropagation();
-                            if (window.confirm(`Are you sure you want to disconnect your LinkedIn account (${connected[0].name})? You'll need to reconnect to post again.`)) {
-                              await disconnectSocialAccount(connected[0]._id, null, handleLocalDisconnect);
-                            }
-                          }}
-                          className="ml-2 bg-red-600 text-white px-2 py-1 rounded text-xs hover:bg-red-700"
-                        >
-                          Disconnect
-                        </button>
-                      ) : null;
-                    })()
-                  )}
+                  <div className="flex items-center gap-1 mt-1 sm:mt-0">
+                    {!hasAccountsForPlatform(selectedContent?.customerId, 'linkedin') ? (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); showIntegration('linkedin', selectedContent?.customerId, getCustomerName(selectedContent?.customerId)); }}
+                        className="bg-blue-600 text-white px-2 py-0.5 rounded text-[10px] hover:bg-blue-700"
+                      >
+                        Connect
+                      </button>
+                    ) : (
+                      (() => {
+                        const connected = getAvailableAccountsForPlatform(selectedContent?.customerId, 'linkedin');
+                        return connected.length > 0 ? (
+                          <button
+                            type="button"
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              if (window.confirm(`Disconnect LinkedIn (${connected[0].name})?`)) {
+                                await disconnectSocialAccount(connected[0]._id, null, handleLocalDisconnect);
+                              }
+                            }}
+                            className="bg-red-500 text-white px-2 py-0.5 rounded text-[10px] hover:bg-red-600"
+                          >
+                            Disconnect
+                          </button>
+                        ) : null;
+                      })()
+                    )}
+                  </div>
                 </label>
               </div>
               
               {scheduleFormData.platforms.length > 0 && (
-                <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-                  <p className="text-sm text-green-800 font-medium">
-                    Selected platforms: {scheduleFormData.platforms.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(', ')}
+                <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-lg">
+                  <p className="text-xs text-green-800 font-medium">
+                    Selected: {scheduleFormData.platforms.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(', ')}
                   </p>
                   {scheduleFormData.platforms.includes('youtube') && scheduleFormData.platforms.length > 1 && (
-                    <p className="text-xs text-orange-600 mt-1">
-                      ⚠️ Note: YouTube only supports single video posts, while other platforms support multiple images/carousel posts.
+                    <p className="text-[10px] text-orange-600 mt-0.5">
+                      ⚠️ YouTube only supports single video
                     </p>
                   )}
                 </div>
               )}
             </div>
 
-            {/* Platform-specific Account Selection */}
+            {/* Platform-specific Account Selection - Compact */}
             {scheduleFormData.platforms.length > 0 && (
-              <div className="space-y-6">
+              <div className="space-y-2">
                 {scheduleFormData.platforms.map(platform => (
-                  <div key={platform} className="bg-gray-50 p-6 rounded-xl border border-gray-200">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4 capitalize flex items-center">
-                      {platform === 'facebook' && <Facebook className="h-5 w-5 text-blue-600 mr-2" />}
-                      {platform === 'instagram' && <Instagram className="h-5 w-5 text-pink-600 mr-2" />}
-                      {platform === 'youtube' && <Youtube className="h-5 w-5 text-red-600 mr-2" />}
-                      {platform === 'linkedin' && <Linkedin className="h-5 w-5 text-blue-600 mr-2" />}
+                  <div key={platform} className="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                    <h3 className="text-sm font-semibold text-gray-900 mb-2 capitalize flex items-center">
+                      {platform === 'facebook' && <Facebook className="h-4 w-4 text-blue-600 mr-1.5" />}
+                      {platform === 'instagram' && <Instagram className="h-4 w-4 text-pink-600 mr-1.5" />}
+                      {platform === 'youtube' && <Youtube className="h-4 w-4 text-red-600 mr-1.5" />}
+                      {platform === 'linkedin' && <Linkedin className="h-4 w-4 text-blue-600 mr-1.5" />}
                       {platform} Settings
                     </h3>
                     
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Select {platform} Account
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Account
                         </label>
                         <select
                           value={scheduleFormData.platformSettings[platform]?.accountId || ''}
                           onChange={(e) => updatePlatformSetting(platform, 'accountId', e.target.value)}
-                          className="w-full border-2 border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                          className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs sm:text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                           required
                         >
-                          <option value="">Choose an account</option>
+                          <option value="">Choose account</option>
                           {getAvailableAccountsForPlatform(selectedContent?.customerId, platform).map(account => (
                             <option key={account._id} value={account._id}>
-                              {account.name} ({account.platform})
+                              {account.name}
                             </option>
                           ))}
                         </select>
@@ -1683,24 +1867,22 @@ function SchedulePostModal({
                       {/* Page Selection for Facebook/Instagram */}
                       {(platform === 'facebook' || platform === 'instagram') && scheduleFormData.platformSettings[platform]?.accountId && (
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Select Page
-                          </label>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Page</label>
                           <select
                             value={scheduleFormData.platformSettings[platform]?.pageId || ''}
                             onChange={(e) => updatePlatformSetting(platform, 'pageId', e.target.value)}
-                            className="w-full border-2 border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                            className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs sm:text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                             required
                           >
-                            <option value="">Choose a page</option>
+                            <option value="">Choose page</option>
                             {(() => {
                               const selectedAccount = getCustomerSocialAccounts(selectedContent?.customerId)
                                 .find(acc => acc._id === scheduleFormData.platformSettings[platform]?.accountId);
                               return selectedAccount?.pages?.map(page => (
                                 <option key={page.id} value={page.id}>
                                   {page.name}
-                                  {!page.accessToken && ' (⚠️ No token)'}
-                                  {platform === 'instagram' && !page.instagramBusinessAccount && ' (No Instagram)'}
+                                  {!page.accessToken && ' ⚠️'}
+                                  {platform === 'instagram' && !page.instagramBusinessAccount && ' (No IG)'}
                                 </option>
                               )) || [];
                             })()}
@@ -1711,23 +1893,20 @@ function SchedulePostModal({
                       {/* Channel Selection for YouTube */}
                       {platform === 'youtube' && scheduleFormData.platformSettings[platform]?.accountId && (
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Select Channel
-                          </label>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Channel</label>
                           <select
                             value={scheduleFormData.platformSettings[platform]?.channelId || ''}
                             onChange={(e) => updatePlatformSetting(platform, 'channelId', e.target.value)}
-                            className="w-full border-2 border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                            className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs sm:text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                             required
                           >
-                            <option value="">Choose a channel</option>
+                            <option value="">Choose channel</option>
                             {(() => {
                               const selectedAccount = getCustomerSocialAccounts(selectedContent?.customerId)
                                 .find(acc => acc._id === scheduleFormData.platformSettings[platform]?.accountId);
                               return selectedAccount?.channels?.map(channel => (
                                 <option key={channel.id} value={channel.id}>
                                   {channel.name}
-                                  {!selectedAccount.accessToken && ' (⚠️ No token)'}
                                 </option>
                               )) || [];
                             })()}
@@ -1740,72 +1919,70 @@ function SchedulePostModal({
               </div>
             )}
 
-            {/* Content Section */}
-            <div className="space-y-6">
+            {/* Content Section - Compact */}
+            <div className="space-y-3">
               {/* Caption */}
               <div>
-                <label className="block text-lg font-semibold text-gray-900 mb-3">Caption</label>
+                <label className="block text-sm font-semibold text-gray-900 mb-1">Caption</label>
                 <textarea
                   value={scheduleFormData.caption}
                   onChange={(e) => setScheduleFormData(prev => ({ ...prev, caption: e.target.value }))}
-                  rows={4}
-                  className="w-full border-2 border-gray-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 resize-none"
+                  rows={3}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 resize-none"
                   placeholder="Write your post caption..."
                 />
               </div>
 
               {/* Hashtags */}
               <div>
-                <label className="block text-lg font-semibold text-gray-900 mb-3 flex items-center">
-                  <Hash className="h-5 w-5 mr-2" />
+                <label className="block text-sm font-semibold text-gray-900 mb-1 flex items-center">
+                  <Hash className="h-4 w-4 mr-1" />
                   Hashtags
                 </label>
                 <textarea
                   value={scheduleFormData.hashtags}
                   onChange={(e) => setScheduleFormData(prev => ({ ...prev, hashtags: e.target.value }))}
-                  rows={3}
-                  className="w-full border-2 border-gray-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 resize-none"
-                  placeholder="#example #hashtags #social"
+                  rows={2}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                  placeholder="#example #hashtags"
                 />
               </div>
 
-              {/* Location Selection (Facebook & Instagram only) */}
+              {/* Location Selection (Facebook & Instagram only) - Compact */}
               {(scheduleFormData.platforms.includes('facebook') || scheduleFormData.platforms.includes('instagram')) && (
                 <div>
-                  <label className="block text-lg font-semibold text-gray-900 mb-3 flex items-center">
-                    <svg className="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <label className="block text-sm font-semibold text-gray-900 mb-1 flex items-center">
+                    <svg className="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                     </svg>
-                    Add Location (Optional)
+                    Location (Optional)
                   </label>
 
                   {/* Selected Location Display */}
                   {scheduleFormData.location ? (
-                    <div className="bg-blue-50 border-2 border-blue-300 rounded-xl p-4 mb-3">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center mb-1">
-                            <svg className="h-5 w-5 text-blue-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
-                            </svg>
-                            <span className="font-semibold text-gray-900">{scheduleFormData.location.name}</span>
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 mb-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center min-w-0 flex-1">
+                          <svg className="h-4 w-4 text-blue-600 mr-1.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
+                          </svg>
+                          <div className="min-w-0">
+                            <span className="font-medium text-gray-900 text-sm truncate block">{scheduleFormData.location.name}</span>
+                            {scheduleFormData.location.location && (
+                              <span className="text-xs text-gray-600">
+                                {scheduleFormData.location.location.city && `${scheduleFormData.location.location.city}, `}
+                                {scheduleFormData.location.location.country}
+                              </span>
+                            )}
                           </div>
-                          {scheduleFormData.location.location && (
-                            <div className="text-sm text-gray-600 ml-7">
-                              {scheduleFormData.location.location.city && `${scheduleFormData.location.location.city}, `}
-                              {scheduleFormData.location.location.country}
-                            </div>
-                          )}
                         </div>
                         <button
                           type="button"
                           onClick={clearLocation}
-                          className="ml-3 text-red-600 hover:text-red-700 p-1 rounded-full hover:bg-red-100 transition-all"
+                          className="ml-2 text-red-500 hover:text-red-600 p-1 rounded hover:bg-red-50"
                         >
-                          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
+                          <X className="h-4 w-4" />
                         </button>
                       </div>
                     </div>
@@ -1813,25 +1990,23 @@ function SchedulePostModal({
                     <button
                       type="button"
                       onClick={() => setShowLocationSearch(!showLocationSearch)}
-                      className="w-full border-2 border-gray-300 rounded-xl px-4 py-3 text-left text-gray-500 hover:border-blue-400 hover:bg-blue-50 transition-all duration-200 flex items-center"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-left text-sm text-gray-500 hover:border-blue-400 hover:bg-blue-50/50 transition-all flex items-center"
                     >
-                      <svg className="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="h-4 w-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                       </svg>
-                      Search for a location
+                      Search location
                     </button>
                   )}
 
-                  {/* Location Search Interface */}
+                  {/* Location Search Interface - Compact */}
                   {showLocationSearch && !scheduleFormData.location && (
-                    <div className="mt-3 bg-gray-50 border-2 border-gray-300 rounded-xl p-4">
-                      <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                        <p className="text-xs text-blue-800">
-                          <strong>💡 Tip:</strong> Only <strong>your managed Facebook Pages</strong> with location data can be used as locations. These are the pages you have admin access to.
-                        </p>
+                    <div className="mt-2 bg-gray-50 border border-gray-300 rounded-lg p-3">
+                      <div className="mb-2 p-2 bg-blue-50 border border-blue-200 rounded text-[10px] text-blue-800">
+                        💡 Only your managed Facebook Pages with location data can be used
                       </div>
                       
-                      <div className="relative mb-3">
+                      <div className="relative mb-2">
                         <input
                           type="text"
                           value={locationSearchQuery}
@@ -1839,46 +2014,39 @@ function SchedulePostModal({
                             setLocationSearchQuery(e.target.value);
                             searchLocations(e.target.value);
                           }}
-                          placeholder="Search your managed pages (e.g., My Restaurant, My Shop)..."
-                          className="w-full border-2 border-gray-300 rounded-lg px-4 py-2 pr-10 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="Search pages..."
+                          className="w-full border border-gray-300 rounded-lg px-3 py-1.5 pr-8 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                         />
                         {searchingLocation && (
-                          <div className="absolute right-3 top-3">
-                            <svg className="animate-spin h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
+                          <div className="absolute right-2 top-2">
+                            <Loader2 className="h-4 w-4 text-blue-600 animate-spin" />
                           </div>
                         )}
                       </div>
 
                       {/* Search Results */}
                       {locationSearchResults.length > 0 && (
-                        <div className="max-h-64 overflow-y-auto space-y-2 mb-3">
+                        <div className="max-h-40 overflow-y-auto space-y-1 mb-2">
                           {locationSearchResults.map((location) => (
                             <button
                               key={location.id}
                               type="button"
                               onClick={() => selectLocation(location)}
-                              className="w-full text-left p-3 bg-white border border-gray-200 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-all duration-200"
+                              className="w-full text-left p-2 bg-white border border-gray-200 rounded hover:border-blue-400 hover:bg-blue-50 transition-all"
                             >
-                              <div className="flex items-center gap-2">
-                                <div className="font-semibold text-gray-900">{location.name}</div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-medium text-gray-900 text-sm">{location.name}</span>
                                 {location.is_verified && (
-                                  <svg className="h-4 w-4 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                                  <svg className="h-3 w-3 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
                                     <path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                                   </svg>
                                 )}
                               </div>
                               {location.location && (
-                                <div className="text-sm text-gray-600 mt-1">
-                                  {location.location.street && `${location.location.street}, `}
+                                <div className="text-xs text-gray-600">
                                   {location.location.city && `${location.location.city}, `}
                                   {location.location.country}
                                 </div>
-                              )}
-                              {location.category && (
-                                <div className="text-xs text-gray-500 mt-1">{location.category}</div>
                               )}
                             </button>
                           ))}
@@ -1886,12 +2054,8 @@ function SchedulePostModal({
                       )}
 
                       {locationSearchQuery.length >= 2 && !searchingLocation && locationSearchResults.length === 0 && (
-                        <div className="text-center py-4 text-gray-500 mb-3">
-                          <svg className="h-8 w-8 mx-auto mb-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                          </svg>
-                          <p className="text-sm">No matching pages found in your managed pages</p>
-                          <p className="text-xs text-gray-400 mt-1">Try searching for pages you manage or have admin access to</p>
+                        <div className="text-center py-2 text-gray-500">
+                          <p className="text-xs">No matching pages found</p>
                         </div>
                       )}
 
@@ -1902,53 +2066,45 @@ function SchedulePostModal({
                           setLocationSearchQuery('');
                           setLocationSearchResults([]);
                         }}
-                        className="mt-3 w-full text-sm text-gray-600 hover:text-gray-800 py-2"
+                        className="w-full text-xs text-gray-600 hover:text-gray-800 py-1"
                       >
                         Cancel
                       </button>
                     </div>
                   )}
-
-                  <p className="text-xs text-gray-500 mt-2">
-                    📍 Add a location to your post (works for Facebook and Instagram Feed posts)
-                  </p>
                 </div>
               )}
             </div>
 
-            {/* Media Selection */}
+            {/* Media Selection - Compact */}
             {scheduleFormData.platforms.some(p => ['facebook', 'instagram', 'youtube', 'linkedin'].includes(p)) && (
-              <div className="bg-gray-50 p-6 rounded-xl border border-gray-200">
-                <label className="block text-lg font-semibold text-gray-900 mb-4">
-                  Media Selection
+              <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                <label className="block text-sm font-semibold text-gray-900 mb-2 flex items-center flex-wrap gap-1">
+                  Media
                   {(scheduleFormData.platforms.includes('youtube') || scheduleFormData.platforms.includes('instagram')) && 
                     <span className="text-red-500">*</span>}
                   {scheduleFormData.platforms.includes('youtube') && (
-                    <span className="text-sm text-orange-600 ml-2">
-                      (YouTube: Single video only)
-                    </span>
+                    <span className="text-[10px] text-orange-600 font-normal">(Single video)</span>
                   )}
                   {scheduleFormData.platforms.some(p => ['facebook', 'instagram', 'linkedin'].includes(p)) && 
                     scheduleFormData.availableImages.length > 1 && (
-                    <span className="text-sm text-gray-500 ml-2">
-                      (Carousel supported - up to 10 media)
-                    </span>
+                    <span className="text-[10px] text-gray-500 font-normal">(Carousel: 2-10)</span>
                   )}
                 </label>
                 
                 {/* Available Media from Version */}
                 {scheduleFormData.availableImages.length > 0 && (
-                  <div className="mb-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <span className="text-sm font-medium text-gray-700">
-                        Available Media from Content ({scheduleFormData.availableImages.length})
+                  <div className="mb-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-medium text-gray-700">
+                        Available ({scheduleFormData.availableImages.length})
                       </span>
-                      <div className="flex gap-2">
+                      <div className="flex gap-1">
                         {scheduleFormData.availableImages.length > 1 && !scheduleFormData.platforms.includes('youtube') && (
                           <button
                             type="button"
                             onClick={selectAllImages}
-                            className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all duration-200"
+                            className="text-[10px] px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
                           >
                             Select All
                           </button>
@@ -1956,57 +2112,54 @@ function SchedulePostModal({
                         <button
                           type="button"
                           onClick={clearAllImages}
-                          className="text-xs px-3 py-1.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-all duration-200"
+                          className="text-[10px] px-2 py-1 bg-gray-500 text-white rounded hover:bg-gray-600"
                         >
-                          Clear All
+                          Clear
                         </button>
                       </div>
                     </div>
                     
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-2">
                       {scheduleFormData.availableImages.map((media, index) => {
                         const isSelected = scheduleFormData.selectedImages.some(item => item.url === media.url);
+                        const selectionOrder = scheduleFormData.selectedImages.findIndex(item => item.url === media.url);
                         
                         return (
                           <div 
                             key={`${media.url}-${index}`}
-                            className={`relative border-2 rounded-lg overflow-hidden cursor-pointer transition-all duration-200 ${
+                            className={`relative border-2 rounded-lg overflow-hidden cursor-pointer transition-all ${
                               isSelected 
-                                ? 'border-blue-500 shadow-lg ring-2 ring-blue-200 transform scale-105' 
-                                : 'border-gray-300 hover:border-blue-400 hover:shadow-md'
+                                ? 'border-blue-500 shadow-md ring-1 ring-blue-200' 
+                                : 'border-gray-300 hover:border-blue-400'
                             }`}
                             onClick={() => toggleImageSelection(media)}
                           >
-                            {media.type === 'video' ? (
-                              <div className="w-full h-24 bg-gray-200 flex items-center justify-center">
-                                <Video className="h-8 w-8 text-gray-500" />
-                                <span className="ml-2 text-xs text-gray-600">Video</span>
+                            {media.type === 'video' || isVideoUrl(media.url) ? (
+                              <div className="w-full h-14 sm:h-16 bg-gray-200 flex items-center justify-center">
+                                <Video className="h-4 w-4 text-gray-500" />
                               </div>
                             ) : (
                               <img 
                                 src={media.url} 
-                                alt={`Available ${media.type} ${index + 1}`}
-                                className="w-full h-24 object-cover"
+                                alt={`Media ${index + 1}`}
+                                className="w-full h-14 sm:h-16 object-cover"
+                                loading="lazy"
                               />
                             )}
                             
                             {/* Selection Indicator */}
-                            <div className={`absolute top-2 right-2 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-200 ${
+                            <div className={`absolute top-0.5 right-0.5 w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold transition-all ${
                               isSelected 
-                                ? 'bg-blue-500 text-white shadow-lg' 
-                                : 'bg-white/80 text-gray-600 border-2 border-gray-300'
+                                ? 'bg-blue-500 text-white shadow' 
+                                : 'bg-white/80 text-gray-600 border border-gray-300'
                             }`}>
-                              {isSelected ? (
-                                <Check className="h-4 w-4" />
-                              ) : (
-                                <span>{index + 1}</span>
-                              )}
+                              {isSelected ? <Check className="h-2.5 w-2.5" /> : <span>{index + 1}</span>}
                             </div>
                             
                             {/* Selection Order */}
                             {isSelected && (
-                              <div className="absolute top-2 left-2 bg-blue-500 text-white w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shadow-lg">
-                                {scheduleFormData.selectedImages.findIndex(item => item.url === media.url) + 1}
+                              <div className="absolute top-0.5 left-0.5 bg-blue-500 text-white w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold shadow">
+                                {selectionOrder + 1}
                               </div>
                             )}
                           </div>
@@ -2015,47 +2168,38 @@ function SchedulePostModal({
                     </div>
                     
                     {scheduleFormData.selectedImages.length > 0 && (
-                      <div className="mt-4 p-4 bg-blue-50 border-2 border-blue-200 rounded-xl">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-semibold text-blue-800">
-                            {scheduleFormData.selectedImages.length} media selected
-                            {scheduleFormData.selectedImages.length > 1 && !scheduleFormData.platforms.includes('youtube') && ' (Multi-platform carousel post)'}
-                          </span>
-                          {scheduleFormData.platforms.includes('instagram') && scheduleFormData.selectedImages.length > 10 && (
-                            <span className="text-xs text-red-600 font-semibold">
-                              Instagram allows max 10 media
-                            </span>
-                          )}
-                        </div>
+                      <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded-lg">
+                        <span className="text-xs font-medium text-blue-800">
+                          {scheduleFormData.selectedImages.length} selected
+                          {scheduleFormData.selectedImages.length > 1 && !scheduleFormData.platforms.includes('youtube') && ' (Carousel)'}
+                        </span>
                       </div>
                     )}
                   </div>
                 )}
 
                 {scheduleFormData.availableImages.length === 0 && (
-                  <div className="mb-6 p-4 bg-yellow-50 border-2 border-yellow-200 rounded-xl">
+                  <div className="mb-3 p-2 bg-yellow-50 border border-yellow-200 rounded-lg">
                     <div className="flex items-center">
-                      <AlertCircle className="h-5 w-5 text-yellow-600 mr-2" />
-                      <span className="text-sm text-yellow-800">
-                        No media available from the selected content for the selected platforms.
-                      </span>
+                      <AlertCircle className="h-4 w-4 text-yellow-600 mr-1.5 flex-shrink-0" />
+                      <span className="text-xs text-yellow-800">No media available</span>
                     </div>
                   </div>
                 )}
 
-                {/* Carousel Builder - Selected Media with Drag & Drop */}
+                {/* Carousel Builder - Selected Media with Drag & Drop - Compact */}
                 {scheduleFormData.selectedImages.length > 0 && (
-                  <div className="mb-6">
-                    <div className="flex items-center justify-between mb-3">
-                      <h4 className="text-sm font-semibold text-gray-700 flex items-center">
-                        <MoveVertical className="h-4 w-4 mr-2" />
-                        Carousel Preview (Drag to reorder)
+                  <div className="mb-3">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <h4 className="text-xs font-medium text-gray-700 flex items-center">
+                        <MoveVertical className="h-3 w-3 mr-1" />
+                        Carousel (Drag to reorder)
                       </h4>
-                      <span className="text-xs text-gray-500">
-                        {scheduleFormData.selectedImages.length} / {scheduleFormData.platforms.includes('youtube') ? '1' : '10'} items
+                      <span className="text-[10px] text-gray-500">
+                        {scheduleFormData.selectedImages.length}/{scheduleFormData.platforms.includes('youtube') ? '1' : '10'}
                       </span>
                     </div>
-                    <div className="grid grid-cols-5 gap-3">
+                    <div className="grid grid-cols-4 sm:grid-cols-5 lg:grid-cols-6 gap-1.5">
                       {scheduleFormData.selectedImages.map((media, index) => (
                         <div
                           key={`selected-${index}`}
@@ -2063,34 +2207,33 @@ function SchedulePostModal({
                           onDragStart={(e) => handleDragStart(e, index)}
                           onDragOver={(e) => handleDragOver(e, index)}
                           onDragEnd={handleDragEnd}
-                          className={`relative border-2 rounded-lg overflow-hidden cursor-move transition-all duration-200 ${
-                            draggedIndex === index ? 'opacity-50 scale-95' : 'hover:shadow-lg'
+                          className={`relative border-2 rounded overflow-hidden cursor-move transition-all ${
+                            draggedIndex === index ? 'opacity-50 scale-95' : 'hover:shadow-md'
                           } border-blue-400 bg-white`}
                         >
                           {isVideoUrl(media.url) ? (
-                            <div className="w-full h-20 bg-gray-800 flex items-center justify-center">
-                              <Video className="h-6 w-6 text-white" />
+                            <div className="w-full h-12 sm:h-14 bg-gray-800 flex items-center justify-center">
+                              <Video className="h-3 w-3 text-white" />
                             </div>
                           ) : (
                             <img 
                               src={media.url} 
-                              alt={`Carousel item ${index + 1}`}
-                              className="w-full h-20 object-cover"
+                              alt={`Carousel ${index + 1}`}
+                              className="w-full h-12 sm:h-14 object-cover"
+                              loading="lazy"
                             />
                           )}
                           
-                          {/* Order number */}
-                          <div className="absolute top-1 left-1 bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">
+                          <div className="absolute top-0 left-0 bg-blue-600 text-white w-4 h-4 rounded-br flex items-center justify-center text-[8px] font-bold">
                             {index + 1}
                           </div>
                           
-                          {/* Remove button */}
                           <button
                             type="button"
                             onClick={() => removeImageFromCarousel(index)}
-                            className="absolute top-1 right-1 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center hover:bg-red-600 transition-colors"
+                            className="absolute top-0 right-0 bg-red-500 text-white w-4 h-4 rounded-bl flex items-center justify-center hover:bg-red-600"
                           >
-                            <Trash2 className="h-3 w-3" />
+                            <X className="h-2.5 w-2.5" />
                           </button>
                         </div>
                       ))}
@@ -2098,8 +2241,8 @@ function SchedulePostModal({
                   </div>
                 )}
 
-                {/* Additional Media Upload */}
-                <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:border-blue-400 transition-all duration-200">
+                {/* Additional Media Upload - Compact */}
+                <div className="border border-dashed border-gray-300 rounded-lg p-3 text-center hover:border-blue-400 transition-all">
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -2119,153 +2262,159 @@ function SchedulePostModal({
                   />
                   {uploadingCarousel ? (
                     <div className="flex flex-col items-center">
-                      <Loader2 className="h-8 w-8 text-blue-600 animate-spin mb-3" />
-                      <span className="text-sm text-gray-600">Uploading carousel items...</span>
+                      <Loader2 className="h-5 w-5 text-blue-600 animate-spin mb-1" />
+                      <span className="text-xs text-gray-600">Uploading...</span>
                     </div>
                   ) : (
                     <>
-                      <Upload className="h-8 w-8 mx-auto mb-3 text-gray-400" />
-                  {/* Post type selector for Instagram and Facebook (Feed / Story / Reel) */}
-                  {(scheduleFormData.platforms.includes('instagram') || scheduleFormData.platforms.includes('facebook')) && (
-                    <div className="flex items-center justify-center gap-3 mb-3">
-                      <label className="text-sm flex items-center gap-2">
-                        <input
-                          type="radio"
-                          name="postType"
-                          value="feed"
-                          checked={scheduleFormData.postType === 'feed'}
-                          onChange={() => setScheduleFormData(prev => ({ ...prev, postType: 'feed' }))}
-                          className="form-radio"
-                        />
-                        Feed
-                      </label>
-                      {scheduleFormData.platforms.includes('instagram') && (
-                        <>
-                          <label className="text-sm flex items-center gap-2">
+                      {/* Post type selector for Instagram and Facebook - Compact */}
+                      {(scheduleFormData.platforms.includes('instagram') || scheduleFormData.platforms.includes('facebook')) && (
+                        <div className="flex items-center justify-center gap-3 mb-2 flex-wrap">
+                          <label className="text-xs flex items-center gap-1">
                             <input
                               type="radio"
                               name="postType"
-                              value="story"
-                              checked={scheduleFormData.postType === 'story'}
-                              onChange={() => setScheduleFormData(prev => ({ ...prev, postType: 'story' }))}
-                              className="form-radio"
+                              value="feed"
+                              checked={scheduleFormData.postType === 'feed'}
+                              onChange={() => setScheduleFormData(prev => ({ ...prev, postType: 'feed' }))}
+                              className="form-radio h-3 w-3"
                             />
-                            Story
+                            Feed
                           </label>
-                          <label className="text-sm flex items-center gap-2">
-                            <input
-                              type="radio"
-                              name="postType"
-                              value="reel"
-                              checked={scheduleFormData.postType === 'reel'}
-                              onChange={() => setScheduleFormData(prev => ({ ...prev, postType: 'reel' }))}
-                              className="form-radio"
-                            />
-                            Reel
-                          </label>
-                        </>
+                          {scheduleFormData.platforms.includes('instagram') && (
+                            <>
+                              <label className="text-xs flex items-center gap-1">
+                                <input
+                                  type="radio"
+                                  name="postType"
+                                  value="story"
+                                  checked={scheduleFormData.postType === 'story'}
+                                  onChange={() => setScheduleFormData(prev => ({ ...prev, postType: 'story' }))}
+                                  className="form-radio h-3 w-3"
+                                />
+                                Story
+                              </label>
+                              <label className="text-xs flex items-center gap-1">
+                                <input
+                                  type="radio"
+                                  name="postType"
+                                  value="reel"
+                                  checked={scheduleFormData.postType === 'reel'}
+                                  onChange={() => setScheduleFormData(prev => ({ ...prev, postType: 'reel' }))}
+                                  className="form-radio h-3 w-3"
+                                />
+                                Reel
+                              </label>
+                            </>
+                          )}
+                          {scheduleFormData.platforms.includes('facebook') && (
+                            <label className="text-xs flex items-center gap-1">
+                              <input
+                                type="radio"
+                                name="postType"
+                                value="story"
+                                checked={scheduleFormData.postType === 'story'}
+                                onChange={() => setScheduleFormData(prev => ({ ...prev, postType: 'story' }))}
+                                className="form-radio h-3 w-3"
+                              />
+                              FB Story
+                            </label>
+                          )}
+                        </div>
                       )}
-                      {scheduleFormData.platforms.includes('facebook') && (
-                        <label className="text-sm flex items-center gap-2">
-                          <input
-                            type="radio"
-                            name="postType"
-                            value="story"
-                            checked={scheduleFormData.postType === 'story'}
-                            onChange={() => setScheduleFormData(prev => ({ ...prev, postType: 'story' }))}
-                            className="form-radio"
-                          />
-                          FB Story
-                        </label>
-                      )}
-                    </div>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="text-blue-600 hover:text-blue-800 font-semibold text-sm transition-colors duration-200"
-                  >
-                    {scheduleFormData.platforms.includes('youtube') 
-                      ? 'Upload Video' 
-                      : 'Upload Multiple Files for Carousel'}
-                  </button>
-                  <p className="text-xs text-gray-500 mt-2">
-                    {scheduleFormData.platforms.includes('youtube') 
-                      ? 'Single video only (Max 100MB)' 
-                      : 'Select multiple files (2-10 items, Max 100MB each)'}
-                  </p>
+                      <Upload className="h-5 w-5 mx-auto mb-1 text-gray-400" />
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="text-blue-600 hover:text-blue-800 font-medium text-xs"
+                      >
+                        {scheduleFormData.platforms.includes('youtube') ? 'Upload Video' : 'Upload Files'}
+                      </button>
+                      <p className="text-[10px] text-gray-500 mt-1">
+                        {scheduleFormData.platforms.includes('youtube') ? 'Max 100MB' : '2-10 items, Max 100MB each'}
+                      </p>
                     </>
                   )}
                 </div>
               </div>
             )}
 
-            {/* Date and Time for Scheduling */}
-            <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-6 rounded-xl border border-purple-200">
-              <label className="block text-lg font-semibold text-gray-900 mb-4">Schedule Time (Optional for Post Now)</label>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Date and Time for Scheduling - Compact */}
+            <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-3 rounded-lg border border-purple-200">
+              <label className="block text-sm font-semibold text-gray-900 mb-2">Schedule Time (Optional)</label>
+              <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Date</label>
                   <input
                     type="date"
                     value={scheduleFormData.scheduledDate}
                     onChange={(e) => setScheduleFormData(prev => ({ ...prev, scheduledDate: e.target.value }))}
-                    className="w-full border-2 border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all duration-200"
+                    className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:ring-1 focus:ring-purple-500 focus:border-purple-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Time</label>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Time</label>
                   <input
                     type="time"
                     value={scheduleFormData.scheduledTime}
                     onChange={(e) => setScheduleFormData(prev => ({ ...prev, scheduledTime: e.target.value }))}
-                    className="w-full border-2 border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all duration-200"
+                    className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:ring-1 focus:ring-purple-500 focus:border-purple-500"
                   />
                 </div>
               </div>
             </div>
 
-            {/* Action Buttons */}
-            <div className="flex flex-col sm:flex-row gap-4 pt-6 border-t border-gray-200">
+            {/* Action Buttons - Mobile Optimized */}
+            <div className="flex flex-col gap-2 pt-3 border-t border-gray-200 sticky bottom-0 bg-white pb-1">
+              <div className="flex gap-2">
+                <button
+                  onClick={handlePostNow}
+                  disabled={isPostingNow || submitting || scheduleFormData.platforms.length === 0}
+                  className="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 text-white py-2.5 px-3 rounded-lg font-medium hover:from-green-600 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-1.5 text-sm"
+                >
+                  {isPostingNow ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span className="hidden sm:inline">Publishing...</span>
+                      <span className="sm:hidden">...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="h-4 w-4" />
+                      <span>Post Now</span>
+                      {scheduleFormData.platforms.length > 0 && (
+                        <span className="text-[10px] opacity-80">({scheduleFormData.platforms.length})</span>
+                      )}
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={handleSchedulePost}
+                  disabled={submitting || isPostingNow || scheduleFormData.platforms.length === 0}
+                  className="flex-1 bg-gradient-to-r from-blue-600 to-cyan-600 text-white py-2.5 px-3 rounded-lg font-medium hover:from-blue-700 hover:to-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-1.5 text-sm"
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span className="hidden sm:inline">Scheduling...</span>
+                      <span className="sm:hidden">...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send className="h-4 w-4" />
+                      <span>Schedule</span>
+                      {scheduleFormData.platforms.length > 0 && (
+                        <span className="text-[10px] opacity-80">({scheduleFormData.platforms.length})</span>
+                      )}
+                    </>
+                  )}
+                </button>
+              </div>
               <button
                 onClick={onClose}
-                className="flex-1 bg-gray-200 text-gray-700 py-3 px-6 rounded-xl font-semibold hover:bg-gray-300 transition-all duration-200"
+                className="w-full bg-gray-100 text-gray-700 py-2 px-4 rounded-lg font-medium hover:bg-gray-200 transition-all text-sm"
               >
                 Cancel
-              </button>
-              <button
-                onClick={handlePostNow}
-                disabled={isPostingNow || submitting || scheduleFormData.platforms.length === 0}
-                className="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 text-white py-3 px-6 rounded-xl font-semibold hover:from-green-600 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center space-x-2"
-              >
-                {isPostingNow ? (
-                  <>
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                    <span>Publishing to {scheduleFormData.platforms.length} platform{scheduleFormData.platforms.length !== 1 ? 's' : ''}...</span>
-                  </>
-                ) : (
-                  <>
-                    <Zap className="h-5 w-5" />
-                    <span>Post Now to {scheduleFormData.platforms.length} Platform{scheduleFormData.platforms.length !== 1 ? 's' : ''}</span>
-                  </>
-                )}
-              </button>
-              <button
-                onClick={handleSchedulePost}
-                disabled={submitting || isPostingNow || scheduleFormData.platforms.length === 0}
-                className="flex-1 bg-gradient-to-r from-blue-600 to-cyan-600 text-white py-3 px-6 rounded-xl font-semibold hover:from-blue-700 hover:to-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center space-x-2"
-              >
-                {submitting ? (
-                  <>
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                    <span>Scheduling...</span>
-                  </>
-                ) : (
-                  <>
-                    <Send className="h-5 w-5" />
-                    <span>Schedule for {scheduleFormData.platforms.length} Platform{scheduleFormData.platforms.length !== 1 ? 's' : ''}</span>
-                  </>
-                )}
               </button>
             </div>
           </div>
@@ -2275,4 +2424,4 @@ function SchedulePostModal({
   );
 }
 
-export default SchedulePostModal;
+export default memo(SchedulePostModal);

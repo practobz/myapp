@@ -24,41 +24,71 @@ const PlatformButton = memo(({ platform, isGenerating, loading, onGenerate }) =>
 });
 
 // Memoized Customer Card Component
-const CustomerCard = memo(({ customer, activeCustomer, loading, onGenerateQr }) => (
-  <div
-    className={`px-3 sm:px-4 lg:px-6 py-3 sm:py-4 transition-colors duration-150 hover:bg-[#F4F9FF] ${
-      activeCustomer?.id === customer._id 
-        ? 'bg-[#F4F9FF] border-l-4 border-l-[#0066CC]' 
-        : ''
-    }`}
-  >
-    <div className="flex flex-col gap-3">
-      {/* Customer Info Row */}
-      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-        <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-[#00E5FF] to-[#0066CC] rounded-full flex items-center justify-center flex-shrink-0">
-          <User className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+const CustomerCard = memo(({ customer, activeCustomer, loading, onGenerateQr }) => {
+  // Check if platform is enabled for customer
+  const isPlatformEnabled = (platform) => {
+    if (!customer.platformAccess) return true; // If no platformAccess, allow all
+    
+    // Map QR platform keys to platformAccess keys
+    const platformMap = {
+      'fb': 'facebook',
+      'insta': 'instagram',
+      'linkedin': 'linkedin',
+      'yt': 'youtube'
+    };
+    
+    const accessKey = platformMap[platform];
+    return customer.platformAccess[accessKey] !== false;
+  };
+
+  return (
+    <div
+      className={`px-3 sm:px-4 lg:px-6 py-3 sm:py-4 transition-colors duration-150 hover:bg-[#F4F9FF] ${
+        activeCustomer?.id === customer._id 
+          ? 'bg-[#F4F9FF] border-l-4 border-l-[#0066CC]' 
+          : ''
+      }`}
+    >
+      <div className="flex flex-col gap-3">
+        {/* Customer Info Row */}
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-[#00E5FF] to-[#0066CC] rounded-full flex items-center justify-center flex-shrink-0">
+            <User className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="font-semibold text-[#0F172A] truncate text-sm sm:text-base lg:text-lg">{customer.name}</h3>
+            <p className="text-xs sm:text-sm text-[#475569] truncate">{customer.email}</p>
+          </div>
         </div>
-        <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-[#0F172A] truncate text-sm sm:text-base lg:text-lg">{customer.name}</h3>
-          <p className="text-xs sm:text-sm text-[#475569] truncate">{customer.email}</p>
+        
+        {/* Platform Buttons Row */}
+        <div className="flex flex-wrap gap-1.5 sm:gap-2">
+          {PLATFORMS.map(platform => {
+            const platformEnabled = isPlatformEnabled(platform.key);
+            return (
+              <button
+                key={platform.key}
+                onClick={() => platformEnabled && onGenerateQr(customer._id, customer.name, platform.key)}
+                disabled={loading || !platformEnabled}
+                className={`${platformEnabled ? platform.color : 'bg-gray-400 cursor-not-allowed'} text-white px-2.5 sm:px-3 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center gap-1 sm:gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md active:scale-95 min-w-[40px] sm:min-w-[44px] justify-center touch-manipulation`}
+                title={!platformEnabled ? 'Platform disabled by admin' : platform.label}
+              >
+                {loading && activeCustomer?.id === customer._id ? (
+                  <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" />
+                ) : (
+                  <>
+                    <platform.icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                    <span className="hidden lg:inline">{platform.label}</span>
+                  </>
+                )}
+              </button>
+            );
+          })}
         </div>
-      </div>
-      
-      {/* Platform Buttons Row */}
-      <div className="flex flex-wrap gap-1.5 sm:gap-2">
-        {PLATFORMS.map(platform => (
-          <PlatformButton
-            key={platform.key}
-            platform={platform}
-            isGenerating={loading && activeCustomer?.id === customer._id}
-            loading={loading}
-            onGenerate={() => onGenerateQr(customer._id, customer.name, platform.key)}
-          />
-        ))}
       </div>
     </div>
-  </div>
-));
+  );
+});
 
 const PLATFORMS = [
   { key: 'fb', label: 'Facebook', icon: Facebook, color: 'bg-blue-600 hover:bg-blue-700', lightColor: 'bg-blue-50 text-blue-700' },

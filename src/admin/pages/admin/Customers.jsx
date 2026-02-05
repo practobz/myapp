@@ -1,8 +1,91 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AdminLayout from '../../components/layout/AdminLayout';
-import { Eye, AlertCircle, ArrowLeft } from 'lucide-react';
+import { Eye, AlertCircle, Calendar, Clock } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+
+// Memoized customer card component for performance
+const CustomerCard = memo(({ customer, calendars, publishedDates, onView, formatDate, getDueDateStatus, getStatusBadgeColor }) => {
+  const totalCalendars = calendars.length;
+  const totalItems = calendars.reduce(
+    (acc, cal) => acc + (Array.isArray(cal.contentItems) ? cal.contentItems.length : 0),
+    0
+  );
+  
+  const allDueDates = calendars
+    .flatMap(cal => Array.isArray(cal.contentItems) ? cal.contentItems.map(item => item.date).filter(Boolean) : [])
+    .filter(date => {
+      const isoDate = new Date(date).toISOString().slice(0, 10);
+      return !publishedDates.has(isoDate) && !isNaN(new Date(date));
+    });
+  
+  const nextDueDate = allDueDates.length > 0
+    ? allDueDates.sort((a, b) => new Date(a) - new Date(b))[0]
+    : null;
+  const status = getDueDateStatus(nextDueDate);
+
+  return (
+    <div 
+      onClick={() => onView(customer.id || customer._id)}
+      className="bg-white rounded-xl border border-gray-200/50 shadow-sm hover:shadow-md active:shadow-sm transition-all duration-200 cursor-pointer active:scale-[0.99]"
+    >
+      <div className="p-3 sm:p-4">
+        <div className="flex items-center gap-3">
+          {/* Avatar */}
+          <div className="h-10 w-10 sm:h-11 sm:w-11 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center flex-shrink-0">
+            <span className="text-white font-bold text-sm sm:text-base">
+              {customer.name.charAt(0).toUpperCase()}
+            </span>
+          </div>
+          
+          {/* Info */}
+          <div className="flex-1 min-w-0">
+            <h4 className="text-sm sm:text-base font-semibold text-gray-900 truncate">
+              {customer.name}
+            </h4>
+            <p className="text-xs sm:text-sm text-gray-500 truncate">{customer.email}</p>
+          </div>
+          
+          {/* Right side */}
+          <div className="flex-shrink-0">
+            <Eye className="h-4 w-4 text-gray-400" />
+          </div>
+        </div>
+        
+        {/* Stats row */}
+        <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-gray-100">
+          <div className="flex items-center gap-1.5">
+            <Calendar className="h-3 w-3 text-gray-400 flex-shrink-0" />
+            <span className="text-[10px] sm:text-xs text-gray-600 truncate">
+              {totalCalendars} calendar{totalCalendars !== 1 ? 's' : ''}
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Clock className="h-3 w-3 text-gray-400 flex-shrink-0" />
+            <span className="text-[10px] sm:text-xs text-gray-600 truncate">
+              {totalItems} item{totalItems !== 1 ? 's' : ''}
+            </span>
+          </div>
+        </div>
+        
+        {/* Due date status */}
+        {nextDueDate && (
+          <div className="mt-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] sm:text-xs text-gray-500">Next due:</span>
+              <span className="text-[10px] sm:text-xs font-medium text-gray-900">{formatDate(nextDueDate)}</span>
+            </div>
+            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border mt-1 ${getStatusBadgeColor(status)}`}>
+              {status.text}
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+});
+
+CustomerCard.displayName = 'CustomerCard';
 
 function Customers() {
   const { currentUser } = useAuth();
@@ -13,39 +96,42 @@ function Customers() {
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
-  const handleViewCustomer = (id) => {
+  const handleViewCustomer = useCallback((id) => {
     navigate(`/admin/customers/${id}`);
-  };
+  }, [navigate]);
 
-  const formatDate = (dateString) => {
+  const formatDate = useCallback((dateString) => {
     if (!dateString) return 'N/A';
     const date = new Date(dateString);
     return isNaN(date) ? 'Invalid Date' : date.toLocaleDateString(undefined, { 
       day: 'numeric', 
-      month: 'short',
-      year: 'numeric'
+      month: 'short'
     });
-  };
+  }, []);
 
-  const getDaysUntilDue = (dateString) => {
+  const getDaysUntilDue = useCallback((dateString) => {
     if (!dateString) return null;
     const dueDate = new Date(dateString);
     const today = new Date();
     const diffTime = dueDate - today;
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     return diffDays;
-  };
+  }, []);
 
-  const getDueDateStatus = (dateString) => {
-    const days = getDaysUntilDue(dateString);
-    if (days === null) return { color: 'gray', text: 'No date' };
-    if (days < 0) return { color: 'red', text: 'Overdue' };
-    if (days === 0) return { color: 'orange', text: 'Due today' };
-    if (days <= 3) return { color: 'yellow', text: `${days} days left` };
-    return { color: 'green', text: `${days} days left` };
-  };
+  const getDueDateStatus = useCallback((dateString) => {
+    const dueDate = new Date(dateString);
+    const today = new Date();
+    const diffTime = dueDate - today;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (!dateString || isNaN(diffDays)) return { color: 'gray', text: 'No date' };
+    if (diffDays < 0) return { color: 'red', text: 'Overdue' };
+    if (diffDays === 0) return { color: 'orange', text: 'Due today' };
+    if (diffDays <= 3) return { color: 'yellow', text: `${diffDays} day${diffDays !== 1 ? 's' : ''}` };
+    return { color: 'green', text: `${diffDays} day${diffDays !== 1 ? 's' : ''}` };
+  }, []);
 
-  const getStatusBadgeColor = (status) => {
+  const getStatusBadgeColor = useCallback((status) => {
     switch (status.color) {
       case 'red':
         return 'bg-red-50 text-red-700 border-red-200';
@@ -58,7 +144,7 @@ function Customers() {
       default:
         return 'bg-gray-50 text-gray-700 border-gray-200';
     }
-  };
+  }, []);
 
   // Fetch only assigned customers for current admin
   const fetchAssignedCustomers = async () => {
@@ -152,159 +238,82 @@ function Customers() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
+      <AdminLayout title="Customers">
+        <div className="flex items-center justify-center h-48">
+          <div className="flex flex-col items-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-2"></div>
+            <p className="text-gray-500 text-sm">Loading...</p>
+          </div>
+        </div>
+      </AdminLayout>
     );
   }
 
   return (
     <AdminLayout title="Customers">
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-        <div className="space-y-8">
-          {/* Header Section with Navigation */}
-          <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-gray-200/50">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <button
-                  onClick={() => navigate('/admin')}
-                  className="mr-4 p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all duration-200"
-                >
-                  <ArrowLeft className="h-5 w-5" />
-                </button>
-                <div>
-                  <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
-                    Customers
-                  </h1>
-                  <p className="text-gray-600 mt-2">Manage customer content calendars and schedules</p>
-                </div>
-              </div>
+      <div className="space-y-3 sm:space-y-4">
+        {/* Header */}
+        <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm p-3 sm:p-4 border border-gray-200/50">
+          <div className="flex items-center justify-between">
+            <div className="flex-1 min-w-0">
+              <h2 className="text-base sm:text-lg font-bold text-gray-900 truncate">
+                Customer Overview
+              </h2>
+              <p className="text-xs sm:text-sm text-gray-500 hidden sm:block">
+                Track content schedules and deadlines
+              </p>
             </div>
-          </div>
-
-          {/* Customers Table */}
-          <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-200/50">
-              <h2 className="text-xl font-bold text-gray-900">Customer Overview</h2>
-              <p className="text-sm text-gray-600 mt-1">Track content schedules and deadlines</p>
-            </div>
-            
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200/50">
-                <thead className="bg-gray-50/50">
-                  <tr>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Customer Name
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Next Content Due Date
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Number of Content Calendars
-                    </th>
-                    <th className="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      View Details
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white/50 divide-y divide-gray-200/30">
-                  {loading ? (
-                    <tr>
-                      <td colSpan={4} className="px-6 py-12 text-center">
-                        <div className="flex flex-col items-center">
-                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-4"></div>
-                          <p className="text-gray-500 font-medium">Loading customers...</p>
-                        </div>
-                      </td>
-                    </tr>
-                  ) : customers.length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="px-6 py-12 text-center">
-                        <div className="flex flex-col items-center">
-                          <div className="bg-gray-100 rounded-full w-16 h-16 flex items-center justify-center mb-4">
-                            <AlertCircle className="h-8 w-8 text-gray-400" />
-                          </div>
-                          <h3 className="text-lg font-medium text-gray-900 mb-2">No customers found</h3>
-                          <p className="text-gray-500">No customers with content calendars found.</p>
-                        </div>
-                      </td>
-                    </tr>
-                  ) : (
-                    customers.map((customer) => {
-                      const calendars = calendarsByCustomer[customer._id || customer.id] || [];
-                      const totalCalendars = calendars.length;
-                      const totalItems = calendars.reduce(
-                        (acc, cal) => acc + (Array.isArray(cal.contentItems) ? cal.contentItems.length : 0),
-                        0
-                      );
-                      // Filter out published items for overdue calculation
-                      const publishedDates = publishedDatesByCustomer[customer._id || customer.id] || new Set();
-                      const allDueDates = calendars
-                        .flatMap(cal => Array.isArray(cal.contentItems) ? cal.contentItems.map(item => item.date).filter(Boolean) : [])
-                        .filter(date => {
-                          // Only include if not published
-                          const isoDate = new Date(date).toISOString().slice(0, 10);
-                          return !publishedDates.has(isoDate) && !isNaN(new Date(date));
-                        });
-                      const nextDueDate = allDueDates.length > 0
-                        ? allDueDates.sort((a, b) => new Date(a) - new Date(b))[0]
-                        : null;
-                      const status = getDueDateStatus(nextDueDate);
-
-                      return (
-                        <tr key={customer.id || customer._id} className="hover:bg-white/70 transition-all duration-200 group">
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center">
-                              <div className="flex-shrink-0 h-10 w-10">
-                                <div className="h-10 w-10 rounded-full bg-gradient-to-r from-blue-500 to-indigo-600 flex items-center justify-center">
-                                  <span className="text-white font-semibold text-sm">
-                                    {customer.name.charAt(0).toUpperCase()}
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="ml-4">
-                                <div className="text-sm font-semibold text-gray-900">{customer.name}</div>
-                                <div className="text-sm text-gray-500">{customer.email}</div>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm font-medium text-gray-900">
-                              {nextDueDate ? formatDate(nextDueDate) : 'No due date'}
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              {nextDueDate ? (
-                                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${getStatusBadgeColor(status)}`}>
-                                  {status.text}
-                                </span>
-                              ) : ''}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-900 font-medium">{totalCalendars}</div>
-                            <div className="text-xs text-gray-500">{totalItems} total items</div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-right">
-                            <button
-                              onClick={() => handleViewCustomer(customer.id || customer._id)}
-                              className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm font-semibold rounded-lg hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-sm hover:shadow-md group-hover:shadow-lg"
-                            >
-                              <Eye className="h-4 w-4 mr-2" />
-                              View Details
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
+            <span className="text-xs sm:text-sm font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded-lg">
+              {customers.length}
+            </span>
           </div>
         </div>
+
+        {/* Error Message */}
+        {error && (
+          <div className="border px-3 py-2 rounded-lg flex items-center text-sm bg-red-50 border-red-200 text-red-700">
+            <AlertCircle className="h-4 w-4 mr-2 flex-shrink-0" />
+            <span className="truncate">{error}</span>
+          </div>
+        )}
+
+        {/* Customers Grid */}
+        {customers.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
+            {customers.map((customer) => {
+              const calendars = calendarsByCustomer[customer._id || customer.id] || [];
+              const publishedDates = publishedDatesByCustomer[customer._id || customer.id] || new Set();
+              
+              return (
+                <CustomerCard
+                  key={customer.id || customer._id}
+                  customer={customer}
+                  calendars={calendars}
+                  publishedDates={publishedDates}
+                  onView={handleViewCustomer}
+                  formatDate={formatDate}
+                  getDueDateStatus={getDueDateStatus}
+                  getStatusBadgeColor={getStatusBadgeColor}
+                />
+              );
+            })}
+          </div>
+        ) : (
+          <div className="bg-white/80 rounded-xl p-6 text-center border border-gray-200/50">
+            <div className="bg-gray-100 rounded-full w-12 h-12 flex items-center justify-center mx-auto mb-3">
+              <AlertCircle className="h-6 w-6 text-gray-400" />
+            </div>
+            <h3 className="text-sm font-medium text-gray-900 mb-1">
+              No customers found
+            </h3>
+            <p className="text-xs text-gray-500">
+              No customers with content calendars found.
+            </p>
+          </div>
+        )}
       </div>
     </AdminLayout>
   );
 }
 
-export default Customers;
+export default memo(Customers);

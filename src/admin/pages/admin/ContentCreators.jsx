@@ -1,9 +1,69 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AdminLayout from '../../components/layout/AdminLayout';
-import { Eye, Search, AlertCircle, UserCheck, Users, Mail, Phone, ArrowLeft } from 'lucide-react';
+import { Eye, Search, AlertCircle, UserCheck, Mail, Phone, ArrowLeft, Calendar } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_API_URL;
+
+// Memoized creator card component for performance
+const CreatorCard = memo(({ creator, onView }) => (
+  <div 
+    onClick={() => onView(creator._id)}
+    className="bg-white rounded-xl border border-gray-200/50 shadow-sm hover:shadow-md active:shadow-sm transition-all duration-200 cursor-pointer active:scale-[0.99]"
+  >
+    <div className="p-3 sm:p-4">
+      <div className="flex items-center gap-3">
+        {/* Avatar */}
+        <div className="h-10 w-10 sm:h-11 sm:w-11 bg-gradient-to-r from-purple-500 to-indigo-600 rounded-lg flex items-center justify-center flex-shrink-0">
+          <span className="text-white font-bold text-sm sm:text-base">
+            {(creator.name || 'U').charAt(0).toUpperCase()}
+          </span>
+        </div>
+        
+        {/* Info */}
+        <div className="flex-1 min-w-0">
+          <h4 className="text-sm sm:text-base font-semibold text-gray-900 truncate">
+            {creator.name || 'Unnamed Creator'}
+          </h4>
+          <div className="flex items-center text-xs sm:text-sm text-gray-500 truncate">
+            <Mail className="h-3 w-3 mr-1 flex-shrink-0" />
+            <span className="truncate">{creator.email}</span>
+          </div>
+        </div>
+        
+        {/* Right side */}
+        <div className="flex flex-col items-end gap-1">
+          <Eye className="h-4 w-4 text-gray-400" />
+          {creator.mobile && (
+            <div className="hidden sm:flex items-center text-xs text-gray-400">
+              <Phone className="h-3 w-3 mr-1" />
+              <span>{creator.mobile}</span>
+            </div>
+          )}
+        </div>
+      </div>
+      
+      {/* Bottom row - compact */}
+      <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
+        <div className="flex items-center gap-1.5">
+          <Calendar className="h-3 w-3 text-gray-400" />
+          <span className="text-[10px] sm:text-xs text-gray-600">
+            {creator.assignedCalendars || 0} calendar{creator.assignedCalendars !== 1 ? 's' : ''}
+          </span>
+        </div>
+        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] sm:text-xs font-medium ${
+          creator.assignedCalendars > 0 
+            ? 'bg-green-50 text-green-700' 
+            : 'bg-gray-50 text-gray-500'
+        }`}>
+          {creator.assignedCalendars > 0 ? 'Active' : 'No tasks'}
+        </span>
+      </div>
+    </div>
+  </div>
+));
+
+CreatorCard.displayName = 'CreatorCard';
 
 function ContentCreators() {
   const [contentCreators, setContentCreators] = useState([]);
@@ -61,25 +121,28 @@ function ContentCreators() {
     }
   };
 
-  const handleViewCreator = (id) => {
+  const handleViewCreator = useCallback((id) => {
     navigate(`/admin/content-creator-details/${id}`);
-  };
+  }, [navigate]);
 
-  const filteredCreators = contentCreators.filter(creator => 
-    creator.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    creator.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    creator.mobile?.includes(searchTerm)
-  );
+  // Memoize filtered creators for performance
+  const filteredCreators = useMemo(() => {
+    const term = searchTerm.toLowerCase();
+    if (!term) return contentCreators;
+    return contentCreators.filter(creator => 
+      creator.name?.toLowerCase().includes(term) ||
+      creator.email?.toLowerCase().includes(term) ||
+      creator.mobile?.includes(searchTerm)
+    );
+  }, [contentCreators, searchTerm]);
 
   if (loading) {
     return (
       <AdminLayout title="Content Creators">
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-          <div className="flex items-center justify-center h-64">
-            <div className="flex flex-col items-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-              <p className="text-gray-500 font-medium">Loading content creators...</p>
-            </div>
+        <div className="flex items-center justify-center h-48">
+          <div className="flex flex-col items-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mb-2"></div>
+            <p className="text-gray-500 text-sm">Loading...</p>
           </div>
         </div>
       </AdminLayout>
@@ -88,156 +151,81 @@ function ContentCreators() {
 
   return (
     <AdminLayout title="Content Creators">
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-        <div className="space-y-8">
-          {/* Header Section with Navigation */}
-          <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-gray-200/50">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <button
-                  onClick={() => navigate('/admin')}
-                  className="mr-4 p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all duration-200"
-                >
-                  <ArrowLeft className="h-5 w-5" />
-                </button>
-                <div>
-                  <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
-                    Content Creators
-                  </h1>
-                  <p className="text-gray-600 mt-2">Manage and view all content creators</p>
-                </div>
-              </div>
+      <div className="space-y-3 sm:space-y-4">
+        {/* Header + Search Combined for Mobile */}
+        <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm p-3 sm:p-4 border border-gray-200/50">
+          {/* Header Row */}
+          <div className="flex items-center mb-3">
+            <button
+              onClick={() => navigate('/admin')}
+              className="mr-2 p-1.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </button>
+            <div className="flex-1 min-w-0">
+              <h1 className="text-lg sm:text-xl font-bold text-gray-900 truncate">
+                Content Creators
+              </h1>
+              <p className="text-xs sm:text-sm text-gray-500 hidden sm:block">
+                Manage and view all content creators
+              </p>
             </div>
+            <span className="text-xs sm:text-sm font-medium text-purple-600 bg-purple-50 px-2 py-1 rounded-lg">
+              {filteredCreators.length}
+            </span>
           </div>
-
-          {/* Search Section */}
-          <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-gray-200/50">
-            <div className="flex items-center">
-              <div className="relative flex-1">
-                <Search className="h-5 w-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="Search content creators by name, email, or phone..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 pr-4 py-3 w-full bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Error Message */}
-          {error && (
-            <div className="bg-red-50/80 backdrop-blur-sm border border-red-200 text-red-700 px-6 py-4 rounded-2xl flex items-start shadow-lg">
-              <AlertCircle className="h-5 w-5 mr-3 mt-0.5 flex-shrink-0" />
-              <span className="font-medium">{error}</span>
-            </div>
-          )}
-
-          {/* Content Creators Table */}
-          <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-200/50">
-              <h2 className="text-xl font-bold text-gray-900">
-                Content Creators Directory ({filteredCreators.length})
-              </h2>
-              <p className="text-sm text-gray-600 mt-1">Manage content creator information and assignments</p>
-            </div>
-            
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200/50">
-                <thead className="bg-gray-50/50">
-                  <tr>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Name
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Phone Number
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Email Address
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Assigned Content Calendars
-                    </th>
-                    <th className="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Action
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white/50 divide-y divide-gray-200/30">
-                  {filteredCreators.length > 0 ? (
-                    filteredCreators.map((creator) => (
-                      <tr key={creator._id} className="hover:bg-white/70 transition-all duration-200 group">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <div className="flex-shrink-0 h-10 w-10">
-                              <div className="h-10 w-10 rounded-full bg-gradient-to-r from-purple-500 to-indigo-600 flex items-center justify-center">
-                                <span className="text-white font-semibold text-sm">
-                                  {(creator.name || 'U').charAt(0).toUpperCase()}
-                                </span>
-                              </div>
-                            </div>
-                            <div className="ml-4">
-                              <div className="text-sm font-semibold text-gray-900">{creator.name || 'Unnamed Creator'}</div>
-                              <div className="text-xs text-gray-500">Content Creator</div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center text-sm text-gray-900">
-                            <Phone className="h-4 w-4 mr-2 text-gray-400" />
-                            {creator.mobile || 'Not provided'}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center text-sm text-gray-900">
-                            <Mail className="h-4 w-4 mr-2 text-gray-400" />
-                            {creator.email}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900">{creator.assignedCalendars || 0}</div>
-                          <div className="text-xs text-gray-500">
-                            {creator.assignedCalendars > 0 ? 'Active assignments' : 'No assignments'}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right">
-                          <button
-                            onClick={() => handleViewCreator(creator._id)}
-                            className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-sm font-semibold rounded-lg hover:from-purple-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-sm hover:shadow-md group-hover:shadow-lg"
-                          >
-                            <Eye className="h-4 w-4 mr-2" />
-                            View Details
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={5} className="px-6 py-12 text-center">
-                        <div className="flex flex-col items-center">
-                          <div className="bg-gray-100 rounded-full w-16 h-16 flex items-center justify-center mb-4">
-                            <UserCheck className="h-8 w-8 text-gray-400" />
-                          </div>
-                          <h3 className="text-lg font-medium text-gray-900 mb-2">No content creators found</h3>
-                          <p className="text-gray-500">
-                            {searchTerm 
-                              ? 'No content creators match your search criteria.' 
-                              : 'No content creators have been registered yet.'
-                            }
-                          </p>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+          
+          {/* Search */}
+          <div className="relative">
+            <Search className="h-4 w-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Search creators..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-9 pr-3 py-2 w-full bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            />
           </div>
         </div>
+
+        {/* Error Message */}
+        {error && (
+          <div className="border px-3 py-2 rounded-lg flex items-center text-sm bg-red-50 border-red-200 text-red-700">
+            <AlertCircle className="h-4 w-4 mr-2 flex-shrink-0" />
+            <span className="truncate">{error}</span>
+          </div>
+        )}
+
+        {/* Creators List - Compact Grid */}
+        {filteredCreators.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
+            {filteredCreators.map((creator) => (
+              <CreatorCard
+                key={creator._id}
+                creator={creator}
+                onView={handleViewCreator}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="bg-white/80 rounded-xl p-6 text-center border border-gray-200/50">
+            <div className="bg-gray-100 rounded-full w-12 h-12 flex items-center justify-center mx-auto mb-3">
+              <UserCheck className="h-6 w-6 text-gray-400" />
+            </div>
+            <h3 className="text-sm font-medium text-gray-900 mb-1">
+              {searchTerm ? 'No matches found' : 'No content creators'}
+            </h3>
+            <p className="text-xs text-gray-500">
+              {searchTerm 
+                ? 'Try a different search term' 
+                : 'No content creators registered yet'
+              }
+            </p>
+          </div>
+        )}
       </div>
     </AdminLayout>
   );
 }
 
-export default ContentCreators;
+export default memo(ContentCreators);

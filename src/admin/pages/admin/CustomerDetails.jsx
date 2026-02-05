@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, memo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import AdminLayout from '../../components/layout/AdminLayout';
@@ -6,7 +6,7 @@ import ContentItemModal from '../../components/modals/ContentItemModal';
 import AssignCreatorModal from '../../components/modals/AssignCreatorModal';
 import ContentCalendarModal from '../../components/modals/ContentCalendarModal';
 import {
-  ChevronLeft, Pencil, Trash2, Plus, AlertCircle, Calendar, Clock, User, FileText, Activity, Target, UserCheck,
+  ChevronLeft, Pencil, Trash2, Plus, AlertCircle, Calendar, Clock,
   ChevronRight, ChevronDown, MoreVertical, Upload
 } from 'lucide-react';
 
@@ -312,6 +312,30 @@ const CustomerDetails = () => {
 
   const handleCancelDelete = () => setDeleteConfirmation(null);
 
+  const toggleCalendarExpansion = useCallback((calendarId) => {
+    setExpandedCalendars(prev => {
+      const newExpanded = new Set(prev);
+      if (newExpanded.has(calendarId)) {
+        newExpanded.delete(calendarId);
+      } else {
+        newExpanded.add(calendarId);
+      }
+      return newExpanded;
+    });
+  }, []);
+
+  const toggleDropdown = useCallback((calendarId) => {
+    setOpenDropdowns(prev => {
+      const newDropdowns = new Set(prev);
+      if (newDropdowns.has(calendarId)) {
+        newDropdowns.delete(calendarId);
+      } else {
+        newDropdowns.add(calendarId);
+      }
+      return newDropdowns;
+    });
+  }, []);
+
   const handleAssignCreator = async (creator) => {
     if (!selectedCalendar) return;
     try {
@@ -335,16 +359,16 @@ const CustomerDetails = () => {
     setSelectedCalendar(null);
   };
 
-  const formatDate = (dateString) => {
+  const formatDate = useCallback((dateString) => {
     try {
       const date = new Date(dateString);
       return format(date, "do MMMM");
     } catch (error) {
       return dateString;
     }
-  };
+  }, []);
 
-  const getStatusColor = (status) => {
+  const getStatusColor = useCallback((status) => {
     switch (status) {
       case 'assigned':
         return 'bg-blue-50 text-blue-700 border-blue-200';
@@ -359,9 +383,9 @@ const CustomerDetails = () => {
       default:
         return 'bg-gray-50 text-gray-700 border-gray-200';
     }
-  };
+  }, []);
 
-  const getPriorityColor = (priority) => {
+  const getPriorityColor = useCallback((priority) => {
     switch ((priority || '').toLowerCase()) {
       case 'high':
         return 'bg-red-100 text-red-800 border-red-200';
@@ -372,47 +396,25 @@ const CustomerDetails = () => {
       default:
         return 'bg-gray-100 text-gray-800 border-gray-200';
     }
-  };
-
-  const toggleCalendarExpansion = (calendarId) => {
-    const newExpanded = new Set(expandedCalendars);
-    if (newExpanded.has(calendarId)) {
-      newExpanded.delete(calendarId);
-    } else {
-      newExpanded.add(calendarId);
-    }
-    setExpandedCalendars(newExpanded);
-  };
-
-  const toggleDropdown = (calendarId) => {
-    const newDropdowns = new Set(openDropdowns);
-    if (newDropdowns.has(calendarId)) {
-      newDropdowns.delete(calendarId);
-    } else {
-      newDropdowns.add(calendarId);
-    }
-    setOpenDropdowns(newDropdowns);
-  };
+  }, []);
 
   if (!customer) {
     return (
-      <AdminLayout title="Customer Not Found">
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
-          <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg p-8 border border-gray-200/50 max-w-md w-full mx-4">
-            <div className="text-center">
-              <div className="bg-red-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-                <AlertCircle className="h-8 w-8 text-red-600" />
-              </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">Customer not found</h3>
-              <p className="text-gray-600 mb-6">The customer you're looking for doesn't exist or has been removed.</p>
-              <button
-                onClick={() => navigate('/admin')}
-                className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
-              >
-                <ChevronLeft className="h-4 w-4 mr-2" />
-                Back to Dashboard
-              </button>
+      <AdminLayout title="Not Found">
+        <div className="p-4">
+          <div className="bg-white rounded-xl p-6 text-center border border-gray-200/50 max-w-sm mx-auto">
+            <div className="bg-red-100 rounded-full w-12 h-12 flex items-center justify-center mx-auto mb-3">
+              <AlertCircle className="h-6 w-6 text-red-600" />
             </div>
+            <h3 className="text-sm font-bold text-gray-900 mb-1">Customer not found</h3>
+            <p className="text-xs text-gray-500 mb-4">This customer doesn't exist.</p>
+            <button
+              onClick={() => navigate('/admin')}
+              className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <ChevronLeft className="h-4 w-4 mr-1" />
+              Back
+            </button>
           </div>
         </div>
       </AdminLayout>
@@ -420,61 +422,34 @@ const CustomerDetails = () => {
   }
 
   return (
-    <AdminLayout title={`${customer.name} - Details`}>
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-        <div className="space-y-6 md:space-y-8">
-          {/* Header Section */}
-          <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg p-4 md:p-6 border border-gray-200/50">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center min-w-0 flex-1">
-                <button
-                  onClick={() => navigate('/admin/customers')}
-                  className="mr-3 md:mr-4 p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all duration-200 flex-shrink-0"
-                >
-                  <ChevronLeft className="h-5 w-5" />
-                </button>
-                <div className="flex items-center min-w-0 flex-1">
-                  <div className="h-10 w-10 md:h-12 md:w-12 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
-                    <span className="text-white font-bold text-sm md:text-lg">
-                      {customer.name.charAt(0).toUpperCase()}
-                    </span>
-                  </div>
-                  <div className="ml-3 md:ml-4 min-w-0 flex-1">
-                    <h2 className="text-lg md:text-2xl font-bold text-gray-900 truncate">{customer.name}</h2>
-                    <p className="text-sm md:text-base text-gray-600 truncate">Content Management Dashboard</p>
-                  </div>
-                </div>
+    <AdminLayout title={`${customer.name}`}>
+      <div className="space-y-3 sm:space-y-4">
+        {/* Content Calendars */}
+        <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200/50 overflow-hidden">
+          <div className="px-3 sm:px-4 py-3 border-b border-gray-100">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base sm:text-lg font-bold text-gray-900 truncate">Content Calendars</h3>
+                <p className="text-xs sm:text-sm text-gray-500 hidden sm:block">Manage content calendars and items</p>
               </div>
+              <button
+                onClick={() => setIsCalendarModalOpen(true)}
+                className="inline-flex items-center px-3 sm:px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Add Calendar
+              </button>
             </div>
           </div>
 
-          {/* Content Calendars */}
-          <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden">
-            <div className="px-4 md:px-8 py-4 md:py-6 border-b border-gray-200/50">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
-                <div>
-                  <h3 className="text-xl md:text-2xl font-bold text-gray-900">Content Calendars</h3>
-                  <p className="text-gray-600 mt-1 text-sm md:text-base">Manage content calendars and items</p>
-                </div>
-                <button
-                  onClick={() => setIsCalendarModalOpen(true)}
-                  className="inline-flex items-center px-4 md:px-6 py-2 md:py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl text-sm md:text-base"
-                >
-                  <Plus className="h-4 md:h-5 w-4 md:w-5 mr-2" />
-                  Add Calendar
-                </button>
-              </div>
-            </div>
-
-            <div className="p-4 md:p-8">
-              {calendars.length > 0 ? (
-                <div className="space-y-4">
-                  {calendars.map((calendar) => (
-                    <div key={calendar._id} className="bg-white rounded-xl border border-gray-200/50 shadow-sm overflow-hidden">
-                      <div
-                        className="p-4 md:p-6 cursor-pointer hover:bg-gray-50 transition-colors"
-                        onClick={() => toggleCalendarExpansion(calendar._id)}
-                      >
+          <div className="p-3 sm:p-4">
+            {calendars.length > 0 ? (
+              <div className="space-y-2">
+                {calendars.map((calendar) => (
+                  <div key={calendar._id} className="bg-white rounded-lg border border-gray-200/50 shadow-sm overflow-hidden">                   <div
+                      className="p-2 sm:p-3 cursor-pointer hover:bg-gray-50 transition-colors"
+                      onClick={() => toggleCalendarExpansion(calendar._id)}
+                    >
                         <div className="flex items-start justify-between">
                           <div className="flex items-start space-x-3 md:space-x-4 min-w-0 flex-1">
                             <div className="p-2 bg-blue-100 rounded-lg flex-shrink-0">
@@ -605,69 +580,100 @@ const CustomerDetails = () => {
                           <div className="p-4 md:p-6">
                             <h5 className="text-sm font-semibold text-gray-700 mb-4">Content Items</h5>
                             {calendar.contentItems && calendar.contentItems.length > 0 ? (
-                              <div className="space-y-3">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 justify-items-center">
                                 {calendar.contentItems.map((item, index) => (
-                                  <div key={index} className="bg-white rounded-lg p-4 border border-gray-200/50">
-                                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between space-y-3 sm:space-y-0">
-                                      <div className="min-w-0 flex-1">
+                                  <div key={index} className="bg-white rounded-lg p-3 border border-gray-200 hover:border-blue-500 hover:shadow-lg transition-all duration-200 h-48 flex flex-col max-w-sm w-full">
+                                    <div className="flex items-start justify-between">
+                                      <div className="min-w-0 flex-1 pr-2">
                                         {item.title && (
-                                          <p className="font-semibold text-blue-800 mb-1 text-sm md:text-base">{item.title}</p>
+                                          <p className="font-semibold text-blue-800 mb-1 text-sm md:text-base truncate">{item.title}</p>
                                         )}
-                                        <p className="font-medium text-gray-900 text-sm md:text-base">{item.description}</p>
-                                        <p className="text-xs md:text-sm text-gray-600 mt-1">Due: {formatDate(item.date)}</p>
+                                        <div className="text-sm text-gray-900 max-h-20 overflow-auto pr-1">
+                                          <p className="whitespace-pre-wrap">{item.description}</p>
+                                        </div>
+                                        <p className="text-xs md:text-sm text-gray-600 mt-2">Due: {formatDate(item.date)}</p>
                                         {item.type && (
-                                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200 mt-2">
+                                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200 mt-2">
                                             {item.type}
                                           </span>
                                         )}
+
+                                        {item.platform && (
+                                          <div className="mt-2 flex flex-wrap gap-2">
+                                            {(() => {
+                                              const raw = item.platform;
+                                              const parsePlatforms = (val) => {
+                                                if (!val) return [];
+                                                if (Array.isArray(val)) return val.map(v => String(v).trim()).filter(Boolean);
+                                                const s = String(val || '');
+                                                if (s.includes(',')) return s.split(',').map(v => v.trim()).filter(Boolean);
+                                                if (s.includes(' ')) return s.split(/\s+/).map(v => v.trim()).filter(Boolean);
+                                                const matches = s.match(/facebook|instagram|youtube|linkedin|twitter|tiktok|pinterest/ig);
+                                                if (matches) return matches.map(m => m.toLowerCase());
+                                                return [s];
+                                              };
+
+                                              const platformColor = (p) => {
+                                                switch((p||'').toLowerCase()){
+                                                  case 'facebook': return 'bg-blue-100 text-blue-800 border border-blue-200';
+                                                  case 'instagram': return 'bg-pink-100 text-pink-800 border border-pink-200';
+                                                  case 'youtube': return 'bg-red-100 text-red-800 border border-red-200';
+                                                  case 'linkedin': return 'bg-blue-50 text-blue-800 border border-blue-100';
+                                                  case 'twitter': return 'bg-sky-100 text-sky-800 border border-sky-200';
+                                                  case 'tiktok': return 'bg-black text-white border border-gray-800';
+                                                  default: return 'bg-gray-100 text-gray-800 border border-gray-200';
+                                                }
+                                              };
+
+                                              return parsePlatforms(raw).map((p, i) => (
+                                                <span key={i} className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${platformColor(p)}`}>{p.charAt(0).toUpperCase() + p.slice(1)}</span>
+                                              ));
+                                            })()}
+                                          </div>
+                                        )}
                                       </div>
-                                      <div className="flex items-center justify-between sm:justify-end space-x-2">
+
+                                      <div className="flex-shrink-0 text-right ml-2">
                                         {item.status && (
-                                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border bg-gray-100 text-gray-800 border-gray-200">
+                                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 border border-gray-200">
                                             {item.status.replace('_', ' ').toUpperCase()}
                                           </span>
                                         )}
-                                        <div className="flex items-center space-x-1">
-                                          <button
-                                            className="p-2 text-gray-400 hover:text-blue-600 transition-colors rounded-lg hover:bg-blue-50"
-                                            onClick={e => {
-                                              e.stopPropagation();
-                                              handleEditItem(item, calendar._id);
-                                            }}
-                                            title="Edit item"
-                                          >
-                                            <Pencil className="h-4 w-4" />
-                                          </button>
-                                          <button
-                                            className="p-2 text-gray-400 hover:text-red-600 transition-colors rounded-lg hover:bg-red-50"
-                                            onClick={e => {
-                                              e.stopPropagation();
-                                              handleDeleteItem(calendar._id, item);
-                                            }}
-                                            title="Delete item"
-                                          >
-                                            <Trash2 className="h-4 w-4" />
-                                          </button>
-                                          <button
-                                            className="p-2 text-gray-400 hover:text-indigo-600 transition-colors rounded-lg hover:bg-indigo-50"
-                                            onClick={e => {
-                                              e.stopPropagation();
-                                              // Pass calendarId, item index, calendar name, item name, and item id
-                                              navigate(`/admin/content-upload/${calendar._id}/${index}`, {
-                                                state: {
-                                                  calendarId: calendar._id,
-                                                  calendarName: calendar.name,
-                                                  itemId: item._id || `${calendar._id}_${item.date}_${item.description}`,
-                                                  itemName: item.title || item.description
-                                                }
-                                              });
-                                            }}
-                                            title="Upload Content"
-                                          >
-                                            <Upload className="h-4 w-4" />
-                                          </button>
-                                        </div>
                                       </div>
+                                    </div>
+
+                                    <div className="mt-auto flex items-center justify-end space-x-2">
+                                      <button
+                                        className="p-2 text-gray-500 hover:text-blue-600 transition-colors rounded-md hover:bg-blue-50"
+                                        onClick={e => { e.stopPropagation(); handleEditItem(item, calendar._id); }}
+                                        title="Edit item"
+                                      >
+                                        <Pencil className="h-4 w-4" />
+                                      </button>
+                                      <button
+                                        className="p-2 text-gray-500 hover:text-red-600 transition-colors rounded-md hover:bg-red-50"
+                                        onClick={e => { e.stopPropagation(); handleDeleteItem(calendar._id, item); }}
+                                        title="Delete item"
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </button>
+                                      <button
+                                        className="p-2 text-gray-500 hover:text-indigo-600 transition-colors rounded-md hover:bg-indigo-50"
+                                        onClick={e => {
+                                          e.stopPropagation();
+                                          navigate(`/admin/content-upload/${calendar._id}/${index}`, {
+                                            state: {
+                                              calendarId: calendar._id,
+                                              calendarName: calendar.name,
+                                              itemId: item._id || `${calendar._id}_${item.date}_${item.description}`,
+                                              itemName: item.title || item.description
+                                            }
+                                          });
+                                        }}
+                                        title="Upload Content"
+                                      >
+                                        <Upload className="h-4 w-4" />
+                                      </button>
                                     </div>
                                   </div>
                                 ))}
@@ -702,7 +708,6 @@ const CustomerDetails = () => {
             </div>
           </div>
         </div>
-      </div>
 
       {/* Click outside to close dropdowns */}
       {openDropdowns.size > 0 && (
@@ -773,4 +778,4 @@ const CustomerDetails = () => {
   );
 };
 
-export default CustomerDetails;
+export default memo(CustomerDetails);

@@ -1,8 +1,105 @@
-import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, Facebook, Instagram, Image, Send, Eye, Edit, Trash2, CheckCircle, XCircle, Loader2, Plus, Filter, ArrowLeft, User, ChevronDown, ChevronRight, Users, Video } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
+import { Calendar, Clock, Facebook, Instagram, Send, Trash2, CheckCircle, XCircle, Loader2, Filter, User, ChevronDown, ChevronRight, Users, Video } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
 import AdminLayout from './components/layout/AdminLayout';
+
+// Memoized PostCard Component
+const PostCard = memo(({ post, onDelete, getStatusColor, getStatusIcon, getPostType, getPlatformIcon, isVideoUrl }) => {
+  return (
+    <div className="bg-white rounded-lg border p-2 sm:p-3 shadow-sm hover:shadow-md transition-shadow">
+      {post.calendar_name && (
+        <div className="text-[10px] text-blue-700 mb-0.5 truncate">
+          <strong>Calendar:</strong> {post.calendar_name}
+        </div>
+      )}
+      {post.item_name && (
+        <div className="text-[10px] text-purple-700 mb-1 truncate">
+          <strong>Item:</strong> {post.item_name}
+        </div>
+      )}
+
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center space-x-1 min-w-0 flex-1">
+          {getPlatformIcon(post.platform)}
+          <span className="text-[10px] sm:text-xs font-medium text-gray-600 truncate">
+            {post.pageName || post.channelName || 'Post'}
+          </span>
+        </div>
+        <div className="flex items-center space-x-1 flex-shrink-0">
+          {(() => {
+            const postType = getPostType(post);
+            return (
+              <span className={`px-1.5 py-0.5 ${postType.color} text-[9px] sm:text-[10px] font-semibold rounded-full flex items-center space-x-0.5`}>
+                <span>{postType.icon}</span>
+                <span className="hidden sm:inline">{postType.type}</span>
+                {postType.type === 'Carousel' && post.imageUrls?.length > 1 && (
+                  <span>({post.imageUrls.length})</span>
+                )}
+              </span>
+            );
+          })()}
+          <span className={`px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-medium flex items-center space-x-0.5 ${getStatusColor(post.status)}`}>
+            {getStatusIcon(post.status)}
+            <span className="hidden sm:inline">{post.status}</span>
+          </span>
+        </div>
+      </div>
+
+      {/* Media Preview */}
+      {post.imageUrls && post.imageUrls.length > 1 ? (
+        <div className="mb-2">
+          <div className="grid grid-cols-3 gap-0.5">
+            {post.imageUrls.slice(0, 3).map((url, idx) => (
+              isVideoUrl(url) ? (
+                <div key={idx} className="relative h-12 sm:h-16 bg-gray-800 rounded flex items-center justify-center">
+                  <Video className="h-4 w-4 text-white" />
+                  <span className="absolute top-0.5 left-0.5 bg-purple-600 text-white text-[8px] px-0.5 rounded">{idx + 1}</span>
+                </div>
+              ) : (
+                <div key={idx} className="relative">
+                  <img src={url} alt={`${idx + 1}`} className="w-full h-12 sm:h-16 object-cover rounded" />
+                  <span className="absolute top-0.5 left-0.5 bg-purple-600 text-white text-[8px] px-0.5 rounded">{idx + 1}</span>
+                </div>
+              )
+            ))}
+          </div>
+        </div>
+      ) : post.imageUrl && isVideoUrl(post.imageUrl) ? (
+        <video src={post.imageUrl} controls className="w-full h-20 sm:h-24 object-cover rounded mb-2" />
+      ) : post.imageUrl ? (
+        <img src={post.imageUrl} alt="Post" className="w-full h-20 sm:h-24 object-cover rounded mb-2" />
+      ) : null}
+
+      <p className="text-gray-800 text-[10px] sm:text-xs mb-1.5 line-clamp-2">{post.caption}</p>
+      
+      <div className="space-y-0.5 text-[9px] sm:text-[10px] text-gray-500 mb-1.5">
+        <div className="flex items-center space-x-1">
+          <Calendar className="h-2.5 w-2.5" />
+          <span>{new Date(post.scheduledAt).toLocaleDateString()}</span>
+        </div>
+        <div className="flex items-center space-x-1">
+          <Clock className="h-2.5 w-2.5" />
+          <span>{new Date(post.scheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+        </div>
+      </div>
+
+      {post.status === 'failed' && post.error && (
+        <div className="bg-red-50 border border-red-200 rounded p-1 mb-1.5">
+          <p className="text-[9px] text-red-600 line-clamp-2">{post.error}</p>
+        </div>
+      )}
+
+      <div className="flex items-center justify-end">
+        <button onClick={() => onDelete(post._id)} className="text-red-600 hover:text-red-800 p-0.5" title="Delete">
+          <Trash2 className="h-3 w-3" />
+        </button>
+      </div>
+    </div>
+  );
+});
+
+PostCard.displayName = 'PostCard';
 
 function ScheduledPosts() {
   const navigate = useNavigate();
@@ -129,7 +226,7 @@ function ScheduledPosts() {
     }
   };
 
-  const handleDeletePost = async (postId) => {
+  const handleDeletePost = useCallback(async (postId) => {
     if (!confirm('Are you sure you want to delete this scheduled post?')) return;
 
     try {
@@ -144,16 +241,16 @@ function ScheduledPosts() {
       console.error('Delete post error:', error);
       alert('Failed to delete post');
     }
-  };
+  }, []);
 
   // Handle post updates from SocialActionManager
-  const handlePostUpdate = (postId, updates) => {
+  const handlePostUpdate = useCallback((postId, updates) => {
     setScheduledPosts(prev => prev.map(post => 
       post._id === postId ? { ...post, ...updates } : post
     ));
-  };
+  }, []);
 
-  const getStatusColor = (status) => {
+  const getStatusColor = useCallback((status) => {
     switch (status) {
       case 'pending': return 'bg-yellow-100 text-yellow-800';
       case 'published': return 'bg-green-100 text-green-800';
@@ -161,9 +258,9 @@ function ScheduledPosts() {
       case 'processing': return 'bg-blue-100 text-blue-800';
       default: return 'bg-gray-100 text-gray-800';
     }
-  };
+  }, []);
 
-  const getStatusIcon = (status) => {
+  const getStatusIcon = useCallback((status) => {
     switch (status) {
       case 'pending': return <Clock className="h-4 w-4" />;
       case 'published': return <CheckCircle className="h-4 w-4" />;
@@ -171,69 +268,55 @@ function ScheduledPosts() {
       case 'processing': return <Loader2 className="h-4 w-4 animate-spin" />;
       default: return <Clock className="h-4 w-4" />;
     }
-  };
+  }, []);
 
-  const filteredPosts = Array.isArray(scheduledPosts) ? scheduledPosts.filter(post => {
-    if (filter === 'all') return true;
-    return post.status === filter;
-  }) : [];
-
-  // Helper to detect video URLs
-  const isVideoUrl = (url) => {
+  const isVideoUrl = useCallback((url) => {
     if (!url || typeof url !== 'string') return false;
     const ext = url.split('.').pop().toLowerCase();
     return ['mp4', 'webm', 'ogg', 'mov', 'avi'].includes(ext);
-  };
+  }, []);
 
-  // Helper to determine post type
-  const getPostType = (post) => {
-    // Check if it's a story
+  const getPostType = useCallback((post) => {
     if (post.isStory || post.postType === 'story') {
       return { type: 'Story', color: 'bg-orange-100 text-orange-700', icon: '📖' };
     }
-    // Check if it's a carousel
     if ((post.isCarousel || post.useCarouselService) && post.imageUrls?.length > 1) {
       return { type: 'Carousel', color: 'bg-purple-100 text-purple-700', icon: '🎠' };
     }
-    // Default to regular post
     return { type: 'Post', color: 'bg-blue-100 text-blue-700', icon: '📝' };
-  };
+  }, []);
 
-  const getPlatformIcon = (platform) => {
+  const getPlatformIcon = useCallback((platform) => {
     switch (platform) {
       case 'facebook':
-        return <Facebook className="h-5 w-5 text-[#0066CC]" />;
+        return <Facebook className="h-4 w-4 sm:h-5 sm:w-5 text-[#0066CC]" />;
       case 'instagram':
-        return <Instagram className="h-5 w-5 text-pink-600" />;
+        return <Instagram className="h-4 w-4 sm:h-5 sm:w-5 text-pink-600" />;
       case 'both':
         return (
           <>
-            <Facebook className="h-4 w-4 text-[#0066CC]" />
-            <Instagram className="h-4 w-4 text-pink-600" />
+            <Facebook className="h-3 w-3 sm:h-4 sm:w-4 text-[#0066CC]" />
+            <Instagram className="h-3 w-3 sm:h-4 sm:w-4 text-pink-600" />
           </>
         );
       case 'youtube':
-        return <div className="h-5 w-5 bg-red-600 text-white rounded text-xs flex items-center justify-center font-bold">YT</div>;
+        return <div className="h-4 w-4 sm:h-5 sm:w-5 bg-red-600 text-white rounded text-[10px] flex items-center justify-center font-bold">YT</div>;
       case 'twitter':
-        return <div className="h-5 w-5 bg-blue-400 text-white rounded text-xs flex items-center justify-center font-bold">X</div>;
+        return <div className="h-4 w-4 sm:h-5 sm:w-5 bg-blue-400 text-white rounded text-[10px] flex items-center justify-center font-bold">X</div>;
       case 'linkedin':
-        return <div className="h-5 w-5 bg-blue-700 text-white rounded text-xs flex items-center justify-center font-bold">In</div>;
+        return <div className="h-4 w-4 sm:h-5 sm:w-5 bg-blue-700 text-white rounded text-[10px] flex items-center justify-center font-bold">In</div>;
       default:
-        return <div className="h-5 w-5 bg-gray-400 text-white rounded text-xs flex items-center justify-center">?</div>;
+        return <div className="h-4 w-4 sm:h-5 sm:w-5 bg-gray-400 text-white rounded text-[10px] flex items-center justify-center">?</div>;
     }
-  };
+  }, []);
 
-  // Helper function to get customer display name
-  const getCustomerDisplayInfo = (post) => {
-    // First try the post's embedded customer info
+  const getCustomerDisplayInfo = useCallback((post) => {
     if (post.customerName) {
       return {
         name: post.customerName,
         id: post.customerId || post.userId || 'Unknown ID'
       };
     }
-
-    // Then try looking up from our customer cache
     const customerId = post.customerId || post.userId;
     if (customerId && customers[customerId]) {
       return {
@@ -241,23 +324,19 @@ function ScheduledPosts() {
         id: customerId
       };
     }
-
-    // Fallback to showing just the ID
     if (customerId) {
       return {
-        name: `Customer ${customerId.slice(-6)}`, // Show last 6 chars of ID
+        name: `Customer ${customerId.slice(-6)}`,
         id: customerId
       };
     }
-
     return {
       name: 'Unknown Customer',
       id: 'Unknown ID'
     };
-  };
+  }, [customers]);
 
-  // Helper to get platform display information
-  const getPlatformInfo = (platform) => {
+  const getPlatformInfo = useCallback((platform) => {
     const platformData = {
       facebook: {
         name: 'Facebook',
@@ -314,79 +393,88 @@ function ScheduledPosts() {
       borderColor: 'border-gray-200',
       icon: <div className="h-6 w-6 bg-gray-400 text-white rounded text-sm flex items-center justify-center">?</div>
     };
-  };
+  }, []);
 
-  // Group posts by customer
-  const groupedPosts = filteredPosts.reduce((groups, post) => {
+  const filteredPosts = useMemo(() => {
+    if (!Array.isArray(scheduledPosts)) return [];
+    if (filter === 'all') return scheduledPosts;
+    return scheduledPosts.filter(post => post.status === filter);
+  }, [scheduledPosts, filter]);
+
+  const groupedPosts = useMemo(() => filteredPosts.reduce((groups, post) => {
     const customerId = post.customerId || post.userId || 'unknown';
     if (!groups[customerId]) {
       groups[customerId] = [];
     }
     groups[customerId].push(post);
     return groups;
-  }, {});
+  }, {}), [filteredPosts]);
 
-  // Group posts by platform
-  const platformGroupedPosts = filteredPosts.reduce((groups, post) => {
+  const platformGroupedPosts = useMemo(() => filteredPosts.reduce((groups, post) => {
     const platform = post.platform || 'unknown';
     if (!groups[platform]) {
       groups[platform] = [];
     }
     groups[platform].push(post);
     return groups;
-  }, {});
+  }, {}), [filteredPosts]);
 
-  // Sort customers by number of posts (descending)
-  const sortedCustomerIds = Object.keys(groupedPosts).sort((a, b) => {
-    return groupedPosts[b].length - groupedPosts[a].length;
-  });
+  const sortedCustomerIds = useMemo(() => 
+    Object.keys(groupedPosts).sort((a, b) => groupedPosts[b].length - groupedPosts[a].length),
+    [groupedPosts]
+  );
 
-  // Sort platforms by priority and number of posts
-  const platformPriority = { facebook: 1, instagram: 2, both: 3, youtube: 4, twitter: 5, linkedin: 6 };
-  const sortedPlatforms = Object.keys(platformGroupedPosts).sort((a, b) => {
-    const priorityA = platformPriority[a] || 999;
-    const priorityB = platformPriority[b] || 999;
-    if (priorityA !== priorityB) return priorityA - priorityB;
-    return platformGroupedPosts[b].length - platformGroupedPosts[a].length;
-  });
+  const sortedPlatforms = useMemo(() => {
+    const platformPriority = { facebook: 1, instagram: 2, both: 3, youtube: 4, twitter: 5, linkedin: 6 };
+    return Object.keys(platformGroupedPosts).sort((a, b) => {
+      const priorityA = platformPriority[a] || 999;
+      const priorityB = platformPriority[b] || 999;
+      if (priorityA !== priorityB) return priorityA - priorityB;
+      return platformGroupedPosts[b].length - platformGroupedPosts[a].length;
+    });
+  }, [platformGroupedPosts]);
 
-  const toggleCustomerExpansion = (customerId) => {
-    const newExpanded = new Set(expandedCustomers);
-    if (newExpanded.has(customerId)) {
-      newExpanded.delete(customerId);
-    } else {
-      newExpanded.add(customerId);
-    }
-    setExpandedCustomers(newExpanded);
-  };
+  const toggleCustomerExpansion = useCallback((customerId) => {
+    setExpandedCustomers(prev => {
+      const newExpanded = new Set(prev);
+      if (newExpanded.has(customerId)) {
+        newExpanded.delete(customerId);
+      } else {
+        newExpanded.add(customerId);
+      }
+      return newExpanded;
+    });
+  }, []);
 
-  const togglePlatformExpansion = (platform) => {
-    const newExpanded = new Set(expandedPlatforms);
-    if (newExpanded.has(platform)) {
-      newExpanded.delete(platform);
-    } else {
-      newExpanded.add(platform);
-    }
-    setExpandedPlatforms(newExpanded);
-  };
+  const togglePlatformExpansion = useCallback((platform) => {
+    setExpandedPlatforms(prev => {
+      const newExpanded = new Set(prev);
+      if (newExpanded.has(platform)) {
+        newExpanded.delete(platform);
+      } else {
+        newExpanded.add(platform);
+      }
+      return newExpanded;
+    });
+  }, []);
 
-  const expandAllCustomers = () => {
+  const expandAllCustomers = useCallback(() => {
     setExpandedCustomers(new Set(sortedCustomerIds));
-  };
+  }, [sortedCustomerIds]);
 
-  const collapseAllCustomers = () => {
+  const collapseAllCustomers = useCallback(() => {
     setExpandedCustomers(new Set());
-  };
+  }, []);
 
-  const expandAllPlatforms = () => {
+  const expandAllPlatforms = useCallback(() => {
     setExpandedPlatforms(new Set(sortedPlatforms));
-  };
+  }, [sortedPlatforms]);
 
-  const collapseAllPlatforms = () => {
+  const collapseAllPlatforms = useCallback(() => {
     setExpandedPlatforms(new Set());
-  };
+  }, []);
 
-  const getCustomerSummary = (posts) => {
+  const getCustomerSummary = useCallback((posts) => {
     const statusCounts = posts.reduce((counts, post) => {
       counts[post.status] = (counts[post.status] || 0) + 1;
       return counts;
@@ -399,138 +487,103 @@ function ScheduledPosts() {
       failed: statusCounts.failed || 0,
       processing: statusCounts.processing || 0
     };
-  };
+  }, []);
 
   return (
     <AdminLayout title="Scheduled Posts">
-      <div className="min-h-screen bg-white">
-        <div className="max-w-7xl mx-auto px-2 sm:px-3 py-3 sm:py-4">
-          {/* Filters and View Mode Toggle */}
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-3 lg:space-y-0 mb-3 sm:mb-4">
-            {/* Status Filters */}
-            <div className="flex items-center space-x-1 sm:space-x-2 flex-wrap gap-1">
-              <div className="flex items-center space-x-2">
-                <Filter className="h-4 w-4 text-[#475569]" />
-                <span className="text-xs sm:text-sm font-medium text-[#0F172A]">Filter:</span>
-              </div>
-              {['all', 'pending', 'processing', 'published', 'failed'].map(status => (
-                <button
-                  key={status}
-                  onClick={() => setFilter(status)}
-                  className={`px-3 py-1 rounded-full text-sm font-medium transition-all ${
-                    filter === status 
-                      ? 'bg-gradient-to-r from-[#00E5FF] to-[#0066CC] text-white shadow-sm' 
-                      : 'bg-[#F4F9FF] text-[#475569] hover:bg-[#0066CC] hover:text-white'
-                  }`}
-                >
-                  {status.charAt(0).toUpperCase() + status.slice(1)}
-                </button>
-              ))}
-            </div>
-
-            {/* View Mode Toggle */}
-            <div className="flex items-center space-x-2 sm:space-x-4">
-              <span className="text-xs sm:text-sm font-medium text-[#0F172A]">View:</span>
-              <div className="flex bg-[#F4F9FF] rounded-lg p-1">
-                <button
-                  onClick={() => setViewMode('grouped')}
-                  className={`px-2 sm:px-3 py-1 rounded-md text-xs sm:text-sm font-medium transition-colors ${
-                    viewMode === 'grouped'
-                      ? 'bg-white text-[#0F172A] shadow-sm'
-                      : 'text-[#475569] hover:text-[#0F172A]'
-                  }`}
-                >
-                  <Users className="h-3 w-3 sm:h-4 sm:w-4 inline mr-1" />
-                  Customers
-                </button>
-                <button
-                  onClick={() => setViewMode('platform')}
-                  className={`px-2 sm:px-3 py-1 rounded-md text-xs sm:text-sm font-medium transition-colors ${
-                    viewMode === 'platform'
-                      ? 'bg-white text-[#0F172A] shadow-sm'
-                      : 'text-[#475569] hover:text-[#0F172A]'
-                  }`}
-                >
-                  <Send className="h-3 w-3 sm:h-4 sm:w-4 inline mr-1" />
-                  Platforms
-                </button>
-                <button
-                  onClick={() => setViewMode('list')}
-                  className={`px-2 sm:px-3 py-1 rounded-md text-xs sm:text-sm font-medium transition-colors ${
-                    viewMode === 'list'
-                      ? 'bg-white text-[#0F172A] shadow-sm'
-                      : 'text-[#475569] hover:text-[#0F172A]'
-                  }`}
-                >
-                  List
-                </button>
-              </div>
-            </div>
+      <div className="space-y-2 sm:space-y-3">
+        {/* Compact Header */}
+        <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm p-2 sm:p-3 border border-gray-200/50">
+          <h2 className="text-sm sm:text-base font-bold text-gray-900 mb-2">Scheduled Posts</h2>
+          
+          {/* Filters */}
+          <div className="flex items-center gap-1 flex-wrap mb-2">
+            <Filter className="h-3 w-3 text-gray-500" />
+            {['all', 'pending', 'processing', 'published', 'failed'].map(status => (
+              <button
+                key={status}
+                onClick={() => setFilter(status)}
+                className={`px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-medium transition-all ${
+                  filter === status 
+                    ? 'bg-blue-600 text-white' 
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {status.charAt(0).toUpperCase() + status.slice(1)}
+              </button>
+            ))}
           </div>
 
-          {/* Add Customer Overview Header */}
-          <div className="bg-[#F4F9FF] backdrop-blur-sm rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-3 sm:mb-4">
-            <div className="px-4 sm:px-6 py-2 sm:py-3 border-b border-gray-100">
-              <h2 className="text-lg sm:text-xl font-bold text-[#0F172A]">Customer Overview</h2>
-              <p className="text-xs sm:text-sm text-[#475569] mt-1">Track content schedules and deadlines</p>
-            </div>
+          {/* View Mode */}
+          <div className="flex bg-gray-100 rounded-lg p-0.5">
+            <button
+              onClick={() => setViewMode('grouped')}
+              className={`flex-1 px-2 py-1 rounded-md text-[10px] sm:text-xs font-medium transition-colors ${
+                viewMode === 'grouped' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'
+              }`}
+            >
+              <Users className="h-3 w-3 inline mr-1" />Customers
+            </button>
+            <button
+              onClick={() => setViewMode('platform')}
+              className={`flex-1 px-2 py-1 rounded-md text-[10px] sm:text-xs font-medium transition-colors ${
+                viewMode === 'platform' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'
+              }`}
+            >
+              <Send className="h-3 w-3 inline mr-1" />Platforms
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`flex-1 px-2 py-1 rounded-md text-[10px] sm:text-xs font-medium transition-colors ${
+                viewMode === 'list' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'
+              }`}
+            >
+              List
+            </button>
+        </div>
+
+        {/* Expand/Collapse All */}
+        {viewMode === 'grouped' && sortedCustomerIds.length > 0 && (
+          <div className="flex items-center space-x-2 px-2">
+            <button onClick={expandAllCustomers} className="text-blue-600 hover:text-blue-800 text-xs font-medium">
+              Expand All
+            </button>
+            <span className="text-gray-300">|</span>
+            <button onClick={collapseAllCustomers} className="text-blue-600 hover:text-blue-800 text-xs font-medium">
+              Collapse All
+            </button>
           </div>
+        )}
+        {viewMode === 'platform' && sortedPlatforms.length > 0 && (
+          <div className="flex items-center space-x-2 px-2">
+            <button onClick={expandAllPlatforms} className="text-blue-600 hover:text-blue-800 text-xs font-medium">
+              Expand All
+            </button>
+            <span className="text-gray-300">|</span>
+            <button onClick={collapseAllPlatforms} className="text-blue-600 hover:text-blue-800 text-xs font-medium">
+              Collapse All
+            </button>
+          </div>
+        )}
 
-          {/* Expand/Collapse All (for grouped and platform modes) */}
-          {viewMode === 'grouped' && sortedCustomerIds.length > 0 && (
-            <div className="flex items-center space-x-2 mb-3">
-              <button
-                onClick={expandAllCustomers}
-                className="text-[#0066CC] hover:text-[#0052A3] text-sm font-medium"
-              >
-                Expand All
-              </button>
-              <span className="text-gray-300">|</span>
-              <button
-                onClick={collapseAllCustomers}
-                className="text-[#0066CC] hover:text-[#0052A3] text-sm font-medium"
-              >
-                Collapse All
-              </button>
-            </div>
-          )}
-          {viewMode === 'platform' && sortedPlatforms.length > 0 && (
-            <div className="flex items-center space-x-2 mb-3">
-              <button
-                onClick={expandAllPlatforms}
-                className="text-[#0066CC] hover:text-[#0052A3] text-sm font-medium"
-              >
-                Expand All
-              </button>
-              <span className="text-gray-300">|</span>
-              <button
-                onClick={collapseAllPlatforms}
-                className="text-[#0066CC] hover:text-[#0052A3] text-sm font-medium"
-              >
-                Collapse All
-              </button>
-            </div>
-          )}
+        {/* Content */}
+        {loading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 animate-spin text-blue-600" />
+          </div>
+        ) : viewMode === 'platform' ? (
+          /* Platform View */
+          <div className="space-y-2 sm:space-y-3">
+            {sortedPlatforms.map(platform => {
+              const platformPosts = platformGroupedPosts[platform];
+              const platformInfo = getPlatformInfo(platform);
+              const summary = getCustomerSummary(platformPosts);
+              const isExpanded = expandedPlatforms.has(platform);
 
-          {/* Content */}
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-[#0066CC]" />
-            </div>
-          ) : viewMode === 'platform' ? (
-            /* Platform View */
-            <div className="space-y-4">
-              {sortedPlatforms.map(platform => {
-                const platformPosts = platformGroupedPosts[platform];
-                const platformInfo = getPlatformInfo(platform);
-                const summary = getCustomerSummary(platformPosts);
-                const isExpanded = expandedPlatforms.has(platform);
-
-                return (
-                  <div key={platform} className="bg-white rounded-lg shadow-sm border overflow-hidden">
-                    {/* Platform Header */}
-                    <div 
-                      className={`p-6 border-b cursor-pointer hover:bg-opacity-50 transition-all ${platformInfo.bgColor}`}
+              return (
+                <div key={platform} className="bg-white rounded-lg shadow-sm border">
+                  <div 
+                    className={`p-3 sm:p-4 border-b cursor-pointer hover:bg-opacity-50 transition-all ${platformInfo.bgColor}`}
                       onClick={() => togglePlatformExpansion(platform)}
                     >
                       <div className="flex items-center justify-between">
@@ -591,131 +644,21 @@ function ScheduledPosts() {
                       </div>
                     </div>
 
-                    {/* Expanded Content */}
                     {isExpanded && (
-                      <div className="p-6 bg-gray-50">
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                          {platformPosts.map(post => {
-                            const customerInfo = getCustomerDisplayInfo(post);
-                            
-                            return (
-                              <div key={post._id} className="bg-white rounded-lg border p-4 shadow-sm hover:shadow-md transition-shadow">
-                                {/* Calendar and Item Name */}
-                                {post.calendar_name && (
-                                  <div className="text-xs text-blue-700 mb-1">
-                                    <strong>Calendar:</strong> {post.calendar_name}
-                                  </div>
-                                )}
-                                {post.item_name && (
-                                  <div className="text-xs text-purple-700 mb-2">
-                                    <strong>Item:</strong> {post.item_name}
-                                  </div>
-                                )}
-
-                                <div className="flex items-center justify-between mb-3">
-                                  <div className="flex items-center space-x-2">
-                                    <User className="h-4 w-4 text-gray-500" />
-                                    <span className="text-xs font-medium text-gray-600 truncate">
-                                      {customerInfo.name}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center space-x-2">
-                                    {(() => {
-                                      const postType = getPostType(post);
-                                      return (
-                                        <span className={`px-2 py-0.5 ${postType.color} text-xs font-semibold rounded-full flex items-center space-x-1`}>
-                                          <span>{postType.icon}</span>
-                                          <span>{postType.type}</span>
-                                          {postType.type === 'Carousel' && post.imageUrls?.length > 1 && (
-                                            <span>({post.imageUrls.length})</span>
-                                          )}
-                                        </span>
-                                      );
-                                    })()}
-                                    <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center space-x-1 ${getStatusColor(post.status)}`}>
-                                      {getStatusIcon(post.status)}
-                                      <span>{post.status}</span>
-                                    </span>
-                                  </div>
-                                </div>
-
-                                {/* Media Preview */}
-                                {post.imageUrls && post.imageUrls.length > 1 ? (
-                                  <div className="mb-3">
-                                    <div className="grid grid-cols-3 gap-1">
-                                      {post.imageUrls.slice(0, 6).map((url, idx) => (
-                                        isVideoUrl(url) ? (
-                                          <div key={idx} className="relative h-20 bg-gray-800 rounded flex items-center justify-center">
-                                            <Video className="h-6 w-6 text-white" />
-                                            <span className="absolute top-1 left-1 bg-purple-600 text-white text-xs px-1 rounded">{idx + 1}</span>
-                                          </div>
-                                        ) : (
-                                          <div key={idx} className="relative">
-                                            <img
-                                              src={url}
-                                              alt={`Item ${idx + 1}`}
-                                              className="w-full h-20 object-cover rounded"
-                                            />
-                                            <span className="absolute top-1 left-1 bg-purple-600 text-white text-xs px-1 rounded">{idx + 1}</span>
-                                          </div>
-                                        )
-                                      ))}
-                                      {post.imageUrls.length > 6 && (
-                                        <div className="h-20 bg-gray-200 rounded flex items-center justify-center">
-                                          <span className="text-gray-600 text-sm font-semibold">+{post.imageUrls.length - 6}</span>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                ) : post.imageUrl && isVideoUrl(post.imageUrl) ? (
-                                  <video
-                                    src={post.imageUrl}
-                                    controls
-                                    className="w-full h-32 object-cover rounded-lg mb-3"
-                                    style={{ background: '#eee' }}
-                                  />
-                                ) : post.imageUrl ? (
-                                  <img
-                                    src={post.imageUrl}
-                                    alt="Post content"
-                                    className="w-full h-32 object-cover rounded-lg mb-3"
-                                  />
-                                ) : null}
-
-                                <p className="text-gray-800 text-sm mb-3 line-clamp-2">
-                                  {post.caption}
-                                </p>
-                                
-                                <div className="space-y-1 text-xs text-gray-500 mb-3">
-                                  <div className="flex items-center space-x-2">
-                                    <Calendar className="h-3 w-3" />
-                                    <span>{new Date(post.scheduledAt).toLocaleDateString()}</span>
-                                  </div>
-                                  <div className="flex items-center space-x-2">
-                                    <Clock className="h-3 w-3" />
-                                    <span>{new Date(post.scheduledAt).toLocaleTimeString()}</span>
-                                  </div>
-                                </div>
-
-                                {/* Error handling */}
-                                {post.status === 'failed' && post.error && (
-                                  <div className="bg-red-50 border border-red-200 rounded p-2 mb-3">
-                                    <p className="text-xs text-red-600">{post.error}</p>
-                                  </div>
-                                )}
-
-                                <div className="flex items-center justify-end space-x-2">
-                                  <button
-                                    onClick={() => handleDeletePost(post._id)}
-                                    className="text-red-600 hover:text-red-800 p-1"
-                                    title="Delete from scheduler"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </button>
-                                </div>
-                              </div>
-                            );
-                          })}
+                      <div className="p-3 sm:p-4 bg-gray-50">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                          {platformPosts.map(post => (
+                            <PostCard
+                              key={post._id}
+                              post={post}
+                              onDelete={handleDeletePost}
+                              getStatusColor={getStatusColor}
+                              getStatusIcon={getStatusIcon}
+                              getPostType={getPostType}
+                              getPlatformIcon={getPlatformIcon}
+                              isVideoUrl={isVideoUrl}
+                            />
+                          ))}
                         </div>
                       </div>
                     )}
@@ -724,196 +667,62 @@ function ScheduledPosts() {
               })}
             </div>
           ) : viewMode === 'grouped' ? (
-            /* Grouped View */
-            <div className="space-y-4">
-              {sortedCustomerIds.map(customerId => {
+            /* Grouped View - Customer Groups */
+            <div className="space-y-2 sm:space-y-3">{sortedCustomerIds.map(customerId => {
                 const customerPosts = groupedPosts[customerId];
                 const customerInfo = getCustomerDisplayInfo(customerPosts[0]);
                 const summary = getCustomerSummary(customerPosts);
                 const isExpanded = expandedCustomers.has(customerId);
 
                 return (
-                  <div key={customerId} className="bg-white rounded-lg shadow-sm">
-                    {/* Customer Header */}
+                  <div key={customerId} className="bg-white rounded-lg shadow-sm border">
                     <div 
-                      className="p-6 border-b cursor-pointer hover:bg-[#F4F9FF] transition-colors"
+                      className="p-3 sm:p-4 border-b cursor-pointer hover:bg-gray-50 transition-colors"
                       onClick={() => toggleCustomerExpansion(customerId)}
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-4">
-                          <div className="flex items-center space-x-2">
-                            {isExpanded ? (
-                              <ChevronDown className="h-5 w-5 text-gray-400" />
-                            ) : (
-                              <ChevronRight className="h-5 w-5 text-gray-400" />
-                            )}
-                            <User className="h-5 w-5 text-[#0066CC]" />
-                          </div>
-                          <div>
-                            <h3 className="text-lg font-semibold text-[#0F172A]">
-                              {customerInfo?.name || 'Unknown Customer'}
-                            </h3>
-                            <p className="text-sm text-[#475569]">
-                              ID: {customerInfo?.id || customerId}
-                            </p>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center space-x-2 min-w-0">
+                          {isExpanded ? <ChevronDown className="h-4 w-4 text-gray-400 flex-shrink-0" /> : <ChevronRight className="h-4 w-4 text-gray-400 flex-shrink-0" />}
+                          <User className="h-4 w-4 text-blue-600 flex-shrink-0" />
+                          <div className="min-w-0">
+                            <h3 className="text-sm font-semibold text-gray-900 truncate">{customerInfo?.name || 'Unknown'}</h3>
+                            <p className="text-xs text-gray-500 truncate">ID: {customerInfo?.id || customerId}</p>
                           </div>
                         </div>
                         
                         {/* Summary Stats */}
-                        <div className="flex items-center space-x-4">
+                        <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
                           <div className="text-center">
-                            <div className="text-2xl font-bold text-[#0F172A]">{summary.total}</div>
-                            <div className="text-xs text-[#475569]">Total Posts</div>
+                            <div className="text-base sm:text-lg font-bold text-gray-900">{summary.total}</div>
+                            <div className="text-[9px] text-gray-500">Posts</div>
                           </div>
-                          <div className="flex space-x-2">
-                            {summary.pending > 0 && (
-                              <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs font-medium rounded-full">
-                                {summary.pending} Pending
-                              </span>
-                            )}
-                            {summary.published > 0 && (
-                              <span className="px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full">
-                                {summary.published} Published
-                              </span>
-                            )}
-                            {summary.failed > 0 && (
-                              <span className="px-2 py-1 bg-red-100 text-red-800 text-xs font-medium rounded-full">
-                                {summary.failed} Failed
-                              </span>
-                            )}
-                            {summary.processing > 0 && (
-                              <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-full">
-                                {summary.processing} Processing
-                              </span>
-                            )}
-                          </div>
+                          {summary.pending > 0 && (
+                            <span className="px-1.5 py-0.5 bg-yellow-100 text-yellow-800 text-[10px] font-medium rounded-full">{summary.pending} Pending</span>
+                          )}
+                          {summary.published > 0 && (
+                            <span className="px-1.5 py-0.5 bg-green-100 text-green-800 text-[10px] font-medium rounded-full hidden sm:inline">{summary.published} Published</span>
+                          )}
+                          {summary.failed > 0 && (
+                            <span className="px-1.5 py-0.5 bg-red-100 text-red-800 text-[10px] font-medium rounded-full">{summary.failed} Failed</span>
+                          )}
                         </div>
                       </div>
                     </div>
 
-                    {/* Expanded Content */}
                     {isExpanded && (
-                      <div className="p-6">
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      <div className="p-3 sm:p-4 bg-gray-50">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                           {customerPosts.map(post => (
-                            <div key={post._id} className="bg-gray-50 rounded-lg border p-4">
-                              {/* --- Display calendar and item name at the top --- */}
-                              {post.calendar_name && (
-                                <div className="text-xs text-blue-700 mb-1">
-                                  <strong>Calendar:</strong> {post.calendar_name}
-                                </div>
-                              )}
-                              {post.item_name && (
-                                <div className="text-xs text-purple-700 mb-2">
-                                  <strong>Item:</strong> {post.item_name}
-                                </div>
-                              )}
-                              {/* --- End --- */}
-
-                              <div className="flex items-center justify-between mb-3">
-                                <div className="flex items-center space-x-2">
-                                  {getPlatformIcon(post.platform)}
-                                  <span className="text-sm font-medium text-gray-600">
-                                    {post.pageName || post.channelName || 'Social Media Post'}
-                                  </span>
-                                </div>
-                                <div className="flex items-center space-x-2">
-                                  {/* Post Type indicator */}
-                                  {(() => {
-                                    const postType = getPostType(post);
-                                    return (
-                                      <span className={`px-2 py-0.5 ${postType.color} text-xs font-semibold rounded-full flex items-center space-x-1`}>
-                                        <span>{postType.icon}</span>
-                                        <span>{postType.type}</span>
-                                        {postType.type === 'Carousel' && post.imageUrls?.length > 1 && (
-                                          <span>({post.imageUrls.length})</span>
-                                        )}
-                                      </span>
-                                    );
-                                  })()}
-                                  <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center space-x-1 ${getStatusColor(post.status)}`}>
-                                    {getStatusIcon(post.status)}
-                                    <span>{post.status}</span>
-                                  </span>
-                                </div>
-                              </div>
-
-                              {/* Media Preview - Show carousel if multiple images */}
-                              {post.imageUrls && post.imageUrls.length > 1 ? (
-                                <div className="mb-3">
-                                  <div className="grid grid-cols-3 gap-1">
-                                    {post.imageUrls.slice(0, 6).map((url, idx) => (
-                                      isVideoUrl(url) ? (
-                                        <div key={idx} className="relative h-20 bg-gray-800 rounded flex items-center justify-center">
-                                          <Video className="h-6 w-6 text-white" />
-                                          <span className="absolute top-1 left-1 bg-purple-600 text-white text-xs px-1 rounded">{idx + 1}</span>
-                                        </div>
-                                      ) : (
-                                        <div key={idx} className="relative">
-                                          <img
-                                            src={url}
-                                            alt={`Item ${idx + 1}`}
-                                            className="w-full h-20 object-cover rounded"
-                                          />
-                                          <span className="absolute top-1 left-1 bg-purple-600 text-white text-xs px-1 rounded">{idx + 1}</span>
-                                        </div>
-                                      )
-                                    ))}
-                                    {post.imageUrls.length > 6 && (
-                                      <div className="h-20 bg-gray-200 rounded flex items-center justify-center">
-                                        <span className="text-gray-600 text-sm font-semibold">+{post.imageUrls.length - 6}</span>
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              ) : post.imageUrl && isVideoUrl(post.imageUrl) ? (
-                                <video
-                                  src={post.imageUrl}
-                                  controls
-                                  className="w-full h-32 object-cover rounded-lg mb-3"
-                                  style={{ background: '#eee' }}
-                                />
-                              ) : post.imageUrl ? (
-                                <img
-                                  src={post.imageUrl}
-                                  alt="Post content"
-                                  className="w-full h-32 object-cover rounded-lg mb-3"
-                                />
-                              ) : null}
-
-                              <p className="text-gray-800 text-sm mb-3 line-clamp-2">
-                                {post.caption}
-                              </p>
-                              
-                              <div className="space-y-1 text-xs text-gray-500 mb-3">
-                                <div className="flex items-center space-x-2">
-                                  <Calendar className="h-3 w-3" />
-                                  <span>{new Date(post.scheduledAt).toLocaleDateString()}</span>
-                                </div>
-                                <div className="flex items-center space-x-2">
-                                  <Clock className="h-3 w-3" />
-                                  <span>{new Date(post.scheduledAt).toLocaleTimeString()}</span>
-                                </div>
-                              </div>
-
-                              {/* Error handling */}
-                              {post.status === 'failed' && post.error && (
-                                <div className="bg-red-50 border border-red-200 rounded p-2 mb-3">
-                                  <p className="text-xs text-red-600">{post.error}</p>
-                                </div>
-                              )}
-
-                              <div className="flex items-center justify-end space-x-2">
-                                {/* Delete from system */}
-                                <button
-                                  onClick={() => handleDeletePost(post._id)}
-                                  className="text-red-600 hover:text-red-800 p-1"
-                                  title="Delete from scheduler"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </button>
-                              </div>
-                            </div>
+                            <PostCard
+                              key={post._id}
+                              post={post}
+                              onDelete={handleDeletePost}
+                              getStatusColor={getStatusColor}
+                              getStatusIcon={getStatusIcon}
+                              getPostType={getPostType}
+                              getPlatformIcon={getPlatformIcon}
+                              isVideoUrl={isVideoUrl}
+                            />
                           ))}
                         </div>
                       </div>
@@ -923,282 +732,34 @@ function ScheduledPosts() {
               })}
             </div>
           ) : (
-            /* List View - Original Grid */
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredPosts.map(post => {
-                const customerInfo = getCustomerDisplayInfo(post);
-                
-                return (
-                  <div
-                    key={post._id}
-                    className="bg-white rounded-lg shadow-sm border p-4 flex flex-col"
-                    style={{ height: '320px', minHeight: 320 }}
-                  >
-                    <div className="flex-1 flex flex-col overflow-y-auto" style={{ minHeight: 0 }}>
-                      {/* --- Display calendar and item name at the top --- */}
-                      {post.calendar_name && (
-                        <div className="text-xs text-blue-700 mb-1">
-                          <strong>Calendar:</strong> {post.calendar_name}
-                        </div>
-                      )}
-                      {post.item_name && (
-                        <div className="text-xs text-purple-700 mb-2">
-                          <strong>Item:</strong> {post.item_name}
-                        </div>
-                      )}
-                      {/* --- End --- */}
-
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center space-x-2">
-                          {getPlatformIcon(post.platform)}
-                          <span className="text-sm font-medium text-gray-600">
-                            {post.pageName || post.channelName || 'Social Media Post'}
-                          </span>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          {/* Post Type indicator */}
-                          {(() => {
-                            const postType = getPostType(post);
-                            return (
-                              <span className={`px-2 py-0.5 ${postType.color} text-xs font-semibold rounded-full flex items-center space-x-1`}>
-                                <span>{postType.icon}</span>
-                                <span>{postType.type}</span>
-                                {postType.type === 'Carousel' && post.imageUrls?.length > 1 && (
-                                  <span>({post.imageUrls.length})</span>
-                                )}
-                              </span>
-                            );
-                          })()}
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center space-x-1 ${getStatusColor(post.status)}`}>
-                            {getStatusIcon(post.status)}
-                            <span>{post.status}</span>
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Customer Information */}
-                      {customerInfo && (
-                        <div className="bg-[#F4F9FF] border border-[#0066CC]/20 rounded-lg p-2 mb-2">
-                          <div className="flex items-center space-x-2">
-                            <User className="h-4 w-4 text-[#0066CC]" />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-[#0F172A] truncate">
-                                {customerInfo.name}
-                              </p>
-                              <p className="text-xs text-[#475569] truncate">
-                                ID: {customerInfo.id}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Show a fallback if no customer info is available */}
-                      {!customerInfo && (
-                        <div className="bg-gray-50 border border-gray-200 rounded-lg p-2 mb-2">
-                          <div className="flex items-center space-x-2">
-                            <User className="h-4 w-4 text-gray-500" />
-                            <div>
-                              <p className="text-sm font-medium text-gray-700">
-                                Unknown Customer
-                              </p>
-                              <p className="text-xs text-gray-500">
-                                Customer info not available
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Media Preview - Show carousel if multiple images */}
-                      {post.imageUrls && post.imageUrls.length > 1 ? (
-                        <div className="mb-3">
-                          <div className="grid grid-cols-3 gap-1">
-                            {post.imageUrls.slice(0, 6).map((url, idx) => (
-                              isVideoUrl(url) ? (
-                                <div key={idx} className="relative h-20 bg-gray-800 rounded flex items-center justify-center">
-                                  <Video className="h-6 w-6 text-white" />
-                                  <span className="absolute top-1 left-1 bg-purple-600 text-white text-xs px-1 rounded">{idx + 1}</span>
-                                </div>
-                              ) : (
-                                <div key={idx} className="relative">
-                                  <img
-                                    src={url}
-                                    alt={`Item ${idx + 1}`}
-                                    className="w-full h-20 object-cover rounded"
-                                  />
-                                  <span className="absolute top-1 left-1 bg-purple-600 text-white text-xs px-1 rounded">{idx + 1}</span>
-                                </div>
-                              )
-                            ))}
-                            {post.imageUrls.length > 6 && (
-                              <div className="h-20 bg-gray-200 rounded flex items-center justify-center">
-                                <span className="text-gray-600 text-sm font-semibold">+{post.imageUrls.length - 6}</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      ) : post.imageUrl && isVideoUrl(post.imageUrl) ? (
-                        <video
-                          src={post.imageUrl}
-                          controls
-                          className="w-full h-28 object-cover rounded-lg mb-2"
-                          style={{ background: '#eee' }}
-                        />
-                      ) : post.imageUrl ? (
-                        <img
-                          src={post.imageUrl}
-                          alt="Post content"
-                          className="w-full h-28 object-cover rounded-lg mb-2"
-                        />
-                      ) : null}
-
-                      {post.imageUrl && isVideoUrl(post.imageUrl) && post.platform === 'instagram' && (
-                        <div className="text-xs text-[#0066CC] mb-1">
-                          This video will be posted as an Instagram Reel.
-                        </div>
-                      )}
-
-                      {post.imageUrl && isVideoUrl(post.imageUrl) && post.platform === 'youtube' && (
-                        <div className="text-xs text-red-600 mb-1">
-                          YouTube video upload scheduled.
-                        </div>
-                      )}
-
-                      <p className="text-gray-800 text-sm mb-2 line-clamp-2">
-                        {post.caption}
-                      </p>
-                      
-                      <div className="space-y-1.5 text-xs text-gray-500 mb-2">
-                        <div className="flex items-center space-x-2">
-                          <Calendar className="h-3 w-3" />
-                          <span>{new Date(post.scheduledAt).toLocaleDateString()}</span>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <Clock className="h-3 w-3" />
-                          <span>{new Date(post.scheduledAt).toLocaleTimeString()}</span>
-                        </div>
-                        {post.publishedAt && (
-                          <div className="flex items-center space-x-2 text-green-600">
-                            <CheckCircle className="h-3 w-3" />
-                            <span>Published: {new Date(post.publishedAt).toLocaleString()}</span>
-                          </div>
-                        )}
-                      </div>
-
-                      {post.status === 'failed' && post.error && (
-                        <div className="bg-red-50 border border-red-200 rounded p-2 mb-2">
-                          <p className="text-xs text-red-600 font-medium">Error Details:</p>
-                          <p className="text-xs text-red-600">{post.error}</p>
-                          {post.error.includes('access token') && (
-                            <p className="text-xs text-[#0066CC] mt-1">
-                              💡 Customer needs to reconnect their social media account
-                            </p>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Show partial success for posts with multiple platforms */}
-                      {post.status === 'published' && post.error && (
-                        <div className="bg-yellow-50 border border-yellow-200 rounded p-2 mb-2">
-                          <p className="text-xs text-yellow-700 font-medium">Partial Success:</p>
-                          <div className="flex items-center space-x-2 text-xs text-yellow-600 mt-1">
-                            {post.facebookPostId ? (
-                              <span className="flex items-center space-x-1 text-green-600">
-                                <Facebook className="h-3 w-3" />
-                                <span>✅ FB: {post.facebookPostId}</span>
-                              </span>
-                            ) : post.platform === 'facebook' || post.platform === 'both' ? (
-                              <span className="flex items-center space-x-1 text-red-600">
-                                <Facebook className="h-3 w-3" />
-                                <span>❌ FB Failed</span>
-                              </span>
-                            ) : null}
-                            
-                            {post.instagramPostId ? (
-                              <span className="flex items-center space-x-1 text-green-600">
-                                <Instagram className="h-3 w-3" />
-                                <span>✅ IG: {post.instagramPostId}</span>
-                              </span>
-                            ) : post.platform === 'instagram' || post.platform === 'both' ? (
-                              <span className="flex items-center space-x-1 text-red-600">
-                                <Instagram className="h-3 w-3" />
-                                <span>❌ IG Failed</span>
-                              </span>
-                            ) : null}
-
-                            {post.youtubePostId ? (
-                              <span className="flex items-center space-x-1 text-green-600">
-                                <div className="h-3 w-3 bg-red-600 text-white rounded text-xs flex items-center justify-center">Y</div>
-                                <span>✅ YT: {post.youtubePostId}</span>
-                              </span>
-                            ) : post.platform === 'youtube' ? (
-                              <span className="flex items-center space-x-1 text-red-600">
-                                <div className="h-3 w-3 bg-red-600 text-white rounded text-xs flex items-center justify-center">Y</div>
-                                <span>❌ YT Failed</span>
-                              </span>
-                            ) : null}
-
-                            {post.twitterPostId ? (
-                              <span className="flex items-center space-x-1 text-green-600">
-                                <div className="h-3 w-3 bg-blue-400 text-white rounded text-xs flex items-center justify-center">X</div>
-                                <span>✅ X: {post.twitterPostId}</span>
-                              </span>
-                            ) : post.platform === 'twitter' ? (
-                              <span className="flex items-center space-x-1 text-red-600">
-                                <div className="h-3 w-3 bg-blue-400 text-white rounded text-xs flex items-center justify-center">X</div>
-                                <span>❌ X Failed</span>
-                              </span>
-                            ) : null}
-
-                            {post.linkedinPostId ? (
-                              <span className="flex items-center space-x-1 text-green-600">
-                                <div className="h-3 w-3 bg-blue-700 text-white rounded text-xs flex items-center justify-center">In</div>
-                                <span>✅ LinkedIn: {post.linkedinPostId}</span>
-                              </span>
-                            ) : post.platform === 'linkedin' ? (
-                              <span className="flex items-center space-x-1 text-red-600">
-                                <div className="h-3 w-3 bg-blue-700 text-white rounded text-xs flex items-center justify-center">In</div>
-                                <span>❌ LinkedIn Failed</span>
-                              </span>
-                            ) : null}
-                          </div>
-                          <p className="text-xs text-yellow-600 mt-1 font-mono bg-yellow-100 p-1 rounded">
-                            {post.error}
-                          </p>
-                        </div>
-                      )}
-
-                      <div className="flex items-center space-x-2 mt-2">
-                        {/* Delete from system */}
-                        <button
-                          onClick={() => handleDeletePost(post._id)}
-                          className="text-red-600 hover:text-red-800 p-1"
-                          title="Delete from scheduler"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+            /* List View - 3 Column Grid */
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {filteredPosts.map(post => (
+                <PostCard
+                  key={post._id}
+                  post={post}
+                  onDelete={handleDeletePost}
+                  getStatusColor={getStatusColor}
+                  getStatusIcon={getStatusIcon}
+                  getPostType={getPostType}
+                  getPlatformIcon={getPlatformIcon}
+                  isVideoUrl={isVideoUrl}
+                />
+              ))}
             </div>
           )}
 
           {filteredPosts.length === 0 && !loading && (
-            <div className="text-center py-12">
-              <Calendar className="h-16 w-16 mx-auto mb-3 text-gray-400" />
-              <p className="text-[#0F172A]">No scheduled posts found for your assigned customers</p>
-              <p className="text-sm text-[#475569] mt-2">
-                Posts from your assigned customers will appear here when they are scheduled
-              </p>
+            <div className="text-center py-8">
+              <Calendar className="h-10 w-10 sm:h-12 sm:w-12 mx-auto mb-2 text-gray-400" />
+              <p className="text-sm font-medium text-gray-900">No scheduled posts found</p>
+              <p className="text-xs text-gray-500 mt-1">Posts will appear here when scheduled</p>
             </div>
           )}
         </div>
-      </div>
-    </AdminLayout>
-  );
-}
-
-export default ScheduledPosts;
+        </div>
+      </AdminLayout>
+    );
+  }
+  
+  export default memo(ScheduledPosts);

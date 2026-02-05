@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 
 import { AuthProvider } from './admin/contexts/AuthContext';
+import CustomerDetails from './admin/pages/admin/CustomerDetails';
 import { CustomerProvider } from './admin/contexts/CustomerContext';
 import Signup from './admin/pages/auth/Signup';
 import Login from './admin/pages/auth/Login';
 import Dashboard from './admin/pages/admin/Dashboard';
-import CustomerDetails from './admin/pages/admin/CustomerDetails';
+import AdminSettings from './admin/pages/admin/Settings';
 import Comment from './admin/pages/admin/Comment';
 import ProtectedRoute from './admin/components/ProtectedRoute';
 import CustomersList from './admin/pages/admin/CustomersList';
@@ -18,6 +19,7 @@ import ScheduledPosts from './admin/ScheduledPosts';
 import AdminContentPortfolio from './admin/pages/admin/AdminContentPortfolio';
 import AdminContentUpload from './admin/pages/admin/ContentUpload';
 import AdminQrGenerator from './admin/pages/admin/AdminQrGenerator';
+
 
 // Super Admin imports
 import SuperAdminLogin from './superadmin/Login';
@@ -395,6 +397,11 @@ function App() {
                   <AdminQrGenerator />
                 </ProtectedRoutePortal>
               } />
+              <Route path="/admin/settings" element={
+  <ProtectedRoutePortal role="admin">
+    <AdminSettings />
+  </ProtectedRoutePortal>
+} />
 
               {/* Remove routes for Customer Portfolio Overview since module is missing */}
 

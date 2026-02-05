@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   User, Smartphone, Mail, MapPin, FileText,
@@ -6,7 +6,7 @@ import {
   ExternalLink, Settings as SettingsIcon,
   ArrowLeft, CheckCircle, AlertCircle, 
   TrendingUp, Users, BarChart3, Eye,
-  Zap, Globe, Shield, Bell
+  Zap, Globe, Shield, Bell, Lock, X, Phone
 } from 'lucide-react';
 import { useAuth } from '../admin/contexts/AuthContext';
 import FacebookIntegration from './Integration/FacebookIntegration';
@@ -134,6 +134,18 @@ function Settings() {
     linkedin: false
   });
 
+  // Platform access state (controlled by admin)
+  const [platformAccess, setPlatformAccess] = useState({
+    facebook: true,
+    instagram: true,
+    linkedin: true,
+    youtube: true
+  });
+
+  // Modal state for disabled platform access
+  const [showAccessDeniedModal, setShowAccessDeniedModal] = useState(false);
+  const [deniedPlatformInfo, setDeniedPlatformInfo] = useState(null);
+
   // Handle URL-based navigation
   useEffect(() => {
     const path = location.pathname;
@@ -202,6 +214,16 @@ function Settings() {
       
       if (!res.ok || !data.email) throw new Error('Failed to fetch customer data');
       setCustomerData(data);
+      
+      // Set platform access from customer data (defaults to true if not set)
+      if (data.platformAccess) {
+        setPlatformAccess({
+          facebook: data.platformAccess.facebook !== false,
+          instagram: data.platformAccess.instagram !== false,
+          linkedin: data.platformAccess.linkedin !== false,
+          youtube: data.platformAccess.youtube !== false
+        });
+      }
     } catch (err) {
       console.error('Error fetching customer data:', err);
       // Fallback to currentUser data if API fails
@@ -214,6 +236,16 @@ function Settings() {
       };
       console.log('Using fallback customer data:', fallbackData);
       setCustomerData(fallbackData);
+      
+      // If currentUser has platformAccess, use it
+      if (currentUser.platformAccess) {
+        setPlatformAccess({
+          facebook: currentUser.platformAccess.facebook !== false,
+          instagram: currentUser.platformAccess.instagram !== false,
+          linkedin: currentUser.platformAccess.linkedin !== false,
+          youtube: currentUser.platformAccess.youtube !== false
+        });
+      }
     } finally {
       setLoading(false);
     }
@@ -230,8 +262,21 @@ function Settings() {
     // }
   };
 
-  const handleIntegrationSelect = (platform) => {
-    setActiveIntegration(platform);
+  const handleIntegrationSelect = (platformKey) => {
+    // Check if platform access is enabled
+    const platform = platforms.find(p => p.key === platformKey);
+    
+    // Map platform keys to access keys (instagram-ads uses instagram access)
+    const accessKey = platformKey === 'instagram-ads' ? 'instagram' : platformKey;
+    
+    if (platformAccess[accessKey] === false) {
+      // Platform is disabled by admin - show modal
+      setDeniedPlatformInfo(platform);
+      setShowAccessDeniedModal(true);
+      return;
+    }
+    
+    setActiveIntegration(platformKey);
     // navigate(`/customer/integration/${platform}`);
   };
 
@@ -725,30 +770,55 @@ function Settings() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {platforms.map((platform) => (
+        {platforms.map((platform) => {
+          // Map platform keys to access keys (instagram-ads uses instagram access)
+          const accessKey = platform.key === 'instagram-ads' ? 'instagram' : platform.key;
+          const isAccessEnabled = platformAccess[accessKey] !== false;
+          
+          return (
           <div
             key={platform.key}
-            className="group bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer transform hover:-translate-y-1"
+            className={`group bg-white rounded-2xl shadow-lg border overflow-hidden transition-all duration-300 cursor-pointer transform ${
+              isAccessEnabled 
+                ? 'border-gray-100 hover:shadow-xl hover:-translate-y-1' 
+                : 'border-gray-200 opacity-75'
+            }`}
             onClick={() => handleIntegrationSelect(platform.key)}
           >
-            <div className={`h-2 bg-gradient-to-r ${platform.color}`}></div>
+            <div className={`h-2 bg-gradient-to-r ${isAccessEnabled ? platform.color : 'from-gray-300 to-gray-400'}`}></div>
             
             <div className="p-6">
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center space-x-4">
-                  <div className={`${platform.bgColor} p-3 rounded-xl ${platform.textColor}`}>
+                  <div className={`${isAccessEnabled ? platform.bgColor : 'bg-gray-100'} p-3 rounded-xl ${isAccessEnabled ? platform.textColor : 'text-gray-400'} relative`}>
                     {platform.icon}
+                    {!isAccessEnabled && (
+                      <div className="absolute -bottom-1 -right-1 bg-amber-500 rounded-full p-0.5">
+                        <Lock className="h-3 w-3 text-white" />
+                      </div>
+                    )}
                   </div>
                   <div>
-                    <h3 className="text-xl font-semibold text-gray-900 group-hover:text-gray-700 transition-colors">
-                      {platform.label}
-                    </h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className={`text-xl font-semibold transition-colors ${isAccessEnabled ? 'text-gray-900 group-hover:text-gray-700' : 'text-gray-500'}`}>
+                        {platform.label}
+                      </h3>
+                      {!isAccessEnabled && (
+                        <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-xs font-medium">
+                          Locked
+                        </span>
+                      )}
+                    </div>
                     <p className="text-sm text-gray-600 mt-1">
                       {platform.description}
                     </p>
                   </div>
                 </div>
-                <ExternalLink className="h-5 w-5 text-gray-400 group-hover:text-gray-600 transition-colors" />
+                {isAccessEnabled ? (
+                  <ExternalLink className="h-5 w-5 text-gray-400 group-hover:text-gray-600 transition-colors" />
+                ) : (
+                  <Lock className="h-5 w-5 text-amber-500" />
+                )}
               </div>
 
               <div className="mb-4">
@@ -766,21 +836,42 @@ function Settings() {
               </div>
 
               <div className="flex items-center justify-between">
-                {renderConnectionStatus(platform.key)}
+                {isAccessEnabled ? (
+                  renderConnectionStatus(platform.key)
+                ) : (
+                  <div className="flex items-center space-x-2 px-3 py-1 rounded-full text-sm font-medium bg-amber-100 text-amber-700">
+                    <Lock className="h-4 w-4" />
+                    <span>Access Restricted</span>
+                  </div>
+                )}
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     handleIntegrationSelect(platform.key);
                   }}
-                  className={`bg-gradient-to-r ${platform.color} text-white px-4 py-2 rounded-lg text-sm font-medium hover:shadow-md transition-all duration-200 flex items-center space-x-2`}
+                  className={`${
+                    isAccessEnabled 
+                      ? `bg-gradient-to-r ${platform.color} text-white hover:shadow-md` 
+                      : 'bg-gray-100 text-gray-500'
+                  } px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center space-x-2`}
                 >
-                  <SettingsIcon className="h-4 w-4" />
-                  <span>Configure</span>
+                  {isAccessEnabled ? (
+                    <>
+                      <SettingsIcon className="h-4 w-4" />
+                      <span>Configure</span>
+                    </>
+                  ) : (
+                    <>
+                      <Lock className="h-4 w-4" />
+                      <span>Unlock</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -898,6 +989,106 @@ function Settings() {
     }
   }, [activeIntegration]);
 
+  // Access Denied Modal Component
+  const AccessDeniedModal = () => {
+    if (!showAccessDeniedModal || !deniedPlatformInfo) return null;
+
+    return (
+      <div className="fixed inset-0 z-50 overflow-y-auto">
+        {/* Backdrop */}
+        <div 
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
+          onClick={() => setShowAccessDeniedModal(false)}
+        ></div>
+        
+        {/* Modal */}
+        <div className="flex min-h-full items-center justify-center p-4">
+          <div className="relative bg-white rounded-2xl shadow-2xl max-w-md w-full mx-auto transform transition-all animate-in zoom-in-95 duration-200">
+            {/* Close Button */}
+            <button
+              onClick={() => setShowAccessDeniedModal(false)}
+              className="absolute right-4 top-4 p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            {/* Header with Icon */}
+            <div className="pt-8 pb-4 px-6 text-center">
+              <div className="mx-auto w-16 h-16 bg-gradient-to-br from-amber-100 to-orange-100 rounded-full flex items-center justify-center mb-4">
+                <Lock className="h-8 w-8 text-amber-600" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">
+                Platform Access Restricted
+              </h3>
+            </div>
+
+            {/* Content */}
+            <div className="px-6 pb-6">
+              {/* Platform Info */}
+              <div className={`${deniedPlatformInfo.bgColor} rounded-xl p-4 mb-5`}>
+                <div className="flex items-center gap-3">
+                  <div className={`p-2.5 rounded-lg bg-white/80 ${deniedPlatformInfo.textColor}`}>
+                    {deniedPlatformInfo.icon}
+                  </div>
+                  <div>
+                    <p className={`font-semibold ${deniedPlatformInfo.textColor}`}>
+                      {deniedPlatformInfo.label}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      This platform is not included in your current plan
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Message */}
+              <div className="bg-gray-50 rounded-xl p-4 mb-5 border border-gray-100">
+                <p className="text-gray-700 text-sm leading-relaxed">
+                  To access <strong>{deniedPlatformInfo.label}</strong> integration features, 
+                  please upgrade your plan or contact your administrator to enable this platform for your account.
+                </p>
+              </div>
+
+              {/* Contact Info */}
+              <div className="bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl p-4 border border-indigo-100">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 bg-indigo-100 rounded-lg">
+                    <Phone className="h-4 w-4 text-indigo-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-indigo-900 mb-1">
+                      Contact Administrator
+                    </p>
+                    <p className="text-xs text-indigo-700 leading-relaxed">
+                      Reach out to your account administrator to request access to additional platforms and unlock more features.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 pb-6 flex flex-col sm:flex-row gap-3">
+              <button
+                onClick={() => setShowAccessDeniedModal(false)}
+                className="flex-1 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200 transition-colors text-sm"
+              >
+                Close
+              </button>
+              <a
+                href="mailto:support@airspark.in?subject=Platform Access Request"
+                className="flex-1 px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 text-white rounded-xl font-medium hover:from-indigo-700 hover:to-blue-700 transition-colors text-sm text-center flex items-center justify-center gap-2"
+              >
+                <Mail className="h-4 w-4" />
+                Contact Support
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
@@ -914,6 +1105,9 @@ function Settings() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+      {/* Access Denied Modal */}
+      <AccessDeniedModal />
+      
       <div className="sm:px-8 lg:px-12 xl:px-16 2xl:px-24">
         {!activeIntegration ? (
           <div className="space-y-8">

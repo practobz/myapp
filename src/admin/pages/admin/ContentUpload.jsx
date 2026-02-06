@@ -28,7 +28,7 @@ const getLogoBase64 = () => {
   return new Promise((resolve, reject) => {
     const img = new window.Image();
     img.crossOrigin = 'Anonymous';
-    img.src = '/logoAirspark.png';
+    img.src = '/watermark.png';
     img.onload = () => {
       const canvas = document.createElement('canvas');
       canvas.width = img.width;
@@ -53,37 +53,21 @@ const watermarkImage = async (file, logoBase64) => {
       const ctx = canvas.getContext('2d');
       ctx.drawImage(img, 0, 0);
 
-      // Draw watermark logo at bottom-right, larger but subtle
+      // Draw watermark logo at bottom-right with proper visibility
       const logoImg = new window.Image();
       logoImg.src = logoBase64;
       logoImg.onload = () => {
-        // Use 1/4th of image width for logo (slightly larger)
-        const logoW = canvas.width / 4;
+        // Larger watermark size: 60% of image width for clear visibility
+        const logoW = canvas.width * 0.6;
         const logoH = logoImg.height * (logoW / logoImg.width);
-        const padding = Math.max(logoW * 0.12, 12);
+        const padding = canvas.width * 0.03; // 3% padding
 
         const x = canvas.width - logoW - padding;
         const y = canvas.height - logoH - padding;
 
-        // Very faint backdrop for contrast (very low alpha -> not intrusive)
+        // Draw logo with clear visibility (70% opacity - professional standard)
         ctx.save();
-        ctx.globalAlpha = 0.06;
-        ctx.fillStyle = '#ffffff';
-        const r = Math.max(6, logoW * 0.05);
-        // draw rounded rect backdrop
-        ctx.beginPath();
-        ctx.moveTo(x + r, y);
-        ctx.arcTo(x + logoW, y, x + logoW, y + logoH, r);
-        ctx.arcTo(x + logoW, y + logoH, x, y + logoH, r);
-        ctx.arcTo(x, y + logoH, x, y, r);
-        ctx.arcTo(x, y, x + logoW, y, r);
-        ctx.closePath();
-        ctx.fill();
-        ctx.restore();
-
-        // Draw logo with low opacity so it's subtle but readable on inspection
-        ctx.save();
-        ctx.globalAlpha = 0.35; // subtle but not too light/dark
+        ctx.globalAlpha = 0.7;
         ctx.drawImage(logoImg, x, y, logoW, logoH);
         ctx.restore();
 
@@ -121,6 +105,7 @@ function ContentUpload() {
   const [thumbnail, setThumbnail] = useState('');
   const [tags, setTags] = useState('');
   const [previousSubmissionLoaded, setPreviousSubmissionLoaded] = useState(false);
+  const [selectedMedia, setSelectedMedia] = useState(null);
 
   const creatorEmail = getCreatorEmail();
 
@@ -822,7 +807,10 @@ function ContentUpload() {
                 <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
                   {uploadedFiles.map((file) => (
                     <div key={file.id} className="relative group">
-                      <div className="aspect-square rounded-lg overflow-hidden bg-gray-100 ring-2 ring-transparent group-hover:ring-purple-200 transition-all relative">
+                      <div 
+                        className="aspect-square rounded-lg overflow-hidden bg-gray-100 ring-2 ring-transparent group-hover:ring-purple-200 transition-all relative cursor-pointer"
+                        onClick={() => setSelectedMedia(file)}
+                      >
                         {file.type === 'image' ? (
                           <img
                             src={file.preview}
@@ -1034,6 +1022,59 @@ function ContentUpload() {
           </div>
         </div>
       </div>
+
+      {/* Media Preview Modal */}
+      {selectedMedia && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4"
+          onClick={() => setSelectedMedia(null)}
+        >
+          <div className="relative max-w-7xl max-h-full" onClick={(e) => e.stopPropagation()}>
+            {/* Close Button */}
+            <button
+              onClick={() => setSelectedMedia(null)}
+              className="absolute -top-10 right-0 text-white hover:text-gray-300 transition-colors"
+            >
+              <X className="h-8 w-8" />
+            </button>
+            
+            {/* Media Content */}
+            <div className="bg-white rounded-lg overflow-hidden shadow-2xl">
+              {selectedMedia.type === 'image' ? (
+                <img
+                  src={selectedMedia.preview}
+                  alt={selectedMedia.name}
+                  className="max-w-full max-h-[85vh] w-auto h-auto object-contain"
+                />
+              ) : (
+                <video
+                  src={selectedMedia.preview}
+                  controls
+                  autoPlay
+                  className="max-w-full max-h-[85vh] w-auto h-auto"
+                />
+              )}
+              
+              {/* Media Info */}
+              <div className="p-4 bg-gray-50 border-t">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-gray-900">{selectedMedia.name}</p>
+                    <p className="text-sm text-gray-500">{formatFileSize(selectedMedia.size)}</p>
+                  </div>
+                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                    selectedMedia.type === 'image' 
+                      ? 'bg-green-100 text-green-800' 
+                      : 'bg-blue-100 text-blue-800'
+                  }`}>
+                    {selectedMedia.type.toUpperCase()}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

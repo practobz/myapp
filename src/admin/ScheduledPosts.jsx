@@ -129,7 +129,7 @@ function ScheduledPosts() {
     }
   };
 
-  const handleDeletePost = async (postId) => {
+  const handleDeletePost = useCallback(async (postId) => {
     if (!confirm('Are you sure you want to delete this scheduled post?')) return;
 
     try {
@@ -144,14 +144,14 @@ function ScheduledPosts() {
       console.error('Delete post error:', error);
       alert('Failed to delete post');
     }
-  };
+  }, []);
 
   // Handle post updates from SocialActionManager
-  const handlePostUpdate = (postId, updates) => {
+  const handlePostUpdate = useCallback((postId, updates) => {
     setScheduledPosts(prev => prev.map(post => 
       post._id === postId ? { ...post, ...updates } : post
     ));
-  };
+  }, []);
 
   const getStatusColor = useCallback((status) => {
     switch (status) {
@@ -165,18 +165,19 @@ function ScheduledPosts() {
 
   const getStatusIcon = useCallback((status) => {
     switch (status) {
-      case 'pending': return <Clock className="h-3 w-3" />;
-      case 'published': return <CheckCircle className="h-3 w-3" />;
-      case 'failed': return <XCircle className="h-3 w-3" />;
-      case 'processing': return <Loader2 className="h-3 w-3 animate-spin" />;
-      default: return <Clock className="h-3 w-3" />;
+      case 'pending': return <Clock className="h-3 w-3 sm:h-4 sm:w-4" />;
+      case 'published': return <CheckCircle className="h-3 w-3 sm:h-4 sm:w-4" />;
+      case 'failed': return <XCircle className="h-3 w-3 sm:h-4 sm:w-4" />;
+      case 'processing': return <Loader2 className="h-3 w-3 sm:h-4 sm:w-4 animate-spin" />;
+      default: return <Clock className="h-3 w-3 sm:h-4 sm:w-4" />;
     }
   }, []);
 
-  const filteredPosts = Array.isArray(scheduledPosts) ? scheduledPosts.filter(post => {
-    if (filter === 'all') return true;
-    return post.status === filter;
-  }) : [];
+  const filteredPosts = useMemo(() => {
+    if (!Array.isArray(scheduledPosts)) return [];
+    if (filter === 'all') return scheduledPosts;
+    return scheduledPosts.filter(post => post.status === filter);
+  }, [scheduledPosts, filter]);
 
   // Helper to detect video URLs
   const isVideoUrl = useCallback((url) => {
@@ -187,47 +188,53 @@ function ScheduledPosts() {
 
   // Helper to determine post type
   const getPostType = useCallback((post) => {
+    // Check if it's a story
     if (post.isStory || post.postType === 'story') {
       return { type: 'Story', color: 'bg-orange-100 text-orange-700', icon: '📖' };
     }
+    // Check if it's a carousel
     if ((post.isCarousel || post.useCarouselService) && post.imageUrls?.length > 1) {
       return { type: 'Carousel', color: 'bg-purple-100 text-purple-700', icon: '🎠' };
     }
+    // Default to regular post
     return { type: 'Post', color: 'bg-blue-100 text-blue-700', icon: '📝' };
   }, []);
 
   const getPlatformIcon = useCallback((platform) => {
     switch (platform) {
       case 'facebook':
-        return <Facebook className="h-4 w-4 text-[#0066CC]" />;
+        return <Facebook className="h-4 w-4 sm:h-5 sm:w-5 text-[#0066CC]" />;
       case 'instagram':
-        return <Instagram className="h-4 w-4 text-pink-600" />;
+        return <Instagram className="h-4 w-4 sm:h-5 sm:w-5 text-pink-600" />;
       case 'both':
         return (
           <>
-            <Facebook className="h-3 w-3 text-[#0066CC]" />
-            <Instagram className="h-3 w-3 text-pink-600" />
+            <Facebook className="h-3 w-3 sm:h-4 sm:w-4 text-[#0066CC]" />
+            <Instagram className="h-3 w-3 sm:h-4 sm:w-4 text-pink-600" />
           </>
         );
       case 'youtube':
-        return <div className="h-4 w-4 bg-red-600 text-white rounded text-xs flex items-center justify-center font-bold">YT</div>;
+        return <div className="h-4 w-4 sm:h-5 sm:w-5 bg-red-600 text-white rounded text-xs flex items-center justify-center font-bold">YT</div>;
       case 'twitter':
-        return <div className="h-4 w-4 bg-blue-400 text-white rounded text-xs flex items-center justify-center font-bold">X</div>;
+        return <div className="h-4 w-4 sm:h-5 sm:w-5 bg-blue-400 text-white rounded text-xs flex items-center justify-center font-bold">X</div>;
       case 'linkedin':
-        return <div className="h-4 w-4 bg-blue-700 text-white rounded text-xs flex items-center justify-center font-bold">In</div>;
+        return <div className="h-4 w-4 sm:h-5 sm:w-5 bg-blue-700 text-white rounded text-xs flex items-center justify-center font-bold">In</div>;
       default:
-        return <div className="h-4 w-4 bg-gray-400 text-white rounded text-xs flex items-center justify-center">?</div>;
+        return <div className="h-4 w-4 sm:h-5 sm:w-5 bg-gray-400 text-white rounded text-xs flex items-center justify-center">?</div>;
     }
   }, []);
 
   // Helper function to get customer display name
   const getCustomerDisplayInfo = useCallback((post) => {
+    // First try the post's embedded customer info
     if (post.customerName) {
       return {
         name: post.customerName,
         id: post.customerId || post.userId || 'Unknown ID'
       };
     }
+
+    // Then try looking up from our customer cache
     const customerId = post.customerId || post.userId;
     if (customerId && customers[customerId]) {
       return {
@@ -235,12 +242,15 @@ function ScheduledPosts() {
         id: customerId
       };
     }
+
+    // Fallback to showing just the ID
     if (customerId) {
       return {
-        name: `Customer ${customerId.slice(-6)}`,
+        name: `Customer ${customerId.slice(-6)}`, // Show last 6 chars of ID
         id: customerId
       };
     }
+
     return {
       name: 'Unknown Customer',
       id: 'Unknown ID'
@@ -248,31 +258,31 @@ function ScheduledPosts() {
   }, [customers]);
 
   // Helper to get platform display information
-  const getPlatformInfo = useCallback((platform) => {
+  const getPlatformInfo = (platform) => {
     const platformData = {
       facebook: {
         name: 'Facebook',
         color: 'from-blue-500 to-blue-700',
         bgColor: 'bg-blue-50',
         borderColor: 'border-blue-200',
-        icon: <Facebook className="h-5 w-5 text-[#0066CC]" />
+        icon: <Facebook className="h-6 w-6 text-[#0066CC]" />
       },
       instagram: {
         name: 'Instagram',
         color: 'from-pink-500 via-purple-500 to-orange-500',
         bgColor: 'bg-pink-50',
         borderColor: 'border-pink-200',
-        icon: <Instagram className="h-5 w-5 text-pink-600" />
+        icon: <Instagram className="h-6 w-6 text-pink-600" />
       },
       both: {
-        name: 'FB & IG',
+        name: 'Facebook & Instagram',
         color: 'from-blue-500 via-purple-500 to-pink-500',
         bgColor: 'bg-purple-50',
         borderColor: 'border-purple-200',
         icon: (
           <div className="flex space-x-1">
-            <Facebook className="h-4 w-4 text-[#0066CC]" />
-            <Instagram className="h-4 w-4 text-pink-600" />
+            <Facebook className="h-5 w-5 text-[#0066CC]" />
+            <Instagram className="h-5 w-5 text-pink-600" />
           </div>
         )
       },
@@ -281,21 +291,21 @@ function ScheduledPosts() {
         color: 'from-red-500 to-red-700',
         bgColor: 'bg-red-50',
         borderColor: 'border-red-200',
-        icon: <div className="h-5 w-5 bg-red-600 text-white rounded text-xs flex items-center justify-center font-bold">YT</div>
+        icon: <div className="h-6 w-6 bg-red-600 text-white rounded text-sm flex items-center justify-center font-bold">YT</div>
       },
       twitter: {
-        name: 'X',
+        name: 'X (Twitter)',
         color: 'from-blue-400 to-blue-600',
         bgColor: 'bg-blue-50',
         borderColor: 'border-blue-200',
-        icon: <div className="h-5 w-5 bg-blue-400 text-white rounded text-xs flex items-center justify-center font-bold">𝕏</div>
+        icon: <div className="h-6 w-6 bg-blue-400 text-white rounded text-sm flex items-center justify-center font-bold">𝕏</div>
       },
       linkedin: {
         name: 'LinkedIn',
         color: 'from-blue-600 to-blue-800',
         bgColor: 'bg-blue-50',
         borderColor: 'border-blue-300',
-        icon: <div className="h-5 w-5 bg-blue-700 text-white rounded text-xs flex items-center justify-center font-bold">in</div>
+        icon: <div className="h-6 w-6 bg-blue-700 text-white rounded text-sm flex items-center justify-center font-bold">in</div>
       }
     };
     return platformData[platform] || {
@@ -303,45 +313,51 @@ function ScheduledPosts() {
       color: 'from-gray-400 to-gray-600',
       bgColor: 'bg-gray-50',
       borderColor: 'border-gray-200',
-      icon: <div className="h-5 w-5 bg-gray-400 text-white rounded text-xs flex items-center justify-center">?</div>
+      icon: <div className="h-6 w-6 bg-gray-400 text-white rounded text-sm flex items-center justify-center">?</div>
     };
-  }, []);
+  };
 
-  // Group posts by customer - memoized
-  const groupedPosts = useMemo(() => filteredPosts.reduce((groups, post) => {
-    const customerId = post.customerId || post.userId || 'unknown';
-    if (!groups[customerId]) {
-      groups[customerId] = [];
-    }
-    groups[customerId].push(post);
-    return groups;
-  }, {}), [filteredPosts]);
+  // Group posts by customer
+  const groupedPosts = useMemo(() => {
+    return filteredPosts.reduce((groups, post) => {
+      const customerId = post.customerId || post.userId || 'unknown';
+      if (!groups[customerId]) {
+        groups[customerId] = [];
+      }
+      groups[customerId].push(post);
+      return groups;
+    }, {});
+  }, [filteredPosts]);
 
-  // Group posts by platform - memoized
-  const platformGroupedPosts = useMemo(() => filteredPosts.reduce((groups, post) => {
-    const platform = post.platform || 'unknown';
-    if (!groups[platform]) {
-      groups[platform] = [];
-    }
-    groups[platform].push(post);
-    return groups;
-  }, {}), [filteredPosts]);
+  // Group posts by platform
+  const platformGroupedPosts = useMemo(() => {
+    return filteredPosts.reduce((groups, post) => {
+      const platform = post.platform || 'unknown';
+      if (!groups[platform]) {
+        groups[platform] = [];
+      }
+      groups[platform].push(post);
+      return groups;
+    }, {});
+  }, [filteredPosts]);
 
-  // Sort customers by number of posts (descending) - memoized
-  const sortedCustomerIds = useMemo(() => Object.keys(groupedPosts).sort((a, b) => {
-    return groupedPosts[b].length - groupedPosts[a].length;
-  }), [groupedPosts]);
+  // Sort customers by number of posts (descending)
+  const sortedCustomerIds = useMemo(() => {
+    return Object.keys(groupedPosts).sort((a, b) => {
+      return groupedPosts[b].length - groupedPosts[a].length;
+    });
+  }, [groupedPosts]);
 
-  // Sort platforms by priority and number of posts - memoized
+  // Sort platforms by priority and number of posts
+  const platformPriority = useMemo(() => ({ facebook: 1, instagram: 2, both: 3, youtube: 4, twitter: 5, linkedin: 6 }), []);
   const sortedPlatforms = useMemo(() => {
-    const platformPriority = { facebook: 1, instagram: 2, both: 3, youtube: 4, twitter: 5, linkedin: 6 };
     return Object.keys(platformGroupedPosts).sort((a, b) => {
       const priorityA = platformPriority[a] || 999;
       const priorityB = platformPriority[b] || 999;
       if (priorityA !== priorityB) return priorityA - priorityB;
       return platformGroupedPosts[b].length - platformGroupedPosts[a].length;
     });
-  }, [platformGroupedPosts]);
+  }, [platformGroupedPosts, platformPriority]);
 
   const toggleCustomerExpansion = useCallback((customerId) => {
     setExpandedCustomers(prev => {
@@ -401,17 +417,20 @@ function ScheduledPosts() {
   return (
     <AdminLayout title="Scheduled Posts">
       <div className="min-h-screen bg-white">
-        <div className="max-w-7xl mx-auto px-1 sm:px-2 py-2 sm:py-3">
+        <div className="max-w-7xl mx-auto px-2 sm:px-3 py-3 sm:py-4">
           {/* Filters and View Mode Toggle */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0 mb-2 sm:mb-3">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-3 lg:space-y-0 mb-3 sm:mb-4">
             {/* Status Filters */}
-            <div className="flex items-center flex-wrap gap-1">
-              <Filter className="h-3 w-3 text-[#475569]" />
+            <div className="flex items-center space-x-1 sm:space-x-2 flex-wrap gap-1">
+              <div className="flex items-center space-x-2">
+                <Filter className="h-4 w-4 text-[#475569]" />
+                <span className="text-xs sm:text-sm font-medium text-[#0F172A]">Filter:</span>
+              </div>
               {['all', 'pending', 'processing', 'published', 'failed'].map(status => (
                 <button
                   key={status}
                   onClick={() => setFilter(status)}
-                  className={`px-2 py-0.5 rounded-full text-xs font-medium transition-all ${
+                  className={`px-3 py-1 rounded-full text-sm font-medium transition-all ${
                     filter === status 
                       ? 'bg-gradient-to-r from-[#00E5FF] to-[#0066CC] text-white shadow-sm' 
                       : 'bg-[#F4F9FF] text-[#475569] hover:bg-[#0066CC] hover:text-white'
@@ -423,32 +442,34 @@ function ScheduledPosts() {
             </div>
 
             {/* View Mode Toggle */}
-            <div className="flex items-center space-x-1">
-              <span className="text-xs font-medium text-[#0F172A]">View:</span>
-              <div className="flex bg-[#F4F9FF] rounded-lg p-0.5">
+            <div className="flex items-center space-x-2 sm:space-x-4">
+              <span className="text-xs sm:text-sm font-medium text-[#0F172A]">View:</span>
+              <div className="flex bg-[#F4F9FF] rounded-lg p-1">
                 <button
                   onClick={() => setViewMode('grouped')}
-                  className={`px-2 py-0.5 rounded text-xs font-medium transition-colors ${
+                  className={`px-2 sm:px-3 py-1 rounded-md text-xs sm:text-sm font-medium transition-colors ${
                     viewMode === 'grouped'
                       ? 'bg-white text-[#0F172A] shadow-sm'
                       : 'text-[#475569] hover:text-[#0F172A]'
                   }`}
                 >
-                  <Users className="h-3 w-3 inline" />
+                  <Users className="h-3 w-3 sm:h-4 sm:w-4 inline mr-1" />
+                  Customers
                 </button>
                 <button
                   onClick={() => setViewMode('platform')}
-                  className={`px-2 py-0.5 rounded text-xs font-medium transition-colors ${
+                  className={`px-2 sm:px-3 py-1 rounded-md text-xs sm:text-sm font-medium transition-colors ${
                     viewMode === 'platform'
                       ? 'bg-white text-[#0F172A] shadow-sm'
                       : 'text-[#475569] hover:text-[#0F172A]'
                   }`}
                 >
-                  <Send className="h-3 w-3 inline" />
+                  <Send className="h-3 w-3 sm:h-4 sm:w-4 inline mr-1" />
+                  Platforms
                 </button>
                 <button
                   onClick={() => setViewMode('list')}
-                  className={`px-2 py-0.5 rounded text-xs font-medium transition-colors ${
+                  className={`px-2 sm:px-3 py-1 rounded-md text-xs sm:text-sm font-medium transition-colors ${
                     viewMode === 'list'
                       ? 'bg-white text-[#0F172A] shadow-sm'
                       : 'text-[#475569] hover:text-[#0F172A]'
@@ -460,34 +481,54 @@ function ScheduledPosts() {
             </div>
           </div>
 
-          {/* Customer Overview Header - Compact */}
-          <div className="bg-[#F4F9FF] rounded-lg shadow-sm border border-gray-100 mb-2">
-            <div className="px-2 sm:px-3 py-1.5">
-              <h2 className="text-sm sm:text-base font-bold text-[#0F172A]">Overview</h2>
-              <p className="text-xs text-[#475569]">Track schedules & deadlines</p>
+          {/* Add Customer Overview Header */}
+          <div className="bg-[#F4F9FF] backdrop-blur-sm rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-3 sm:mb-4">
+            <div className="px-4 sm:px-6 py-2 sm:py-3 border-b border-gray-100">
+              <h2 className="text-lg sm:text-xl font-bold text-[#0F172A]">Customer Overview</h2>
+              <p className="text-xs sm:text-sm text-[#475569] mt-1">Track content schedules and deadlines</p>
             </div>
           </div>
 
-          {/* Expand/Collapse All - Compact */}
+          {/* Expand/Collapse All (for grouped and platform modes) */}
           {viewMode === 'grouped' && sortedCustomerIds.length > 0 && (
-            <div className="flex items-center space-x-2 mb-2">
-              <button onClick={expandAllCustomers} className="text-[#0066CC] text-xs font-medium">Expand All</button>
+            <div className="flex items-center space-x-2 mb-3">
+              <button
+                onClick={expandAllCustomers}
+                className="text-[#0066CC] hover:text-[#0052A3] text-sm font-medium"
+              >
+                Expand All
+              </button>
               <span className="text-gray-300">|</span>
-              <button onClick={collapseAllCustomers} className="text-[#0066CC] text-xs font-medium">Collapse All</button>
+              <button
+                onClick={collapseAllCustomers}
+                className="text-[#0066CC] hover:text-[#0052A3] text-sm font-medium"
+              >
+                Collapse All
+              </button>
             </div>
           )}
           {viewMode === 'platform' && sortedPlatforms.length > 0 && (
-            <div className="flex items-center space-x-2 mb-2">
-              <button onClick={expandAllPlatforms} className="text-[#0066CC] text-xs font-medium">Expand All</button>
+            <div className="flex items-center space-x-2 mb-3">
+              <button
+                onClick={expandAllPlatforms}
+                className="text-[#0066CC] hover:text-[#0052A3] text-sm font-medium"
+              >
+                Expand All
+              </button>
               <span className="text-gray-300">|</span>
-              <button onClick={collapseAllPlatforms} className="text-[#0066CC] text-xs font-medium">Collapse All</button>
+              <button
+                onClick={collapseAllPlatforms}
+                className="text-[#0066CC] hover:text-[#0052A3] text-sm font-medium"
+              >
+                Collapse All
+              </button>
             </div>
           )}
 
           {/* Content */}
           {loading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-[#0066CC]" />
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-[#0066CC]" />
             </div>
           ) : viewMode === 'platform' ? (
             /* Platform View */
@@ -500,45 +541,63 @@ function ScheduledPosts() {
 
                 return (
                   <div key={platform} className="bg-white rounded-lg shadow-sm border overflow-hidden">
-                    {/* Platform Header - Compact */}
+                    {/* Platform Header */}
                     <div 
-                      className={`p-2 sm:p-3 border-b cursor-pointer hover:bg-opacity-50 transition-all ${platformInfo.bgColor}`}
+                      className={`p-3 sm:p-6 border-b cursor-pointer hover:bg-opacity-50 transition-all ${platformInfo.bgColor}`}
                       onClick={() => togglePlatformExpansion(platform)}
                     >
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-2">
-                          {isExpanded ? (
-                            <ChevronDown className="h-4 w-4 text-gray-400" />
-                          ) : (
-                            <ChevronRight className="h-4 w-4 text-gray-400" />
-                          )}
-                          <div className={`p-1.5 rounded-lg bg-gradient-to-r ${platformInfo.color} bg-opacity-10`}>
-                            {platformInfo.icon}
+                        <div className="flex items-center space-x-2 sm:space-x-4">
+                          <div className="flex items-center space-x-1 sm:space-x-2">
+                            {isExpanded ? (
+                              <ChevronDown className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400" />
+                            )}
+                            <div className={`p-1.5 sm:p-2 rounded-lg bg-gradient-to-r ${platformInfo.color} bg-opacity-10`}>
+                              {platformInfo.icon}
+                            </div>
                           </div>
                           <div>
-                            <h3 className="text-sm sm:text-base font-bold text-[#0F172A]">
+                            <h3 className="text-sm sm:text-xl font-bold text-[#0F172A]">
                               {platformInfo.name}
                             </h3>
-                            <p className="text-xs text-[#475569]">
-                              {summary.total} posts
+                            <p className="text-xs sm:text-sm text-[#475569] hidden sm:block">
+                              {summary.total} {summary.total === 1 ? 'post' : 'posts'} scheduled
                             </p>
                           </div>
                         </div>
                         
-                        {/* Summary Stats - Compact */}
-                        <div className="flex items-center space-x-1 sm:space-x-2">
+                        {/* Summary Stats */}
+                        <div className="flex items-center space-x-2 sm:space-x-6">
                           <div className="text-center">
-                            <div className="text-lg sm:text-xl font-bold text-[#0F172A]">{summary.total}</div>
+                            <div className="text-lg sm:text-3xl font-bold text-[#0F172A]">{summary.total}</div>
+                            <div className="text-xs text-[#475569] uppercase tracking-wide hidden sm:block">Total</div>
                           </div>
-                          <div className="hidden sm:flex flex-wrap gap-1">
+                          <div className="hidden sm:flex flex-wrap gap-2">
                             {summary.pending > 0 && (
-                              <span className="px-1.5 py-0.5 bg-yellow-100 text-yellow-800 text-xs rounded">{summary.pending}P</span>
+                              <div className="text-center px-3 py-2 bg-yellow-100 rounded-lg">
+                                <div className="text-lg font-bold text-yellow-800">{summary.pending}</div>
+                                <div className="text-xs text-yellow-600">Pending</div>
+                              </div>
+                            )}
+                            {summary.processing > 0 && (
+                              <div className="text-center px-3 py-2 bg-blue-100 rounded-lg">
+                                <div className="text-lg font-bold text-blue-800">{summary.processing}</div>
+                                <div className="text-xs text-blue-600">Processing</div>
+                              </div>
                             )}
                             {summary.published > 0 && (
-                              <span className="px-1.5 py-0.5 bg-green-100 text-green-800 text-xs rounded">{summary.published}✓</span>
+                              <div className="text-center px-3 py-2 bg-green-100 rounded-lg">
+                                <div className="text-lg font-bold text-green-800">{summary.published}</div>
+                                <div className="text-xs text-green-600">Published</div>
+                              </div>
                             )}
                             {summary.failed > 0 && (
-                              <span className="px-1.5 py-0.5 bg-red-100 text-red-800 text-xs rounded">{summary.failed}✗</span>
+                              <div className="text-center px-3 py-2 bg-red-100 rounded-lg">
+                                <div className="text-lg font-bold text-red-800">{summary.failed}</div>
+                                <div className="text-xs text-red-600">Failed</div>
+                              </div>
                             )}
                           </div>
                         </div>
@@ -547,69 +606,113 @@ function ScheduledPosts() {
 
                     {/* Expanded Content */}
                     {isExpanded && (
-                      <div className="p-2 sm:p-3 bg-gray-50">
-                        <div className="grid grid-cols-3 gap-1 sm:gap-2">
+                      <div className="p-2 sm:p-6 bg-gray-50">
+                        <div className="grid grid-cols-3 sm:grid-cols-2 lg:grid-cols-3 gap-1.5 sm:gap-4">
                           {platformPosts.map(post => {
                             const customerInfo = getCustomerDisplayInfo(post);
                             
                             return (
-                              <div key={post._id} className="bg-white rounded border p-1.5 sm:p-2 shadow-sm">
-                                {/* Status Badge */}
-                                <div className="flex items-center justify-between mb-1">
-                                  <span className={`px-1 py-0.5 rounded text-xs font-medium flex items-center space-x-0.5 ${getStatusColor(post.status)}`}>
-                                    {getStatusIcon(post.status)}
-                                  </span>
-                                  {(() => {
-                                    const postType = getPostType(post);
-                                    return (
-                                      <span className={`text-xs ${postType.color} px-1 rounded`}>
-                                        {postType.icon}
-                                      </span>
-                                    );
-                                  })()}
+                              <div key={post._id} className="bg-white rounded-lg border p-1.5 sm:p-4 shadow-sm hover:shadow-md transition-shadow">
+                                {/* Calendar and Item Name - Hidden on mobile */}
+                                {post.calendar_name && (
+                                  <div className="text-xs text-blue-700 mb-1 hidden sm:block">
+                                    <strong>Calendar:</strong> {post.calendar_name}
+                                  </div>
+                                )}
+                                {post.item_name && (
+                                  <div className="text-xs text-purple-700 mb-2 hidden sm:block">
+                                    <strong>Item:</strong> {post.item_name}
+                                  </div>
+                                )}
+
+                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-1 sm:mb-3">
+                                  <div className="flex items-center space-x-1 sm:space-x-2">
+                                    <User className="h-3 w-3 sm:h-4 sm:w-4 text-gray-500" />
+                                    <span className="text-xs font-medium text-gray-600 truncate max-w-[60px] sm:max-w-none">
+                                      {customerInfo.name}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center space-x-1 mt-1 sm:mt-0">
+                                    <span className={`px-1 sm:px-2 py-0.5 rounded-full text-xs font-medium flex items-center ${getStatusColor(post.status)}`}>
+                                      {getStatusIcon(post.status)}
+                                      <span className="hidden sm:inline ml-1">{post.status}</span>
+                                    </span>
+                                  </div>
                                 </div>
 
-                                {/* Media Preview - Small */}
+                                {/* Media Preview - Compact on mobile */}
                                 {post.imageUrls && post.imageUrls.length > 1 ? (
-                                  <div className="mb-1">
-                                    <div className="grid grid-cols-2 gap-0.5">
+                                  <div className="mb-1 sm:mb-3">
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-0.5 sm:gap-1">
                                       {post.imageUrls.slice(0, 4).map((url, idx) => (
                                         isVideoUrl(url) ? (
-                                          <div key={idx} className="h-8 sm:h-12 bg-gray-800 rounded flex items-center justify-center">
-                                            <Video className="h-3 w-3 text-white" />
+                                          <div key={idx} className="relative h-10 sm:h-20 bg-gray-800 rounded flex items-center justify-center">
+                                            <Video className="h-3 w-3 sm:h-6 sm:w-6 text-white" />
                                           </div>
                                         ) : (
-                                          <img key={idx} src={url} alt="" className="w-full h-8 sm:h-12 object-cover rounded" />
+                                          <div key={idx} className="relative">
+                                            <img
+                                              src={url}
+                                              alt={`Item ${idx + 1}`}
+                                              className="w-full h-10 sm:h-20 object-cover rounded"
+                                              loading="lazy"
+                                            />
+                                          </div>
                                         )
                                       ))}
+                                      {post.imageUrls.length > 4 && (
+                                        <div className="h-10 sm:h-20 bg-gray-200 rounded flex items-center justify-center">
+                                          <span className="text-gray-600 text-xs sm:text-sm font-semibold">+{post.imageUrls.length - 4}</span>
+                                        </div>
+                                      )}
                                     </div>
                                   </div>
+                                ) : post.imageUrl && isVideoUrl(post.imageUrl) ? (
+                                  <video
+                                    src={post.imageUrl}
+                                    className="w-full h-12 sm:h-32 object-cover rounded-lg mb-1 sm:mb-3"
+                                    style={{ background: '#1f2937' }}
+                                  />
                                 ) : post.imageUrl ? (
-                                  isVideoUrl(post.imageUrl) ? (
-                                    <div className="h-16 sm:h-20 bg-gray-800 rounded flex items-center justify-center mb-1">
-                                      <Video className="h-4 w-4 text-white" />
-                                    </div>
-                                  ) : (
-                                    <img src={post.imageUrl} alt="" className="w-full h-16 sm:h-20 object-cover rounded mb-1" />
-                                  )
+                                  <img
+                                    src={post.imageUrl}
+                                    alt="Post content"
+                                    className="w-full h-12 sm:h-32 object-cover rounded-lg mb-1 sm:mb-3"
+                                    loading="lazy"
+                                  />
                                 ) : null}
 
-                                {/* Caption - Truncated */}
-                                <p className="text-xs text-gray-700 line-clamp-1 mb-1">{post.caption}</p>
+                                <p className="text-gray-800 text-xs sm:text-sm mb-1 sm:mb-3 line-clamp-1 sm:line-clamp-2 hidden sm:block">
+                                  {post.caption}
+                                </p>
                                 
-                                {/* Date/Time - Compact */}
-                                <div className="flex items-center text-xs text-gray-400 space-x-1">
-                                  <Calendar className="h-2.5 w-2.5" />
-                                  <span>{new Date(post.scheduledAt).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})}</span>
+                                <div className="space-y-0.5 sm:space-y-1 text-xs text-gray-500 mb-1 sm:mb-3">
+                                  <div className="flex items-center space-x-1 sm:space-x-2">
+                                    <Calendar className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
+                                    <span className="text-xs">{new Date(post.scheduledAt).toLocaleDateString()}</span>
+                                  </div>
+                                  <div className="hidden sm:flex items-center space-x-2">
+                                    <Clock className="h-3 w-3" />
+                                    <span>{new Date(post.scheduledAt).toLocaleTimeString()}</span>
+                                  </div>
                                 </div>
 
-                                {/* Delete */}
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); handleDeletePost(post._id); }}
-                                  className="text-red-500 hover:text-red-700 mt-1"
-                                >
-                                  <Trash2 className="h-3 w-3" />
-                                </button>
+                                {/* Error handling - Hidden on mobile */}
+                                {post.status === 'failed' && post.error && (
+                                  <div className="bg-red-50 border border-red-200 rounded p-1 sm:p-2 mb-1 sm:mb-3 hidden sm:block">
+                                    <p className="text-xs text-red-600 line-clamp-2">{post.error}</p>
+                                  </div>
+                                )}
+
+                                <div className="flex items-center justify-end">
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleDeletePost(post._id); }}
+                                    className="text-red-600 hover:text-red-800 p-0.5 sm:p-1"
+                                    title="Delete from scheduler"
+                                  >
+                                    <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
+                                  </button>
+                                </div>
                               </div>
                             );
                           })}
@@ -622,7 +725,7 @@ function ScheduledPosts() {
             </div>
           ) : viewMode === 'grouped' ? (
             /* Grouped View */
-            <div className="space-y-2">
+            <div className="space-y-2 sm:space-y-4">
               {sortedCustomerIds.map(customerId => {
                 const customerPosts = groupedPosts[customerId];
                 const customerInfo = getCustomerDisplayInfo(customerPosts[0]);
@@ -631,103 +734,171 @@ function ScheduledPosts() {
 
                 return (
                   <div key={customerId} className="bg-white rounded-lg shadow-sm">
-                    {/* Customer Header - Compact */}
+                    {/* Customer Header */}
                     <div 
-                      className="p-2 sm:p-3 border-b cursor-pointer hover:bg-[#F4F9FF] transition-colors"
+                      className="p-3 sm:p-6 border-b cursor-pointer hover:bg-[#F4F9FF] transition-colors"
                       onClick={() => toggleCustomerExpansion(customerId)}
                     >
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-2">
-                          {isExpanded ? (
-                            <ChevronDown className="h-4 w-4 text-gray-400" />
-                          ) : (
-                            <ChevronRight className="h-4 w-4 text-gray-400" />
-                          )}
-                          <User className="h-4 w-4 text-[#0066CC]" />
+                        <div className="flex items-center space-x-2 sm:space-x-4">
+                          <div className="flex items-center space-x-1 sm:space-x-2">
+                            {isExpanded ? (
+                              <ChevronDown className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400" />
+                            )}
+                            <User className="h-4 w-4 sm:h-5 sm:w-5 text-[#0066CC]" />
+                          </div>
                           <div>
-                            <h3 className="text-sm font-semibold text-[#0F172A] truncate max-w-[120px] sm:max-w-none">
-                              {customerInfo?.name || 'Unknown'}
+                            <h3 className="text-sm sm:text-lg font-semibold text-[#0F172A] truncate max-w-[120px] sm:max-w-none">
+                              {customerInfo?.name || 'Unknown Customer'}
                             </h3>
+                            <p className="text-xs sm:text-sm text-[#475569] hidden sm:block">
+                              ID: {customerInfo?.id || customerId}
+                            </p>
                           </div>
                         </div>
                         
-                        {/* Summary Stats - Compact */}
-                        <div className="flex items-center space-x-1 sm:space-x-2">
+                        {/* Summary Stats */}
+                        <div className="flex items-center space-x-2 sm:space-x-4">
                           <div className="text-center">
-                            <div className="text-lg sm:text-xl font-bold text-[#0F172A]">{summary.total}</div>
+                            <div className="text-lg sm:text-2xl font-bold text-[#0F172A]">{summary.total}</div>
+                            <div className="text-xs text-[#475569] hidden sm:block">Total Posts</div>
                           </div>
-                          <div className="hidden sm:flex space-x-1">
+                          <div className="hidden sm:flex space-x-2">
                             {summary.pending > 0 && (
-                              <span className="px-1.5 py-0.5 bg-yellow-100 text-yellow-800 text-xs rounded">{summary.pending}P</span>
+                              <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs font-medium rounded-full">
+                                {summary.pending} Pending
+                              </span>
                             )}
                             {summary.published > 0 && (
-                              <span className="px-1.5 py-0.5 bg-green-100 text-green-800 text-xs rounded">{summary.published}✓</span>
+                              <span className="px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full">
+                                {summary.published} Published
+                              </span>
                             )}
                             {summary.failed > 0 && (
-                              <span className="px-1.5 py-0.5 bg-red-100 text-red-800 text-xs rounded">{summary.failed}✗</span>
+                              <span className="px-2 py-1 bg-red-100 text-red-800 text-xs font-medium rounded-full">
+                                {summary.failed} Failed
+                              </span>
+                            )}
+                            {summary.processing > 0 && (
+                              <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-full">
+                                {summary.processing} Processing
+                              </span>
                             )}
                           </div>
                         </div>
                       </div>
                     </div>
 
-                    {/* Expanded Content - 3 Column Grid */}
+                    {/* Expanded Content */}
                     {isExpanded && (
-                      <div className="p-2 sm:p-3">
-                        <div className="grid grid-cols-3 gap-1 sm:gap-2">
+                      <div className="p-2 sm:p-6">
+                        <div className="grid grid-cols-3 sm:grid-cols-2 lg:grid-cols-3 gap-1.5 sm:gap-4">
                           {customerPosts.map(post => (
-                            <div key={post._id} className="bg-gray-50 rounded border p-1.5 sm:p-2">
-                              {/* Header with platform and status */}
-                              <div className="flex items-center justify-between mb-1">
-                                <div className="flex items-center space-x-1">
-                                  {getPlatformIcon(post.platform)}
+                            <div key={post._id} className="bg-gray-50 rounded-lg border p-1.5 sm:p-4">
+                              {/* --- Display calendar and item name at the top --- Hidden on mobile */}
+                              {post.calendar_name && (
+                                <div className="text-xs text-blue-700 mb-1 hidden sm:block">
+                                  <strong>Calendar:</strong> {post.calendar_name}
                                 </div>
-                                <span className={`px-1 py-0.5 rounded text-xs font-medium flex items-center ${getStatusColor(post.status)}`}>
-                                  {getStatusIcon(post.status)}
-                                </span>
+                              )}
+                              {post.item_name && (
+                                <div className="text-xs text-purple-700 mb-2 hidden sm:block">
+                                  <strong>Item:</strong> {post.item_name}
+                                </div>
+                              )}
+                              {/* --- End --- */}
+
+                              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-1 sm:mb-3">
+                                <div className="flex items-center space-x-1 sm:space-x-2">
+                                  {getPlatformIcon(post.platform)}
+                                  <span className="text-xs sm:text-sm font-medium text-gray-600 truncate max-w-[50px] sm:max-w-none">
+                                    {post.pageName || post.channelName || 'Post'}
+                                  </span>
+                                </div>
+                                <div className="flex items-center space-x-1 mt-0.5 sm:mt-0">
+                                  <span className={`px-1 sm:px-2 py-0.5 rounded-full text-xs font-medium flex items-center ${getStatusColor(post.status)}`}>
+                                    {getStatusIcon(post.status)}
+                                    <span className="hidden sm:inline ml-1">{post.status}</span>
+                                  </span>
+                                </div>
                               </div>
 
-                              {/* Media Preview - Small */}
+                              {/* Media Preview - Compact on mobile */}
                               {post.imageUrls && post.imageUrls.length > 1 ? (
-                                <div className="mb-1">
-                                  <div className="grid grid-cols-2 gap-0.5">
+                                <div className="mb-1 sm:mb-3">
+                                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-0.5 sm:gap-1">
                                     {post.imageUrls.slice(0, 4).map((url, idx) => (
                                       isVideoUrl(url) ? (
-                                        <div key={idx} className="h-8 sm:h-12 bg-gray-800 rounded flex items-center justify-center">
-                                          <Video className="h-3 w-3 text-white" />
+                                        <div key={idx} className="relative h-10 sm:h-20 bg-gray-800 rounded flex items-center justify-center">
+                                          <Video className="h-3 w-3 sm:h-6 sm:w-6 text-white" />
                                         </div>
                                       ) : (
-                                        <img key={idx} src={url} alt="" className="w-full h-8 sm:h-12 object-cover rounded" />
+                                        <div key={idx} className="relative">
+                                          <img
+                                            src={url}
+                                            alt={`Item ${idx + 1}`}
+                                            className="w-full h-10 sm:h-20 object-cover rounded"
+                                            loading="lazy"
+                                          />
+                                        </div>
                                       )
                                     ))}
+                                    {post.imageUrls.length > 4 && (
+                                      <div className="h-10 sm:h-20 bg-gray-200 rounded flex items-center justify-center">
+                                        <span className="text-gray-600 text-xs sm:text-sm font-semibold">+{post.imageUrls.length - 4}</span>
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
+                              ) : post.imageUrl && isVideoUrl(post.imageUrl) ? (
+                                <video
+                                  src={post.imageUrl}
+                                  className="w-full h-12 sm:h-32 object-cover rounded-lg mb-1 sm:mb-3"
+                                  style={{ background: '#1f2937' }}
+                                />
                               ) : post.imageUrl ? (
-                                isVideoUrl(post.imageUrl) ? (
-                                  <div className="h-16 sm:h-20 bg-gray-800 rounded flex items-center justify-center mb-1">
-                                    <Video className="h-4 w-4 text-white" />
-                                  </div>
-                                ) : (
-                                  <img src={post.imageUrl} alt="" className="w-full h-16 sm:h-20 object-cover rounded mb-1" />
-                                )
+                                <img
+                                  src={post.imageUrl}
+                                  alt="Post content"
+                                  className="w-full h-12 sm:h-32 object-cover rounded-lg mb-1 sm:mb-3"
+                                  loading="lazy"
+                                />
                               ) : null}
 
-                              {/* Caption - Truncated */}
-                              <p className="text-xs text-gray-700 line-clamp-1 mb-1">{post.caption}</p>
+                              <p className="text-gray-800 text-xs sm:text-sm mb-1 sm:mb-3 line-clamp-1 sm:line-clamp-2 hidden sm:block">
+                                {post.caption}
+                              </p>
                               
-                              {/* Date/Time - Compact */}
-                              <div className="flex items-center text-xs text-gray-400 space-x-1">
-                                <Calendar className="h-2.5 w-2.5" />
-                                <span>{new Date(post.scheduledAt).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})}</span>
+                              <div className="space-y-0.5 sm:space-y-1 text-xs text-gray-500 mb-1 sm:mb-3">
+                                <div className="flex items-center space-x-1 sm:space-x-2">
+                                  <Calendar className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
+                                  <span className="text-xs">{new Date(post.scheduledAt).toLocaleDateString()}</span>
+                                </div>
+                                <div className="hidden sm:flex items-center space-x-2">
+                                  <Clock className="h-3 w-3" />
+                                  <span>{new Date(post.scheduledAt).toLocaleTimeString()}</span>
+                                </div>
                               </div>
 
-                              {/* Delete */}
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleDeletePost(post._id); }}
-                                className="text-red-500 hover:text-red-700 mt-1"
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </button>
+                              {/* Error handling - Hidden on mobile */}
+                              {post.status === 'failed' && post.error && (
+                                <div className="bg-red-50 border border-red-200 rounded p-1 sm:p-2 mb-1 sm:mb-3 hidden sm:block">
+                                  <p className="text-xs text-red-600 line-clamp-2">{post.error}</p>
+                                </div>
+                              )}
+
+                              <div className="flex items-center justify-end">
+                                {/* Delete from system */}
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleDeletePost(post._id); }}
+                                  className="text-red-600 hover:text-red-800 p-0.5 sm:p-1"
+                                  title="Delete from scheduler"
+                                >
+                                  <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
+                                </button>
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -738,75 +909,153 @@ function ScheduledPosts() {
               })}
             </div>
           ) : (
-            /* List View - 3 Column Grid for Mobile */
-            <div className="grid grid-cols-3 gap-1 sm:gap-2">
+            /* List View - Mobile 3-column grid */
+            <div className="grid grid-cols-3 sm:grid-cols-2 lg:grid-cols-3 gap-1.5 sm:gap-6">
               {filteredPosts.map(post => {
                 const customerInfo = getCustomerDisplayInfo(post);
                 
                 return (
                   <div
                     key={post._id}
-                    className="bg-white rounded border shadow-sm p-1.5 sm:p-2"
+                    className="bg-white rounded-lg shadow-sm border p-1.5 sm:p-4 flex flex-col"
+                    style={{ minHeight: 'auto' }}
                   >
-                    {/* Header with platform and status */}
-                    <div className="flex items-center justify-between mb-1">
-                      <div className="flex items-center space-x-1">
-                        {getPlatformIcon(post.platform)}
-                      </div>
-                      <span className={`px-1 py-0.5 rounded text-xs font-medium flex items-center ${getStatusColor(post.status)}`}>
-                        {getStatusIcon(post.status)}
-                      </span>
-                    </div>
+                    <div className="flex-1 flex flex-col" style={{ minHeight: 0 }}>
+                      {/* --- Display calendar and item name at the top --- Hidden on mobile */}
+                      {post.calendar_name && (
+                        <div className="text-xs text-blue-700 mb-1 hidden sm:block">
+                          <strong>Calendar:</strong> {post.calendar_name}
+                        </div>
+                      )}
+                      {post.item_name && (
+                        <div className="text-xs text-purple-700 mb-2 hidden sm:block">
+                          <strong>Item:</strong> {post.item_name}
+                        </div>
+                      )}
+                      {/* --- End --- */}
 
-                    {/* Customer - Compact */}
-                    {customerInfo && (
-                      <div className="flex items-center space-x-1 mb-1">
-                        <User className="h-2.5 w-2.5 text-[#0066CC]" />
-                        <span className="text-xs text-gray-600 truncate">{customerInfo.name}</span>
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-1 sm:mb-3">
+                        <div className="flex items-center space-x-1 sm:space-x-2">
+                          {getPlatformIcon(post.platform)}
+                          <span className="text-xs sm:text-sm font-medium text-gray-600 truncate max-w-[50px] sm:max-w-none">
+                            {post.pageName || post.channelName || 'Post'}
+                          </span>
+                        </div>
+                        <div className="flex items-center space-x-1 mt-0.5 sm:mt-0">
+                          <span className={`px-1 sm:px-2 py-0.5 rounded-full text-xs font-medium flex items-center ${getStatusColor(post.status)}`}>
+                            {getStatusIcon(post.status)}
+                            <span className="hidden sm:inline ml-1">{post.status}</span>
+                          </span>
+                        </div>
                       </div>
-                    )}
 
-                    {/* Media Preview - Small */}
-                    {post.imageUrls && post.imageUrls.length > 1 ? (
-                      <div className="mb-1">
-                        <div className="grid grid-cols-2 gap-0.5">
-                          {post.imageUrls.slice(0, 4).map((url, idx) => (
-                            isVideoUrl(url) ? (
-                              <div key={idx} className="h-8 sm:h-12 bg-gray-800 rounded flex items-center justify-center">
-                                <Video className="h-3 w-3 text-white" />
+                      {/* Customer Information - Hidden on mobile */}
+                      {customerInfo && (
+                        <div className="bg-[#F4F9FF] border border-[#0066CC]/20 rounded-lg p-1 sm:p-2 mb-1 sm:mb-2 hidden sm:block">
+                          <div className="flex items-center space-x-2">
+                            <User className="h-3 w-3 sm:h-4 sm:w-4 text-[#0066CC]" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs sm:text-sm font-medium text-[#0F172A] truncate">
+                                {customerInfo.name}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Media Preview - Compact on mobile */}
+                      {post.imageUrls && post.imageUrls.length > 1 ? (
+                        <div className="mb-1 sm:mb-3">
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-0.5 sm:gap-1">
+                            {post.imageUrls.slice(0, 4).map((url, idx) => (
+                              isVideoUrl(url) ? (
+                                <div key={idx} className="relative h-10 sm:h-20 bg-gray-800 rounded flex items-center justify-center">
+                                  <Video className="h-3 w-3 sm:h-6 sm:w-6 text-white" />
+                                </div>
+                              ) : (
+                                <div key={idx} className="relative">
+                                  <img
+                                    src={url}
+                                    alt={`Item ${idx + 1}`}
+                                    className="w-full h-10 sm:h-20 object-cover rounded"
+                                    loading="lazy"
+                                  />
+                                </div>
+                              )
+                            ))}
+                            {post.imageUrls.length > 4 && (
+                              <div className="h-10 sm:h-20 bg-gray-200 rounded flex items-center justify-center">
+                                <span className="text-gray-600 text-xs sm:text-sm font-semibold">+{post.imageUrls.length - 4}</span>
                               </div>
-                            ) : (
-                              <img key={idx} src={url} alt="" className="w-full h-8 sm:h-12 object-cover rounded" />
-                            )
-                          ))}
+                            )}
+                          </div>
                         </div>
+                      ) : post.imageUrl && isVideoUrl(post.imageUrl) ? (
+                        <video
+                          src={post.imageUrl}
+                          className="w-full h-12 sm:h-28 object-cover rounded-lg mb-1 sm:mb-2"
+                          style={{ background: '#1f2937' }}
+                        />
+                      ) : post.imageUrl ? (
+                        <img
+                          src={post.imageUrl}
+                          alt="Post content"
+                          className="w-full h-12 sm:h-28 object-cover rounded-lg mb-1 sm:mb-2"
+                          loading="lazy"
+                        />
+                      ) : null}
+
+                      {/* Video notes - Hidden on mobile */}
+                      {post.imageUrl && isVideoUrl(post.imageUrl) && post.platform === 'instagram' && (
+                        <div className="text-xs text-[#0066CC] mb-1 hidden sm:block">
+                          This video will be posted as an Instagram Reel.
+                        </div>
+                      )}
+
+                      {post.imageUrl && isVideoUrl(post.imageUrl) && post.platform === 'youtube' && (
+                        <div className="text-xs text-red-600 mb-1 hidden sm:block">
+                          YouTube video upload scheduled.
+                        </div>
+                      )}
+
+                      <p className="text-gray-800 text-xs sm:text-sm mb-1 sm:mb-2 line-clamp-1 sm:line-clamp-2 hidden sm:block">
+                        {post.caption}
+                      </p>
+                      
+                      <div className="space-y-0.5 sm:space-y-1.5 text-xs text-gray-500 mb-1 sm:mb-2">
+                        <div className="flex items-center space-x-1 sm:space-x-2">
+                          <Calendar className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
+                          <span className="text-xs">{new Date(post.scheduledAt).toLocaleDateString()}</span>
+                        </div>
+                        <div className="hidden sm:flex items-center space-x-2">
+                          <Clock className="h-3 w-3" />
+                          <span>{new Date(post.scheduledAt).toLocaleTimeString()}</span>
+                        </div>
+                        {post.publishedAt && (
+                          <div className="hidden sm:flex items-center space-x-2 text-green-600">
+                            <CheckCircle className="h-3 w-3" />
+                            <span>Published: {new Date(post.publishedAt).toLocaleString()}</span>
+                          </div>
+                        )}
                       </div>
-                    ) : post.imageUrl ? (
-                      isVideoUrl(post.imageUrl) ? (
-                        <div className="h-16 sm:h-20 bg-gray-800 rounded flex items-center justify-center mb-1">
-                          <Video className="h-4 w-4 text-white" />
+
+                      {/* Error details - Hidden on mobile */}
+                      {post.status === 'failed' && post.error && (
+                        <div className="bg-red-50 border border-red-200 rounded p-1 sm:p-2 mb-1 sm:mb-2 hidden sm:block">
+                          <p className="text-xs text-red-600 line-clamp-2">{post.error}</p>
                         </div>
-                      ) : (
-                        <img src={post.imageUrl} alt="" className="w-full h-16 sm:h-20 object-cover rounded mb-1" />
-                      )
-                    ) : null}
+                      )}
 
-                    {/* Caption - Truncated */}
-                    <p className="text-xs text-gray-700 line-clamp-1 mb-1">{post.caption}</p>
-                    
-                    {/* Date/Time - Compact */}
-                    <div className="flex items-center text-xs text-gray-400 space-x-1">
-                      <Calendar className="h-2.5 w-2.5" />
-                      <span>{new Date(post.scheduledAt).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})}</span>
+                      <div className="flex items-center justify-end mt-auto">
+                        <button
+                          onClick={() => handleDeletePost(post._id)}
+                          className="text-red-600 hover:text-red-800 p-0.5 sm:p-1"
+                          title="Delete from scheduler"
+                        >
+                          <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
+                        </button>
+                      </div>
                     </div>
-
-                    {/* Delete */}
-                    <button
-                      onClick={() => handleDeletePost(post._id)}
-                      className="text-red-500 hover:text-red-700 mt-1"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
                   </div>
                 );
               })}
@@ -814,10 +1063,10 @@ function ScheduledPosts() {
           )}
 
           {filteredPosts.length === 0 && !loading && (
-            <div className="text-center py-8">
-              <Calendar className="h-12 w-12 mx-auto mb-2 text-gray-400" />
-              <p className="text-sm text-[#0F172A]">No scheduled posts found</p>
-              <p className="text-xs text-[#475569] mt-1">
+            <div className="text-center py-6 sm:py-12">
+              <Calendar className="h-10 w-10 sm:h-16 sm:w-16 mx-auto mb-2 sm:mb-3 text-gray-400" />
+              <p className="text-sm sm:text-base text-[#0F172A]">No scheduled posts found</p>
+              <p className="text-xs sm:text-sm text-[#475569] mt-1 sm:mt-2">
                 Posts will appear here when scheduled
               </p>
             </div>

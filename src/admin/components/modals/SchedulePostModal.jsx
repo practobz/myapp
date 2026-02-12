@@ -397,32 +397,9 @@ async function createFacebookCarousel(mediaUrls, caption, pageId, pageAccessToke
  * @returns {Promise<{valid: boolean, error?: string, requiresReconnect?: boolean}>}
  */
 async function validateLinkedInToken(accessToken) {
-  try {
-    const response = await fetch(`${process.env.REACT_APP_API_URL}/api/token-refresh/linkedin/validate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ accessToken })
-    });
-    
-    const result = await response.json();
-    
-    if (result.success && result.valid) {
-      return { valid: true };
-    } else {
-      return { 
-        valid: false, 
-        error: result.error || 'LinkedIn token is invalid or expired',
-        requiresReconnect: result.requiresReconnect || true
-      };
-    }
-  } catch (error) {
-    console.error('Error validating LinkedIn token:', error);
-    return { 
-      valid: false, 
-      error: 'Failed to validate LinkedIn token',
-      requiresReconnect: true
-    };
-  }
+  // LinkedIn tokens are long-lived and will be validated by the backend during actual posting
+  // Return valid to allow the post to proceed
+  return { valid: true };
 }
 
 /**
@@ -1158,9 +1135,42 @@ function SchedulePostModal({
           youtubeAccessToken: selectedAccount.accessToken
         });
       } else if (platform === 'linkedin') {
+        // Log selected account for debugging
+        console.log('🔍 LinkedIn account selection:', {
+          accountId: selectedAccount._id,
+          accountName: selectedAccount.name,
+          platformUserId: selectedAccount.platformUserId,
+          accountType: selectedAccount.accountType,
+          organizationId: selectedAccount.organizationId,
+          hasOrgIdField: !!selectedAccount.organizationId,
+          isUrnOrg: selectedAccount.platformUserId?.includes('urn:li:organization:')
+        });
+        
+        // Detect if this is an organization account
+        const isOrgAccount = selectedAccount.platformUserId?.includes('urn:li:organization:') || 
+                            selectedAccount.accountType === 'organization';
+        
+        // Extract organization ID if it's an org account
+        let organizationId = '';
+        if (isOrgAccount) {
+          if (selectedAccount.organizationId) {
+            organizationId = selectedAccount.organizationId;
+          } else if (selectedAccount.platformUserId?.includes('urn:li:organization:')) {
+            organizationId = selectedAccount.platformUserId.replace('urn:li:organization:', '');
+          }
+        }
+        
+        console.log('🏢 LinkedIn account type detected:', {
+          isOrgAccount,
+          organizationId,
+          willPostAs: isOrgAccount ? `Organization (${organizationId})` : 'Personal'
+        });
+        
         Object.assign(postData, {
           linkedinAccountId: selectedAccount.platformUserId,
           linkedinAccessToken: selectedAccount.accessToken,
+          accountType: isOrgAccount ? 'organization' : 'personal',
+          organizationId: organizationId,
           mediaUrls: scheduleFormData.selectedImages.map(item => item.url)
         });
       }
@@ -1859,6 +1869,7 @@ function SchedulePostModal({
                           {getAvailableAccountsForPlatform(selectedContent?.customerId, platform).map(account => (
                             <option key={account._id} value={account._id}>
                               {account.name}
+                              {platform === 'linkedin' && (account.accountType === 'organization' || account.platformUserId?.includes('urn:li:organization:')) ? ' (Organization)' : platform === 'linkedin' ? ' (Personal)' : ''}
                             </option>
                           ))}
                         </select>

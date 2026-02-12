@@ -27,8 +27,10 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
   // LinkedIn OAuth configuration
   const LINKEDIN_CLIENT_ID = process.env.REACT_APP_LINKEDIN_CLIENT_ID;
   const LINKEDIN_REDIRECT_URI = process.env.REACT_APP_LINKEDIN_REDIRECT_URI;
-  // Only use available scopes
-  const LINKEDIN_SCOPE = 'openid profile email w_member_social';
+  // Use authorized scopes: profile reading, posting, and organization management
+  // Including r_basicprofile (though deprecated) as it's still required to read profile
+  // Removed openid as it's not authorized for this app
+  const LINKEDIN_SCOPE = 'r_basicprofile w_member_social r_organization_social w_organization_social rw_organization_admin r_organization_followers';
 
   // Helper: Get current customerId (same logic as storeCustomerSocialAccount)
   const getCustomerId = () => {
@@ -66,18 +68,42 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
 
   // Helper: Normalize accounts so each has an 'id' property
   const normalizeAccounts = (accounts) => {
-    return accounts.map(acc => ({
-      ...acc,
-      id: acc.id || acc._id,
-      profile: acc.profile
-        ? acc.profile
-        : {
-            name: acc.name || '',
-            headline: acc.headline || acc.preferred_username || '',
-            email: acc.email || '',
-            picture: acc.picture || ''
-          }
-    }));
+    return accounts.map(acc => {
+      const accountId = acc.id || acc._id || '';
+      const platformUserId = acc.platformUserId || '';
+      
+      // Detect if this is an organization account by checking the platformUserId or ID
+      const isOrgAccount = platformUserId.includes('urn:li:organization:') || accountId.includes('organization');
+      
+      // Extract organization ID if it's an org account
+      let organizationId = acc.organizationId || '';
+      if (!organizationId && isOrgAccount) {
+        // Try to extract from platformUserId or account ID
+        if (platformUserId.includes('urn:li:organization:')) {
+          organizationId = platformUserId.replace('urn:li:organization:', '');
+        } else if (accountId.includes('organization:')) {
+          // Extract from ID like: customerId_linkedin_urn:li:organization:106973671
+          const match = accountId.match(/organization:(\d+)/);
+          if (match) organizationId = match[1];
+        }
+      }
+      
+      return {
+        ...acc,
+        id: accountId,
+        token: acc.token || acc.accessToken, // Map accessToken from DB to token
+        accountType: acc.accountType || (isOrgAccount ? 'organization' : 'personal'),
+        organizationId: organizationId,
+        profile: acc.profile
+          ? acc.profile
+          : {
+              name: acc.name || '',
+              headline: acc.headline || acc.preferred_username || '',
+              email: acc.email || '',
+              picture: acc.picture || ''
+            }
+      };
+    });
   };
 
   // Load accounts from backend on mount
@@ -169,7 +195,7 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
       if (event.data?.source === 'linkedin-callback') {
         window.removeEventListener('message', handleMessage);
         if (event.data.success) {
-          handleLinkedInSuccess(event.data.access_token, event.data.userinfo);
+          handleLinkedInSuccess(event.data.access_token, event.data.profile);
         } else {
           setError(event.data.error || 'LinkedIn authentication failed');
           setLoading(false);
@@ -194,68 +220,154 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
   };
 
   // Handle successful LinkedIn authentication
-  const handleLinkedInSuccess = async (token, userinfo) => {
+  const handleLinkedInSuccess = async (token, profile) => {
     try {
-      if (userinfo && userinfo.sub) {
-        // Check if account already exists
-        const existingAccount = connectedAccounts.find(acc => acc.id === userinfo.sub);
-        if (existingAccount) {
-          setError('This LinkedIn account is already connected.');
-          setLoading(false);
-          return;
+      setLoading(true);
+      setError('');
+
+      // Try to fetch both personal profile and organizations
+      // This will work once Community Management API is approved
+      let orgsData = null;
+      try {
+        const orgsResponse = await fetch(`${process.env.REACT_APP_API_URL}/linkedin/organizations`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (orgsResponse.ok) {
+          orgsData = await orgsResponse.json();
+        } else {
+          console.warn('Organization access not available yet (Community Management API may need approval)');
         }
+      } catch (orgError) {
+        console.warn('Could not fetch organizations:', orgError.message);
+      }
 
-        // Create profile object from userinfo
-        const profile = {
-          id: userinfo.sub,
-          name: userinfo.name || '',
-          headline: userinfo.preferred_username || '',
-          email: userinfo.email || '',
-          picture: userinfo.picture || ''
+      // If organization fetch failed, use profile directly
+      if (!orgsData) {
+        // Extract localized values safely
+        const firstName = profile.localizedFirstName || profile.firstName?.localized?.en_US || '';
+        const lastName = profile.localizedLastName || profile.lastName?.localized?.en_US || '';
+        const headline = typeof profile.headline === 'string' ? profile.headline : (profile.headline?.localized?.en_US || '');
+        const name = `${firstName} ${lastName}`.trim() || 'LinkedIn User';
+        
+        orgsData = {
+          personal: {
+            id: profile.id,
+            name: name,
+            headline: headline,
+            firstName: firstName,
+            lastName: lastName,
+            picture: '',
+            type: 'personal'
+          },
+          organizations: []
         };
+      }
+      console.log('Organizations data:', orgsData);
 
-        // Add new account
-        const newAccount = {
-          id: userinfo.sub,
+      // Combine personal and organization accounts
+      const allAccounts = [];
+      
+      // Add personal account
+      if (orgsData.personal) {
+        allAccounts.push({
+          id: orgsData.personal.id,
+          _id: orgsData.personal.id,
           token: token,
-          profile: profile,
+          profile: {
+            name: orgsData.personal.name,
+            headline: orgsData.personal.headline || orgsData.personal.email,
+            email: orgsData.personal.email,
+            picture: orgsData.personal.picture
+          },
+          accountType: 'personal',
           connectedAt: new Date().toISOString(),
           lastRefreshed: new Date().toISOString()
-        };
-
-        const updatedAccounts = [...connectedAccounts, newAccount];
-        setConnectedAccounts(updatedAccounts);
-        
-        // Set as selected if it's the first account
-        if (!selectedAccountId) {
-          setSelectedAccountId(newAccount.id);
-          setUserData('selected_linkedin_account', newAccount.id);
-        }
-
-        // Save to localStorage with user-specific keys
-        setUserData('connected_linkedin_accounts', updatedAccounts);
-        setUserData('linkedin_connected_accounts', updatedAccounts); // <-- Add this line
-        
-        // Store customer social account for admin access
-        await storeCustomerSocialAccount(newAccount);
-        
-        setError('');
-        setSuccess('LinkedIn account connected successfully!');
-        setLoading(false);
-
-        // Notify parent that LinkedIn is now connected
-        if (onConnectionStatusChange) {
-          onConnectionStatusChange(true);
-        }
-
-        // Refetch LinkedIn data
-        fetchLinkedinData();
-      } else {
-        setError('Failed to get user information from LinkedIn');
-        setLoading(false);
+        });
       }
+
+      // Add organization accounts
+      if (orgsData.organizations && orgsData.organizations.length > 0) {
+        orgsData.organizations.forEach(org => {
+          allAccounts.push({
+            id: org.id,
+            _id: org.id,
+            organizationId: org.organizationId,
+            token: token,
+            profile: {
+              name: org.name,
+              headline: org.vanityName ? `@${org.vanityName}` : 'Organization Page',
+              email: '',
+              picture: org.picture
+            },
+            accountType: 'organization',
+            connectedAt: new Date().toISOString(),
+            lastRefreshed: new Date().toISOString()
+          });
+        });
+      }
+
+      if (allAccounts.length === 0) {
+        throw new Error('No accounts found');
+      }
+
+      // Filter out already connected accounts
+      const newAccounts = allAccounts.filter(acc => 
+        !connectedAccounts.find(existing => existing.id === acc.id)
+      );
+
+      if (newAccounts.length === 0) {
+        setError('All these LinkedIn accounts are already connected.');
+        setLoading(false);
+        return;
+      }
+
+      // Update state with all accounts
+      const updatedAccounts = [...connectedAccounts, ...newAccounts];
+      setConnectedAccounts(updatedAccounts);
+      
+      // Set as selected if it's the first account
+      if (!selectedAccountId) {
+        setSelectedAccountId(newAccounts[0].id);
+        setUserData('selected_linkedin_account', newAccounts[0].id);
+      }
+
+      // Save to localStorage
+      setUserData('connected_linkedin_accounts', updatedAccounts);
+      setUserData('linkedin_connected_accounts', updatedAccounts);
+      
+      // Store each new account in backend
+      for (const account of newAccounts) {
+        await storeCustomerSocialAccount(account);
+      }
+
+      const orgCount = newAccounts.filter(a => a.accountType === 'organization').length;
+      const personalCount = newAccounts.filter(a => a.accountType === 'personal').length;
+      let successMsg = 'Successfully connected ';
+      if (personalCount > 0) successMsg += `${personalCount} personal profile${personalCount > 1 ? 's' : ''}`;
+      if (orgCount > 0 && personalCount > 0) successMsg += ' and ';
+      if (orgCount > 0) successMsg += `${orgCount} organization page${orgCount > 1 ? 's' : ''}`;
+      successMsg += '!';
+      
+      // Add info message about organization access if not available
+      if (orgsData && orgsData.organizations && orgsData.organizations.length === 0) {
+        successMsg += ' (Note: Organization pages require Community Management API approval from LinkedIn)';
+      }
+      
+      setSuccess(successMsg);
+      
+      if (onConnectionStatusChange) {
+        onConnectionStatusChange(true);
+      }
+
+      // Refetch LinkedIn data
+      fetchLinkedinData();
     } catch (err) {
-      setError('Failed to process LinkedIn authentication');
+      setError(`Failed to connect LinkedIn: ${err.message}`);
+      console.error('LinkedIn connection error:', err);
+    } finally {
       setLoading(false);
     }
   };
@@ -319,11 +431,11 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
 
   const selectedAccount = connectedAccounts.find(acc => acc.id === selectedAccountId);
 
-  // OIDC userinfo state
-  const [oidcUserinfo, setOidcUserinfo] = useState(null);
+  // LinkedIn profile state
+  const [linkedinProfile, setLinkedinProfile] = useState(null);
 
-  // Fetch OIDC userinfo for selected account
-  const fetchOidcUserinfo = async (accountId) => {
+  // Fetch LinkedIn profile for selected account
+  const fetchLinkedinProfile = async (accountId) => {
     const account = connectedAccounts.find(acc => acc.id === accountId);
     if (!account) return;
     setLoading(true);
@@ -336,14 +448,14 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
         credentials: 'include'
       });
       const data = await response.json();
-      if (data && data.sub) {
-        setOidcUserinfo(data);
-        setSuccess('Fetched OIDC userinfo successfully!');
+      if (data && data.id) {
+        setLinkedinProfile(data);
+        setSuccess('Fetched LinkedIn profile successfully!');
       } else {
-        setError('Failed to fetch OIDC userinfo.');
+        setError('Failed to fetch LinkedIn profile.');
       }
     } catch (err) {
-      setError('Failed to fetch OIDC userinfo.');
+      setError('Failed to fetch LinkedIn profile.');
     }
     setLoading(false);
   };
@@ -613,6 +725,8 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
         }
       } else if (postImagePreview) {
         console.log('🖼️ Attempting to upload image from URL...');
+        console.log('🔑 Selected account:', selectedAccount);
+        console.log('🔑 Token available:', !!selectedAccount.token);
         // Handle existing image from bucket
         try {
           const imageResponse = await fetch(`${process.env.REACT_APP_API_URL}/linkedin/upload-image-from-url`, {
@@ -622,7 +736,9 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
             },
             body: JSON.stringify({
               imageUrl: postImagePreview,
-              linkedin_token: selectedAccount.token
+              linkedin_token: selectedAccount.token,
+              accountType: selectedAccount.accountType || 'personal',
+              organizationId: selectedAccount.organizationId || ''
             })
           });
 
@@ -646,8 +762,12 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
       const payload = {
         text: postText,
         linkedin_token: selectedAccount.token,
+        accountType: selectedAccount.accountType || 'personal',
+        organizationId: selectedAccount.organizationId || '',
         ...(imageAsset && { imageAsset })
       };
+      
+      console.log('📤 Post payload:', payload);
 
       const response = await axios.post(
         `${process.env.REACT_APP_API_URL}/linkedin/post`,
@@ -681,6 +801,8 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
       }
     } catch (err) {
       console.error('❌ Error creating post:', err);
+      console.error('❌ Error response:', err.response?.data);
+      console.error('❌ Error status:', err.response?.status);
       
       // Provide more specific error messages
       let errorMessage = 'Failed to create post. Please try again.';
@@ -720,6 +842,9 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
               <Linkedin className="h-4 w-4 text-blue-700" />
             )}
             <span>{selectedAccount?.profile?.name || 'Select Account'}</span>
+            {selectedAccount?.accountType === 'organization' && (
+              <span className="text-xs px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded">Org</span>
+            )}
           </div>
           {showAccountSelector ? (
             <ChevronDown className="h-4 w-4" />
@@ -827,22 +952,31 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
                       )}
                     </div>
                     <p className="text-xs sm:text-sm text-gray-600 truncate">{account.profile?.headline || account.profile?.email}</p>
-                    <p className="text-xs text-gray-500">
-                      {/* Fix: Parse and format the connection date correctly */}
-                      Connected {
-                        (() => {
-                          let date = account.connectedAt;
-                          if (date) {
-                            // Try to parse ISO string or timestamp
-                            const parsedDate = new Date(date);
-                            if (!isNaN(parsedDate.getTime())) {
-                              return parsedDate.toLocaleDateString();
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${
+                        account.accountType === 'organization' 
+                          ? 'bg-purple-100 text-purple-700' 
+                          : 'bg-green-100 text-green-700'
+                      }`}>
+                        {account.accountType === 'organization' ? '📄 Organization' : '👤 Personal'}
+                      </span>
+                      <p className="text-xs text-gray-500">
+                        {/* Fix: Parse and format the connection date correctly */}
+                        {
+                          (() => {
+                            let date = account.connectedAt;
+                            if (date) {
+                              // Try to parse ISO string or timestamp
+                              const parsedDate = new Date(date);
+                              if (!isNaN(parsedDate.getTime())) {
+                                return parsedDate.toLocaleDateString();
+                              }
                             }
-                          }
-                          return "Unknown";
-                        })()
-                      }
-                    </p>
+                            return "Unknown";
+                          })()
+                        }
+                      </p>
+                    </div>
                   </div>
                   <button
                     onClick={(e) => {
@@ -1124,9 +1258,11 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
                 </div>
                 
                 <div className="mt-4 bg-white rounded-lg p-3 sm:border border-blue-200">
+                  <p className="text-xs text-blue-600 mb-2">
+                    <strong>Personal Accounts:</strong> Works immediately with any LinkedIn account.
+                  </p>
                   <p className="text-xs text-blue-600">
-                    <strong>Note:</strong> This integration works with any LinkedIn account. 
-                    Advanced features like detailed analytics require LinkedIn Marketing Developer Platform access.
+                    <strong>Organization Pages:</strong> To manage LinkedIn organization pages, your app needs LinkedIn's Community Management API approval (currently in review). Once approved, reconnect to access organization pages.
                   </p>
                 </div>
               </div>
@@ -1176,7 +1312,7 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
                     </div>
                   </div>
 
-                  {/* {renderPostCreation()} - Post creation removed */}
+                  {renderPostCreation()}
                 </>
               )}
             </div>

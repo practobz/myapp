@@ -720,7 +720,7 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
     try {
       const LINKEDIN_CLIENT_ID = process.env.REACT_APP_LINKEDIN_CLIENT_ID;
       const LINKEDIN_REDIRECT_URI = process.env.REACT_APP_LINKEDIN_REDIRECT_URI;
-      const LINKEDIN_SCOPE = 'openid profile email w_member_social';
+      const LINKEDIN_SCOPE = 'r_basicprofile w_member_social r_organization_social w_organization_social rw_organization_admin r_organization_followers';
 
       if (!LINKEDIN_CLIENT_ID || !LINKEDIN_REDIRECT_URI) {
         throw new Error('LinkedIn OAuth configuration is missing');
@@ -745,7 +745,7 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
         if (event.data?.source === 'linkedin-callback') {
           window.removeEventListener('message', handleMessage);
           if (event.data.success) {
-            handleLinkedInSuccess(event.data.access_token, event.data.userinfo);
+            handleLinkedInSuccess(event.data.access_token, event.data.profile);
           } else {
             setError(event.data.error || 'LinkedIn authentication failed');
             setLoading(false);
@@ -773,17 +773,17 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
     }
   };
 
-  const handleLinkedInSuccess = async (token, userinfo) => {
+  const handleLinkedInSuccess = async (token, profile) => {
     try {
-      if (userinfo && userinfo.sub) {
+      if (profile && profile.id) {
         // Prepare LinkedIn account data for saving
         const accountData = {
           customerId: customer.id,
           platform: 'linkedin',
-          platformUserId: userinfo.sub,
-          name: userinfo.name || '',
-          email: userinfo.email || '',
-          profilePicture: userinfo.picture || '',
+          platformUserId: profile.id,
+          name: `${profile.localizedFirstName || ''} ${profile.localizedLastName || ''}`.trim(),
+          email: '', // Email requires r_emailaddress scope
+          profilePicture: profile.profilePicture?.displayImage || '',
           accessToken: token,
           pages: [], // LinkedIn doesn't have pages like Facebook
           connectedAt: new Date().toISOString()
@@ -792,7 +792,7 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
         console.log('📤 Saving LinkedIn account data:', { 
           customerId: customer.id, 
           platform: 'linkedin', 
-          platformUserId: userinfo.sub 
+          platformUserId: profile.id 
         });
 
         // Save to database

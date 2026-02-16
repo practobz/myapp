@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Linkedin, ArrowLeft, Save, ExternalLink, CheckCircle, Plus, Settings, ChevronDown, ChevronRight, Loader2, Users, UserCheck, Trash2, Send, Image, FileText, TrendingUp, Eye, MessageSquare, Share2, Heart } from 'lucide-react';
+import { Linkedin, ArrowLeft, Save, ExternalLink, CheckCircle, Plus, Settings, ChevronDown, ChevronRight, Loader2, Users, UserCheck, Trash2, Send, Image, FileText, TrendingUp, Eye, MessageSquare, Share2, Heart, MousePointer } from 'lucide-react';
 import { useAuth } from '../../admin/contexts/AuthContext';
 import axios from 'axios';
 import { getUserData, setUserData, removeUserData, migrateToUserSpecificStorage } from '../../utils/sessionUtils';
@@ -464,6 +464,15 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
   const [linkedinData, setLinkedinData] = useState([]);
   const [linkedinDataLoading, setLinkedinDataLoading] = useState(true);
 
+  // Posts state
+  const [posts, setPosts] = useState([]);
+  const [postsLoading, setPostsLoading] = useState(false);
+  const [postsError, setPostsError] = useState('');
+
+  // Post analytics state
+  const [postAnalytics, setPostAnalytics] = useState({});
+  const [loadingAnalytics, setLoadingAnalytics] = useState({});
+
   // Fetch LinkedIn data from API
   const fetchLinkedinData = async () => {
     setLinkedinDataLoading(true);
@@ -481,24 +490,174 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
   const [linkedinAnalytics, setLinkedinAnalytics] = useState({
     profileViews: '--',
     connections: '--',
-    postEngagement: '--'
+    postEngagement: '--',
+    followers: '--'
   });
 
-  // Fetch LinkedIn analytics from API
+  // Calculate analytics from local data (API requires partner access)
   const fetchLinkedinAnalytics = async () => {
+    if (!selectedAccount) return;
+    
+    // Load local posts for this account
+    const storageKey = `linkedin_posts_${selectedAccount.id}`;
+    const localPosts = JSON.parse(localStorage.getItem(storageKey) || '[]');
+    
+    // Calculate total engagement from posts
+    let totalEngagement = 0;
+    localPosts.forEach(post => {
+      if (post.analytics) {
+        totalEngagement += (post.analytics.likeCount || 0) + 
+                          (post.analytics.commentCount || 0) + 
+                          (post.analytics.shareCount || 0);
+      }
+    });
+    
+    // If organization account, fetch real statistics
+    if (selectedAccount.accountType === 'organization' && selectedAccount.organizationId) {
+      try {
+        // Fetch organization statistics and followers in parallel
+        const [statsRes, followersRes] = await Promise.all([
+          axios.get(`${process.env.REACT_APP_API_URL}/linkedin/organization-statistics`, {
+            params: {
+              token: selectedAccount.token,
+              organizationId: selectedAccount.organizationId
+            }
+          }).catch(err => ({ data: { success: false } })),
+          axios.get(`${process.env.REACT_APP_API_URL}/linkedin/organization-followers`, {
+            params: {
+              token: selectedAccount.token,
+              organizationId: selectedAccount.organizationId
+            }
+          }).catch(err => ({ data: { success: false } }))
+        ]);
+        
+        if (statsRes.data.success) {
+          const stats = statsRes.data.statistics;
+          const followersCount = followersRes.data.success ? followersRes.data.followers.total : '--';
+          
+          setLinkedinAnalytics({
+            profileViews: stats.uniqueImpressionsCount || 0,
+            connections: '--', // Not applicable for organizations
+            postEngagement: stats.likeCount + stats.commentCount + stats.shareCount,
+            followers: followersCount,
+            impressionCount: stats.impressionCount || 0,
+            clickCount: stats.clickCount || 0,
+            engagementRate: (stats.engagement * 100).toFixed(2) + '%'
+          });
+          return;
+        }
+      } catch (error) {
+        console.warn('Failed to fetch organization analytics:', error);
+      }
+    }
+    
+    // Fallback to local analytics
+    setLinkedinAnalytics({
+      profileViews: '--', // Requires partner API access
+      connections: '--', // Requires partner API access
+      postEngagement: totalEngagement,
+      followers: '--' // Requires partner API access
+    });
+  };
+
+  // Fetch posts from LinkedIn API (now working with v2/posts!)
+  const fetchPosts = async () => {
+    if (!selectedAccount) return;
+    
+    setPostsLoading(true);
+    setPostsError('');
+    
     try {
-      const res = await axios.get(`${process.env.REACT_APP_API_URL}/linkedin/analytics`);
-      setLinkedinAnalytics({
-        profileViews: res.data.profileViews ?? '--',
-        connections: res.data.connections ?? '--',
-        postEngagement: res.data.postEngagement ?? '--'
+      const res = await axios.get(`${process.env.REACT_APP_API_URL}/linkedin/posts`, {
+        params: {
+          token: selectedAccount.token,
+          accountType: selectedAccount.accountType || 'personal',
+          organizationId: selectedAccount.organizationId || ''
+        }
       });
+      
+      if (res.data.success) {
+        const fetchedPosts = res.data.posts || [];
+        console.log('📊 Fetched posts from LinkedIn:', fetchedPosts.length);
+        if (fetchedPosts.length > 0) {
+          console.log('📊 Sample post analytics:', fetchedPosts[0].analytics);
+        }
+        
+        // Merge with locally tracked posts
+        const storageKey = `linkedin_posts_${selectedAccount.id}`;
+        const localPosts = JSON.parse(localStorage.getItem(storageKey) || '[]');
+        
+        // Combine and deduplicate
+        const allPosts = [...fetchedPosts];
+        localPosts.forEach(localPost => {
+          if (!allPosts.find(p => p.id === localPost.id)) {
+            allPosts.push(localPost);
+          }
+        });
+        
+        // Sort by date
+        allPosts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        
+        setPosts(allPosts);
+        
+        // Initialize analytics from backend data
+        const analyticsMap = {};
+        allPosts.forEach(post => {
+          const analytics = post.analytics || {
+            likeCount: 0,
+            commentCount: 0,
+            shareCount: 0,
+            liked: false
+          };
+          analyticsMap[post.id] = analytics;
+          console.log(`📊 Post ${post.id.substring(0, 30)}... analytics:`, analytics);
+        });
+        setPostAnalytics(analyticsMap);
+      } else {
+        setPostsError('Failed to fetch posts');
+      }
     } catch (error) {
-      setLinkedinAnalytics({
-        profileViews: '--',
-        connections: '--',
-        postEngagement: '--'
+      console.error('Error fetching posts:', error);
+      setPostsError(error.response?.data?.error || 'Failed to fetch posts from LinkedIn');
+      
+      // Fallback to local posts
+      const storageKey = `linkedin_posts_${selectedAccount.id}`;
+      const localPosts = JSON.parse(localStorage.getItem(storageKey) || '[]');
+      setPosts(localPosts);
+    } finally {
+      setPostsLoading(false);
+    }
+  };
+
+  // Fetch analytics for a specific post
+  const fetchPostAnalytics = async (postId) => {
+    if (!selectedAccount || !postId) return;
+    
+    setLoadingAnalytics(prev => ({ ...prev, [postId]: true }));
+    
+    try {
+      const res = await axios.get(`${process.env.REACT_APP_API_URL}/linkedin/social-actions`, {
+        params: {
+          token: selectedAccount.token,
+          postId: postId
+        }
       });
+      
+      if (res.data.success) {
+        setPostAnalytics(prev => ({
+          ...prev,
+          [postId]: res.data.actions
+        }));
+      }
+    } catch (error) {
+      console.warn(`Failed to fetch analytics for post ${postId}:`, error);
+      // Set default values
+      setPostAnalytics(prev => ({
+        ...prev,
+        [postId]: { likeCount: 0, commentCount: 0, liked: false }
+      }));
+    } finally {
+      setLoadingAnalytics(prev => ({ ...prev, [postId]: false }));
     }
   };
 
@@ -513,6 +672,7 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
   useEffect(() => {
     if (selectedAccount) {
       fetchLinkedinAnalytics();
+      fetchPosts();
     }
   }, [selectedAccount]);
 
@@ -786,6 +946,45 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
           successMessage += ' (Note: Image upload failed, posted as text-only)';
         }
         setPostSuccess(successMessage);
+        
+        // Store post locally for tracking
+        const newPost = {
+          id: response.data.post?.id || `local-${Date.now()}`,
+          shareUrn: response.data.post?.id || `urn:li:share:${Date.now()}`,
+          text: postText,
+          hasImage: !!postImagePreview,
+          imageUrl: postImagePreview,
+          createdAt: new Date().toISOString(),
+          lifecycleState: 'PUBLISHED',
+          visibility: 'PUBLIC',
+          analytics: {
+            likeCount: 0,
+            commentCount: 0,
+            shareCount: 0,
+            impressions: 0,
+            engagement: 0
+          }
+        };
+        
+        // Add to posts list
+        setPosts(prev => [newPost, ...prev]);
+        
+        // Store analytics
+        setPostAnalytics(prev => ({
+          ...prev,
+          [newPost.id]: {
+            likeCount: 0,
+            commentCount: 0,
+            shareCount: 0,
+            liked: false
+          }
+        }));
+        
+        // Save to localStorage for persistence
+        const storageKey = `linkedin_posts_${selectedAccount.id}`;
+        const existingPosts = JSON.parse(localStorage.getItem(storageKey) || '[]');
+        localStorage.setItem(storageKey, JSON.stringify([newPost, ...existingPosts].slice(0, 50))); // Keep last 50
+        
         setPostText('');
         setPostImage(null);
         setPostImagePreview(null);
@@ -998,6 +1197,13 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
   };
 
   // Render post creation section
+  // Function to clean LinkedIn hashtag format
+  const cleanLinkedInText = (text) => {
+    if (!text) return '';
+    // Replace LinkedIn hashtag format {hashtag|\#|tag} with #tag
+    return text.replace(/\{hashtag\|\\#\|([^}]+)\}/g, '#$1');
+  };
+
   const renderPostCreation = () => {
     if (!selectedAccount) return null;
 
@@ -1193,6 +1399,358 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
     );
   };
 
+  // Render analytics dashboard
+  const renderAnalyticsDashboard = () => {
+    if (!selectedAccount) return null;
+
+    return (
+      <div className="bg-white sm:rounded-2xl border-y sm:border border-gray-200 shadow-sm p-4 sm:p-6 mb-4 sm:mb-8">
+        <div className="flex items-center gap-2 sm:gap-3 mb-4">
+          <div className="bg-purple-600 p-2 rounded-lg">
+            <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
+          </div>
+          <div>
+            <h3 className="text-base sm:text-lg font-semibold text-gray-900">Analytics Overview</h3>
+            <p className="text-xs sm:text-sm text-gray-600 hidden sm:block">Track your LinkedIn performance</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <div className={`bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 ${
+            selectedAccount.accountType === 'organization' && typeof linkedinAnalytics.profileViews === 'number' ? '' : 'opacity-60'
+          }`}>
+            <div className="flex items-center gap-2 mb-2">
+              <Eye className="h-5 w-5 text-blue-600" />
+              <span className="text-xs text-gray-600">
+                {selectedAccount.accountType === 'organization' ? 'Impressions' : 'Profile Views'}
+              </span>
+            </div>
+            <div className="text-2xl font-bold text-gray-900">{linkedinAnalytics.profileViews}</div>
+            <div className="text-xs text-gray-500 mt-1">
+              {selectedAccount.accountType === 'organization' && typeof linkedinAnalytics.profileViews === 'number' 
+                ? '✅ Live data' 
+                : 'Partner API required'}
+            </div>
+          </div>
+
+          <div className={`bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 ${
+            selectedAccount.accountType === 'organization' && typeof linkedinAnalytics.followers === 'number' ? '' : 'opacity-60'
+          }`}>
+            <div className="flex items-center gap-2 mb-2">
+              <Users className="h-5 w-5 text-green-600" />
+              <span className="text-xs text-gray-600">
+                {selectedAccount.accountType === 'organization' ? 'Followers' : 'Connections'}
+              </span>
+            </div>
+            <div className="text-2xl font-bold text-gray-900">
+              {selectedAccount.accountType === 'organization' ? linkedinAnalytics.followers : linkedinAnalytics.connections}
+            </div>
+            <div className="text-xs text-gray-500 mt-1">
+              {selectedAccount.accountType === 'organization' && typeof linkedinAnalytics.followers === 'number'
+                ? '✅ Live data'
+                : 'Partner API required'}
+            </div>
+          </div>
+
+          <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <FileText className="h-5 w-5 text-purple-600" />
+              <span className="text-xs text-gray-600">Total Posts</span>
+            </div>
+            <div className="text-2xl font-bold text-gray-900">{posts.length}</div>
+            <div className="text-xs text-green-600 mt-1">Tracked locally</div>
+          </div>
+
+          <div className={`bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-4 ${
+            selectedAccount.accountType === 'organization' && typeof linkedinAnalytics.postEngagement === 'number' ? '' : ''
+          }`}>
+            <div className="flex items-center gap-2 mb-2">
+              <Heart className="h-5 w-5 text-orange-600" />
+              <span className="text-xs text-gray-600">Total Engagement</span>
+            </div>
+            <div className="text-2xl font-bold text-gray-900">
+              {linkedinAnalytics.postEngagement || 0}
+            </div>
+            <div className="text-xs text-green-600 mt-1">
+              {selectedAccount.accountType === 'organization' && typeof linkedinAnalytics.postEngagement === 'number'
+                ? '✅ Live data'
+                : 'From tracked posts'}
+            </div>
+          </div>
+        </div>
+        
+        {/* Additional metrics for organizations */}
+        {selectedAccount.accountType === 'organization' && linkedinAnalytics.impressionCount !== undefined && (
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mt-4">
+            <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <TrendingUp className="h-5 w-5 text-indigo-600" />
+                <span className="text-xs text-gray-600">Total Impressions</span>
+              </div>
+              <div className="text-2xl font-bold text-gray-900">{linkedinAnalytics.impressionCount}</div>
+              <div className="text-xs text-green-600 mt-1">✅ Live data</div>
+            </div>
+            
+            <div className="bg-gradient-to-br from-pink-50 to-pink-100 rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <MousePointer className="h-5 w-5 text-pink-600" />
+                <span className="text-xs text-gray-600">Total Clicks</span>
+              </div>
+              <div className="text-2xl font-bold text-gray-900">{linkedinAnalytics.clickCount}</div>
+              <div className="text-xs text-green-600 mt-1">✅ Live data</div>
+            </div>
+            
+            <div className="bg-gradient-to-br from-teal-50 to-teal-100 rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <TrendingUp className="h-5 w-5 text-teal-600" />
+                <span className="text-xs text-gray-600">Engagement Rate</span>
+              </div>
+              <div className="text-2xl font-bold text-gray-900">{linkedinAnalytics.engagementRate || '0%'}</div>
+              <div className="text-xs text-green-600 mt-1">✅ Live data</div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Render posts feed
+  const renderPostsFeed = () => {
+    if (!selectedAccount) return null;
+
+    return (
+      <div className="bg-white sm:rounded-2xl border-y sm:border border-gray-200 shadow-sm p-4 sm:p-6 mb-4 sm:mb-8">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="bg-blue-600 p-2 rounded-lg">
+              <FileText className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
+            </div>
+            <div>
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900">Recent Posts</h3>
+              <p className="text-xs sm:text-sm text-gray-600 hidden sm:block">Your latest LinkedIn posts</p>
+            </div>
+          </div>
+          <button
+            onClick={fetchPosts}
+            disabled={postsLoading}
+            className="flex items-center gap-2 px-3 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors text-sm disabled:opacity-50"
+          >
+            <Loader2 className={`h-4 w-4 ${postsLoading ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">Refresh</span>
+          </button>
+        </div>
+        
+        {/* Success banner - posts are now fetching from LinkedIn! */}
+        {posts.length > 0 && (
+          <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+            <p className="text-xs text-green-700">
+              ✅ <strong>Connected!</strong> Showing {posts.length} posts from your LinkedIn account.
+            </p>
+          </div>
+        )}
+
+        {postsLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+            <span className="ml-2">Loading posts...</span>
+          </div>
+        ) : postsError ? (
+          <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-red-600 text-sm">{postsError}</p>
+          </div>
+        ) : posts.length === 0 ? (
+          <div className="text-center py-12 text-gray-500">
+            <FileText className="h-16 w-16 mx-auto mb-4 opacity-50" />
+            <p className="font-medium">No posts tracked yet</p>
+            <p className="text-sm">Create your first post through this app to see it here</p>
+            <p className="text-xs mt-2 text-gray-400">Note: Only posts created via this app are tracked locally</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {posts.map((post) => {
+              const analytics = postAnalytics[post.id] || { likeCount: 0, commentCount: 0, liked: false };
+              const isLoadingAnalytics = loadingAnalytics[post.id];
+              
+              return (
+                <div key={post.id} className="group border border-gray-200 rounded-xl overflow-hidden hover:shadow-lg transition-all duration-300 bg-white flex flex-col">
+                  {/* Post Header */}
+                  <div className="p-4 border-b border-gray-100">
+                    <div className="flex items-center gap-3 mb-2">
+                      {selectedAccount.profile?.picture ? (
+                        <img
+                          src={selectedAccount.profile.picture}
+                          alt={selectedAccount.profile.name}
+                          className="w-10 h-10 rounded-full flex-shrink-0"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-700 rounded-full flex items-center justify-center flex-shrink-0">
+                          <Linkedin className="h-5 w-5 text-white" />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-gray-900 text-sm truncate">{selectedAccount.profile?.name}</p>
+                        <p className="text-xs text-gray-500">
+                          {new Date(post.createdAt).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric'
+                          })}
+                        </p>
+                      </div>
+                      <span className={`text-xs px-2 py-1 rounded-full flex-shrink-0 ${
+                        post.lifecycleState === 'PUBLISHED' 
+                          ? 'bg-green-100 text-green-700' 
+                          : 'bg-gray-100 text-gray-700'
+                      }`}>
+                        {post.lifecycleState === 'PUBLISHED' ? '✓' : '•'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Post Content */}
+                  <div className="p-4 flex-1 flex flex-col">
+                    {post.text && (
+                      <p className="text-gray-800 text-sm mb-3 line-clamp-4 flex-1">
+                        {cleanLinkedInText(post.text)}
+                      </p>
+                    )}
+
+                    {/* Media Display - Show actual image/video if URL is available */}
+                    {post.hasMedia && post.mediaUrl && (
+                      <div className="mb-3 rounded-lg overflow-hidden border border-gray-200 bg-gray-50">
+                        {post.mediaType === 'video' || post.isVideo ? (
+                          <div className="relative">
+                            <video
+                              src={post.mediaUrl}
+                              controls
+                              className="w-full max-h-96 object-cover bg-black"
+                              poster={post.altText}
+                              onError={(e) => {
+                                // If video fails to load, show a message
+                                e.target.style.display = 'none';
+                                const parent = e.target.parentElement;
+                                if (parent && !parent.querySelector('.error-message')) {
+                                  const msg = document.createElement('div');
+                                  msg.className = 'error-message bg-gray-100 p-6 text-center';
+                                  msg.innerHTML = `
+                                    <div class="flex flex-col items-center gap-2">
+                                      <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                                      </svg>
+                                      <p class="text-sm text-gray-600">Video preview unavailable</p>
+                                      <p class="text-xs text-gray-500">Click "View on LinkedIn" below to watch</p>
+                                    </div>
+                                  `;
+                                  parent.appendChild(msg);
+                                }
+                              }}
+                            >
+                              Your browser does not support the video tag.
+                            </video>
+                          </div>
+                        ) : (
+                          <img
+                            src={post.mediaUrl}
+                            alt={post.altText || 'LinkedIn post media'}
+                            className="w-full max-h-96 object-cover"
+                            onError={(e) => {
+                              // If image fails to load (CORS or other issues), show message
+                              e.target.style.display = 'none';
+                              const parent = e.target.parentElement;
+                              if (parent && !parent.querySelector('.error-message')) {
+                                const msg = document.createElement('div');
+                                msg.className = 'error-message bg-gray-100 p-6 text-center';
+                                msg.innerHTML = `
+                                  <div class="flex flex-col items-center gap-2">
+                                    <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                    </svg>
+                                    <p class="text-sm text-gray-600">Image preview unavailable</p>
+                                    <p class="text-xs text-gray-500">Click "View on LinkedIn" below to see the full post</p>
+                                  </div>
+                                `;
+                                parent.appendChild(msg);
+                              }
+                            }}
+                          />
+                        )}
+                      </div>
+                    )}
+
+                    {/* Media Indicator - Show only if no URL available */}
+                    {post.hasMedia && !post.mediaUrl && (
+                      <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-3 mb-3">
+                        <div className="flex items-center gap-2 mb-2">
+                          {post.isVideo ? (
+                            <>
+                              <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                                <svg className="w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 24 24">
+                                  <path d="M8 5v14l11-7z"/>
+                                </svg>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-semibold text-gray-900 text-xs">Video Post</p>
+                                <p className="text-xs text-gray-600">Click to view on LinkedIn</p>
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                                <Image className="h-5 w-5 text-blue-600" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-semibold text-gray-900 text-xs">Image Post</p>
+                                <p className="text-xs text-gray-600">Click to view on LinkedIn</p>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Post Footer - Engagement Stats */}
+                  <div className="p-4 bg-gray-50 border-t border-gray-100">
+                    {isLoadingAnalytics ? (
+                      <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span className="text-xs">Loading...</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className="flex items-center gap-1.5 text-gray-600">
+                            <Heart className={`h-4 w-4 ${analytics.liked ? 'fill-red-500 text-red-500' : ''}`} />
+                            <span className="text-xs font-medium">{analytics.likeCount || 0}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-gray-600">
+                            <MessageSquare className="h-4 w-4" />
+                            <span className="text-xs font-medium">{analytics.commentCount || 0}</span>
+                          </div>
+                        </div>
+                        {post.linkedinUrl && (
+                          <a
+                            href={post.linkedinUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs font-medium group-hover:scale-105 transform"
+                          >
+                            <ExternalLink className="h-3 w-3" />
+                            <span>View</span>
+                          </a>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Sticky Header */}
@@ -1312,7 +1870,9 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
                     </div>
                   </div>
 
+                  {selectedAccount.accountType === 'organization' && renderAnalyticsDashboard()}
                   {renderPostCreation()}
+                  {selectedAccount.accountType === 'organization' && renderPostsFeed()}
                 </>
               )}
             </div>

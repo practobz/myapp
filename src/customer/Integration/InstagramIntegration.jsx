@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Instagram, TrendingUp, BarChart3, ExternalLink, CheckCircle, AlertCircle, Loader2, Users, Heart, MessageCircle, Eye, Plus, Settings, ChevronDown, ChevronRight, UserCheck, Trash2, Calendar, LayoutGrid } from 'lucide-react';
+import { Instagram, TrendingUp, BarChart3, ExternalLink, CheckCircle, AlertCircle, Loader2, Users, Heart, MessageCircle, Eye, Plus, Settings, ChevronDown, ChevronRight, UserCheck, Trash2, Calendar, LayoutGrid, Edit2, X } from 'lucide-react';
 import TrendChart from '../../components/TrendChart';
 import TimePeriodChart from '../../components/TimeperiodChart';
 import { subDays, format } from 'date-fns';
@@ -48,6 +48,18 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
   const [replyingToComment, setReplyingToComment] = useState(null);
   const [replyText, setReplyText] = useState('');
   const [sendingReply, setSendingReply] = useState(false);
+  
+  // State for adding/editing comments
+  const [addingComment, setAddingComment] = useState(false);
+  const [newCommentText, setNewCommentText] = useState('');
+  const [editingCommentId, setEditingCommentId] = useState(null);
+  const [editCommentText, setEditCommentText] = useState('');
+  const [processingComment, setProcessingComment] = useState(false);
+  
+  // State for viewing comment details
+  const [viewingCommentDetails, setViewingCommentDetails] = useState(null);
+  const [commentDetails, setCommentDetails] = useState(null);
+  const [loadingCommentDetails, setLoadingCommentDetails] = useState(false);
 
   // State for followers timeline
   const [followersTimeline, setFollowersTimeline] = useState({});
@@ -1048,7 +1060,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
         }
       } catch (err) {
         console.error('❌ Failed to remove Instagram account from backend:', err);
-        alert('Warning: Account disconnected locally but may still exist in database. Please contact support if issues persist.');
+        console.log('Warning: Account disconnected locally but may still exist in database.');
       }
     }
 
@@ -1103,7 +1115,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
         }
       } catch (err) {
         console.error('❌ Failed to remove Instagram accounts from backend:', err);
-        alert('Warning: Accounts disconnected locally but may still exist in database. Please contact support if issues persist.');
+        console.log('Warning: Accounts disconnected locally but may still exist in database.');
       }
     }
     
@@ -1149,7 +1161,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
           loadAvailableAccounts(userAccessToken);
         }
         setError(null);
-        alert('✅ Tokens refreshed successfully!');
+        console.log('Tokens refreshed successfully');
       } else {
         setError('Failed to refresh session. Please try reconnecting your Facebook account.');
       }
@@ -1176,15 +1188,15 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
       });
       
       if (!customerId) {
-        console.error('❌ No customer ID found for Instagram, cannot store social account');
-        alert('Error: No customer ID found. Please make sure you accessed this page through the proper configuration link.');
+        console.error('No customer ID found for Instagram, cannot store social account');
+        setError('Unable to connect account. Please use the link provided to you.');
         return;
       }
 
       // ✅ CRITICAL: Always store user access token for refresh capabilities
       if (!userAccessToken) {
         console.error('❌ No user access token available - refresh capabilities will be limited');
-        alert('Warning: User access token is missing. Token refresh may not work. Please reconnect if you experience issues.');
+        console.log('Warning: Token refresh may not work');
       }
 
       // Get user information for storing user access token
@@ -1335,12 +1347,12 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
         console.log('✅ Stored Instagram account for scheduling with customer ID:', customerId);
       } else {
         console.warn('Failed to store Instagram account:', result.error);
-        alert(`Warning: Failed to store account data - ${result.error}. You may need to reconnect later.`);
+        setError('Account connected but some features may be limited. Please try reconnecting.');
       }
       
     } catch (error) {
       console.warn('Failed to store Instagram account:', error);
-      alert(`Warning: ${error.message}. You may need to reconnect your Instagram account later.`);
+      setError('Account connected but some features may be limited.');
     }
   };
 
@@ -1512,7 +1524,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
   // Handle boost post - Opens Instagram's native boost interface
   const handleBoostPost = (post) => {
     if (!post || !post.permalink) {
-      alert('Post link not available');
+      setError('Post link not available');
       return;
     }
     
@@ -1570,14 +1582,58 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
       console.log(`🔍 Fetching comments for post ${mediaId}...`);
       console.log(`🔑 Using access token: ${accessToken.substring(0, 20)}...`);
       
-      // Fetch comments using direct Graph API call (including replies)
-      const response = await fetch(
-        `https://graph.facebook.com/v18.0/${mediaId}/comments?fields=id,username,text,timestamp,like_count,replies{id,username,text,timestamp,like_count}&access_token=${accessToken}`,
+      // Try multiple approaches to fetch comments
+      let allComments = [];
+      
+      // Fetch all available fields according to Instagram Comment API documentation
+      // Fields: from, hidden, id, like_count, media, parent_id, replies, text, timestamp, user, username
+      const fields = [
+        'id',
+        'from',  // Object with id and username
+        'hidden',
+        'like_count',
+        'media{id,media_product_type}',
+        'parent_id',
+        'text',
+        'timestamp',
+        'user',
+        'username',
+        'replies{id,from,hidden,like_count,text,timestamp,username,parent_id}'
+      ].join(',');
+      
+      // Approach 1: Try with filter=stream to get ALL comments including hidden
+      console.log('🔍 Attempt 1: Fetching with filter=stream (all comments including hidden)...');
+      let response = await fetch(
+        `https://graph.facebook.com/v18.0/${mediaId}/comments?fields=${fields}&filter=stream&limit=100&access_token=${accessToken}`,
         { method: 'GET' }
       );
       
-      const data = await response.json();
+      let data = await response.json();
       
+      if (response.ok && !data.error && data.data) {
+        allComments = data.data;
+        console.log(`✅ Approach 1 found ${allComments.length} comments with filter=stream`);
+      } else {
+        console.warn('⚠️ Approach 1 failed:', data.error?.message);
+        
+        // Approach 2: Try without filter parameter (shows only non-hidden)
+        console.log('🔍 Attempt 2: Fetching without filter (visible comments only)...');
+        response = await fetch(
+          `https://graph.facebook.com/v18.0/${mediaId}/comments?fields=${fields}&limit=100&access_token=${accessToken}`,
+          { method: 'GET' }
+        );
+        
+        data = await response.json();
+        
+        if (response.ok && !data.error && data.data) {
+          allComments = data.data;
+          console.log(`✅ Approach 2 found ${allComments.length} comments without filter`);
+        } else {
+          console.error('❌ Approach 2 also failed:', data.error?.message);
+        }
+      }
+      
+      // If still no comments, check if there's an API error
       if (!response.ok || data.error) {
         console.error('❌ Failed to fetch comments:', {
           status: response.status,
@@ -1588,26 +1644,44 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
           errorCode: data.error?.code
         });
         
+        let errorMsg = data.error?.message || 'Failed to load comments';
+        
+        // Add helpful error messages
+        if (data.error?.code === 10) {
+          errorMsg = 'Permission denied. You may need "instagram_manage_comments" permission to view hidden comments.';
+        } else if (data.error?.code === 190) {
+          errorMsg = 'Access token expired or invalid. Please reconnect your Instagram account.';
+        }
+        
         // Store error info for display
         setPostComments(prev => ({
           ...prev,
-          [mediaId]: { error: data.error?.message || 'Failed to load comments' }
+          [mediaId]: { error: errorMsg }
         }));
         
         return [];
       }
       
-      const comments = data.data || [];
+      console.log(`✅ Total comments fetched: ${allComments.length}`);
+      console.log(`📊 Hidden comments: ${allComments.filter(c => c.hidden || c.is_hidden).length}`);
+      console.log(`📊 Visible comments: ${allComments.filter(c => !c.hidden && !c.is_hidden).length}`);
       
-      console.log(`✅ Fetched ${comments.length} comments for post ${mediaId}`);
+      // If we got 0 comments but the post says there are comments, add a note
+      if (allComments.length === 0) {
+        console.warn('⚠️ API returned 0 comments. Comments may be:');
+        console.warn('  - Hidden by Instagram spam filters (not accessible via API)');
+        console.warn('  - Require additional permissions (instagram_manage_comments)');
+        console.warn('  - Posted by users who blocked the API access');
+        console.warn('  - Deleted but count not updated yet');
+      }
       
-      // Store comments in state
+      // Store comments in state (including hidden ones)
       setPostComments(prev => ({
         ...prev,
-        [mediaId]: comments
+        [mediaId]: allComments
       }));
       
-      return comments;
+      return allComments;
     } catch (error) {
       console.error('❌ Error fetching comments:', error);
       setPostComments(prev => ({
@@ -1620,15 +1694,66 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
     }
   };
 
+  // --- FETCH INDIVIDUAL COMMENT DETAILS ---
+  const fetchCommentDetails = async (commentId) => {
+    if (!commentId || !activeAccount || !activeAccount.pageAccessToken) {
+      console.warn('Missing commentId or access token');
+      return null;
+    }
+
+    setLoadingCommentDetails(true);
+    
+    try {
+      console.log(`🔍 Fetching details for comment ${commentId}...`);
+      
+      // Fetch all available fields for a single comment
+      const fields = [
+        'id',
+        'from',
+        'hidden',
+        'like_count',
+        'legacy_instagram_comment_id',
+        'media{id,media_product_type}',
+        'parent_id',
+        'text',
+        'timestamp',
+        'user',
+        'username'
+      ].join(',');
+      
+      const response = await fetch(
+        `https://graph.facebook.com/v18.0/${commentId}?fields=${fields}&access_token=${activeAccount.pageAccessToken}`,
+        { method: 'GET' }
+      );
+      
+      const data = await response.json();
+      
+      if (!response.ok || data.error) {
+        console.error('❌ Failed to fetch comment details:', data.error);
+        return null;
+      }
+      
+      console.log('✅ Comment details fetched:', data);
+      setCommentDetails(data);
+      return data;
+      
+    } catch (error) {
+      console.error('❌ Error fetching comment details:', error);
+      return null;
+    } finally {
+      setLoadingCommentDetails(false);
+    }
+  };
+
   // --- POST REPLY TO COMMENT ---
   const postReplyToComment = async (commentId, message, mediaId) => {
     if (!message || !message.trim()) {
-      alert('Please enter a reply message');
+      setError('Please enter a reply message');
       return;
     }
 
     if (!activeAccount || !activeAccount.pageAccessToken) {
-      alert('No active account or access token found');
+      setError('No active account or access token found');
       return;
     }
 
@@ -1646,7 +1771,14 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
       
       if (!response.ok || data.error) {
         console.error('❌ Failed to post reply:', data.error);
-        alert(`Failed to post reply: ${data.error?.message || 'Unknown error'}`);
+        
+        // Check for permission errors
+        if (data.error?.code === 100 || data.error?.code === 10 || data.error?.message?.includes('Permission')) {
+          console.error('Permission error posting reply:', data.error?.message);
+          setError('Unable to post reply due to account permissions.');
+        } else {
+          setError('Unable to post reply. Please try again.');
+        }
         return;
       }
       
@@ -1661,9 +1793,108 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
       
     } catch (error) {
       console.error('❌ Error posting reply:', error);
-      alert(`Error posting reply: ${error.message}`);
+      setError('Unable to post reply. Please try again.');
     } finally {
       setSendingReply(false);
+    }
+  };
+
+  // --- NOTE: Instagram API does NOT support adding top-level comments or editing comments ---
+  // Only replies, delete, and hide/unhide are supported
+
+  // --- DELETE COMMENT ---
+  const deleteComment = async (commentId, mediaId) => {
+    if (!window.confirm('Are you sure you want to delete this comment? This action cannot be undone.')) {
+      return;
+    }
+
+    if (!activeAccount || !activeAccount.pageAccessToken) {
+      setError('No active account or access token found');
+      return;
+    }
+
+    setProcessingComment(true);
+    
+    try {
+      console.log(`🗑️ Deleting comment ${commentId}...`);
+      
+      const response = await fetch(
+        `https://graph.facebook.com/v18.0/${commentId}?access_token=${activeAccount.pageAccessToken}`,
+        { method: 'DELETE' }
+      );
+      
+      const data = await response.json();
+      
+      if (!response.ok || data.error) {
+        console.error('❌ Failed to delete comment:', data.error);
+        
+        // Check for permission errors
+        if (data.error?.code === 100 || data.error?.code === 10 || data.error?.message?.includes('Permission')) {
+          console.error('Permission error deleting comment:', data.error?.message);
+          setError('Unable to delete comment due to account permissions.');
+        } else {
+          setError('Unable to delete comment. Please try again.');
+        }
+        return;
+      }
+      
+      console.log('✅ Comment deleted successfully');
+      setError(null);
+      
+      // Refresh comments to remove the deleted comment
+      await fetchPostComments(mediaId, activeAccount.pageAccessToken);
+      
+    } catch (error) {
+      console.error('❌ Error deleting comment:', error);
+      setError('Unable to delete comment. Please try again.');
+    } finally {
+      setProcessingComment(false);
+    }
+  };
+
+  // --- HIDE/UNHIDE COMMENT ---
+  const toggleCommentVisibility = async (commentId, shouldHide, mediaId) => {
+    if (!activeAccount || !activeAccount.pageAccessToken) {
+      setError('No active account or access token found');
+      return;
+    }
+
+    setProcessingComment(true);
+    
+    try {
+      console.log(`${shouldHide ? '🙈' : '👁️'} ${shouldHide ? 'Hiding' : 'Unhiding'} comment ${commentId}...`);
+      
+      const response = await fetch(
+        `https://graph.facebook.com/v18.0/${commentId}?hide=${shouldHide}&access_token=${activeAccount.pageAccessToken}`,
+        { method: 'POST' }
+      );
+      
+      const data = await response.json();
+      
+      if (!response.ok || data.error) {
+        console.error(`❌ Failed to ${shouldHide ? 'hide' : 'unhide'} comment:`, data.error);
+        
+        // Check for permission errors
+        if (data.error?.code === 100 || data.error?.code === 10 || data.error?.message?.includes('Permission')) {
+          console.error('Permission error:', data.error?.message);
+          setError(`Unable to ${shouldHide ? 'hide' : 'unhide'} comment due to account permissions.`);
+        } else {
+          setError(`Unable to ${shouldHide ? 'hide' : 'unhide'} comment. Please try again.`);
+        }
+        return;
+      }
+      
+      console.log(`✅ Comment ${shouldHide ? 'hidden' : 'unhidden'} successfully`);
+      setError(null);
+      
+      // Refresh comments to show the updated state
+      await fetchPostComments(mediaId, activeAccount.pageAccessToken);
+      
+    } catch (error) {
+      console.error(`❌ Error ${shouldHide ? 'hiding' : 'unhiding'} comment:`, error);
+      setError(`Unable to ${shouldHide ? 'hide' : 'unhide'} comment. Please try again.`);
+    } finally {
+      setProcessingComment(false);
     }
   };
 
@@ -2042,9 +2273,23 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
                     <MessageCircle className="h-3 w-3 sm:h-4 sm:w-4 mr-1.5 text-purple-600" />
                     Comments ({singlePostAnalytics.comments_count || 0})
                   </h4>
-                  {loadingComments && (
-                    <Loader2 className="h-3 w-3 sm:h-4 sm:w-4 animate-spin text-purple-600" />
-                  )}
+                  <div className="flex items-center gap-2">
+                    {loadingComments && (
+                      <Loader2 className="h-3 w-3 sm:h-4 sm:w-4 animate-spin text-purple-600" />
+                    )}
+                    <button
+                      onClick={() => {
+                        if (activeAccount && activeAccount.pageAccessToken) {
+                          fetchPostComments(singlePostAnalytics.id, activeAccount.pageAccessToken);
+                        }
+                      }}
+                      className="text-[10px] sm:text-xs bg-purple-600 text-white px-2 py-1 rounded hover:bg-purple-700 flex items-center gap-1"
+                      disabled={loadingComments}
+                      title="Load/Reload all comments including hidden ones"
+                    >
+                      🔄 Load All
+                    </button>
+                  </div>
                 </div>
                 
                 <div className="space-y-2 max-h-60 overflow-y-auto">
@@ -2070,48 +2315,158 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
                         Retry
                       </button>
                     </div>
-                  ) : postComments[singlePostAnalytics.id] && Array.isArray(postComments[singlePostAnalytics.id]) && postComments[singlePostAnalytics.id].length > 0 ? (
-                    postComments[singlePostAnalytics.id].map((comment) => (
-                      <div key={comment.id} className="bg-white border border-gray-200 rounded-lg p-2 sm:p-3">
+                  ) : (
+                    <>
+                      {/* Show warning if comment count doesn't match */}
+                      {singlePostAnalytics.comments_count > 0 && 
+                       (!postComments[singlePostAnalytics.id] || 
+                        (Array.isArray(postComments[singlePostAnalytics.id]) && postComments[singlePostAnalytics.id].length === 0)) && (
+                        <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 mb-3">
+                          <div className="flex items-start gap-2">
+                            <AlertCircle className="h-4 w-4 text-orange-600 mt-0.5 flex-shrink-0" />
+                            <div>
+                              <p className="text-xs font-semibold text-orange-800 mb-1">Comments Hidden or Unavailable</p>
+                              <p className="text-[10px] text-orange-700 mb-2">
+                                This post has {singlePostAnalytics.comments_count} comment{singlePostAnalytics.comments_count !== 1 ? 's' : ''}, but Instagram API returned 0 comments. Possible reasons:
+                              </p>
+                              <ul className="text-[10px] text-orange-700 mb-2 space-y-1 ml-3 list-disc">
+                                <li>Comments hidden by Instagram spam filters (not accessible)</li>
+                                <li>Comments from users who blocked API access</li>
+                                <li>Requires "instagram_manage_comments" permission</li>
+                                <li>Recent comments not yet indexed</li>
+                              </ul>
+                              <button
+                                onClick={() => {
+                                  if (activeAccount && activeAccount.pageAccessToken) {
+                                    fetchPostComments(singlePostAnalytics.id, activeAccount.pageAccessToken);
+                                  }
+                                }}
+                                className="bg-orange-600 text-white px-3 py-1.5 rounded text-[10px] hover:bg-orange-700 flex items-center gap-1"
+                                disabled={loadingComments}
+                              >
+                                {loadingComments ? (
+                                  <>
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                    <span>Loading...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Eye className="h-3 w-3" />
+                                    <span>Try Loading Again</span>
+                                  </>
+                                )}
+                              </button>
+                              <div className="mt-2 pt-2 border-t border-orange-200">
+                                <p className="text-[9px] text-orange-600 mb-1 font-medium">
+                                  💡 To view and manage all comments:
+                                </p>
+                                {singlePostAnalytics.permalink && (
+                                  <a
+                                    href={singlePostAnalytics.permalink}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 bg-gradient-to-r from-pink-500 to-purple-600 text-white px-2 py-1 rounded text-[10px] hover:from-pink-600 hover:to-purple-700"
+                                  >
+                                    <Instagram className="h-3 w-3" />
+                                    <span>Open on Instagram</span>
+                                    <ExternalLink className="h-2.5 w-2.5" />
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {postComments[singlePostAnalytics.id] && Array.isArray(postComments[singlePostAnalytics.id]) && postComments[singlePostAnalytics.id].length > 0 ? (
+                        postComments[singlePostAnalytics.id].map((comment) => (
+                          <div key={comment.id} className={`rounded-lg p-2 sm:p-3 border ${
+                        comment.hidden || comment.is_hidden
+                          ? 'bg-gray-100 border-gray-300 opacity-60' 
+                          : 'bg-white border-gray-200'
+                      }`}>
+                        {(comment.hidden || comment.is_hidden) && (
+                          <div className="mb-2 flex items-center gap-1 text-[9px] text-gray-600">
+                            <span>🙈</span>
+                            <span className="font-medium">Hidden Comment (only you can see this)</span>
+                          </div>
+                        )}
+                        {comment.parent_id && typeof comment.parent_id === 'string' && (
+                          <div className="mb-2 flex items-center gap-1 text-[9px] text-blue-600">
+                            <span>↩️</span>
+                            <span className="font-medium">Reply to another comment</span>
+                          </div>
+                        )}
                         <div className="flex items-start gap-2">
                           <div className="w-6 h-6 sm:w-8 sm:h-8 bg-gradient-to-br from-pink-400 to-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
                             <span className="text-white text-[10px] sm:text-xs font-bold">
-                              {comment.username ? comment.username.charAt(0).toUpperCase() : '?'}
+                              {(comment.from?.username || comment.username || 'U').charAt(0).toUpperCase()}
                             </span>
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between gap-2 mb-1">
-                              <span className="text-xs sm:text-sm font-semibold text-gray-900 truncate">
-                                @{comment.username || 'Unknown'}
-                              </span>
+                              <div className="flex flex-col">
+                                <span className="text-xs sm:text-sm font-semibold text-gray-900 truncate">
+                                  @{String(comment.from?.username || comment.username || 'Unknown')}
+                                </span>
+                                {comment.from && comment.from.id && typeof comment.from.id === 'string' && (
+                                  <span className="text-[8px] text-gray-400">ID: {String(comment.from.id)}</span>
+                                )}
+                              </div>
                               <span className="text-[9px] sm:text-[10px] text-gray-500 flex-shrink-0">
-                                {new Date(comment.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                {comment.timestamp ? new Date(comment.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A'}
                               </span>
                             </div>
+                            
                             <p className="text-[10px] sm:text-xs text-gray-700 break-words">
-                              {comment.text}
+                              {String(comment.text || '')}
                             </p>
-                            <div className="mt-1 flex items-center gap-2">
-                              {comment.like_count > 0 && (
+                            
+                            <div className="mt-1 flex items-center gap-2 flex-wrap">
+                              {comment.like_count && Number(comment.like_count) > 0 && (
                                 <div className="flex items-center gap-1">
                                   <Heart className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-pink-500" fill="currentColor" />
                                   <span className="text-[9px] sm:text-[10px] text-gray-500">
-                                    {comment.like_count}
+                                    {Number(comment.like_count)}
                                   </span>
                                 </div>
                               )}
+                              {comment.media && typeof comment.media === 'object' && comment.media.media_product_type && (
+                                <span className="text-[8px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">
+                                  {String(comment.media.media_product_type)}
+                                </span>
+                              )}
+                              <button
+                                onClick={() => {
+                                  setViewingCommentDetails(comment.id);
+                                  fetchCommentDetails(comment.id);
+                                }}
+                                className="text-[9px] sm:text-[10px] text-blue-600 hover:text-blue-700 font-medium"
+                                title="View full comment details"
+                              >
+                                ℹ️ Details
+                              </button>
                               <button
                                 onClick={() => {
                                   setReplyingToComment(comment.id);
                                   setReplyText('');
                                 }}
                                 className="text-[9px] sm:text-[10px] text-purple-600 hover:text-purple-700 font-medium"
+                                title="Add a reply (supported by Instagram API)"
                               >
                                 💬 Reply
                               </button>
-                              {comment.replies && comment.replies.data && comment.replies.data.length > 0 && (
+                              <button
+                                onClick={() => deleteComment(comment.id, singlePostAnalytics.id)}
+                                className="text-[9px] sm:text-[10px] text-red-600 hover:text-red-700 font-medium"
+                                disabled={processingComment}
+                                title="Delete this comment (supported by Instagram API)"
+                              >
+                                🗑️ Delete
+                              </button>
+                              {comment.replies && Array.isArray(comment.replies.data) && comment.replies.data.length > 0 && (
                                 <span className="text-[9px] sm:text-[10px] text-gray-500">
-                                  {comment.replies.data.length} {comment.replies.data.length === 1 ? 'reply' : 'replies'}
+                                  {Number(comment.replies.data.length)} {comment.replies.data.length === 1 ? 'reply' : 'replies'}
                                 </span>
                               )}
                             </div>
@@ -2161,36 +2516,53 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
                         )}
 
                         {/* Display Replies */}
-                        {comment.replies && comment.replies.data && comment.replies.data.length > 0 && (
+                        {comment.replies && Array.isArray(comment.replies.data) && comment.replies.data.length > 0 && (
                           <div className="mt-2 pl-8 sm:pl-10 space-y-2">
                             {comment.replies.data.map((reply) => (
-                              <div key={reply.id} className="bg-purple-50 border border-purple-100 rounded-lg p-2">
+                              <div key={reply.id} className={`border rounded-lg p-2 ${
+                                reply.hidden || reply.is_hidden
+                                  ? 'bg-purple-100 border-purple-200 opacity-70'
+                                  : 'bg-purple-50 border-purple-100'
+                              }`}>
+                                {(reply.hidden || reply.is_hidden) && (
+                                  <div className="mb-1 flex items-center gap-1 text-[8px] text-purple-600">
+                                    <span>🙈</span>
+                                    <span>Hidden Reply</span>
+                                  </div>
+                                )}
                                 <div className="flex items-start gap-2">
                                   <div className="w-5 h-5 sm:w-6 sm:h-6 bg-gradient-to-br from-purple-400 to-indigo-600 rounded-full flex items-center justify-center flex-shrink-0">
                                     <span className="text-white text-[9px] sm:text-[10px] font-bold">
-                                      {reply.username ? reply.username.charAt(0).toUpperCase() : '?'}
+                                      {(reply.from?.username || reply.username || 'U').charAt(0).toUpperCase()}
                                     </span>
                                   </div>
                                   <div className="flex-1 min-w-0">
                                     <div className="flex items-center justify-between gap-2 mb-0.5">
                                       <span className="text-[10px] sm:text-xs font-semibold text-gray-900 truncate">
-                                        @{reply.username || 'Unknown'}
+                                        @{String(reply.from?.username || reply.username || 'Unknown')}
                                       </span>
                                       <span className="text-[8px] sm:text-[9px] text-gray-500 flex-shrink-0">
-                                        {new Date(reply.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                        {reply.timestamp ? new Date(reply.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'N/A'}
                                       </span>
                                     </div>
                                     <p className="text-[9px] sm:text-[10px] text-gray-700 break-words">
-                                      {reply.text}
+                                      {String(reply.text || '')}
                                     </p>
-                                    {reply.like_count > 0 && (
-                                      <div className="mt-0.5 flex items-center gap-1">
-                                        <Heart className="h-2 w-2 sm:h-2.5 sm:w-2.5 text-pink-500" fill="currentColor" />
-                                        <span className="text-[8px] sm:text-[9px] text-gray-500">
-                                          {reply.like_count}
+                                    <div className="mt-1 flex items-center gap-2 flex-wrap">
+                                      {reply.like_count && Number(reply.like_count) > 0 && (
+                                        <div className="flex items-center gap-1">
+                                          <Heart className="h-2 w-2 sm:h-2.5 sm:w-2.5 text-pink-500" fill="currentColor" />
+                                          <span className="text-[8px] sm:text-[9px] text-gray-500">
+                                            {Number(reply.like_count)}
+                                          </span>
+                                        </div>
+                                      )}
+                                      {reply.parent_id && typeof reply.parent_id === 'string' && (
+                                        <span className="text-[8px] text-blue-500 bg-blue-50 px-1 py-0.5 rounded">
+                                          ↩️ Reply
                                         </span>
-                                      </div>
-                                    )}
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
                               </div>
@@ -2198,13 +2570,15 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
                           </div>
                         )}
                       </div>
-                    ))
-                  ) : (
-                    <div className="text-center py-6">
-                      <MessageCircle className="h-8 w-8 mx-auto mb-2 text-gray-300" />
-                      <p className="text-xs text-gray-500">No comments yet</p>
-                      <p className="text-[10px] text-gray-400 mt-1">Be the first to comment!</p>
-                    </div>
+                        ))
+                      ) : singlePostAnalytics.comments_count > 0 ? null : (
+                        <div className="text-center py-6">
+                          <MessageCircle className="h-8 w-8 mx-auto mb-2 text-gray-300" />
+                          <p className="text-xs text-gray-500">No comments yet</p>
+                          <p className="text-[10px] text-gray-400 mt-1">Be the first to comment!</p>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
 
@@ -2216,46 +2590,188 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
                   </div>
                 )}
 
-                {/* Permission notice if no comments loaded but count > 0 */}
-                {!loadingComments && 
-                 singlePostAnalytics.comments_count > 0 && 
-                 (!postComments[singlePostAnalytics.id] || (Array.isArray(postComments[singlePostAnalytics.id]) && postComments[singlePostAnalytics.id].length === 0)) && 
-                 !postComments[singlePostAnalytics.id]?.error && (
-                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-                    <div className="flex items-start gap-2 mb-2">
-                      <AlertCircle className="h-4 w-4 text-yellow-600 flex-shrink-0 mt-0.5" />
-                      <div className="flex-1">
-                        <p className="text-[10px] sm:text-xs font-semibold text-yellow-800 mb-1">
-                          Missing Permission
-                        </p>
-                        <p className="text-[10px] sm:text-xs text-yellow-700 mb-2">
-                          Unable to load comments. The <strong>instagram_manage_comments</strong> permission is required.
-                        </p>
-                        <div className="text-[9px] sm:text-[10px] text-yellow-700 space-y-1">
-                          <p className="font-semibold">To fix this:</p>
-                          <ol className="list-decimal list-inside space-y-0.5 ml-1">
-                            <li>Disconnect your Instagram account</li>
-                            <li>Reconnect and grant all permissions</li>
-                            <li>Check browser console for detailed errors</li>
-                          </ol>
-                        </div>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => {
-                        console.log('🔍 Debugging info:');
-                        console.log('Post ID:', singlePostAnalytics.id);
-                        console.log('Access Token:', activeAccount?.pageAccessToken?.substring(0, 20) + '...');
-                        console.log('Comments data:', postComments[singlePostAnalytics.id]);
-                        console.log('Active Account:', activeAccount);
-                      }}
-                      className="w-full bg-yellow-600 text-white px-3 py-1.5 rounded text-[10px] hover:bg-yellow-700 mt-2"
-                    >
-                      Show Debug Info (Check Console)
-                    </button>
-                  </div>
-                )}
+                {/* Permission notice removed as requested */}
               </div>
+              
+              {/* Comment Details Modal */}
+              {viewingCommentDetails && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                  <div className="bg-white rounded-lg max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+                    <div className="sticky top-0 bg-white border-b border-gray-200 p-4 flex items-center justify-between">
+                      <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                        <MessageCircle className="h-5 w-5 text-purple-600" />
+                        Comment Details
+                      </h3>
+                      <button
+                        onClick={() => {
+                          setViewingCommentDetails(null);
+                          setCommentDetails(null);
+                        }}
+                        className="text-gray-400 hover:text-gray-600"
+                      >
+                        <X className="h-5 w-5" />
+                      </button>
+                    </div>
+                    
+                    <div className="p-4">
+                      {loadingCommentDetails ? (
+                        <div className="text-center py-8">
+                          <Loader2 className="h-8 w-8 animate-spin mx-auto text-purple-600" />
+                          <p className="text-sm text-gray-500 mt-2">Loading comment details...</p>
+                        </div>
+                      ) : commentDetails ? (
+                        <div className="space-y-4">
+                          {/* Comment ID */}
+                          <div className="bg-gray-50 rounded-lg p-3">
+                            <label className="text-xs font-semibold text-gray-600 uppercase">Comment ID</label>
+                            <p className="text-sm text-gray-900 font-mono mt-1">{String(commentDetails.id || '')}</p>
+                          </div>
+                          
+                          {/* Legacy ID if available */}
+                          {commentDetails.legacy_instagram_comment_id && typeof commentDetails.legacy_instagram_comment_id === 'string' && (
+                            <div className="bg-gray-50 rounded-lg p-3">
+                              <label className="text-xs font-semibold text-gray-600 uppercase">Legacy Instagram Comment ID</label>
+                              <p className="text-sm text-gray-900 font-mono mt-1">{String(commentDetails.legacy_instagram_comment_id)}</p>
+                            </div>
+                          )}
+                          
+                          {/* Author Information */}
+                          <div className="bg-gradient-to-r from-pink-50 to-purple-50 rounded-lg p-3">
+                            <label className="text-xs font-semibold text-gray-600 uppercase">Author</label>
+                            <div className="mt-2 space-y-2">
+                              {commentDetails.from && typeof commentDetails.from === 'object' && (
+                                <>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs text-gray-600">Username:</span>
+                                    <span className="text-sm font-semibold text-gray-900">@{String(commentDetails.from.username || commentDetails.username || 'Unknown')}</span>
+                                  </div>
+                                  {commentDetails.from.id && typeof commentDetails.from.id === 'string' && (
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-xs text-gray-600">User ID:</span>
+                                      <span className="text-sm text-gray-900 font-mono">{String(commentDetails.from.id)}</span>
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                              {commentDetails.user && typeof commentDetails.user === 'string' && (
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-gray-600">App User ID:</span>
+                                  <span className="text-sm text-gray-900 font-mono">{String(commentDetails.user)}</span>
+                                  <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">Owner</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          
+                          {/* Comment Text */}
+                          <div className="bg-gray-50 rounded-lg p-3">
+                            <label className="text-xs font-semibold text-gray-600 uppercase">Comment Text</label>
+                            <p className="text-sm text-gray-900 mt-1 whitespace-pre-wrap">{String(commentDetails.text || '')}</p>
+                          </div>
+                          
+                          {/* Status Badges */}
+                          <div className="flex flex-wrap gap-2">
+                            <div className={`px-3 py-2 rounded-lg border ${
+                              commentDetails.hidden
+                                ? 'bg-yellow-50 border-yellow-200'
+                                : 'bg-green-50 border-green-200'
+                            }`}>
+                              <span className="text-xs font-semibold text-gray-600 uppercase block mb-1">Visibility</span>
+                              <span className={`text-sm font-semibold ${
+                                commentDetails.hidden ? 'text-yellow-700' : 'text-green-700'
+                              }`}>
+                                {commentDetails.hidden ? '🙈 Hidden' : '👁️ Visible'}
+                              </span>
+                            </div>
+                            
+                            <div className="bg-pink-50 border border-pink-200 px-3 py-2 rounded-lg">
+                              <span className="text-xs font-semibold text-gray-600 uppercase block mb-1">Likes</span>
+                              <span className="text-sm font-semibold text-pink-700 flex items-center gap-1">
+                                <Heart className="h-4 w-4" fill="currentColor" />
+                                {Number(commentDetails.like_count) || 0}
+                              </span>
+                            </div>
+                            
+                            {commentDetails.parent_id && typeof commentDetails.parent_id === 'string' && (
+                              <div className="bg-blue-50 border border-blue-200 px-3 py-2 rounded-lg">
+                                <span className="text-xs font-semibold text-gray-600 uppercase block mb-1">Type</span>
+                                <span className="text-sm font-semibold text-blue-700">↩️ Reply</span>
+                              </div>
+                            )}
+                          </div>
+                          
+                          {/* Timestamp */}
+                          <div className="bg-gray-50 rounded-lg p-3">
+                            <label className="text-xs font-semibold text-gray-600 uppercase">Timestamp</label>
+                            <p className="text-sm text-gray-900 mt-1">
+                              {commentDetails.timestamp ? new Date(commentDetails.timestamp).toLocaleString('en-US', {
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                second: '2-digit',
+                                timeZoneName: 'short'
+                              }) : 'N/A'}
+                            </p>
+                            {commentDetails.timestamp && typeof commentDetails.timestamp === 'string' && (
+                              <p className="text-xs text-gray-500 mt-1 font-mono">{String(commentDetails.timestamp)}</p>
+                            )}
+                          </div>
+                          
+                          {/* Media Information */}
+                          {commentDetails.media && typeof commentDetails.media === 'object' && commentDetails.media.id && (
+                            <div className="bg-gray-50 rounded-lg p-3">
+                              <label className="text-xs font-semibold text-gray-600 uppercase">Media</label>
+                              <div className="mt-2 space-y-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-gray-600">Media ID:</span>
+                                  <span className="text-sm text-gray-900 font-mono">{String(commentDetails.media.id)}</span>
+                                </div>
+                                {commentDetails.media.media_product_type && typeof commentDetails.media.media_product_type === 'string' && (
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs text-gray-600">Product Type:</span>
+                                    <span className="text-sm text-gray-900 bg-gray-200 px-2 py-0.5 rounded">{String(commentDetails.media.media_product_type)}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Parent Comment Reference */}
+                          {commentDetails.parent_id && typeof commentDetails.parent_id === 'string' && (
+                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                              <label className="text-xs font-semibold text-blue-700 uppercase">Parent Comment ID</label>
+                              <p className="text-sm text-blue-900 font-mono mt-1">{String(commentDetails.parent_id)}</p>
+                              <p className="text-xs text-blue-600 mt-1">This is a reply to another comment</p>
+                            </div>
+                          )}
+                          
+                          {/* Actions */}
+                          <div className="flex gap-2 pt-4 border-t border-gray-200">
+                            <button
+                              onClick={() => {
+                                deleteComment(commentDetails.id, singlePostAnalytics.id);
+                                setViewingCommentDetails(null);
+                                setCommentDetails(null);
+                              }}
+                              className="w-full bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-700 flex items-center justify-center gap-2"
+                              disabled={processingComment}
+                            >
+                              🗑️ Delete Comment
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-center py-8">
+                          <AlertCircle className="h-8 w-8 mx-auto text-red-500" />
+                          <p className="text-sm text-gray-500 mt-2">Failed to load comment details</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -2575,19 +3091,6 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
             
             {/* Action Buttons - Compact for mobile */}
             <div className="flex gap-2 mb-4">
-              <button
-                onClick={() => storeHistoricalSnapshot(activeAccount.id, activeAccount.profile?.username || 'Unknown', {
-                  followersCount: activeAccount.profile?.followers_count,
-                  mediaCount: activeAccount.profile?.media_count,
-                  totalLikes: activeAccount.media?.reduce((sum, m) => sum + (m.like_count || 0), 0) || 0,
-                  totalComments: activeAccount.media?.reduce((sum, m) => sum + (m.comments_count || 0), 0) || 0,
-                  postsCount: activeAccount.media?.length || 0
-                })}
-                className="flex items-center justify-center gap-1 flex-1 py-1.5 bg-pink-500 text-white rounded-lg text-xs font-medium"
-              >
-                <Settings className="h-3 w-3" />
-                <span>Capture</span>
-              </button>
               <button
                 onClick={() => removeAccount(activeAccount.id)}
                 className="flex items-center justify-center py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs"

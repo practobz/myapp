@@ -1289,12 +1289,12 @@ function FacebookIntegration() {
   // --- POST REPLY TO COMMENT ---
   const postReplyToComment = async (commentId, message, postId) => {
     if (!message || !message.trim()) {
-      alert('Please enter a reply message');
+      setFbError('Please enter a reply message');
       return;
     }
 
     if (!fbPages || fbPages.length === 0) {
-      alert('No page access token found');
+      setFbError('No page access token found');
       return;
     }
 
@@ -1344,10 +1344,11 @@ function FacebookIntegration() {
             errorMessage += '\n\n⚠️ Permission Issue: Please disconnect and reconnect your Facebook account to grant required permissions.';
           }
         } else if (data.error?.code === 190) {
-          errorMessage += '\n\n⚠️ Token expired. Please refresh your page tokens.';
+          errorMessage += '\n\nToken expired. Please reconnect your account.';
         }
         
-        alert(`Failed to post reply:\n${errorMessage}`);
+        console.error('Failed to post reply:', errorMessage);
+        setFbError('Unable to post reply. Please try again.');
         return;
       }
       
@@ -1362,7 +1363,7 @@ function FacebookIntegration() {
       
     } catch (error) {
       console.error('❌ Error posting reply:', error);
-      alert(`Error posting reply: ${error.message}`);
+      setFbError('Unable to post reply. Please try again.');
     } finally {
       setSendingReply(false);
     }
@@ -2139,12 +2140,13 @@ function FacebookIntegration() {
         }
       }
       
-      // Show success message
-      alert('✅ Facebook account disconnected successfully!');
+      // Clear error on success
+      setFbError(null);
+      console.log('Facebook account disconnected successfully');
       
     } catch (error) {
       console.error('❌ Error removing account:', error);
-      alert('❌ Failed to disconnect account. Please try again.');
+      setFbError('Failed to disconnect account. Please try again.');
     }
   };
 
@@ -2281,7 +2283,7 @@ function FacebookIntegration() {
 
       if (!activeAccount?.accessToken) {
         console.error('❌ No user access token available - refresh will not work');
-        alert('Warning: User access token is missing. Token refresh may not work. Please reconnect if you experience issues.');
+        setFbError('Token refresh unavailable. Please reconnect your account.');
       }
 
       // Map all pages to backend format
@@ -2347,7 +2349,7 @@ function FacebookIntegration() {
   // Enhanced token refresh with never-expiring page tokens
   const refreshPageTokens = async () => {
     if (!activeAccount) {
-      alert('❌ No active account found. Please connect your Facebook account first.');
+      setFbError('No active account found. Please connect your Facebook account first.');
       return;
     }
 
@@ -2359,7 +2361,7 @@ function FacebookIntegration() {
       
       if (!sessionRefreshed) {
         console.error('❌ Session refresh failed');
-        alert('❌ Failed to refresh session. Please try reconnecting your Facebook account.');
+        setFbError('Failed to refresh session. Please try reconnecting your Facebook account.');
         return;
       }
       
@@ -2395,16 +2397,17 @@ function FacebookIntegration() {
           });
         });
         
-        alert('✅ Tokens refreshed successfully! Page tokens are now never-expiring.');
+        console.log('Tokens refreshed successfully');
+        setFbError(null);
       } else {
         console.error('❌ Failed to get page tokens:', data.error);
         // Fallback to re-fetching pages normally
         fetchFbPages();
-        alert('✅ Session refreshed! Your pages have been reloaded.');
+        console.log('Session refreshed! Your pages have been reloaded.');
       }
     } catch (error) {
       console.error('❌ Failed to refresh tokens:', error);
-      alert('❌ Failed to refresh tokens. Error: ' + error.message);
+      setFbError('Unable to refresh session. Please reconnect your account.');
     }
   };
 

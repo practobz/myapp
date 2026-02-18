@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Youtube, TrendingUp, ExternalLink, CheckCircle, AlertCircle, Loader2, Users, Eye, Play, Clock, Plus, UserCheck, Trash2, RefreshCw, BarChart3, ThumbsUp, MessageSquare, ChevronUp, LayoutGrid, X } from 'lucide-react';
+import { Youtube, TrendingUp, ExternalLink, CheckCircle, AlertCircle, Loader2, Users, Eye, Play, Clock, Plus, UserCheck, Trash2, RefreshCw, BarChart3, ThumbsUp, MessageSquare, ChevronUp, LayoutGrid, X, Key, Calendar, XCircle } from 'lucide-react';
 import YouTubePostAnalytics from './components/YouTubePostAnalytics';
 import TimePeriodChart from '../../components/TimeperiodChart';
 import { getUserData, setUserData, removeUserData, migrateToUserSpecificStorage } from '../../utils/sessionUtils';
@@ -1399,17 +1399,42 @@ function YouTubeIntegration(props) {
 
     return (
       <div className="mt-4 p-3 bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-lg">
-        <h6 className="font-medium text-green-800 mb-2">🔑 Token Status</h6>
+        <h6 className="font-medium text-green-800 mb-2 flex items-center gap-2">
+          <Key className="h-4 w-4" />
+          Token Status
+        </h6>
         <div className="text-sm text-green-700 space-y-1">
-          <p>📅 <strong>Token Status:</strong> {tokenExpired ? '❌ Expired' : tokenExpiringSoon ? '⚠️ Expiring Soon' : '✅ Valid'}</p>
+          <p className="flex items-center gap-2">
+            <Calendar className="h-4 w-4" />
+            <strong>Status:</strong>
+            {tokenExpired ? (
+              <span className="flex items-center gap-1 text-red-600">
+                <XCircle className="h-4 w-4" />
+                Expired
+              </span>
+            ) : tokenExpiringSoon ? (
+              <span className="flex items-center gap-1 text-orange-600">
+                <AlertCircle className="h-4 w-4" />
+                Expiring Soon
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 text-green-600">
+                <CheckCircle className="h-4 w-4" />
+                Valid
+              </span>
+            )}
+          </p>
           {storedExpiry && (
-            <p>⏰ <strong>Expires:</strong> {new Date(parseInt(storedExpiry, 10)).toLocaleString()}</p>
+            <p className="flex items-center gap-2">
+              <Clock className="h-4 w-4" />
+              <strong>Expires:</strong> {new Date(parseInt(storedExpiry, 10)).toLocaleString()}
+            </p>
           )}
           {hasRefreshToken && (
             <div className="mt-2 p-2 bg-green-100 border border-green-300 rounded text-xs">
               <p className="flex items-center">
-                <RefreshCw className="h-3 w-3 mr-1 text-green-600" />
-                <strong className="text-green-800">✅ Auto-Refresh Enabled:</strong>
+                <CheckCircle className="h-3 w-3 mr-1 text-green-600" />
+                <strong className="text-green-800">Auto-Refresh Enabled:</strong>
                 <span className="ml-1 text-green-700">Token will refresh automatically before expiry</span>
               </p>
             </div>
@@ -1418,9 +1443,10 @@ function YouTubeIntegration(props) {
             {(tokenExpired || tokenExpiringSoon) && (
               <button
                 onClick={() => refreshYouTubeToken(activeAccount.id)}
-                className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700"
+                className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 flex items-center gap-1"
               >
-                🔄 Refresh Now
+                <RefreshCw className="h-3 w-3" />
+                Refresh Now
               </button>
             )}
             {!hasRefreshToken && (

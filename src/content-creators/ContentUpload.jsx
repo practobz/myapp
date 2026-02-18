@@ -2,64 +2,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Upload, Image, X, Check, FileText, Calendar, Clock, Palette, Send, MapPin, Tag, MessageSquare, Play, Video } from 'lucide-react';
 
-// Helper to load watermark logo as base64
-const getLogoBase64 = () => {
-  return new Promise((resolve, reject) => {
-    const img = new window.Image();
-    img.crossOrigin = 'Anonymous';
-    img.src = '/watermark.png';
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = img.width;
-      canvas.height = img.height;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0);
-      resolve(canvas.toDataURL('image/png'));
-    };
-    img.onerror = reject;
-  });
-};
-
-// Helper to watermark image (improved visibility)
-const watermarkImage = async (file, logoBase64) => {
-  return new Promise((resolve, reject) => {
-    const img = new window.Image();
-    img.src = URL.createObjectURL(file);
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = img.width;
-      canvas.height = img.height;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0);
-
-      // Draw watermark logo at bottom-right with proper visibility
-      const logoImg = new window.Image();
-      logoImg.src = logoBase64;
-      logoImg.onload = () => {
-        // Larger watermark size: 60% of image width for clear visibility
-        const logoW = canvas.width * 0.6;
-        const logoH = logoImg.height * (logoW / logoImg.width);
-        const padding = canvas.width * 0.03; // 3% padding
-
-        const x = canvas.width - logoW - padding;
-        const y = canvas.height - logoH - padding;
-
-        // Draw logo with clear visibility (70% opacity - professional standard)
-        ctx.save();
-        ctx.globalAlpha = 0.7;
-        ctx.drawImage(logoImg, x, y, logoW, logoH);
-        ctx.restore();
-
-        canvas.toBlob((blob) => {
-          resolve(blob);
-        }, file.type);
-      };
-      logoImg.onerror = reject;
-    };
-    img.onerror = reject;
-  });
-};
-
 // Helper to get creator email from localStorage
 function getCreatorEmail() {
   let email = '';
@@ -314,37 +256,30 @@ function ContentUpload() {
   };
 
   const handleFiles = async (files) => {
-    const logoBase64 = await getLogoBase64();
     Array.from(files).forEach(async file => {
       if (file.type.startsWith('image/')) {
-        // Watermark image
-        const watermarkedBlob = await watermarkImage(file, logoBase64);
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const newFile = {
-            id: Date.now() + Math.random(),
-            file: new File([watermarkedBlob], file.name, { type: file.type }),
-            preview: e.target.result,
-            name: file.name,
-            size: watermarkedBlob.size,
-            type: 'image',
-            uploaded: false,
-            uploading: false,
-            publicUrl: null,
-            error: null
-          };
-          setUploadedFiles(prev => [...prev, newFile]);
-        };
-        reader.readAsDataURL(watermarkedBlob);
-      } else if (file.type.startsWith('video/')) {
-        // Handle video files properly - no watermarking, just add original file
         const preview = URL.createObjectURL(file);
         const newFile = {
           id: Date.now() + Math.random(),
-          file: file, // Use original file object directly
+          file: file,
           preview: preview,
           name: file.name,
-          size: file.size, // Use original file size
+          size: file.size,
+          type: 'image',
+          uploaded: false,
+          uploading: false,
+          publicUrl: null,
+          error: null
+        };
+        setUploadedFiles(prev => [...prev, newFile]);
+      } else if (file.type.startsWith('video/')) {
+        const preview = URL.createObjectURL(file);
+        const newFile = {
+          id: Date.now() + Math.random(),
+          file: file,
+          preview: preview,
+          name: file.name,
+          size: file.size,
           type: 'video',
           uploaded: false,
           uploading: false,

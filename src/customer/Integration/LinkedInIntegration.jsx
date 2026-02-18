@@ -1376,34 +1376,61 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
   // Render account management section
   const renderAccountManagement = () => {
     return (
-      <div className="mb-4 sm:mb-6 px-3 sm:px-0">
-        <div className="flex items-center justify-between mb-3 sm:mb-4">
-          <h4 className="font-medium text-gray-700 flex items-center text-sm sm:text-base">
-            <Users className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
-            <span className="hidden sm:inline">Connected LinkedIn Accounts</span>
-            <span className="sm:hidden">Accounts</span>
-            <span className="ml-1">({connectedAccounts.length})</span>
-          </h4>
-          <button
-            onClick={handleLinkedInConnect}
-            disabled={loading}
-            className="bg-blue-700 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-blue-800 flex items-center gap-1 sm:gap-2 text-xs sm:text-sm disabled:opacity-50"
-          >
-            <Plus className="h-4 w-4" />
-            <span className="hidden sm:inline">{loading ? 'Connecting...' : 'Add Account'}</span>
-            <span className="sm:hidden">{loading ? '...' : 'Add'}</span>
-          </button>
+      <div className="mb-4 sm:mb-6">
+        {/* Status badges - Instagram style */}
+        <div className="flex flex-col gap-3 px-3 sm:px-0 mb-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1 bg-green-100 px-2 py-1 rounded-full">
+              <CheckCircle className="h-3 w-3 text-green-600" />
+              <span className="text-xs font-medium text-green-700">
+                {connectedAccounts.length} Connected
+              </span>
+            </div>
+            {selectedAccount && (
+              <div className="flex items-center gap-1 bg-blue-50 px-2 py-1 rounded-full">
+                {selectedAccount.profile?.picture ? (
+                  <img
+                    src={selectedAccount.profile.picture}
+                    alt="Profile"
+                    className="w-4 h-4 rounded-full"
+                  />
+                ) : (
+                  <Linkedin className="h-3 w-3 text-blue-600" />
+                )}
+                <span className="text-xs font-medium text-blue-700 truncate max-w-[120px]">
+                  {selectedAccount.profile?.name || 'Loading...'}
+                </span>
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleLinkedInConnect}
+              disabled={loading}
+              className="flex items-center gap-1 px-3 py-1.5 bg-gradient-to-r from-blue-600 to-blue-800 text-white rounded-lg text-xs font-medium disabled:opacity-50 flex-1 sm:flex-initial justify-center"
+            >
+              <Plus className="h-3 w-3" />
+              <span>{loading ? '...' : 'Add'}</span>
+            </button>
+            <button
+              onClick={handleDisconnectAll}
+              className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs font-medium flex-1 sm:flex-initial justify-center"
+            >
+              <ExternalLink className="h-3 w-3" />
+              <span>Disconnect</span>
+            </button>
+          </div>
         </div>
         
         {connectedAccounts.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-0.5 sm:gap-3 bg-gray-100 sm:bg-transparent px-0 sm:px-0">
             {connectedAccounts.map((account) => (
               <div
                 key={account.id}
-                className={`border rounded-lg p-3 sm:p-4 transition-all cursor-pointer ${
+                className={`sm:border sm:rounded-lg p-3 sm:p-4 transition-all cursor-pointer bg-white ${
                   selectedAccountId === account.id
-                    ? 'border-blue-500 bg-blue-50 shadow-md'
-                    : 'border-gray-200 bg-white hover:border-gray-300'
+                    ? 'sm:border-blue-500 sm:bg-blue-50 sm:shadow-md border-l-4 border-l-blue-500 sm:border-l'
+                    : 'sm:border-gray-200 hover:bg-gray-50 sm:hover:border-gray-300'
                 }`}
                 onClick={() => selectAccount(account.id)}
               >
@@ -1494,14 +1521,14 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
     if (!selectedAccount) return null;
 
     return (
-      <div className="bg-white sm:rounded-2xl border-y sm:border border-gray-200 shadow-sm p-4 sm:p-6 mb-4 sm:mb-8">
+      <div className="bg-white sm:rounded-2xl sm:border sm:border-gray-200 sm:shadow-sm p-4 sm:p-6 mb-4 sm:mb-6">
         <div className="flex items-center gap-2 sm:gap-3 mb-4">
-          <div className="bg-blue-700 p-2 rounded-lg">
+          <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-blue-600 to-blue-800 rounded-lg flex items-center justify-center">
             <Send className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
           </div>
           <div>
-            <h3 className="text-base sm:text-lg font-semibold text-gray-900">Create LinkedIn Post</h3>
-            <p className="text-xs sm:text-sm text-gray-600 hidden sm:block">Share your thoughts with your professional network</p>
+            <h3 className="text-sm sm:text-lg font-semibold text-gray-900">Create Post</h3>
+            <p className="text-xs text-gray-500 hidden sm:block">Share with your professional network</p>
           </div>
         </div>
 
@@ -1570,9 +1597,9 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
             
             {/* Debug notice */}
             {(postImage || postImagePreview) && (
-              <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <p className="text-sm text-yellow-800">
-                  <strong>Note:</strong> Image upload is currently being debugged. If image upload fails, your post will be created as text-only. Check the browser console for detailed error logs.
+              <div className="p-2 sm:p-3 bg-yellow-50 sm:border border-yellow-200 rounded-lg">
+                <p className="text-xs text-yellow-800">
+                  <strong>Note:</strong> Image upload is being debugged. If it fails, your post will be text-only.
                 </p>
               </div>
             )}
@@ -1580,49 +1607,49 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
 
           {/* Image browser modal */}
           {showImageBrowser && (
-            <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4">
-              <div className="bg-white rounded-lg shadow-lg max-w-4xl w-full max-h-[80vh] overflow-hidden">
-                <div className="p-6">
-                  <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-xl font-bold text-gray-900">Select Image from Library</h2>
+            <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center sm:p-4">
+              <div className="bg-white sm:rounded-lg shadow-lg w-full sm:max-w-4xl max-h-[90vh] sm:max-h-[80vh] overflow-hidden rounded-t-2xl sm:rounded-2xl">
+                <div className="p-4 sm:p-6">
+                  <div className="flex items-center justify-between mb-4 sm:mb-6">
+                    <h2 className="text-base sm:text-xl font-bold text-gray-900">Select Image</h2>
                     <button
                       onClick={() => setShowImageBrowser(false)}
-                      className="text-gray-400 hover:text-gray-600"
+                      className="w-8 h-8 flex items-center justify-center bg-gray-100 rounded-full text-gray-600 hover:bg-gray-200"
                     >
                       ×
                     </button>
                   </div>
                   {loadingImages ? (
-                    <div className="flex items-center justify-center py-12">
-                      <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-                      <span className="ml-2">Loading images...</span>
+                    <div className="flex items-center justify-center py-8 sm:py-12">
+                      <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 animate-spin text-blue-600" />
+                      <span className="ml-2 text-sm">Loading images...</span>
                     </div>
                   ) : (
-                    <div className="space-y-4">
+                    <div className="space-y-3 sm:space-y-4">
                       {bucketImages.length === 0 ? (
-                        <div className="text-center py-12 text-gray-500">
-                          <Image className="h-16 w-16 mx-auto mb-4 opacity-50" />
-                          <p>No images found in your library</p>
-                          <p className="text-sm">Upload some images first to see them here</p>
+                        <div className="text-center py-8 sm:py-12 text-gray-500">
+                          <Image className="h-12 w-12 sm:h-16 sm:w-16 mx-auto mb-3 sm:mb-4 opacity-50" />
+                          <p className="text-sm sm:text-base">No images found</p>
+                          <p className="text-xs sm:text-sm">Upload some images first</p>
                         </div>
                       ) : (
                         <>
-                          <div className="text-sm text-gray-600 mb-4">
-                            Found {bucketImages.length} images in your library
+                          <div className="text-xs sm:text-sm text-gray-600 mb-3 sm:mb-4">
+                            Found {bucketImages.length} images
                           </div>
-                          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 max-h-96 overflow-y-auto">
+                          <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-1 sm:gap-4 max-h-64 sm:max-h-96 overflow-y-auto">
                             {bucketImages.map((image, index) => (
                               <div
                                 key={index}
-                                className="border rounded-lg overflow-hidden cursor-pointer hover:shadow-lg transition-shadow"
+                                className="sm:border rounded-lg overflow-hidden cursor-pointer hover:shadow-lg transition-shadow"
                                 onClick={() => handleSelectExistingImage(image.publicUrl)}
                               >
                                 <img
                                   src={image.publicUrl}
                                   alt={image.name}
-                                  className="w-full h-32 object-cover"
+                                  className="w-full aspect-square sm:h-32 object-cover"
                                 />
-                                <div className="p-2 bg-gray-50">
+                                <div className="hidden sm:block p-2 bg-gray-50">
                                   <p className="text-xs text-gray-600 truncate" title={image.name}>
                                     {image.name.split('/').pop()}
                                   </p>
@@ -1690,61 +1717,83 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
     if (!selectedAccount) return null;
 
     return (
-      <div className="bg-white sm:rounded-2xl border-y sm:border border-gray-200 shadow-sm p-4 sm:p-6 mb-4 sm:mb-8">
-        <div className="flex items-center gap-2 sm:gap-3 mb-4">
-          <div className="bg-purple-600 p-2 rounded-lg">
-            <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
+      <div className="bg-white sm:bg-gradient-to-br sm:from-blue-50 sm:to-indigo-50 sm:rounded-2xl sm:border sm:border-blue-200 mb-4 sm:mb-6">
+        {/* Stats Row - Instagram Style */}
+        <div className="flex justify-around text-center border-t border-b sm:border-0 border-gray-200 py-4 sm:py-6 sm:mx-4 sm:border sm:rounded-xl sm:bg-white sm:my-4">
+          <div className="px-2">
+            <div className="text-lg sm:text-2xl font-bold text-gray-900">
+              {selectedAccount.accountType === 'organization' ? linkedinAnalytics.followers : linkedinAnalytics.connections}
+            </div>
+            <div className="text-xs text-gray-500">
+              {selectedAccount.accountType === 'organization' ? 'Followers' : 'Connections'}
+            </div>
           </div>
-          <div>
-            <h3 className="text-base sm:text-lg font-semibold text-gray-900">Analytics Overview</h3>
-            <p className="text-xs sm:text-sm text-gray-600 hidden sm:block">Track your LinkedIn performance</p>
+          <div className="border-l border-gray-200 px-2">
+            <div className="text-lg sm:text-2xl font-bold text-gray-900">{posts.length}</div>
+            <div className="text-xs text-gray-500">Posts</div>
+          </div>
+          <div className="border-l border-gray-200 px-2">
+            <div className="text-lg sm:text-2xl font-bold text-gray-900">
+              {linkedinAnalytics.postEngagement || 0}
+            </div>
+            <div className="text-xs text-gray-500">Engagement</div>
+          </div>
+          <div className="border-l border-gray-200 px-2">
+            <div className="text-lg sm:text-2xl font-bold text-gray-900">
+              {linkedinAnalytics.profileViews !== '--' ? linkedinAnalytics.profileViews : '0'}
+            </div>
+            <div className="text-xs text-gray-500">
+              {selectedAccount.accountType === 'organization' ? 'Impressions' : 'Views'}
+            </div>
           </div>
         </div>
-
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-          <div className={`bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 ${
-            selectedAccount.accountType === 'organization' && typeof linkedinAnalytics.profileViews === 'number' ? '' : 'opacity-60'
-          }`}>
+        
+        {/* Detailed Analytics Cards - Only on Desktop */}
+        <div className="hidden sm:grid grid-cols-2 lg:grid-cols-4 gap-3 p-4 pt-0">
+          <div className="bg-white rounded-xl p-4 border border-blue-100 shadow-sm">
             <div className="flex items-center gap-2 mb-2">
-              <Eye className="h-5 w-5 text-blue-600" />
-              <span className="text-xs text-gray-600">
+              <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                <Eye className="h-4 w-4 text-blue-600" />
+              </div>
+              <span className="text-xs font-medium text-gray-700">
                 {selectedAccount.accountType === 'organization' ? 'Impressions' : 'Profile Views'}
               </span>
             </div>
-            <div className="text-2xl font-bold text-gray-900">{linkedinAnalytics.profileViews}</div>
+            <div className="text-xl font-bold text-gray-900">{linkedinAnalytics.profileViews}</div>
           </div>
 
-          <div className={`bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 ${
-            selectedAccount.accountType === 'organization' && typeof linkedinAnalytics.followers === 'number' ? '' : 'opacity-60'
-          }`}>
+          <div className="bg-white rounded-xl p-4 border border-green-100 shadow-sm">
             <div className="flex items-center gap-2 mb-2">
-              <Users className="h-5 w-5 text-green-600" />
-              <span className="text-xs text-gray-600">
+              <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
+                <Users className="h-4 w-4 text-green-600" />
+              </div>
+              <span className="text-xs font-medium text-gray-700">
                 {selectedAccount.accountType === 'organization' ? 'Followers' : 'Connections'}
               </span>
             </div>
-            <div className="text-2xl font-bold text-gray-900">
+            <div className="text-xl font-bold text-gray-900">
               {selectedAccount.accountType === 'organization' ? linkedinAnalytics.followers : linkedinAnalytics.connections}
             </div>
           </div>
 
-          <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-4">
+          <div className="bg-white rounded-xl p-4 border border-purple-100 shadow-sm">
             <div className="flex items-center gap-2 mb-2">
-              <FileText className="h-5 w-5 text-purple-600" />
-              <span className="text-xs text-gray-600">Total Posts</span>
+              <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
+                <FileText className="h-4 w-4 text-purple-600" />
+              </div>
+              <span className="text-xs font-medium text-gray-700">Total Posts</span>
             </div>
-            <div className="text-2xl font-bold text-gray-900">{posts.length}</div>
-
+            <div className="text-xl font-bold text-gray-900">{posts.length}</div>
           </div>
 
-          <div className={`bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-4 ${
-            selectedAccount.accountType === 'organization' && typeof linkedinAnalytics.postEngagement === 'number' ? '' : ''
-          }`}>
+          <div className="bg-white rounded-xl p-4 border border-orange-100 shadow-sm">
             <div className="flex items-center gap-2 mb-2">
-              <Heart className="h-5 w-5 text-orange-600" />
-              <span className="text-xs text-gray-600">Total Engagement</span>
+              <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center">
+                <Heart className="h-4 w-4 text-orange-600" />
+              </div>
+              <span className="text-xs font-medium text-gray-700">Engagement</span>
             </div>
-            <div className="text-2xl font-bold text-gray-900">
+            <div className="text-xl font-bold text-gray-900">
               {linkedinAnalytics.postEngagement || 0}
             </div>
           </div>
@@ -1752,29 +1801,35 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
         
         {/* Additional metrics for organizations */}
         {selectedAccount.accountType === 'organization' && linkedinAnalytics.impressionCount !== undefined && (
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mt-4">
-            <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-xl p-4">
+          <div className="hidden sm:grid grid-cols-3 gap-3 px-4 pb-4">
+            <div className="bg-white rounded-xl p-4 border border-indigo-100 shadow-sm">
               <div className="flex items-center gap-2 mb-2">
-                <TrendingUp className="h-5 w-5 text-indigo-600" />
-                <span className="text-xs text-gray-600">Total Impressions</span>
+                <div className="w-8 h-8 bg-indigo-100 rounded-lg flex items-center justify-center">
+                  <TrendingUp className="h-4 w-4 text-indigo-600" />
+                </div>
+                <span className="text-xs font-medium text-gray-700">Total Impressions</span>
               </div>
-              <div className="text-2xl font-bold text-gray-900">{linkedinAnalytics.impressionCount}</div>
+              <div className="text-xl font-bold text-gray-900">{linkedinAnalytics.impressionCount}</div>
             </div>
             
-            <div className="bg-gradient-to-br from-pink-50 to-pink-100 rounded-xl p-4">
+            <div className="bg-white rounded-xl p-4 border border-pink-100 shadow-sm">
               <div className="flex items-center gap-2 mb-2">
-                <MousePointer className="h-5 w-5 text-pink-600" />
-                <span className="text-xs text-gray-600">Total Clicks</span>
+                <div className="w-8 h-8 bg-pink-100 rounded-lg flex items-center justify-center">
+                  <MousePointer className="h-4 w-4 text-pink-600" />
+                </div>
+                <span className="text-xs font-medium text-gray-700">Total Clicks</span>
               </div>
-              <div className="text-2xl font-bold text-gray-900">{linkedinAnalytics.clickCount}</div>
+              <div className="text-xl font-bold text-gray-900">{linkedinAnalytics.clickCount}</div>
             </div>
             
-            <div className="bg-gradient-to-br from-teal-50 to-teal-100 rounded-xl p-4">
+            <div className="bg-white rounded-xl p-4 border border-teal-100 shadow-sm">
               <div className="flex items-center gap-2 mb-2">
-                <TrendingUp className="h-5 w-5 text-teal-600" />
-                <span className="text-xs text-gray-600">Engagement Rate</span>
+                <div className="w-8 h-8 bg-teal-100 rounded-lg flex items-center justify-center">
+                  <TrendingUp className="h-4 w-4 text-teal-600" />
+                </div>
+                <span className="text-xs font-medium text-gray-700">Engagement Rate</span>
               </div>
-              <div className="text-2xl font-bold text-gray-900">{linkedinAnalytics.engagementRate || '0%'}</div>
+              <div className="text-xl font-bold text-gray-900">{linkedinAnalytics.engagementRate || '0%'}</div>
             </div>
           </div>
         )}
@@ -1787,41 +1842,36 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
     if (!selectedAccount) return null;
 
     return (
-      <div className="bg-white sm:rounded-2xl border-y sm:border border-gray-200 shadow-sm p-4 sm:p-6 mb-4 sm:mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2 sm:gap-3">
-            <div className="bg-blue-600 p-2 rounded-lg">
-              <FileText className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
-            </div>
-            <div>
-              <h3 className="text-base sm:text-lg font-semibold text-gray-900">Recent Posts</h3>
-              <p className="text-xs sm:text-sm text-gray-600 hidden sm:block">Your latest LinkedIn posts</p>
-            </div>
+      <div className="bg-white sm:rounded-2xl sm:border sm:border-gray-200 sm:shadow-sm">
+        <div className="flex items-center justify-between px-3 py-3 sm:p-4 border-b border-gray-100">
+          <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+            <FileText className="h-4 w-4 text-blue-600" />
+            Posts
+          </h3>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500">{posts.length} posts</span>
+            <button
+              onClick={fetchPosts}
+              disabled={postsLoading}
+              className="flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors text-xs disabled:opacity-50"
+            >
+              <Loader2 className={`h-3 w-3 ${postsLoading ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">Refresh</span>
+            </button>
           </div>
-          <button
-            onClick={fetchPosts}
-            disabled={postsLoading}
-            className="flex items-center gap-2 px-3 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors text-sm disabled:opacity-50"
-          >
-            <Loader2 className={`h-4 w-4 ${postsLoading ? 'animate-spin' : ''}`} />
-            <span className="hidden sm:inline">Refresh</span>
-          </button>
         </div>
         
         {posts.length > 0 && (
-          <div className="mb-4 space-y-2">
+          <div className="px-3 sm:px-4 py-2 space-y-2">
             {isRateLimited && rateLimitResetTime && (
-              <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-                <div className="flex items-start gap-3">
-                  <svg className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+              <div className="p-3 bg-red-50 sm:border border-red-200 rounded-lg">
+                <div className="flex items-start gap-2">
+                  <svg className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                   </svg>
                   <div className="flex-1">
-                    <h5 className="font-medium text-red-800 text-sm mb-1">Daily Limit Reached</h5>
-                    <p className="text-xs text-red-700 mb-2">
-                      Analytics will refresh automatically after the reset time.
-                    </p>
-                    <p className="text-xs text-red-600 font-medium">
+                    <h5 className="font-medium text-red-800 text-xs mb-1">Daily Limit Reached</h5>
+                    <p className="text-xs text-red-600">
                       Resets at: {rateLimitResetTime.toLocaleString()}
                     </p>
                   </div>
@@ -1833,22 +1883,22 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
         )}
 
         {postsLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-            <span className="ml-2">Loading posts...</span>
+          <div className="flex items-center justify-center py-8 sm:py-12">
+            <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 animate-spin text-blue-600" />
+            <span className="ml-2 text-sm text-gray-600">Loading posts...</span>
           </div>
         ) : postsError ? (
-          <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-red-600 text-sm">{postsError}</p>
+          <div className="p-3 mx-3 sm:mx-4 bg-red-50 sm:border border-red-200 rounded-lg">
+            <p className="text-red-600 text-xs sm:text-sm">{postsError}</p>
           </div>
         ) : posts.length === 0 ? (
-          <div className="text-center py-12 text-gray-500">
-            <FileText className="h-16 w-16 mx-auto mb-4 opacity-50" />
-            <p className="font-medium">No posts yet</p>
-            <p className="text-sm">Create your first post to see it here</p>
+          <div className="text-center py-8 sm:py-12 text-gray-500">
+            <FileText className="h-12 w-12 sm:h-16 sm:w-16 mx-auto mb-3 sm:mb-4 opacity-50" />
+            <p className="font-medium text-sm sm:text-base">No posts yet</p>
+            <p className="text-xs sm:text-sm">Create your first post to see it here</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-3 sm:grid-cols-2 lg:grid-cols-3 gap-0.5 sm:gap-4 sm:p-4">
             {posts.map((post) => {
               // Use analytics from post object (fetched from backend) or fall back to state
               const analytics = post.analytics || postAnalytics[post.id] || { likeCount: 0, commentCount: 0, liked: false };
@@ -1862,15 +1912,77 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
               return (
                 <div 
                   key={post.id} 
-                  className="group border border-gray-200 rounded-xl overflow-hidden hover:shadow-lg transition-all duration-300 bg-white flex flex-col cursor-pointer hover:border-blue-400"
+                  className="group sm:border border-gray-200 sm:rounded-xl overflow-hidden hover:shadow-lg transition-all duration-300 bg-white flex flex-col cursor-pointer hover:sm:border-blue-400"
                   onClick={() => fetchSinglePostAnalytics(post)}
                 >
-                  {/* Post Header */}
-                  <div className="p-4 border-b border-gray-100">
-                    <div className="flex items-center gap-3 mb-2">
-                      {selectedAccount.profile?.picture ? (
+                  {/* Mobile: Simple Instagram-like card */}
+                  <div className="sm:hidden aspect-square relative bg-gray-100">
+                    {/* Show media if available */}
+                    {post.hasMedia && post.mediaUrl ? (
+                      post.mediaType === 'video' || post.isVideo ? (
+                        <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
+                          <div className="absolute top-2 right-2 z-10">
+                            <svg className="w-5 h-5 text-white drop-shadow-lg" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M8 5v14l11-7z"/>
+                            </svg>
+                          </div>
+                          <video
+                            src={post.mediaUrl}
+                            className="w-full h-full object-cover"
+                            poster={post.altText}
+                          />
+                        </div>
+                      ) : (
                         <img
-                          src={selectedAccount.profile.picture}
+                          src={post.mediaUrl}
+                          alt={post.altText || 'LinkedIn post'}
+                          className="w-full h-full object-cover"
+                        />
+                      )
+                    ) : (
+                      // Text-only post - show preview
+                      <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-indigo-600 p-3 flex flex-col justify-center">
+                        <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center mb-2">
+                          <Linkedin className="h-5 w-5 text-white" />
+                        </div>
+                        {post.text && (
+                          <p className="text-white text-[10px] line-clamp-4 leading-tight">
+                            {cleanLinkedInText(post.text)}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    
+                    {/* Hover overlay with stats */}
+                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <div className="text-white text-center space-y-1">
+                        <div className="flex items-center justify-center gap-3 text-xs font-semibold">
+                          <span className="flex items-center gap-1">
+                            <Heart className="h-3 w-3" fill="white" />
+                            {analytics.likeCount || 0}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <MessageSquare className="h-3 w-3" fill="white" />
+                            {analytics.commentCount || 0}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Published indicator */}
+                    {post.lifecycleState === 'PUBLISHED' && (
+                      <div className="absolute top-1 left-1 w-2 h-2 bg-green-500 rounded-full"></div>
+                    )}
+                  </div>
+
+                  {/* Desktop: Detailed card */}
+                  <div className="hidden sm:block">
+                    {/* Post Header */}
+                    <div className="p-4 border-b border-gray-100">
+                      <div className="flex items-center gap-3 mb-2">
+                        {selectedAccount.profile?.picture ? (
+                          <img
+                            src={selectedAccount.profile.picture}
                           alt={selectedAccount.profile.name}
                           className="w-10 h-10 rounded-full flex-shrink-0"
                         />
@@ -2072,6 +2184,8 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
                       </div>
                     )}
                   </div>
+                  </div>
+                  {/* End Desktop card */}
                 </div>
               );
             })}
@@ -2089,28 +2203,28 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
     const comments = postComments[selectedPostId] || [];
 
     return (
-      <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 flex items-start justify-center py-8 px-4">
-        <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 flex items-end sm:items-start justify-center sm:py-8 sm:px-4">
+        <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl sm:max-w-4xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
           {/* Header */}
-          <div className="sticky top-0 bg-white border-b border-gray-200 p-4 sm:p-6 z-10 rounded-t-2xl">
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-3 flex-1 min-w-0">
+          <div className="sticky top-0 bg-white border-b border-gray-200 p-3 sm:p-6 z-10 rounded-t-2xl">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
                 {selectedAccount?.profile?.picture ? (
                   <img
                     src={selectedAccount.profile.picture}
                     alt={selectedAccount.profile.name}
-                    className="w-12 h-12 rounded-full flex-shrink-0"
+                    className="w-10 h-10 sm:w-12 sm:h-12 rounded-full flex-shrink-0"
                   />
                 ) : (
-                  <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-700 rounded-full flex items-center justify-center flex-shrink-0">
-                    <Linkedin className="h-6 w-6 text-white" />
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-blue-500 to-blue-700 rounded-full flex items-center justify-center flex-shrink-0">
+                    <Linkedin className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
                   </div>
                 )}
                 <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-gray-900 text-lg truncate">Post Analytics</h3>
-                  <p className="text-sm text-gray-500">
+                  <h3 className="font-semibold text-gray-900 text-sm sm:text-lg truncate">Post Analytics</h3>
+                  <p className="text-xs sm:text-sm text-gray-500">
                     {new Date(post.createdAt).toLocaleDateString('en-US', {
-                      month: 'long',
+                      month: 'short',
                       day: 'numeric',
                       year: 'numeric'
                     })}
@@ -2122,9 +2236,9 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
                   setSelectedPostId(null);
                   setSinglePostAnalytics(null);
                 }}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
+                className="w-8 h-8 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded-full transition-colors flex-shrink-0"
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
@@ -2132,15 +2246,15 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
           </div>
 
           {loadingSinglePost ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+            <div className="flex items-center justify-center py-8 sm:py-12">
+              <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 animate-spin text-blue-600" />
             </div>
           ) : (
-            <div className="p-4 sm:p-6 space-y-6">
+            <div className="p-3 sm:p-6 space-y-4 sm:space-y-6">
               {/* Post Content */}
-              <div className="bg-gradient-to-br from-gray-50 to-blue-50 rounded-xl p-4 sm:p-6 border border-gray-200">
+              <div className="bg-gradient-to-br from-gray-50 to-blue-50 rounded-xl p-3 sm:p-6 sm:border border-gray-200">
                 {post.text && (
-                  <p className="text-gray-800 text-sm sm:text-base mb-4 whitespace-pre-wrap">
+                  <p className="text-gray-800 text-xs sm:text-base mb-3 sm:mb-4 whitespace-pre-wrap line-clamp-6 sm:line-clamp-none">
                     {cleanLinkedInText(post.text)}
                   </p>
                 )}
@@ -2167,14 +2281,14 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
                 )}
 
                 {post.linkedinUrl && (
-                  <div className="mt-4">
+                  <div className="mt-3 sm:mt-4">
                     <a
                       href={post.linkedinUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                      className="inline-flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm font-medium"
                     >
-                      <ExternalLink className="h-4 w-4" />
+                      <ExternalLink className="h-3 w-3 sm:h-4 sm:w-4" />
                       <span>View on LinkedIn</span>
                     </a>
                   </div>
@@ -2182,98 +2296,98 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
               </div>
 
               {/* Engagement Metrics Grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-3 sm:grid-cols-3 gap-2 sm:gap-4">
                 {/* Likes */}
-                <div className="bg-gradient-to-br from-red-50 to-pink-50 rounded-xl p-4 border border-red-200">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="p-2 bg-red-100 rounded-lg">
-                      <Heart className="h-4 w-4 text-red-600" />
+                <div className="bg-gradient-to-br from-red-50 to-pink-50 rounded-xl p-2 sm:p-4 sm:border border-red-200">
+                  <div className="flex items-center gap-1 sm:gap-2 mb-1 sm:mb-2">
+                    <div className="p-1 sm:p-2 bg-red-100 rounded-lg">
+                      <Heart className="h-3 w-3 sm:h-4 sm:w-4 text-red-600" />
                     </div>
-                    <span className="text-xs font-medium text-gray-600">Likes</span>
+                    <span className="text-[10px] sm:text-xs font-medium text-gray-600">Likes</span>
                   </div>
-                  <p className="text-2xl font-bold text-gray-900">{metrics.likes.toLocaleString()}</p>
+                  <p className="text-lg sm:text-2xl font-bold text-gray-900">{metrics.likes.toLocaleString()}</p>
                 </div>
 
                 {/* Comments */}
-                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="p-2 bg-blue-100 rounded-lg">
-                      <MessageSquare className="h-4 w-4 text-blue-600" />
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-2 sm:p-4 sm:border border-blue-200">
+                  <div className="flex items-center gap-1 sm:gap-2 mb-1 sm:mb-2">
+                    <div className="p-1 sm:p-2 bg-blue-100 rounded-lg">
+                      <MessageSquare className="h-3 w-3 sm:h-4 sm:w-4 text-blue-600" />
                     </div>
-                    <span className="text-xs font-medium text-gray-600">Comments</span>
+                    <span className="text-[10px] sm:text-xs font-medium text-gray-600">Comments</span>
                   </div>
-                  <p className="text-2xl font-bold text-gray-900">{metrics.comments.toLocaleString()}</p>
+                  <p className="text-lg sm:text-2xl font-bold text-gray-900">{metrics.comments.toLocaleString()}</p>
                 </div>
 
                 {/* Shares */}
-                <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-4 border border-green-200">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="p-2 bg-green-100 rounded-lg">
-                      <Share2 className="h-4 w-4 text-green-600" />
+                <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-2 sm:p-4 sm:border border-green-200">
+                  <div className="flex items-center gap-1 sm:gap-2 mb-1 sm:mb-2">
+                    <div className="p-1 sm:p-2 bg-green-100 rounded-lg">
+                      <Share2 className="h-3 w-3 sm:h-4 sm:w-4 text-green-600" />
                     </div>
-                    <span className="text-xs font-medium text-gray-600">Shares</span>
+                    <span className="text-[10px] sm:text-xs font-medium text-gray-600">Shares</span>
                   </div>
-                  <p className="text-2xl font-bold text-gray-900">{metrics.shares.toLocaleString()}</p>
+                  <p className="text-lg sm:text-2xl font-bold text-gray-900">{metrics.shares.toLocaleString()}</p>
                 </div>
 
                 {/* Impressions */}
-                <div className="bg-gradient-to-br from-purple-50 to-violet-50 rounded-xl p-4 border border-purple-200">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="p-2 bg-purple-100 rounded-lg">
-                      <Eye className="h-4 w-4 text-purple-600" />
+                <div className="bg-gradient-to-br from-purple-50 to-violet-50 rounded-xl p-2 sm:p-4 sm:border border-purple-200">
+                  <div className="flex items-center gap-1 sm:gap-2 mb-1 sm:mb-2">
+                    <div className="p-1 sm:p-2 bg-purple-100 rounded-lg">
+                      <Eye className="h-3 w-3 sm:h-4 sm:w-4 text-purple-600" />
                     </div>
-                    <span className="text-xs font-medium text-gray-600">Impressions</span>
+                    <span className="text-[10px] sm:text-xs font-medium text-gray-600">Impressions</span>
                   </div>
-                  <p className="text-2xl font-bold text-gray-900">{metrics.impressions.toLocaleString()}</p>
+                  <p className="text-lg sm:text-2xl font-bold text-gray-900">{metrics.impressions.toLocaleString()}</p>
                 </div>
 
                 {/* Unique Impressions */}
-                <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl p-4 border border-amber-200">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="p-2 bg-amber-100 rounded-lg">
-                      <Users className="h-4 w-4 text-amber-600" />
+                <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl p-2 sm:p-4 sm:border border-amber-200">
+                  <div className="flex items-center gap-1 sm:gap-2 mb-1 sm:mb-2">
+                    <div className="p-1 sm:p-2 bg-amber-100 rounded-lg">
+                      <Users className="h-3 w-3 sm:h-4 sm:w-4 text-amber-600" />
                     </div>
-                    <span className="text-xs font-medium text-gray-600">Unique Views</span>
+                    <span className="text-[10px] sm:text-xs font-medium text-gray-600">Unique</span>
                   </div>
-                  <p className="text-2xl font-bold text-gray-900">{metrics.uniqueImpressions.toLocaleString()}</p>
+                  <p className="text-lg sm:text-2xl font-bold text-gray-900">{metrics.uniqueImpressions.toLocaleString()}</p>
                 </div>
 
                 {/* Clicks */}
-                <div className="bg-gradient-to-br from-cyan-50 to-teal-50 rounded-xl p-4 border border-cyan-200">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="p-2 bg-cyan-100 rounded-lg">
-                      <MousePointer className="h-4 w-4 text-cyan-600" />
+                <div className="bg-gradient-to-br from-cyan-50 to-teal-50 rounded-xl p-2 sm:p-4 sm:border border-cyan-200">
+                  <div className="flex items-center gap-1 sm:gap-2 mb-1 sm:mb-2">
+                    <div className="p-1 sm:p-2 bg-cyan-100 rounded-lg">
+                      <MousePointer className="h-3 w-3 sm:h-4 sm:w-4 text-cyan-600" />
                     </div>
-                    <span className="text-xs font-medium text-gray-600">Clicks</span>
+                    <span className="text-[10px] sm:text-xs font-medium text-gray-600">Clicks</span>
                   </div>
-                  <p className="text-2xl font-bold text-gray-900">{metrics.clicks.toLocaleString()}</p>
+                  <p className="text-lg sm:text-2xl font-bold text-gray-900">{metrics.clicks.toLocaleString()}</p>
                 </div>
               </div>
 
               {/* Total Engagement Summary */}
-              <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-xl p-6 text-white">
-                <div className="flex items-center justify-between mb-4">
-                  <h4 className="font-semibold text-lg">Total Engagement</h4>
-                  <TrendingUp className="h-6 w-6" />
+              <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-xl p-4 sm:p-6 text-white">
+                <div className="flex items-center justify-between mb-3 sm:mb-4">
+                  <h4 className="font-semibold text-sm sm:text-lg">Total Engagement</h4>
+                  <TrendingUp className="h-5 w-5 sm:h-6 sm:w-6" />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-3 sm:gap-4">
                   <div>
-                    <p className="text-3xl font-bold mb-1">{metrics.engagement.toLocaleString()}</p>
-                    <p className="text-sm text-blue-100">Total Interactions</p>
+                    <p className="text-2xl sm:text-3xl font-bold mb-0.5 sm:mb-1">{metrics.engagement.toLocaleString()}</p>
+                    <p className="text-xs sm:text-sm text-blue-100">Total Interactions</p>
                   </div>
                   <div>
-                    <p className="text-3xl font-bold mb-1">{metrics.engagementRate}%</p>
-                    <p className="text-sm text-blue-100">Engagement Rate</p>
+                    <p className="text-2xl sm:text-3xl font-bold mb-0.5 sm:mb-1">{metrics.engagementRate}%</p>
+                    <p className="text-xs sm:text-sm text-blue-100">Engagement Rate</p>
                   </div>
                 </div>
               </div>
               
               {/* Comments Section */}
               {metrics.comments > 0 && (
-                <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h4 className="font-semibold text-gray-900 flex items-center gap-2">
-                      <MessageSquare className="h-5 w-5 text-blue-600" />
+                <div className="bg-white sm:border border-gray-200 rounded-xl p-3 sm:p-6">
+                  <div className="flex items-center justify-between mb-3 sm:mb-4">
+                    <h4 className="font-semibold text-gray-900 flex items-center gap-2 text-sm sm:text-base">
+                      <MessageSquare className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
                       Comments ({comments.length})
                     </h4>
                     {loadingComments && (
@@ -2282,49 +2396,49 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
                   </div>
                   
                   {loadingComments ? (
-                    <div className="flex items-center justify-center py-8">
-                      <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+                    <div className="flex items-center justify-center py-6 sm:py-8">
+                      <Loader2 className="h-5 w-5 sm:h-6 sm:w-6 animate-spin text-blue-600" />
                     </div>
                   ) : comments.length === 0 ? (
-                    <p className="text-sm text-gray-500 text-center py-8">No comments to display</p>
+                    <p className="text-xs sm:text-sm text-gray-500 text-center py-6 sm:py-8">No comments to display</p>
                   ) : (
-                    <div className="space-y-4 max-h-96 overflow-y-auto">
+                    <div className="space-y-3 sm:space-y-4 max-h-72 sm:max-h-96 overflow-y-auto">
                       {comments.map((comment) => (
-                        <div key={comment.id} className="bg-gray-50 rounded-lg p-3">
-                          <div className="flex items-start gap-3">
+                        <div key={comment.id} className="bg-gray-50 rounded-lg p-2 sm:p-3">
+                          <div className="flex items-start gap-2 sm:gap-3">
                             {comment.actor?.profilePicture ? (
                               <img
                                 src={comment.actor.profilePicture}
                                 alt={comment.actor.name}
-                                className="w-8 h-8 rounded-full flex-shrink-0"
+                                className="w-6 h-6 sm:w-8 sm:h-8 rounded-full flex-shrink-0"
                               />
                             ) : (
-                              <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
-                                <Linkedin className="h-4 w-4 text-blue-600" />
+                              <div className="w-6 h-6 sm:w-8 sm:h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                                <Linkedin className="h-3 w-3 sm:h-4 sm:w-4 text-blue-600" />
                               </div>
                             )}
                             <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="font-medium text-sm text-gray-900">
+                              <div className="flex items-center gap-1 sm:gap-2 mb-0.5 sm:mb-1">
+                                <span className="font-medium text-xs sm:text-sm text-gray-900 truncate">
                                   {comment.actor?.name || 'LinkedIn User'}
                                 </span>
-                                <span className="text-xs text-gray-500">
+                                <span className="text-[10px] sm:text-xs text-gray-500">
                                   {comment.created ? new Date(comment.created).toLocaleDateString() : ''}
                                 </span>
                               </div>
-                              <p className="text-sm text-gray-700 whitespace-pre-wrap">{comment.message}</p>
+                              <p className="text-xs sm:text-sm text-gray-700 whitespace-pre-wrap">{comment.message}</p>
                               
-                              <div className="flex items-center gap-3 mt-2">
+                              <div className="flex items-center gap-3 mt-1.5 sm:mt-2">
                                 <button
                                   onClick={() => setReplyingToComment(comment.id)}
-                                  className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                                  className="text-[10px] sm:text-xs text-blue-600 hover:text-blue-700 font-medium"
                                 >
                                   Reply
                                 </button>
                                 {comment.canDelete && (
                                   <button
                                     onClick={() => deleteComment(comment.id, selectedPostId)}
-                                    className="text-xs text-red-600 hover:text-red-700 font-medium"
+                                    className="text-[10px] sm:text-xs text-red-600 hover:text-red-700 font-medium"
                                   >
                                     Delete
                                   </button>
@@ -2332,13 +2446,13 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
                               </div>
                               
                               {replyingToComment === comment.id && (
-                                <div className="mt-3 flex gap-2">
+                                <div className="mt-2 sm:mt-3 flex gap-1 sm:gap-2">
                                   <input
                                     type="text"
                                     value={replyText}
                                     onChange={(e) => setReplyText(e.target.value)}
                                     placeholder="Write a reply..."
-                                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    className="flex-1 px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-lg text-xs sm:text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                     onKeyPress={(e) => {
                                       if (e.key === 'Enter' && !sendingReply) {
                                         postReplyToComment(comment.id, replyText, selectedPostId);
@@ -2348,18 +2462,18 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
                                   <button
                                     onClick={() => postReplyToComment(comment.id, replyText, selectedPostId)}
                                     disabled={sendingReply || !replyText.trim()}
-                                    className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm"
+                                    className="px-2 sm:px-3 py-1.5 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-xs sm:text-sm"
                                   >
-                                    {sendingReply ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                                    {sendingReply ? <Loader2 className="h-3 w-3 sm:h-4 sm:w-4 animate-spin" /> : <Send className="h-3 w-3 sm:h-4 sm:w-4" />}
                                   </button>
                                   <button
                                     onClick={() => {
                                       setReplyingToComment(null);
                                       setReplyText('');
                                     }}
-                                    className="px-3 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 text-sm"
+                                    className="px-2 sm:px-3 py-1.5 sm:py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 text-xs sm:text-sm"
                                   >
-                                    Cancel
+                                    ✕
                                   </button>
                                 </div>
                               )}
@@ -2453,47 +2567,71 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
               </div>
             </>
           ) : (
-            <div className="space-y-6">
+            <div className="space-y-4">
               {renderAccountManagement()}
               
               {selectedAccount && (
                 <>
-                  {/* Post creation removed */}
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 sm:p-4 bg-gradient-to-r from-blue-50 to-indigo-50 sm:rounded-lg sm:border border-blue-200 gap-3 sm:gap-4">
-                    <div className="flex items-center gap-3 w-full sm:w-auto">
-                      {selectedAccount.profile?.picture ? (
-                        <img 
-                          src={selectedAccount.profile.picture} 
-                          alt="Profile"
-                          className="w-10 h-10 sm:w-12 sm:h-12 rounded-full border-2 border-blue-200"
-                        />
-                      ) : (
-                        <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                          <Linkedin className="h-5 w-5 sm:h-6 sm:w-6 text-blue-700" />
+                  {/* Profile Header - Instagram/LinkedIn Style */}
+                  <div className="bg-white sm:bg-gradient-to-br sm:from-blue-50 sm:to-indigo-50 sm:border sm:border-blue-200 sm:rounded-2xl">
+                    <div className="px-3 py-4 sm:p-6">
+                      <div className="flex items-start gap-4 mb-4">
+                        {selectedAccount.profile?.picture ? (
+                          <img 
+                            src={selectedAccount.profile.picture} 
+                            alt="Profile"
+                            className="w-16 h-16 sm:w-20 sm:h-20 rounded-full border-2 border-blue-200 flex-shrink-0"
+                          />
+                        ) : (
+                          <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-blue-500 to-blue-700 rounded-full flex items-center justify-center flex-shrink-0">
+                            <Linkedin className="h-8 w-8 sm:h-10 sm:w-10 text-white" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <h2 className="text-lg sm:text-xl font-bold text-gray-900 truncate">{selectedAccount.profile?.name}</h2>
+                          <p className="text-xs sm:text-sm text-gray-500 truncate">{selectedAccount.profile?.headline}</p>
+                          {selectedAccount.profile?.email && (
+                            <p className="text-xs text-gray-600 mt-1 truncate hidden sm:block">{selectedAccount.profile.email}</p>
+                          )}
+                          <div className="flex items-center gap-2 mt-2">
+                            <span className={`text-xs px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                              selectedAccount.accountType === 'organization' 
+                                ? 'bg-purple-100 text-purple-700' 
+                                : 'bg-green-100 text-green-700'
+                            }`}>
+                              {selectedAccount.accountType === 'organization' ? (
+                                <>
+                                  <Building2 className="h-3 w-3" />
+                                  <span>Organization</span>
+                                </>
+                              ) : (
+                                <>
+                                  <User className="h-3 w-3" />
+                                  <span>Personal</span>
+                                </>
+                              )}
+                            </span>
+                          </div>
                         </div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-gray-900 text-sm sm:text-base truncate">{selectedAccount.profile?.name}</p>
-                        <p className="text-xs sm:text-sm text-gray-600 truncate">{selectedAccount.profile?.headline || selectedAccount.profile?.email}</p>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2 w-full sm:w-auto">
-                      <button
-                        onClick={() => refreshAccountData(selectedAccount.id)}
-                        disabled={loading}
-                        className="flex items-center justify-center gap-1 sm:gap-2 px-3 py-2 bg-white border border-blue-200 text-blue-700 rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-50 text-xs sm:text-sm flex-1 sm:flex-initial"
-                      >
-                        <Settings className="h-4 w-4" />
-                        <span>Refresh</span>
-                      </button>
-                      <button
-                        onClick={handleDisconnectAll}
-                        className="flex items-center justify-center gap-1 sm:gap-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-xs sm:text-sm flex-1 sm:flex-initial"
-                      >
-                        <ExternalLink className="h-4 w-4" />
-                        <span className="hidden sm:inline">Disconnect All</span>
-                        <span className="sm:hidden">Disconnect</span>
-                      </button>
+                      
+                      {/* Action Buttons - Compact for mobile */}
+                      <div className="flex gap-2 mb-4">
+                        <button
+                          onClick={() => refreshAccountData(selectedAccount.id)}
+                          disabled={loading}
+                          className="flex items-center justify-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs hover:bg-blue-700 transition-colors disabled:opacity-50"
+                        >
+                          <Settings className="h-3 w-3" />
+                          <span>Refresh</span>
+                        </button>
+                        <button
+                          onClick={() => disconnectAccount(selectedAccount.id)}
+                          className="flex items-center justify-center py-1.5 px-3 bg-gray-100 text-gray-600 rounded-lg text-xs hover:bg-gray-200"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                        </button>
+                      </div>
                     </div>
                   </div>
 
@@ -2506,18 +2644,22 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
           )}
 
           {error && (
-            <div className="mt-4 p-3 bg-red-50 sm:border border-red-200 rounded mx-3 sm:mx-0">
-              <p className="text-red-600 text-sm">
-                <strong>Error:</strong> {error}
-              </p>
+            <div className="mt-4 p-3 bg-red-50 sm:border border-red-200 rounded-lg mx-3 sm:mx-0">
+              <div className="flex items-start gap-2">
+                <div className="w-4 h-4 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <span className="text-red-600 text-xs">!</span>
+                </div>
+                <p className="text-red-600 text-xs sm:text-sm flex-1">{error}</p>
+              </div>
             </div>
           )}
 
           {success && (
-            <div className="mt-4 p-3 bg-green-50 sm:border border-green-200 rounded mx-3 sm:mx-0">
-              <p className="text-green-600 text-sm">
-                <strong>Success:</strong> {success}
-              </p>
+            <div className="mt-4 p-3 bg-green-50 sm:border border-green-200 rounded-lg mx-3 sm:mx-0">
+              <div className="flex items-start gap-2">
+                <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" />
+                <p className="text-green-600 text-xs sm:text-sm flex-1">{success}</p>
+              </div>
             </div>
           )}
         </div>

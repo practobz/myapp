@@ -6,7 +6,7 @@ import {
   CheckCircle, AlertCircle, Image, FileText, 
   Play, Search, Send, 
   Trash2, Users, XCircle,
-  Settings
+  Settings, RefreshCw
 } from 'lucide-react';
 
 import SchedulePostModal from '../../components/modals/SchedulePostModal';
@@ -18,7 +18,7 @@ import { useAuth } from '../../contexts/AuthContext';
 const CustomerCard = memo(({ customerData, customer, onSelect, getStatusColor, isContentPublished, getPublishedPlatformsForContent }) => {
   const customerName = customer?.name || `Customer ${customerData.customerId}`;
   const totalPortfolios = customerData.portfolios.length;
-  const pendingCount = customerData.portfolios.filter(p => p.status === 'under_review' && !isContentPublished(p.id)).length;
+  const pendingCount = customerData.portfolios.filter(p => p.status === 'under_review' && p.published !== true && !isContentPublished(p.id, p)).length;
   
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200/50 overflow-hidden hover:shadow-md transition-shadow">
@@ -47,17 +47,20 @@ const CustomerCard = memo(({ customerData, customer, onSelect, getStatusColor, i
         </div>
 
         <div className="space-y-1 mb-3 max-h-20 overflow-y-auto">
-          {customerData.portfolios.slice(0, 3).map((portfolio) => (
-            <div key={portfolio.id} className="flex items-center justify-between p-1.5 bg-gray-50 rounded text-xs">
-              <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                <div className="w-1.5 h-1.5 bg-blue-500 rounded-full flex-shrink-0"></div>
-                <span className="truncate">{portfolio.title || portfolio.calendarName || 'Content'}</span>
+          {customerData.portfolios.slice(0, 3).map((portfolio) => {
+            const isPublished = isContentPublished(portfolio.id, portfolio);
+            return (
+              <div key={portfolio.id} className="flex items-center justify-between p-1.5 bg-gray-50 rounded text-xs">
+                <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                  <div className="w-1.5 h-1.5 bg-blue-500 rounded-full flex-shrink-0"></div>
+                  <span className="truncate">{portfolio.title || portfolio.calendarName || 'Content'}</span>
+                </div>
+                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getStatusColor(isPublished ? 'published' : portfolio.status)}`}>
+                  {isPublished ? 'Done' : portfolio.status.replace('_', ' ')}
+                </span>
               </div>
-              <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getStatusColor(isContentPublished(portfolio.id) ? 'published' : portfolio.status)}`}>
-                {isContentPublished(portfolio.id) ? 'Done' : portfolio.status.replace('_', ' ')}
-              </span>
-            </div>
-          ))}
+            );
+          })}
           {customerData.portfolios.length > 3 && (
             <div className="text-center text-[10px] text-gray-400">
               +{customerData.portfolios.length - 3} more
@@ -82,7 +85,8 @@ CustomerCard.displayName = 'CustomerCard';
 const PortfolioCard = memo(({ item, onView, onSchedule, onDelete, formatDate, getStatusColor, getStatusIcon, isContentPublished, getPublishedPlatformsForContent, isVideoUrl }) => {
   const latestVersion = item.versions[item.versions.length - 1];
   const firstMedia = latestVersion?.media?.[0];
-  const published = isContentPublished(item.id);
+  // Check both item.published field and scheduled posts for published status
+  const published = isContentPublished(item.id, item);
   
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200/50 overflow-hidden hover:shadow-md transition-shadow flex flex-col">
@@ -216,12 +220,31 @@ function AdminContentPortfolio() {
     }
   }, [currentUser]);
 
+  // Refresh data when page regains focus (e.g., after using PublishManager)
+  useEffect(() => {
+    const handleFocus = () => {
+      if (currentUser) {
+        fetchAllCalendars();
+        fetchScheduledPosts();
+      }
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [currentUser]);
+
   // Add this effect to re-map portfolios when calendars or submissions are loaded
   useEffect(() => {
     if (calendars.length > 0 && submissions.length > 0) {
       mapPortfolioItems();
     }
   }, [calendars, submissions]);
+
+  // Manual refresh function
+  const handleRefresh = () => {
+    fetchAllCalendars();
+    fetchScheduledPosts();
+    fetchAllSubmissions();
+  };
 
   // Fetch only assigned customers for the current admin
   const fetchAssignedCustomers = async () => {
@@ -336,27 +359,39 @@ function AdminContentPortfolio() {
 
   // Helper: Find calendar and content item for a portfolio item
   const getCalendarAndItem = (portfolio) => {
-    // Try to find the calendar by customerId and assignmentId/contentId
-    const calendar = calendars.find(c => c.customerId === portfolio.customerId && c.contentItems?.some(item =>
-      // Try to match by assignmentId, date, or description
-      item.assignment_id === portfolio.id ||
-      item._id === portfolio.id ||
-      item.title === portfolio.title ||
-      item.description === portfolio.description
-    ));
-    if (!calendar) return { calendarName: '', itemName: '' };
-
-    // Find the content item
-    const contentItem = calendar.contentItems.find(item =>
-      item.assignment_id === portfolio.id ||
-      item._id === portfolio.id ||
-      item.title === portfolio.title ||
-      item.description === portfolio.description
-    );
-    return {
-      calendarName: calendar.name || '',
-      itemName: contentItem?.title || contentItem?.description || ''
-    };
+    // Try to find the calendar by customerId first
+    const customerCalendars = calendars.filter(c => c.customerId === portfolio.customerId);
+    
+    for (const calendar of customerCalendars) {
+      if (!calendar.contentItems || !Array.isArray(calendar.contentItems)) continue;
+      
+      // Try to find matching content item
+      const contentItem = calendar.contentItems.find(item => {
+        // Match by assignment_id (most reliable)
+        if (item.assignment_id === portfolio.id) return true;
+        // Match by item id (calendar items use 'id' field)
+        if (item.id === portfolio.id) return true;
+        // Match by item _id
+        if (item._id === portfolio.id) return true;
+        // Match by title
+        if (item.title && portfolio.title && item.title === portfolio.title) return true;
+        // Match by description
+        if (item.description && portfolio.description && item.description === portfolio.description) return true;
+        return false;
+      });
+      
+      if (contentItem) {
+        return {
+          calendarName: calendar.name || '',
+          itemName: contentItem?.title || contentItem?.description || '',
+          published: contentItem?.published === true || contentItem?.manuallyPublished === true,
+          publishedPlatforms: contentItem?.publishedPlatforms || []
+        };
+      }
+    }
+    
+    // No match found
+    return { calendarName: '', itemName: '', published: false, publishedPlatforms: [] };
   };
 
   const mapPortfolioItems = () => {
@@ -382,19 +417,26 @@ function AdminContentPortfolio() {
         );
         const baseItem = versions[0];
 
-        // --- Use saved calendar/item name if available ---
+        // --- Get calendar info including publish status ---
         let calendarName = baseItem.calendar_name || '';
         let itemName = baseItem.item_name || '';
-        // If not available, fallback to mapping
-        if ((!calendarName || !itemName) && calendars.length > 0) {
-          const { calendarName: calName, itemName: itmName } = getCalendarAndItem({
+        let published = false;
+        let publishedPlatforms = [];
+        
+        // Always check calendar for publish status
+        if (calendars.length > 0) {
+          const calendarInfo = getCalendarAndItem({
             id: assignmentId,
             customerId,
             title: baseItem.caption || 'Untitled Post',
             description: baseItem.notes || ''
           });
-          if (!calendarName) calendarName = calName;
-          if (!itemName) itemName = itmName;
+          // Use saved names if available, otherwise use from calendar
+          if (!calendarName) calendarName = calendarInfo.calendarName;
+          if (!itemName) itemName = calendarInfo.itemName;
+          // Always get publish status from calendar
+          published = calendarInfo.published;
+          publishedPlatforms = calendarInfo.publishedPlatforms;
         }
         // --- End ---
 
@@ -423,7 +465,9 @@ function AdminContentPortfolio() {
           totalVersions: versions.length,
           customerFeedback: getAllFeedback(versions),
           calendarName: calendarName, // <-- Attach calendar name
-          itemName: itemName         // <-- Attach item name
+          itemName: itemName,         // <-- Attach item name
+          published: published,       // <-- Attach manual publish status
+          publishedPlatforms: publishedPlatforms // <-- Attach published platforms from calendar
         });
       });
       portfolioData.push({
@@ -532,6 +576,10 @@ function AdminContentPortfolio() {
     return customer ? customer.name : `Customer ${customerId}`;
   }, [customers]);
 
+  const getCustomer = useCallback((customerId) => {
+    return customers.find(c => c._id === customerId);
+  }, [customers]);
+
   const formatDate = useCallback((dateString) => {
     try {
       return new Date(dateString).toLocaleDateString('en-US', {
@@ -549,14 +597,51 @@ function AdminContentPortfolio() {
     return ['mp4', 'webm', 'ogg', 'mov', 'avi'].includes(ext);
   }, []);
 
-  const isContentPublished = useCallback((contentId) => {
-    return scheduledPosts.some(post => post.contentId === contentId && post.status === 'published');
+  const isContentPublished = useCallback((contentId, item = null) => {
+    // Check manual publish flag if item is provided (from calendar item)
+    if (item && item.published === true) return true;
+    
+    // Check scheduled posts - need to check multiple ID fields
+    return scheduledPosts.some(post => {
+      if (post.status !== 'published') return false;
+      
+      // Check if contentId matches
+      if (post.contentId === contentId) return true;
+      
+      // Check if item_id matches (for calendar-based posts)
+      if (post.item_id === contentId) return true;
+      
+      // Check if any version's _id matches (versions are individual submissions)
+      if (item?.versions?.some(v => post.contentId === v.id)) return true;
+      
+      return false;
+    });
   }, [scheduledPosts]);
 
-  const getPublishedPlatformsForContent = useCallback((contentId) => {
-    return scheduledPosts
-      .filter(post => post.contentId === contentId && post.status === 'published')
+  const getPublishedPlatformsForContent = useCallback((contentId, item = null) => {
+    // Get platforms from manual publish if available
+    const manualPlatforms = (item && item.publishedPlatforms) ? item.publishedPlatforms : [];
+    
+    // Get platforms from scheduled posts - check multiple ID fields
+    const scheduledPlatforms = scheduledPosts
+      .filter(post => {
+        if (post.status !== 'published') return false;
+        
+        // Check if contentId matches
+        if (post.contentId === contentId) return true;
+        
+        // Check if item_id matches
+        if (post.item_id === contentId) return true;
+        
+        // Check if any version's _id matches
+        if (item?.versions?.some(v => post.contentId === v.id)) return true;
+        
+        return false;
+      })
       .map(post => post.platform);
+    
+    // Combine and deduplicate
+    return [...new Set([...manualPlatforms, ...scheduledPlatforms])];
   }, [scheduledPosts]);
 
   const handleViewContent = useCallback((item) => {
@@ -678,9 +763,9 @@ function AdminContentPortfolio() {
         if (statusFilter !== 'all') {
           const hasMatchingPortfolio = customerData.portfolios.some(p => {
             if (statusFilter === 'published') {
-              return isContentPublished(p.id);
+              return isContentPublished(p.id, p);
             }
-            return p.status === statusFilter && !isContentPublished(p.id);
+            return p.status === statusFilter && !isContentPublished(p.id, p);
           });
           if (!hasMatchingPortfolio) return false;
         }
@@ -792,6 +877,15 @@ function AdminContentPortfolio() {
                 {selectedContent ? 'View & manage' : selectedCustomer ? `${selectedCustomer.portfolios.length} items` : 'All customers'}
               </p>
             </div>
+            {!selectedContent && (
+              <button
+                onClick={handleRefresh}
+                className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                title="Refresh data"
+              >
+                <RefreshCw className="h-5 w-5" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -923,6 +1017,7 @@ function AdminContentPortfolio() {
             extractHashtags={extractHashtags}
             getCustomerSocialAccounts={getCustomerSocialAccounts}
             getCustomerName={getCustomerName}
+            getCustomer={getCustomer}
             showIntegration={showIntegration}
             updatePortfolioStatus={updatePortfolioStatus}
             onRefreshScheduledPosts={fetchScheduledPosts}

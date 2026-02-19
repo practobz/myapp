@@ -19,6 +19,7 @@ import ScheduledPosts from './admin/ScheduledPosts';
 import AdminContentPortfolio from './admin/pages/admin/AdminContentPortfolio';
 import AdminContentUpload from './admin/pages/admin/ContentUpload';
 import AdminQrGenerator from './admin/pages/admin/AdminQrGenerator';
+import PublishManager from './admin/pages/admin/PublishManager';
 
 
 // Super Admin imports
@@ -402,6 +403,11 @@ function App() {
     <AdminSettings />
   </ProtectedRoutePortal>
 } />
+ <Route path="/admin/publish-manager" element={
+                <ProtectedRoutePortal role="admin">
+                  <PublishManager />
+                </ProtectedRoutePortal>
+              } />
 
               {/* Remove routes for Customer Portfolio Overview since module is missing */}
 

@@ -59,8 +59,11 @@ function Dashboard() {
           (p.customerId === currentUser._id || p.customerId === currentUser.id) &&
           p.status === 'published'
         );
-        // Helper: check if item is published
+        // Helper: check if item is published (via scheduled posts OR manual publish)
         const isItemPublished = (item) => {
+          // Check manual publish flag first
+          if (item.published === true) return true;
+          // Check scheduled posts
           return customerPosts.some(post =>
             (post.item_id && post.item_id === item.id) ||
             (post.contentId && post.contentId === item.id) ||

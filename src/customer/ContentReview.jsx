@@ -8,7 +8,10 @@ function ContentReview() {
     const [scheduledPosts, setScheduledPosts] = useState([]);
     const [scheduledPostsLoading, setScheduledPostsLoading] = useState(false);
     const [scheduledPostsError, setScheduledPostsError] = useState(null);
-    // Fetch scheduled posts on mount
+    // Calendars state for checking manual publish status
+    const [calendars, setCalendars] = useState([]);
+    
+    // Fetch scheduled posts and calendars on mount
     useEffect(() => {
       const fetchScheduledPosts = async () => {
         setScheduledPostsLoading(true);
@@ -25,7 +28,22 @@ function ContentReview() {
           setScheduledPostsLoading(false);
         }
       };
+      
+      const fetchCalendars = async () => {
+        try {
+          const res = await fetch(`${process.env.REACT_APP_API_URL}/calendars`);
+          if (res.ok) {
+            const data = await res.json();
+            setCalendars(Array.isArray(data) ? data : []);
+          }
+        } catch (err) {
+          console.error('Failed to fetch calendars:', err);
+          setCalendars([]);
+        }
+      };
+      
       fetchScheduledPosts();
+      fetchCalendars();
     }, []);
   const navigate = useNavigate();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -175,21 +193,27 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
     createdBy: baseItem.created_by || 'Unknown',
     createdAt: baseItem.created_at || '',
     status: currentStatus,  // Now uses latest version status
-          platform: baseItem.platform || 'Instagram',
-          type: baseItem.type || 'Post',
-          customer_id: baseItem.customer_id,
-          customer_name: baseItem.customer_name,
-          customer_email: baseItem.customer_email,
-          versions: versions.map((version, index) => ({
-            id: version._id,
-            versionNumber: index + 1,
-            media: normalizeMedia(version.media || version.images || []),
-            caption: version.caption || '',
-            notes: version.notes || '',
-            createdAt: version.created_at,
-            comments: version.comments || []
-          })),
-          totalVersions: versions.length
+    platform: baseItem.platform || 'Instagram',
+    type: baseItem.type || 'Post',
+    customer_id: baseItem.customer_id,
+    customer_name: baseItem.customer_name,
+    customer_email: baseItem.customer_email,
+    // Add calendar and item info for publish status checking
+    calendar_id: baseItem.calendar_id || '',
+    calendar_name: baseItem.calendar_name || '',
+    item_id: baseItem.item_id || '',
+    item_name: baseItem.item_name || '',
+    assignment_id: assignmentId,
+    versions: versions.map((version, index) => ({
+      id: version._id,
+      versionNumber: index + 1,
+      media: normalizeMedia(version.media || version.images || []),
+      caption: version.caption || '',
+      notes: version.notes || '',
+      createdAt: version.created_at,
+      comments: version.comments || []
+    })),
+    totalVersions: versions.length
         });
       });
 
@@ -762,10 +786,35 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
     }
   };
 
-  // Published status detection logic (now also checks scheduled_posts DB)
+  // Published status detection logic (checks manual publish flag, scheduled posts, and calendar items)
   const isContentPublished = (contentOrId) => {
     const content = typeof contentOrId === 'object' ? contentOrId : selectedContent;
     if (!content) return false;
+    
+    // Check manual publish flag first
+    if (content.published === true) return true;
+    
+    // Check if the associated calendar item is marked as published
+    if (calendars && calendars.length > 0 && (content.calendar_id || content.item_id)) {
+      // Find the calendar by calendar_id
+      const calendar = calendars.find(cal => 
+        cal._id === content.calendar_id || cal.id === content.calendar_id
+      );
+      
+      if (calendar && Array.isArray(calendar.contentItems)) {
+        // Find the item in the calendar by item_id or item_name
+        const calendarItem = calendar.contentItems.find(item => 
+          (content.item_id && item.id === content.item_id) ||
+          (content.item_name && (item.title === content.item_name || item.description === content.item_name))
+        );
+        
+        // Check if the calendar item is marked as published
+        if (calendarItem && calendarItem.published === true) {
+          return true;
+        }
+      }
+    }
+    
     // Check scheduledPosts for published status
     if (scheduledPosts && scheduledPosts.length > 0) {
       // Try to match by assignmentId, item_id, or contentId
@@ -774,6 +823,7 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
           (post.assignmentId && (post.assignmentId === content.id || post.assignmentId === content.assignment_id)) ||
           (post.assignmentId && post.assignmentId === content.assignment_id) ||
           (post.item_id && post.item_id === content.id) ||
+          (post.item_id && post.item_id === content.item_id) ||
           (post.contentId && post.contentId === content.id) ||
           (post.assignmentId && post.assignmentId === content.id)
         );
@@ -785,7 +835,6 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
     // Fallback to local logic
     if (
       content.status === 'published' ||
-      content.published === true ||
       !!content.publishedAt
     ) return true;
     if (Array.isArray(content.versions) && content.versions.length > 0) {

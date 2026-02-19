@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import AdminLayout from '../../components/layout/AdminLayout';
-import { Users, Calendar, TrendingUp, BarChart3, Activity, Zap, Award, UserCheck, Send, Palette } from 'lucide-react';
+import { Users, Calendar, TrendingUp, BarChart3, Activity, Zap, Award, UserCheck, Send, Palette, CheckCircle2 } from 'lucide-react';
 
 // Memoized stat card component to prevent unnecessary re-renders
 const StatCard = React.memo(({ icon: Icon, iconBgClass, title, value, trend, onClick }) => (
@@ -142,7 +142,8 @@ function Dashboard() {
     customers: () => navigate('/admin/customers'),
     contentPortfolio: () => navigate('/admin/content-portfolio'),
     scheduledPosts: () => navigate('/admin/scheduled-posts'),
-    qrGenerator: () => navigate('/admin/qr-generator')
+    qrGenerator: () => navigate('/admin/qr-generator'),
+    publishManager: () => navigate('/admin/publish-manager')
   }), [navigate]);
 
   if (loading) {
@@ -241,7 +242,7 @@ function Dashboard() {
         {/* Quick Actions - Optimized grid for mobile */}
         <div className="bg-white/70 backdrop-blur-sm rounded-xl sm:rounded-2xl shadow-lg border border-gray-200/50 p-4 sm:p-6 lg:p-8">
           <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900 mb-4 sm:mb-6">Quick Actions</h2>
-          <div className="grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3 lg:gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 sm:gap-3 lg:gap-4">
             <QuickActionButton 
               icon={Users}
               label="Customers"
@@ -277,6 +278,12 @@ function Dashboard() {
               label="QR Codes"
               gradientClass="bg-gradient-to-r from-cyan-600 to-blue-400 hover:from-cyan-700 hover:to-blue-500 focus:ring-cyan-500"
               onClick={navigationHandlers.qrGenerator}
+            />
+            <QuickActionButton 
+              icon={CheckCircle2}
+              label="Publish"
+              gradientClass="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 focus:ring-green-500"
+              onClick={navigationHandlers.publishManager}
             />
           </div>
         </div>

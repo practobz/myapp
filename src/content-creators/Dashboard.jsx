@@ -102,8 +102,12 @@ function Dashboard() {
     return scheduledPosts.some(post => post.contentId === assignmentId && post.status === 'published');
   };
   
-  // Helper: get actual status considering published posts
+  // Helper: get actual status considering published posts and item.published field
   const getActualStatus = (assignment) => {
+    // Check if the item itself is marked as published
+    if (assignment.published === true) {
+      return 'published';
+    }
     if (isContentPublished(assignment.id || assignment._id)) {
       return 'published';
     }

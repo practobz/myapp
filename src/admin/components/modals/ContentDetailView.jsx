@@ -233,15 +233,15 @@ function ContentDetailView({
           {/* Status & Action */}
           <div className="flex flex-col sm:flex-row gap-2">
             <span className={`inline-flex items-center px-2 py-1.5 rounded-lg text-xs font-medium ${
-              getStatusColor(isContentPublished(selectedContent.id) ? 'published' : selectedContent.status)
+              getStatusColor((selectedContent.published === true || isContentPublished(selectedContent.id, selectedContent)) ? 'published' : selectedContent.status)
             }`}>
-              {getStatusIcon(isContentPublished(selectedContent.id) ? 'published' : selectedContent.status)}
+              {getStatusIcon((selectedContent.published === true || isContentPublished(selectedContent.id, selectedContent)) ? 'published' : selectedContent.status)}
               <span className="ml-1">
-                {isContentPublished(selectedContent.id) ? 'Published' : selectedContent.status.replace('_', ' ')}
+                {(selectedContent.published === true || isContentPublished(selectedContent.id, selectedContent)) ? 'Published' : selectedContent.status.replace('_', ' ')}
               </span>
-              {isContentPublished(selectedContent.id) && (
+              {(selectedContent.published === true || isContentPublished(selectedContent.id, selectedContent)) && (
                 <span className="ml-1 flex flex-wrap gap-1">
-                  {getPublishedPlatformsForContent(selectedContent.id).map((p, idx) => (
+                  {getPublishedPlatformsForContent(selectedContent.id, selectedContent).map((p, idx) => (
                     <span key={idx} className={`px-1 py-0.5 rounded text-[10px] ${platformColor(p)}`}>
                       {p.charAt(0).toUpperCase() + p.slice(1)}
                     </span>

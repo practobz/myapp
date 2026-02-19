@@ -201,7 +201,8 @@ function ContentCalendar() {
 
   // Helper: determine the correct status for an item
   const getItemStatus = (item) => {
-    // Priority: published > scheduled > under_review > pending
+    // Priority: check item.published field first, then published > scheduled > under_review > pending
+    if (item.published === true) return 'published';
     if (isItemPublished(item)) return 'published';
     if (isItemScheduled(item)) return 'scheduled';
     if (hasContentSubmitted(item)) return 'under_review';
@@ -215,9 +216,9 @@ function ContentCalendar() {
       // Only add items from selected calendar (or all if none selected)
       if (!selectedCalendarId || calendar._id === selectedCalendarId || calendar.id === selectedCalendarId) {
         calendar.contentItems.forEach(item => {
-          // Determine the correct status based on submissions and scheduled posts
+          // Determine the correct status based on item.published field, submissions and scheduled posts
           const itemStatus = getItemStatus(item);
-          const published = isItemPublished(item);
+          const published = item.published === true || isItemPublished(item);
           
           allItems.push({
             ...item,
@@ -225,7 +226,7 @@ function ContentCalendar() {
             id: item.id || item._id || Math.random().toString(36).slice(2),
             creator: item.assignedToName || item.assignedTo || calendar.assignedToName || calendar.assignedTo || '',
             status: itemStatus,
-            publishedPlatforms: published ? getPublishedPlatformsForItem(item) : []
+            publishedPlatforms: published ? (item.publishedPlatforms || getPublishedPlatformsForItem(item)) : []
           });
         });
       }

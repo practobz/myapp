@@ -274,8 +274,12 @@ function ContentPortfolio() {
     return scheduledPosts.some(post => post.contentId === assignmentId && post.status === 'published');
   };
   
-  // Helper: get actual status considering published posts
-  const getActualStatus = (assignmentId, originalStatus) => {
+  // Helper: get actual status considering published posts and item.published field
+  const getActualStatus = (assignmentId, originalStatus, item = null) => {
+    // Check if the item itself is marked as published
+    if (item && item.published === true) {
+      return 'published';
+    }
     if (isContentPublished(assignmentId)) {
       return 'published';
     }

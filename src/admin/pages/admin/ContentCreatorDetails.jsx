@@ -25,11 +25,11 @@ const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 const InfoItem = memo(({ icon: Icon, iconBg, iconColor, label, value, mono }) => (
   <div className="flex items-center gap-2 p-2 bg-gray-50/50 rounded-lg">
     <div className={`p-1.5 ${iconBg} rounded-md flex-shrink-0`}>
-      <Icon className={`h-3.5 w-3.5 ${iconColor}`} />
+      <Icon className={`h-4 w-4 ${iconColor}`} />
     </div>
     <div className="flex-1 min-w-0">
-      <p className="text-[10px] font-medium text-gray-400 uppercase">{label}</p>
-      <p className={`text-xs text-gray-900 font-medium truncate ${mono ? 'font-mono' : ''}`}>
+      <p className="text-xs font-medium text-gray-400 uppercase">{label}</p>
+      <p className={`text-sm text-gray-900 font-medium truncate ${mono ? 'font-mono' : ''}`}>
         {value || 'N/A'}
       </p>
     </div>
@@ -39,7 +39,7 @@ const InfoItem = memo(({ icon: Icon, iconBg, iconColor, label, value, mono }) =>
 InfoItem.displayName = 'InfoItem';
 
 // Memoized calendar card component
-const CalendarCard = memo(({ calendar, isExpanded, onToggle, formatSimpleDate }) => (
+const CalendarCard = memo(({ calendar, isExpanded, onToggle, formatSimpleDate, getItemStatus, getItemStatusColor }) => (
   <div className="bg-white rounded-lg border border-gray-200/50 shadow-sm overflow-hidden">
     <div 
       className="p-3 cursor-pointer hover:bg-gray-50 transition-colors"
@@ -48,15 +48,15 @@ const CalendarCard = memo(({ calendar, isExpanded, onToggle, formatSimpleDate })
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <div className="p-1.5 bg-blue-100 rounded-md flex-shrink-0">
-            <Calendar className="h-3.5 w-3.5 text-blue-600" />
+            <Calendar className="h-4 w-4 text-blue-600" />
           </div>
           <div className="min-w-0 flex-1">
-            <h4 className="text-sm font-semibold text-gray-900 truncate">{calendar.name}</h4>
-            <p className="text-xs text-gray-500 truncate">{calendar.customerName}</p>
+            <h4 className="text-base font-semibold text-gray-900 truncate">{calendar.name}</h4>
+            <p className="text-sm text-gray-500 truncate">{calendar.customerName}</p>
           </div>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-50 text-green-700">
+          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-50 text-green-700">
             {calendar.contentItems?.length || 0}
           </span>
           {isExpanded ? (
@@ -71,27 +71,30 @@ const CalendarCard = memo(({ calendar, isExpanded, onToggle, formatSimpleDate })
     {isExpanded && (
       <div className="border-t border-gray-100 bg-gray-50/30">
         <div className="p-3">
-          <h5 className="text-xs font-semibold text-gray-600 mb-2">Content Items</h5>
+          <h5 className="text-sm font-semibold text-gray-600 mb-2">Content Items</h5>
           {calendar.contentItems && calendar.contentItems.length > 0 ? (
             <div className="space-y-2">
-              {calendar.contentItems.map((item, index) => (
-                <div key={index} className="bg-white rounded-lg p-2 border border-gray-100">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-medium text-gray-900 truncate">{item.description}</p>
-                      <p className="text-[10px] text-gray-500">Due: {formatSimpleDate(item.date)}</p>
-                    </div>
-                    {item.status && (
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600 flex-shrink-0">
-                        {item.status.replace('_', ' ')}
+              {calendar.contentItems.map((item, index) => {
+                const itemStatus = getItemStatus ? getItemStatus(item) : (item.status || 'pending');
+                const statusColor = getItemStatusColor ? getItemStatusColor(itemStatus) : 'bg-gray-100 text-gray-600';
+                
+                return (
+                  <div key={index} className="bg-white rounded-lg p-2 border border-gray-100">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-gray-900 truncate">{item.description}</p>
+                        <p className="text-xs text-gray-500">Due: {formatSimpleDate(item.date)}</p>
+                      </div>
+                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${statusColor} flex-shrink-0`}>
+                        {itemStatus.replace('_', ' ')}
                       </span>
-                    )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
-            <p className="text-gray-400 text-xs">No content items</p>
+            <p className="text-gray-400 text-sm">No content items</p>
           )}
         </div>
       </div>
@@ -109,9 +112,11 @@ function ContentCreatorDetails() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [expandedCalendars, setExpandedCalendars] = useState(new Set());
+  const [scheduledPosts, setScheduledPosts] = useState([]);
 
   useEffect(() => {
     fetchCreatorDetails();
+    fetchScheduledPosts();
   }, [id]);
 
   useEffect(() => {
@@ -119,6 +124,55 @@ function ContentCreatorDetails() {
       fetchAssignedCalendars();
     }
   }, [creator]);
+
+  const fetchScheduledPosts = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/scheduled-posts`);
+      if (response.ok) {
+        const posts = await response.json();
+        setScheduledPosts(Array.isArray(posts) ? posts : []);
+      }
+    } catch (error) {
+      console.error('Error fetching scheduled posts:', error);
+      setScheduledPosts([]);
+    }
+  };
+
+  // Check if item is published (manual or via scheduled post)
+  const isItemPublished = useCallback((item) => {
+    // Check manual publish flag
+    if (item.published === true) return true;
+    // Check scheduled posts
+    return scheduledPosts.some(post =>
+      ((post.item_id && post.item_id === item.id) ||
+       (post.contentId && post.contentId === item.id) ||
+       (post.item_name && post.item_name === (item.title || item.description))) &&
+      (post.status === 'published' || post.publishedAt)
+    );
+  }, [scheduledPosts]);
+
+  // Get item status with published check
+  const getItemStatus = useCallback((item) => {
+    if (isItemPublished(item)) return 'published';
+    return item.status || 'pending';
+  }, [isItemPublished]);
+
+  const getItemStatusColor = useCallback((status) => {
+    switch (status) {
+      case 'published':
+        return 'bg-green-100 text-green-700';
+      case 'approved':
+        return 'bg-emerald-100 text-emerald-700';
+      case 'under_review':
+        return 'bg-purple-100 text-purple-700';
+      case 'in_progress':
+        return 'bg-blue-100 text-blue-700';
+      case 'pending':
+        return 'bg-yellow-100 text-yellow-700';
+      default:
+        return 'bg-gray-100 text-gray-600';
+    }
+  }, []);
 
   const fetchCreatorDetails = async () => {
     try {
@@ -278,7 +332,7 @@ function ContentCreatorDetails() {
         <div className="flex items-center justify-center h-48">
           <div className="flex flex-col items-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mb-2"></div>
-            <p className="text-gray-500 text-sm">Loading...</p>
+            <p className="text-gray-500 text-base">Loading...</p>
           </div>
         </div>
       </AdminLayout>
@@ -293,13 +347,13 @@ function ContentCreatorDetails() {
             <div className="bg-red-100 rounded-full w-12 h-12 flex items-center justify-center mx-auto mb-3">
               <AlertCircle className="h-6 w-6 text-red-600" />
             </div>
-            <h3 className="text-sm font-bold text-gray-900 mb-1">Creator not found</h3>
-            <p className="text-xs text-gray-500 mb-4">{error || "This creator doesn't exist."}</p>
+            <h3 className="text-lg font-bold text-gray-900 mb-1">Creator not found</h3>
+            <p className="text-base text-gray-500 mb-4">{error || "This creator doesn't exist."}</p>
             <button
               onClick={() => navigate('/admin/content-creators')}
               className="inline-flex items-center px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 transition-colors"
             >
-              <ArrowLeft className="h-4 w-4 mr-1" />
+              <ChevronLeft className="h-4 w-4 mr-1" />
               Back
             </button>
           </div>
@@ -311,35 +365,26 @@ function ContentCreatorDetails() {
   return (
     <AdminLayout title="Creator Details">
       <div className="space-y-3 sm:space-y-4">
-        {/* Header - Compact */}
+        {/* Creator Information - Compact */}
         <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm p-3 sm:p-4 border border-gray-200/50">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => navigate('/admin/content-creators')}
-              className="p-1.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </button>
+          <div className="flex items-center gap-3 mb-3">
             <div className="h-10 w-10 sm:h-11 sm:w-11 bg-gradient-to-r from-purple-500 to-indigo-600 rounded-lg flex items-center justify-center flex-shrink-0">
               <span className="text-white font-bold text-sm sm:text-base">
                 {(creator.name || creator.email || 'U').charAt(0).toUpperCase()}
               </span>
             </div>
             <div className="flex-1 min-w-0">
-              <h2 className="text-base sm:text-lg font-bold text-gray-900 truncate">
+              <h2 className="text-lg sm:text-xl font-bold text-gray-900 truncate">
                 {creator.name || creator.email || 'Unnamed Creator'}
               </h2>
-              <p className="text-xs text-gray-500 truncate hidden sm:block">Content Creator Profile</p>
+              <p className="text-sm sm:text-base text-gray-500 truncate">Content Creator Profile</p>
             </div>
-            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] sm:text-xs font-medium border ${getStatusColor(creator.isActive)}`}>
+            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs sm:text-sm font-medium border ${getStatusColor(creator.isActive)}`}>
               {getStatusText(creator.isActive)}
             </span>
           </div>
-        </div>
-
-        {/* Creator Information - Compact Grid */}
-        <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm p-3 sm:p-4 border border-gray-200/50">
-          <h3 className="text-sm font-bold text-gray-900 mb-3">Profile Details</h3>
+          
+          <h3 className="text-base font-bold text-gray-900 mb-3">Profile Details</h3>
           
           <div className="grid grid-cols-2 gap-2">
             {/* Personal Details */}
@@ -406,15 +451,15 @@ function ContentCreatorDetails() {
           {/* Permissions Section */}
           {creator.permissions && creator.permissions.length > 0 && (
             <div className="mt-3 pt-3 border-t border-gray-100">
-              <h4 className="text-xs font-semibold text-gray-700 mb-2 flex items-center gap-1">
-                <Shield className="h-3 w-3" />
+              <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1">
+                <Shield className="h-4 w-4" />
                 Permissions
               </h4>
               <div className="flex flex-wrap gap-1">
                 {creator.permissions.map((permission, index) => (
                   <span
                     key={index}
-                    className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700"
+                    className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700"
                   >
                     {permission.replace(/_/g, ' ')}
                   </span>
@@ -424,12 +469,15 @@ function ContentCreatorDetails() {
           )}
         </div>
 
-        {/* Assigned Calendars Section - Compact */}
+        {/* Assigned Calendars Section */}
         <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200/50 overflow-hidden">
           <div className="px-3 sm:px-4 py-3 border-b border-gray-100">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-gray-900">Assigned Calendars</h3>
-              <span className="text-xs font-medium text-purple-600 bg-purple-50 px-2 py-0.5 rounded">
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base sm:text-lg font-bold text-gray-900 truncate">Assigned Calendars</h3>
+                <p className="text-sm text-gray-500">Content calendars assigned to this creator</p>
+              </div>
+              <span className="text-sm font-medium text-purple-600 bg-purple-50 px-2 py-1 rounded-lg">
                 {assignedCalendars.length}
               </span>
             </div>
@@ -445,6 +493,8 @@ function ContentCreatorDetails() {
                     isExpanded={expandedCalendars.has(calendar._id)}
                     onToggle={() => toggleCalendarExpansion(calendar._id)}
                     formatSimpleDate={formatSimpleDate}
+                    getItemStatus={getItemStatus}
+                    getItemStatusColor={getItemStatusColor}
                   />
                 ))}
               </div>
@@ -453,8 +503,8 @@ function ContentCreatorDetails() {
                 <div className="bg-gray-100 rounded-full w-10 h-10 flex items-center justify-center mx-auto mb-2">
                   <Calendar className="h-5 w-5 text-gray-400" />
                 </div>
-                <h3 className="text-sm font-medium text-gray-900 mb-1">No calendars assigned</h3>
-                <p className="text-xs text-gray-500">
+                <h3 className="text-base font-medium text-gray-900 mb-1">No calendars assigned</h3>
+                <p className="text-sm text-gray-500">
                   This creator has no calendar assignments yet.
                 </p>
               </div>

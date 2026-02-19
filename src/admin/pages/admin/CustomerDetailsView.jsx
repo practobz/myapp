@@ -22,18 +22,19 @@ import {
   Edit,
   Trash2,
   MoreVertical,
-  Upload
+  Upload,
+  CheckCircle
 } from 'lucide-react';
 
 // Memoized info item component for performance
 const InfoItem = memo(({ icon: Icon, iconBg, iconColor, label, value, mono }) => (
   <div className="flex items-center gap-2 p-2 bg-gray-50/50 rounded-lg">
     <div className={`p-1.5 ${iconBg} rounded-md flex-shrink-0`}>
-      <Icon className={`h-3.5 w-3.5 ${iconColor}`} />
+      <Icon className={`h-4 w-4 ${iconColor}`} />
     </div>
     <div className="flex-1 min-w-0">
-      <p className="text-[10px] font-medium text-gray-400 uppercase">{label}</p>
-      <p className={`text-xs text-gray-900 font-medium truncate ${mono ? 'font-mono' : ''}`}>
+      <p className="text-xs font-medium text-gray-400 uppercase">{label}</p>
+      <p className={`text-sm text-gray-900 font-medium truncate ${mono ? 'font-mono' : ''}`}>
         {value || 'N/A'}
       </p>
     </div>
@@ -382,13 +383,34 @@ function CustomerDetailsView() {
     setOpenDropdowns(new Set());
   };
 
+  // Toggle published status of a content item
+  const handleTogglePublished = async (calendarId, item) => {
+    const newPublishedState = !item.published;
+    try {
+      const response = await fetch(`${API_URL}/calendars/item/${calendarId}/publish`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          itemId: item.id,
+          published: newPublishedState,
+          publishedAt: newPublishedState ? new Date().toISOString() : null,
+          publishedPlatforms: item.platforms || item.type || []
+        })
+      });
+      if (!response.ok) throw new Error('Failed to update publish status');
+      fetchCalendars();
+    } catch (err) {
+      console.error('Error toggling publish status:', err);
+    }
+  };
+
   if (loading) {
     return (
       <AdminLayout title="Customer Details">
         <div className="flex items-center justify-center h-48">
           <div className="flex flex-col items-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-2"></div>
-            <p className="text-gray-500 text-sm">Loading...</p>
+            <p className="text-gray-500 text-base">Loading...</p>
           </div>
         </div>
       </AdminLayout>
@@ -404,7 +426,7 @@ function CustomerDetailsView() {
               <AlertCircle className="h-6 w-6 text-red-600" />
             </div>
             <h3 className="text-lg font-bold text-gray-900 mb-1">Not Found</h3>
-            <p className="text-sm text-gray-600 mb-4">{error || "Customer doesn't exist."}</p>
+            <p className="text-base text-gray-600 mb-4">{error || "Customer doesn't exist."}</p>
             <button
               onClick={() => navigate('/admin/customers-list')}
               className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
@@ -436,15 +458,15 @@ function CustomerDetailsView() {
               </span>
             </div>
             <div className="ml-2 sm:ml-3 min-w-0 flex-1">
-              <h2 className="text-base sm:text-lg font-bold text-gray-900 truncate">{customer.name || 'Customer'}</h2>
-              <p className="text-xs text-gray-500 truncate">{customer.email}</p>
+              <h2 className="text-lg sm:text-xl font-bold text-gray-900 truncate">{customer.name || 'Customer'}</h2>
+              <p className="text-sm text-gray-500 truncate">{customer.email}</p>
             </div>
           </div>
         </div>
 
         {/* Customer Info - Side by Side Grid on Mobile */}
         <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm p-3 sm:p-4 border border-gray-200/50">
-          <h3 className="text-sm font-semibold text-gray-900 mb-3">Customer Information</h3>
+          <h3 className="text-base font-semibold text-gray-900 mb-3">Customer Information</h3>
           
           {/* 2-Column Grid for Mobile */}
           <div className="grid grid-cols-2 gap-2">
@@ -467,14 +489,14 @@ function CustomerDetailsView() {
           <div className="px-3 sm:px-4 py-3 border-b border-gray-200/50">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-sm sm:text-base font-bold text-gray-900">Content Calendars</h3>
-                <p className="text-xs text-gray-500 hidden sm:block">Manage calendars & items</p>
+                <h3 className="text-base sm:text-lg font-bold text-gray-900">Content Calendars</h3>
+                <p className="text-sm text-gray-500 hidden sm:block">Manage calendars & items</p>
               </div>
               <button
                 onClick={() => setIsCalendarModalOpen(true)}
-                className="inline-flex items-center px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                className="inline-flex items-center px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
               >
-                <Plus className="h-3.5 w-3.5 mr-1" />
+                <Plus className="h-4 w-4 mr-1" />
                 Add
               </button>
             </div>
@@ -495,8 +517,8 @@ function CustomerDetailsView() {
                               <Calendar className="h-3.5 w-3.5 text-blue-600" />
                             </div>
                             <div className="min-w-0 flex-1">
-                              <h4 className="text-sm font-semibold text-gray-900 truncate">{calendar.name}</h4>
-                              <div className="flex items-center gap-2 text-[10px] text-gray-500">
+                              <h4 className="text-base font-semibold text-gray-900 truncate">{calendar.name}</h4>
+                              <div className="flex items-center gap-2 text-xs text-gray-500">
                                 <span>{calendar.contentItems?.length || 0} items</span>
                                 {calendar.assignedTo && (
                                   <span className="truncate">• {calendar.assignedToName || calendar.assignedTo}</span>
@@ -544,21 +566,21 @@ function CustomerDetailsView() {
                                 <div className="absolute right-0 top-full mt-1 w-36 bg-white rounded-lg shadow-lg border border-gray-200 z-20 py-1">
                                   <button
                                     onClick={e => { e.stopPropagation(); setSelectedCalendar(calendar); setIsContentModalOpen(true); setOpenDropdowns(new Set()); }}
-                                    className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center"
+                                    className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center"
                                   >
-                                    <Plus className="h-3.5 w-3.5 mr-2 text-green-600" />Add Item
+                                    <Plus className="h-4 w-4 mr-2 text-green-600" />Add Item
                                   </button>
                                   <button
                                     onClick={e => { e.stopPropagation(); handleEditCalendar(calendar); }}
-                                    className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center"
+                                    className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center"
                                   >
-                                    <Edit className="h-3.5 w-3.5 mr-2 text-blue-600" />Edit
+                                    <Edit className="h-4 w-4 mr-2 text-blue-600" />Edit
                                   </button>
                                   <button
                                     onClick={e => { e.stopPropagation(); handleDeleteCalendar(calendar._id); }}
-                                    className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center"
+                                    className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center"
                                   >
-                                    <Trash2 className="h-3.5 w-3.5 mr-2 text-red-600" />Delete
+                                    <Trash2 className="h-4 w-4 mr-2 text-red-600" />Delete
                                   </button>
                                 </div>
                               )}
@@ -575,17 +597,17 @@ function CustomerDetailsView() {
 
                       {expandedCalendars.has(calendar._id) && (
                         <div className="border-t border-gray-200/50 bg-gray-50/50 p-3">
-                          <h5 className="text-xs font-semibold text-gray-600 mb-2">Content Items</h5>
+                          <h5 className="text-sm font-semibold text-gray-600 mb-2">Content Items</h5>
                           {calendar.contentItems && calendar.contentItems.length > 0 ? (
                             <div className="space-y-2">
                               {calendar.contentItems.map((item, index) => (
                                 <div key={index} className="bg-white rounded-lg p-2.5 border border-gray-200/50">
                                   <div className="flex items-start justify-between gap-2">
                                     <div className="min-w-0 flex-1">
-                                      {item.title && <p className="font-medium text-blue-800 text-xs truncate">{item.title}</p>}
-                                      <p className="text-xs text-gray-900 truncate">{item.description}</p>
+                                      {item.title && <p className="font-medium text-blue-800 text-sm truncate">{item.title}</p>}
+                                      <p className="text-sm text-gray-900 truncate">{item.description}</p>
                                       <div className="flex items-center gap-1 mt-1 flex-wrap">
-                                        <span className="text-[10px] text-gray-500">Due: {formatSimpleDate(item.date)}</span>
+                                        <span className="text-xs text-gray-500">Due: {formatSimpleDate(item.date)}</span>
                                         {item.type && (
                                           <>
                                             {(Array.isArray(item.type) ? item.type : 
@@ -593,21 +615,33 @@ function CustomerDetailsView() {
                                             ).map((platform, idx) => (
                                               <span 
                                                 key={idx}
-                                                className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 capitalize"
+                                                className="inline-flex px-1.5 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700 capitalize"
                                               >
                                                 {platform}
                                               </span>
                                             ))}
                                           </>
                                         )}
-                                        {item.status && (
-                                          <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600">
+                                        {item.published ? (
+                                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">
+                                            <CheckCircle className="h-3 w-3 mr-0.5" />
+                                            Published
+                                          </span>
+                                        ) : item.status && (
+                                          <span className="inline-flex px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
                                             {item.status.replace('_', ' ')}
                                           </span>
                                         )}
                                       </div>
                                     </div>
                                     <div className="flex items-center gap-0.5 flex-shrink-0">
+                                      <button
+                                        className={`p-1.5 rounded transition-colors ${item.published ? 'text-green-600 bg-green-50 hover:bg-green-100' : 'text-gray-400 hover:text-green-600 hover:bg-green-50'}`}
+                                        onClick={(e) => { e.stopPropagation(); handleTogglePublished(calendar._id, item); }}
+                                        title={item.published ? 'Mark as unpublished' : 'Mark as published'}
+                                      >
+                                        <CheckCircle className="h-3.5 w-3.5" />
+                                      </button>
                                       <button
                                         className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
                                         onClick={() => handleEditItem(item, calendar._id)}

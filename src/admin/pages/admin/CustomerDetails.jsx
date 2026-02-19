@@ -31,12 +31,46 @@ const CustomerDetails = () => {
   const [isEditCalendarModalOpen, setIsEditCalendarModalOpen] = useState(false);
   const [calendarToEdit, setCalendarToEdit] = useState(null);
   const [openDropdowns, setOpenDropdowns] = useState(new Set());
+  const [scheduledPosts, setScheduledPosts] = useState([]);
 
   useEffect(() => {
     fetchCustomer();
     fetchCalendarItems();
     fetchCreators();
+    fetchScheduledPosts();
   }, [id]);
+
+  const fetchScheduledPosts = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/scheduled-posts`);
+      if (response.ok) {
+        const posts = await response.json();
+        setScheduledPosts(Array.isArray(posts) ? posts : []);
+      }
+    } catch (error) {
+      console.error('Error fetching scheduled posts:', error);
+      setScheduledPosts([]);
+    }
+  };
+
+  // Check if item is published (manual or via scheduled post)
+  const isItemPublished = (item) => {
+    // Check manual publish flag
+    if (item.published === true) return true;
+    // Check scheduled posts
+    return scheduledPosts.some(post =>
+      ((post.item_id && post.item_id === item.id) ||
+       (post.contentId && post.contentId === item.id) ||
+       (post.item_name && post.item_name === (item.title || item.description))) &&
+      (post.status === 'published' || post.publishedAt)
+    );
+  };
+
+  // Get item status with published check
+  const getItemStatus = (item) => {
+    if (isItemPublished(item)) return 'published';
+    return item.status || 'pending';
+  };
 
   const fetchCustomer = async () => {
     try {
@@ -634,11 +668,9 @@ const CustomerDetails = () => {
                                       </div>
 
                                       <div className="flex-shrink-0 text-right ml-2">
-                                        {item.status && (
-                                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 border border-gray-200">
-                                            {item.status.replace('_', ' ').toUpperCase()}
-                                          </span>
-                                        )}
+                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(getItemStatus(item))}`}>
+                                          {getItemStatus(item).replace('_', ' ').toUpperCase()}
+                                        </span>
                                       </div>
                                     </div>
 

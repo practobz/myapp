@@ -300,12 +300,13 @@ function ContentUpload() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  // Upload single file using base64 upload through backend API
+  // Upload single file - uses signed URL for large files (>=10MB), base64 for small files
   const uploadFileToGCS = async (fileObj) => {
     try {
+      const fileSizeMB = fileObj.file.size / (1024 * 1024);
       console.log(`📤 Starting upload for ${fileObj.name} (${formatFileSize(fileObj.size)})`);
       
-      // Validate file object before proceeding
+      // Validate file object
       if (!fileObj.file || !fileObj.file.size || fileObj.file.size === 0) {
         throw new Error(`Invalid file: ${fileObj.name} has no content or is corrupted`);
       }
@@ -315,62 +316,107 @@ function ContentUpload() {
         prev.map(f => f.id === fileObj.id ? { ...f, uploading: true, error: null } : f)
       );
 
-      // Convert file to base64
-      const base64Data = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const result = reader.result;
-          if (!result || typeof result !== 'string') {
-            reject(new Error('Failed to read file as base64'));
-            return;
-          }
-          // Remove the data URL prefix (e.g., "data:image/png;base64,")
-          const base64 = result.split(',')[1];
-          if (!base64 || base64.length === 0) {
-            reject(new Error('Base64 conversion resulted in empty data'));
-            return;
-          }
-          resolve(base64);
+      let publicUrl;
+
+      // Use signed URL for large files (>=10MB) to bypass Cloud Run's 32MB limit
+      if (fileSizeMB >= 10) {
+        console.log(`📤 Using signed URL for large file: ${fileObj.name} (${fileSizeMB.toFixed(2)} MB)`);
+        
+        // Step 1: Get signed URL from backend
+        const signedUrlResponse = await fetch(`${process.env.REACT_APP_API_URL}/api/gcs/signed-url`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            filename: fileObj.name,
+            contentType: fileObj.file.type
+          })
+        });
+
+        if (!signedUrlResponse.ok) {
+          const errorData = await signedUrlResponse.json();
+          throw new Error(`Failed to get signed URL: ${errorData.error || signedUrlResponse.statusText}`);
+        }
+
+        const { signedUrl, publicUrl: uploadedUrl } = await signedUrlResponse.json();
+
+        if (!signedUrl) {
+          throw new Error('No signed URL received from backend');
+        }
+
+        // Step 2: Upload directly to GCS using signed URL
+        console.log(`📤 Uploading ${fileObj.name} directly to GCS...`);
+        const uploadResponse = await fetch(signedUrl, {
+          method: 'PUT',
+          headers: { 
+            'Content-Type': fileObj.file.type
+          },
+          body: fileObj.file  // Send the actual file, not base64
+        });
+
+        if (!uploadResponse.ok) {
+          throw new Error(`GCS upload failed: ${uploadResponse.status} ${uploadResponse.statusText}`);
+        }
+
+        publicUrl = uploadedUrl;
+        console.log(`✅ Successfully uploaded ${fileObj.name} via signed URL`);
+
+      } else {
+        // Use base64 upload for small files (<10MB)
+        console.log(`📤 Using base64 upload for small file: ${fileObj.name} (${fileSizeMB.toFixed(2)} MB)`);
+        
+        // Convert file to base64
+        const base64Data = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const result = reader.result;
+            if (!result || typeof result !== 'string') {
+              reject(new Error('Failed to read file as base64'));
+              return;
+            }
+            const base64 = result.split(',')[1];
+            if (!base64 || base64.length === 0) {
+              reject(new Error('Base64 conversion resulted in empty data'));
+              return;
+            }
+            resolve(base64);
+          };
+          reader.onerror = () => reject(new Error('FileReader error'));
+          reader.readAsDataURL(fileObj.file);
+        });
+
+        const payload = {
+          filename: fileObj.name,
+          contentType: fileObj.file.type,
+          base64Data: base64Data
         };
-        reader.onerror = () => reject(new Error('FileReader error'));
-        reader.readAsDataURL(fileObj.file);
-      });
 
-      // Validate payload before sending
-      const payload = {
-        filename: fileObj.name,
-        contentType: fileObj.file.type,
-        base64Data: base64Data
-      };
+        if (!payload.filename || !payload.contentType || !payload.base64Data) {
+          throw new Error(`Invalid payload: missing ${!payload.filename ? 'filename' : !payload.contentType ? 'contentType' : 'base64Data'}`);
+        }
 
-      // Additional validation
-      if (!payload.filename || !payload.contentType || !payload.base64Data) {
-        throw new Error(`Invalid payload: missing ${!payload.filename ? 'filename' : !payload.contentType ? 'contentType' : 'base64Data'}`);
+        // Upload using base64 through backend API
+        const uploadResponse = await fetch(`${process.env.REACT_APP_API_URL}/api/gcs/upload-base64`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        });
+
+        if (!uploadResponse.ok) {
+          const errorData = await uploadResponse.json();
+          throw new Error(`Upload failed: ${errorData.error || uploadResponse.statusText}`);
+        }
+
+        const responseData = await uploadResponse.json();
+        publicUrl = responseData.publicUrl;
+        
+        console.log(`✅ Successfully uploaded ${fileObj.name} via base64`);
       }
-
-      console.log(`📤 Uploading ${fileObj.name} - Type: ${payload.contentType}, Size: ${formatFileSize(fileObj.file.size)}`);
-
-      // Upload using base64 through backend API
-      const uploadResponse = await fetch(`${process.env.REACT_APP_API_URL}/api/gcs/upload-base64`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!uploadResponse.ok) {
-        const errorData = await uploadResponse.json();
-        throw new Error(`Upload failed: ${errorData.error || uploadResponse.statusText}`);
-      }
-
-      const { publicUrl } = await uploadResponse.json();
 
       if (!publicUrl) {
         throw new Error('No public URL returned from upload');
       }
-
-      console.log(`✅ Successfully uploaded ${fileObj.name} via base64`);
 
       // Update file status to uploaded
       setUploadedFiles(prev => 

@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Linkedin, ArrowLeft, Save, ExternalLink, CheckCircle, Plus, Settings, ChevronDown, ChevronRight, Loader2, Users, UserCheck, Trash2, Send, Image, FileText, TrendingUp, Eye, MessageSquare, Share2, Heart, MousePointer, Building2, User } from 'lucide-react';
+import { Linkedin, ArrowLeft, Save, ExternalLink, CheckCircle, Plus, Settings, ChevronDown, ChevronRight, Loader2, Users, UserCheck, Trash2, Send, Image, FileText, TrendingUp, Eye, MessageSquare, Share2, Heart, MousePointer, Building2, User, Calendar, BarChart3 } from 'lucide-react';
 import { useAuth } from '../../admin/contexts/AuthContext';
 import axios from 'axios';
 import { getUserData, setUserData, removeUserData, migrateToUserSpecificStorage } from '../../utils/sessionUtils';
+import TimePeriodChart from '../../components/TimeperiodChart';
 
 function LinkedInIntegration({ onConnectionStatusChange }) {
   const navigate = useNavigate();
@@ -23,6 +24,9 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
   const [posting, setPosting] = useState(false);
   const [postSuccess, setPostSuccess] = useState('');
   const [postError, setPostError] = useState('');
+
+  // Historical charts state
+  const [showHistoricalCharts, setShowHistoricalCharts] = useState(false);
 
   // LinkedIn OAuth configuration
   const LINKEDIN_CLIENT_ID = process.env.REACT_APP_LINKEDIN_CLIENT_ID;
@@ -1833,6 +1837,37 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
             </div>
           </div>
         )}
+
+        {/* Historical Data Charts Section */}
+        <div className="p-4 pt-0">
+          <div className="border-t border-gray-200 pt-4">
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                <BarChart3 className="h-4 w-4 text-blue-600" />
+                Historical Analytics
+              </h4>
+              <button
+                onClick={() => setShowHistoricalCharts(!showHistoricalCharts)}
+                className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors text-xs font-medium"
+              >
+                <Calendar className="h-4 w-4" />
+                <span>
+                  {showHistoricalCharts ? 'Hide' : 'Show'} Historical Data
+                </span>
+              </button>
+            </div>
+            {showHistoricalCharts && selectedAccount && (
+              <div className="overflow-x-auto">
+                <TimePeriodChart
+                  platform="linkedin"
+                  accountId={selectedAccount.organizationId || selectedAccount.id || selectedAccount.platformUserId}
+                  title="LinkedIn Historical Analytics"
+                  defaultMetric="followers"
+                />
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     );
   };
@@ -2637,6 +2672,38 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
 
                   {selectedAccount.accountType === 'organization' && renderAnalyticsDashboard()}
                   {renderPostCreation()}
+                  
+                  {/* Historical Charts for Personal Accounts */}
+                  {selectedAccount.accountType !== 'organization' && (
+                    <div className="bg-white sm:rounded-2xl sm:border sm:border-gray-200 sm:shadow-sm p-4 mb-4 sm:mb-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <h4 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                          <BarChart3 className="h-4 w-4 text-blue-600" />
+                          Historical Analytics
+                        </h4>
+                        <button
+                          onClick={() => setShowHistoricalCharts(!showHistoricalCharts)}
+                          className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors text-xs font-medium"
+                        >
+                          <Calendar className="h-4 w-4" />
+                          <span>
+                            {showHistoricalCharts ? 'Hide' : 'Show'} Historical Data
+                          </span>
+                        </button>
+                      </div>
+                      {showHistoricalCharts && (
+                        <div className="overflow-x-auto">
+                          <TimePeriodChart
+                            platform="linkedin"
+                            accountId={selectedAccount.id || selectedAccount.platformUserId}
+                            title="LinkedIn Historical Analytics"
+                            defaultMetric="followers"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
                   {selectedAccount.accountType === 'organization' && renderPostsFeed()}
                 </>
               )}

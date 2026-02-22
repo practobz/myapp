@@ -720,7 +720,7 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
     try {
       const LINKEDIN_CLIENT_ID = process.env.REACT_APP_LINKEDIN_CLIENT_ID;
       const LINKEDIN_REDIRECT_URI = process.env.REACT_APP_LINKEDIN_REDIRECT_URI;
-      const LINKEDIN_SCOPE = 'r_basicprofile w_member_social r_organization_social w_organization_social rw_organization_admin r_organization_followers';
+      const LINKEDIN_SCOPE = 'r_basicprofile w_member_social r_member_postAnalytics r_organization_social w_organization_social rw_organization_admin r_organization_followers w_member_social_feed w_organization_social_feed r_organization_social_feed';
 
       if (!LINKEDIN_CLIENT_ID || !LINKEDIN_REDIRECT_URI) {
         throw new Error('LinkedIn OAuth configuration is missing');

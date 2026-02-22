@@ -50,28 +50,19 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
       return customerId;
     }
     
-    // 🔥 PRIORITY 2: Check AuthContext currentUser
-    if (currentUser) {
-      customerId = currentUser._id || currentUser.userId || currentUser.id || currentUser.customer_id;
-      if (customerId) {
-        console.log('✅ Found customer ID from AuthContext for LinkedIn:', customerId);
-        return customerId;
-      }
-    }
-    
-    // 🔥 PRIORITY 3: Check localStorage as fallback
-    const localUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
-    customerId = localUser._id || localUser.userId || localUser.id || localUser.customer_id;
+    // 🔥 PRIORITY 2: Check localStorage as fallback
+    const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
+    customerId = currentUser.userId || currentUser.id || currentUser._id || currentUser.customer_id;
     
     if (!customerId) {
       const authUser = JSON.parse(localStorage.getItem('user') || '{}');
-      customerId = authUser._id || authUser.userId || authUser.id || authUser.customer_id;
+      customerId = authUser.userId || authUser.id || authUser._id || authUser.customer_id;
     }
     
     if (customerId) {
       console.log('✅ Found customer ID in localStorage for LinkedIn:', customerId);
     } else {
-      console.warn('❌ No customer ID found in URL, AuthContext, or localStorage for LinkedIn');
+      console.warn('❌ No customer ID found in URL or localStorage for LinkedIn');
     }
     
     return customerId;
@@ -136,27 +127,6 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
 
   // Load accounts from backend on mount
   useEffect(() => {
-    // Wait for currentUser to be available before loading accounts
-    if (!currentUser || !currentUser._id) {
-      console.log('⏳ Waiting for currentUser to be available for LinkedIn...');
-      return;
-    }
-
-    console.log('🔍 LinkedIn component mounted, loading accounts from backend...');
-    
-    // Ensure currentUser is in localStorage for sessionUtils
-    if (currentUser) {
-      localStorage.setItem('currentUser', JSON.stringify(currentUser));
-    }
-    
-    // First, migrate any existing data to user-specific storage
-    migrateToUserSpecificStorage([
-      'connected_linkedin_accounts',
-      'selected_linkedin_account',
-      'linkedin_connected_accounts',
-      'linkedin_active_account_id'
-    ]);
-
     const customerId = getCustomerId();
     
     // 🔥 NEW: Log the customer ID detection for debugging
@@ -219,7 +189,7 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
     };
 
     fetchFromBackend();
-  }, [currentUser]); // Run when currentUser becomes available
+  }, []); // 🔥 IMPORTANT: Keep dependency array empty to run only on mount
 
   // Start LinkedIn OAuth in popup
   const handleLinkedInConnect = () => {

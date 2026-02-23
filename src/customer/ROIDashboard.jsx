@@ -583,41 +583,57 @@ const ROIDashboard = () => {
               
               console.log(`✅ Created Instagram analytics from real-time data:`, platforms[platform]);
             } else if (platform === 'linkedin') {
-              platforms[platform] = {
-                followers: { 
-                  current: metrics.followers, 
-                  previous: estimatedPrevious.followers, 
-                  growth: Math.round(growth.followers * 100) / 100 
-                },
-                likes: { 
-                  current: metrics.likes, 
-                  previous: estimatedPrevious.likes, 
-                  growth: Math.round(growth.likes * 100) / 100 
-                },
-                comments: { 
-                  current: metrics.comments, 
-                  previous: estimatedPrevious.comments, 
-                  growth: Math.round(growth.comments * 100) / 100 
-                },
-                shares: { 
-                  current: metrics.shares || Math.round(metrics.totalEngagement * 0.3), // LinkedIn has good sharing
-                  previous: estimatedPrevious.shares, 
-                  growth: Math.round(growth.shares * 100) / 100 
-                },
-                impressions: {
-                  current: metrics.impressions || Math.round(metrics.totalEngagement * 15), // Use real impressions if available
-                  previous: Math.round(metrics.totalEngagement * 12),
-                  growth: 25
-                },
-                engagement_rate: { 
-                  current: Math.min(100, metrics.engagementRate || 0), 
-                  previous: Math.min(100, (metrics.engagementRate || 0) * 0.9), 
-                  growth: 12 
-                },
-                monthlyData: generateGrowthTrend(metrics.followers, timeframeKey === 'last_7_days' ? 6 : timeframeKey === 'last_30_days' ? 6 : 12)
-              };
+              console.log(`💼 LinkedIn real-time metrics:`, metrics);
               
-              console.log(`✅ Created LinkedIn analytics from real-time data:`, platforms[platform]);
+              // Check if real-time metrics are essentially empty (all zeros or very low)
+              const hasRealData = metrics.followers > 0 || metrics.totalEngagement > 0 || metrics.impressions > 0;
+              
+              // If we already have historical data for LinkedIn and real-time is empty, skip overwriting
+              if (platforms[platform] && !hasRealData) {
+                console.log(`⚠️ Skipping LinkedIn - already have historical data, real-time returned zeros`);
+                console.log(`📊 Keeping historical LinkedIn data:`, platforms[platform]);
+              } else if (hasRealData) {
+                // Only overwrite if we have real data from API or database
+                console.log(`✅ Using real-time LinkedIn data (has actual metrics)`);
+                platforms[platform] = {
+                  followers: { 
+                    current: metrics.followers, 
+                    previous: estimatedPrevious.followers, 
+                    growth: Math.round(growth.followers * 100) / 100 
+                  },
+                  likes: { 
+                    current: metrics.likes, 
+                    previous: estimatedPrevious.likes, 
+                    growth: Math.round(growth.likes * 100) / 100 
+                  },
+                  comments: { 
+                    current: metrics.comments, 
+                    previous: estimatedPrevious.comments, 
+                    growth: Math.round(growth.comments * 100) / 100 
+                  },
+                  shares: { 
+                    current: metrics.shares || Math.round(metrics.totalEngagement * 0.3), // LinkedIn has good sharing
+                    previous: estimatedPrevious.shares, 
+                    growth: Math.round(growth.shares * 100) / 100 
+                  },
+                  impressions: {
+                    current: metrics.impressions || Math.round(metrics.totalEngagement * 15), // Use real impressions if available
+                    previous: Math.round(metrics.totalEngagement * 12),
+                    growth: 25
+                  },
+                  engagement_rate: { 
+                    current: Math.min(100, metrics.engagementRate || 0), 
+                    previous: Math.min(100, (metrics.engagementRate || 0) * 0.9), 
+                    growth: 12 
+                  },
+                  monthlyData: generateGrowthTrend(metrics.followers, timeframeKey === 'last_7_days' ? 6 : timeframeKey === 'last_30_days' ? 6 : 12)
+                };
+                
+                console.log(`✅ Created LinkedIn analytics from real-time data:`, platforms[platform]);
+              } else if (!platforms[platform]) {
+                // No historical data and no real-time data - this shouldn't happen but handle it
+                console.log(`⚠️ No historical or real-time data for LinkedIn`);
+              }
             }
             
             // Update account names

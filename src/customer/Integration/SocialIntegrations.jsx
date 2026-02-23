@@ -775,35 +775,127 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
 
   const handleLinkedInSuccess = async (token, profile) => {
     try {
-      if (profile && profile.id) {
-        // Prepare LinkedIn account data for saving
-        const accountData = {
-          customerId: customer.id,
+      setLoading(true);
+      setError('');
+
+      // Try to fetch both personal profile and organizations
+      let orgsData = null;
+      try {
+        const endpoints = [];
+        if (process.env.REACT_APP_API_URL) {
+          endpoints.push(`${process.env.REACT_APP_API_URL.replace(/\/$/, '')}/linkedin/organizations`);
+        }
+        endpoints.push('/linkedin/organizations');
+
+        for (const url of endpoints) {
+          try {
+            const orgsResponse = await fetch(url, {
+              headers: {
+                'Authorization': `Bearer ${token}`
+              }
+            });
+
+            if (orgsResponse.ok) {
+              orgsData = await orgsResponse.json();
+              console.log('✅ Fetched organizations data:', orgsData);
+              break;
+            } else {
+              console.warn('Organization fetch failed for', url, orgsResponse.status);
+              continue;
+            }
+          } catch (err) {
+            console.warn('Organization fetch error for', url, err.message);
+            continue;
+          }
+        }
+      } catch (orgError) {
+        console.warn('Could not fetch organizations:', orgError.message);
+      }
+
+      // If organization fetch failed, use profile directly
+      if (!orgsData) {
+        const firstName = profile.localizedFirstName || profile.firstName?.localized?.en_US || '';
+        const lastName = profile.localizedLastName || profile.lastName?.localized?.en_US || '';
+        const headline = typeof profile.headline === 'string' ? profile.headline : (profile.headline?.localized?.en_US || '');
+        const name = `${firstName} ${lastName}`.trim() || 'LinkedIn User';
+        
+        orgsData = {
+          personal: {
+            id: profile.id,
+            name: name,
+            headline: headline,
+            firstName: firstName,
+            lastName: lastName,
+            picture: profile.profilePicture?.displayImage || '',
+            type: 'personal'
+          },
+          organizations: []
+        };
+      }
+
+      console.log('📊 Processing LinkedIn accounts:', {
+        hasPersonal: !!orgsData.personal,
+        organizationsCount: orgsData.organizations?.length || 0
+      });
+
+      // Save personal account if available
+      if (orgsData.personal) {
+        const personalAccountData = {
+          customerId: getCustomerId(customer),
           platform: 'linkedin',
-          platformUserId: profile.id,
-          name: `${profile.localizedFirstName || ''} ${profile.localizedLastName || ''}`.trim(),
-          email: '', // Email requires r_emailaddress scope
-          profilePicture: profile.profilePicture?.displayImage || '',
+          platformUserId: orgsData.personal.id,
+          name: orgsData.personal.name,
+          email: orgsData.personal.email || '',
+          profilePicture: orgsData.personal.picture || '',
           accessToken: token,
-          pages: [], // LinkedIn doesn't have pages like Facebook
+          tokenExpiresAt: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString(), // 60 days
+          accountType: 'personal',
+          pages: [],
           connectedAt: new Date().toISOString()
         };
 
-        console.log('📤 Saving LinkedIn account data:', { 
-          customerId: customer.id, 
-          platform: 'linkedin', 
-          platformUserId: profile.id 
-        });
-
-        // Save to database
-        await saveAccountToDatabase(accountData);
-        
-      } else {
-        setError('Failed to get user information from LinkedIn');
-        setLoading(false);
+        console.log('💾 Saving LinkedIn personal account:', personalAccountData.name);
+        await saveAccountToDatabase(personalAccountData);
       }
+
+      // Save organization accounts if available
+      if (orgsData.organizations && orgsData.organizations.length > 0) {
+        console.log(`💾 Saving ${orgsData.organizations.length} LinkedIn organization account(s)`);
+        
+        for (const org of orgsData.organizations) {
+          const orgAccountData = {
+            customerId: getCustomerId(customer),
+            platform: 'linkedin',
+            platformUserId: org.id,
+            organizationId: org.organizationId, // ✅ Critical: Store organization ID
+            name: org.name,
+            email: '',
+            profilePicture: org.picture || '',
+            accessToken: token,
+            tokenExpiresAt: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString(),
+            accountType: 'organization', // ✅ Critical: Set account type
+            vanityName: org.vanityName || '',
+            pages: [],
+            connectedAt: new Date().toISOString()
+          };
+
+          console.log('💾 Saving LinkedIn organization:', {
+            name: org.name,
+            organizationId: org.organizationId,
+            accountType: 'organization'
+          });
+
+          await saveAccountToDatabase(orgAccountData);
+        }
+      }
+
+      setSuccess(`Successfully connected LinkedIn account${orgsData.organizations?.length > 0 ? ` with ${orgsData.organizations.length} organization(s)` : ''}`);
+      await fetchExistingConnections();
+      if (onConnectionSuccess) onConnectionSuccess();
+      
     } catch (err) {
-      setError('Failed to process LinkedIn authentication');
+      console.error('❌ LinkedIn connection error:', err);
+      setError('Failed to process LinkedIn authentication: ' + err.message);
       setLoading(false);
     }
   };
@@ -962,6 +1054,15 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
     } finally {
       setLoading(false);
     }
+  };
+
+  // Helper: Check if token is expired
+  const isTokenExpired = (account) => {
+    if (!account.tokenExpiresAt) return false;
+    const expiryTime = new Date(account.tokenExpiresAt);
+    const now = new Date();
+    const bufferTime = 5 * 60 * 1000; // 5 minutes buffer
+    return (expiryTime.getTime() - now.getTime()) < bufferTime;
   };
 
   const disconnectAccount = async (accountId) => {

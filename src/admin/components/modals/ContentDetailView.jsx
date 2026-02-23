@@ -26,7 +26,7 @@ const CommentMarker = memo(({ comment, index, onToggle, active, hovered, onHover
         fontSize: "11px",
         boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
         cursor: "pointer",
-        zIndex: 2,
+        zIndex: 10,
         border: "2px solid #fff",
         transition: "all 0.2s",
       }}
@@ -53,7 +53,7 @@ const CommentMarker = memo(({ comment, index, onToggle, active, hovered, onHover
             padding: "12px",
             minWidth: "240px",
             maxWidth: "280px",
-            zIndex: 10,
+            zIndex: 20,
             boxShadow: "0 4px 16px rgba(59,130,246,0.2)",
           }}
           onClick={(e) => e.stopPropagation()}
@@ -310,49 +310,52 @@ function ContentDetailView({
               {currentVersion && (
                 <div className="space-y-3">
                   {/* Media Display */}
-                  <div className="relative">
-                    {currentVersion.media?.length > 0 ? (
-                      <>
-                        {/* Media Navigation */}
-                        {currentVersion.media.length > 1 && (
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-xs text-gray-600">
-                              {selectedMediaIndex + 1} / {currentVersion.media.length}
-                            </span>
-                            <div className="flex gap-1">
-                              <button
-                                onClick={() => selectedMediaIndex > 0 && setSelectedMediaIndex(selectedMediaIndex - 1)}
-                                disabled={selectedMediaIndex === 0}
-                                className="p-1.5 rounded-lg bg-blue-50 border border-gray-200 hover:bg-white disabled:opacity-50 transition-colors"
-                              >
-                                <ChevronLeft className="h-3.5 w-3.5 text-blue-600" />
-                              </button>
-                              <button
-                                onClick={() => selectedMediaIndex < currentVersion.media.length - 1 && setSelectedMediaIndex(selectedMediaIndex + 1)}
-                                disabled={selectedMediaIndex === currentVersion.media.length - 1}
-                                className="p-1.5 rounded-lg bg-blue-50 border border-gray-200 hover:bg-white disabled:opacity-50 transition-colors"
-                              >
-                                <ChevronRight className="h-3.5 w-3.5 text-blue-600" />
-                              </button>
-                            </div>
+                  {currentVersion.media?.length > 0 ? (
+                    <>
+                      {/* Media Navigation */}
+                      {currentVersion.media.length > 1 && (
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs text-gray-600">
+                            {selectedMediaIndex + 1} / {currentVersion.media.length}
+                          </span>
+                          <div className="flex gap-1">
+                            <button
+                              onClick={() => selectedMediaIndex > 0 && setSelectedMediaIndex(selectedMediaIndex - 1)}
+                              disabled={selectedMediaIndex === 0}
+                              className="p-1.5 rounded-lg bg-blue-50 border border-gray-200 hover:bg-white disabled:opacity-50 transition-colors"
+                            >
+                              <ChevronLeft className="h-3.5 w-3.5 text-blue-600" />
+                            </button>
+                            <button
+                              onClick={() => selectedMediaIndex < currentVersion.media.length - 1 && setSelectedMediaIndex(selectedMediaIndex + 1)}
+                              disabled={selectedMediaIndex === currentVersion.media.length - 1}
+                              className="p-1.5 rounded-lg bg-blue-50 border border-gray-200 hover:bg-white disabled:opacity-50 transition-colors"
+                            >
+                              <ChevronRight className="h-3.5 w-3.5 text-blue-600" />
+                            </button>
                           </div>
-                        )}
-                        
-                        {/* Media Item */}
-                        <div className="relative">
+                        </div>
+                      )}
+                      
+                      {/* Media Item */}
+                      <div className="flex justify-center">
+                        <div 
+                          className="relative inline-block"
+                          style={{ position: 'relative' }}
+                        >
                           {currentMedia?.url && typeof currentMedia.url === 'string' ? (
                             isVideoUrl(currentMedia.url) ? (
                               <video
                                 src={currentMedia.url}
                                 controls
-                                className="max-w-full h-auto max-h-64 sm:max-h-80 mx-auto rounded-lg shadow border border-gray-200"
+                                className="max-w-full h-auto max-h-[50vh] sm:max-h-[60vh] lg:max-h-[70vh] rounded-lg shadow border border-gray-200 object-contain"
                                 loading="lazy"
                               />
                             ) : (
                               <img
                                 src={currentMedia.url}
                                 alt={`V${currentVersion.versionNumber} M${selectedMediaIndex + 1}`}
-                                className="max-w-full h-auto max-h-64 sm:max-h-80 mx-auto rounded-lg shadow border border-gray-200"
+                                className="max-w-full h-auto max-h-[50vh] sm:max-h-[60vh] lg:max-h-[70vh] rounded-lg shadow border border-gray-200 object-contain"
                                 loading="lazy"
                               />
                             )
@@ -380,6 +383,7 @@ function ContentDetailView({
                             />
                           ))}
                         </div>
+                      </div>
                       </>
                     ) : (
                       <div className="w-full h-48 sm:h-64 bg-gray-50 rounded-lg flex items-center justify-center border border-gray-200">
@@ -389,7 +393,6 @@ function ContentDetailView({
                         </div>
                       </div>
                     )}
-                  </div>
 
                   {/* Caption & Details */}
                   <div className="space-y-2">

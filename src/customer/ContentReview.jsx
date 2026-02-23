@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MessageSquare, CheckCircle, Edit3, Trash2, Move, ChevronLeft, ChevronRight, Image, Video, AlertCircle, ThumbsUp } from 'lucide-react';
+import { MessageSquare, CheckCircle, Edit3, Trash2, Move, ChevronLeft, ChevronRight, Image, Video, AlertCircle, ThumbsUp, Calendar, ChevronDown, ChevronUp } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 function ContentReview() {
@@ -52,6 +52,8 @@ function ContentReview() {
   const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
 
   const [contentItems, setContentItems] = useState([]);
+  const [groupedContentItems, setGroupedContentItems] = useState({});
+  const [collapsedCalendars, setCollapsedCalendars] = useState({});
   const [selectedContent, setSelectedContent] = useState(null);
   const [comments, setComments] = useState([]);
   const [commentsForCurrentMedia, setCommentsForCurrentMedia] = useState([]);
@@ -218,6 +220,18 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
       });
 
       setContentItems(contentData);
+      
+      // Group content by calendar
+      const grouped = {};
+      contentData.forEach(item => {
+        const calendarKey = item.calendar_name || item.calendar_id || 'Uncategorized';
+        if (!grouped[calendarKey]) {
+          grouped[calendarKey] = [];
+        }
+        grouped[calendarKey].push(item);
+      });
+      setGroupedContentItems(grouped);
+      
       // Only set initial selection if nothing is currently selected
       if (contentData.length > 0 && !selectedContent) {
         setSelectedContent(contentData[0]);
@@ -311,6 +325,13 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
         {children}
       </button>
     );
+  };
+
+  const toggleCalendarCollapse = (calendarName) => {
+    setCollapsedCalendars(prev => ({
+      ...prev,
+      [calendarName]: !prev[calendarName]
+    }));
   };
 
   const handleImageClick = (e) => {
@@ -986,42 +1007,79 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
               </div>
               
               <div className="max-h-64 sm:max-h-80 lg:max-h-96 overflow-y-auto">
-                {contentItems.map((item, index) => (
-                  <div
-                    key={item.id}
-                    className={`p-2.5 sm:p-3 cursor-pointer transition-all duration-200 border-b border-slate-100 hover:bg-gradient-to-r hover:from-indigo-50 hover:to-blue-50 ${
-                      selectedContentIndex === index
-                        ? 'bg-gradient-to-r from-indigo-50 to-blue-50 border-l-4 border-l-indigo-600'
-                        : ''
-                    }`}
-                    onClick={() => handleContentSelect(item, index)}
-                  >
-                    <div className="flex items-start space-x-2 sm:space-x-3">
-                      <div className="flex-shrink-0">
-                        <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-xs sm:text-sm shadow-md">
-                          {index + 1}
+                {Object.keys(groupedContentItems).length === 0 ? (
+                  <div className="p-4 text-center text-slate-500 text-sm">No content items</div>
+                ) : (
+                  Object.keys(groupedContentItems).sort().map((calendarName) => (
+                    <div key={calendarName}>
+                      {/* Calendar Header */}
+                      <div 
+                        className="sticky top-0 z-10 bg-gradient-to-r from-slate-100 to-slate-50 px-3 py-2 border-b-2 border-indigo-200 cursor-pointer hover:from-slate-200 hover:to-slate-100 transition-colors"
+                        onClick={() => toggleCalendarCollapse(calendarName)}
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 bg-gradient-to-br from-indigo-400 to-purple-500 rounded-md flex items-center justify-center flex-shrink-0">
+                            <Calendar className="h-3.5 w-3.5 text-white" />
+                          </div>
+                          <h4 className="font-bold text-xs sm:text-sm text-slate-800 truncate">
+                            {calendarName}
+                          </h4>
+                          <span className="px-2 py-0.5 bg-indigo-500 text-white rounded-full text-[10px] font-semibold">
+                            {groupedContentItems[calendarName].length}
+                          </span>
+                          <div className="ml-auto">
+                            {collapsedCalendars[calendarName] ? (
+                              <ChevronDown className="h-4 w-4 text-slate-600" />
+                            ) : (
+                              <ChevronUp className="h-4 w-4 text-slate-600" />
+                            )}
+                          </div>
                         </div>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <h4 className="font-bold text-xs sm:text-sm text-slate-900 truncate leading-tight">{item.title}</h4>
-                        <p className="text-xs text-slate-600 mt-1 line-clamp-1 sm:line-clamp-2 leading-relaxed hidden sm:block">{item.description}</p>
-                        <div className="flex items-center flex-wrap gap-1.5 mt-1.5 sm:mt-2">
-                          <span className={`inline-flex items-center px-1.5 py-0.5 sm:px-2 sm:py-0.5 rounded-full text-[10px] sm:text-xs font-semibold border ${getStatusColor(getDisplayStatus(item))}`}>
-                            {getStatusLabel(getDisplayStatus(item))}
-                          </span>
-                          <span className="text-[10px] sm:text-xs text-slate-600 font-medium">{item.platform}</span>
-                          <span className="text-[10px] sm:text-xs text-indigo-600 font-semibold bg-indigo-50 px-1.5 py-0.5 rounded-full">
-                            v{item.totalVersions}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between mt-1 text-[10px] sm:text-xs text-slate-400">
-                          <span className="truncate">{item.createdBy}</span>
-                          <span>{formatDate(item.createdAt)}</span>
-                        </div>
-                      </div>
+                      
+                      {/* Content Items for this Calendar */}
+                      {!collapsedCalendars[calendarName] && groupedContentItems[calendarName].map((item) => {
+                        const itemIndex = contentItems.findIndex(ci => ci.id === item.id);
+                        return (
+                          <div
+                            key={item.id}
+                            className={`p-2.5 sm:p-3 cursor-pointer transition-all duration-200 border-b border-slate-100 hover:bg-gradient-to-r hover:from-indigo-50 hover:to-blue-50 ${
+                              selectedContentIndex === itemIndex
+                                ? 'bg-gradient-to-r from-indigo-50 to-blue-50 border-l-4 border-l-indigo-600'
+                                : ''
+                            }`}
+                            onClick={() => handleContentSelect(item, itemIndex)}
+                          >
+                            <div className="flex items-start space-x-2 sm:space-x-3">
+                              <div className="flex-shrink-0">
+                                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-xs sm:text-sm shadow-md">
+                                  {itemIndex + 1}
+                                </div>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <h4 className="font-bold text-xs sm:text-sm text-slate-900 truncate leading-tight">{item.title}</h4>
+                                <p className="text-xs text-slate-600 mt-1 line-clamp-1 sm:line-clamp-2 leading-relaxed hidden sm:block">{item.description}</p>
+                                <div className="flex items-center flex-wrap gap-1.5 mt-1.5 sm:mt-2">
+                                  <span className={`inline-flex items-center px-1.5 py-0.5 sm:px-2 sm:py-0.5 rounded-full text-[10px] sm:text-xs font-semibold border ${getStatusColor(getDisplayStatus(item))}`}>
+                                    {getStatusLabel(getDisplayStatus(item))}
+                                  </span>
+                                  <span className="text-[10px] sm:text-xs text-slate-600 font-medium">{item.platform}</span>
+                                  <span className="text-[10px] sm:text-xs text-indigo-600 font-semibold bg-indigo-50 px-1.5 py-0.5 rounded-full">
+                                    v{item.totalVersions}
+                                  </span>
+                                </div>
+                                <div className="flex items-center justify-between mt-1 text-[10px] sm:text-xs text-slate-400">
+                                  <span className="truncate">{item.createdBy}</span>
+                                  <span>{formatDate(item.createdAt)}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
 

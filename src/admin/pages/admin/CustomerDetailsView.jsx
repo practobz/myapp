@@ -61,6 +61,7 @@ function CustomerDetailsView() {
   const [selectedItem, setSelectedItem] = useState(null);
   const [expandedCalendars, setExpandedCalendars] = useState(new Set());
   const [openDropdowns, setOpenDropdowns] = useState(new Set());
+  const [scheduledPosts, setScheduledPosts] = useState([]);
 
   const API_URL = process.env.REACT_APP_API_URL;
 
@@ -88,6 +89,7 @@ function CustomerDetailsView() {
       fetchCustomer();
       fetchCalendars();
       fetchCreators();
+      fetchScheduledPosts();
     }
   }, [id]);
 
@@ -132,6 +134,38 @@ function CustomerDetailsView() {
       setCreators([]);
     }
   };
+
+  const fetchScheduledPosts = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/scheduled-posts`);
+      if (response.ok) {
+        const data = await response.json();
+        setScheduledPosts(Array.isArray(data) ? data : []);
+      }
+    } catch (error) {
+      console.error('Error fetching scheduled posts:', error);
+      setScheduledPosts([]);
+    }
+  };
+
+  // Check if item is published (manual or via scheduled post)
+  const isItemPublished = useCallback((item) => {
+    // Check manual publish flag
+    if (item.published === true) return true;
+    // Check scheduled posts
+    return scheduledPosts.some(post =>
+      ((post.item_id && post.item_id === item.id) ||
+       (post.contentId && post.contentId === item.id) ||
+       (post.item_name && post.item_name === (item.title || item.description))) &&
+      (post.status === 'published' || post.publishedAt)
+    );
+  }, [scheduledPosts]);
+
+  // Check if all items in a calendar are published
+  const isCalendarPublished = useCallback((calendar) => {
+    if (!calendar.contentItems || calendar.contentItems.length === 0) return false;
+    return calendar.contentItems.every(item => isItemPublished(item));
+  }, [isItemPublished]);
 
   const handleCreateCalendar = async (calendarData) => {
     try {
@@ -506,7 +540,7 @@ function CustomerDetailsView() {
             {calendars.length > 0 ? (
                 <div className="space-y-2 sm:space-y-3">
                   {calendars.map((calendar) => (
-                    <div key={calendar._id} className="bg-white rounded-lg border border-gray-200/50 shadow-sm overflow-hidden">
+                    <div key={calendar._id} className="bg-white rounded-lg border border-gray-200/50 shadow-sm relative">
                       <div 
                         className="p-3 cursor-pointer hover:bg-gray-50 transition-colors active:bg-gray-100"
                         onClick={() => toggleCalendarExpansion(calendar._id)}
@@ -517,7 +551,17 @@ function CustomerDetailsView() {
                               <Calendar className="h-3.5 w-3.5 text-blue-600" />
                             </div>
                             <div className="min-w-0 flex-1">
-                              <h4 className="text-base font-semibold text-gray-900 truncate">{calendar.name}</h4>
+                              <div className="flex items-center gap-2">
+                                <h4 className="text-base font-semibold text-gray-900 truncate">{calendar.name}</h4>
+                                {isCalendarPublished(calendar) && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 border border-green-200 flex-shrink-0">
+                                    <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                    </svg>
+                                    Fully Published
+                                  </span>
+                                )}
+                              </div>
                               <div className="flex items-center gap-2 text-xs text-gray-500">
                                 <span>{calendar.contentItems?.length || 0} items</span>
                                 {calendar.assignedTo && (
@@ -557,28 +601,52 @@ function CustomerDetailsView() {
                             {/* Mobile Menu */}
                             <div className="sm:hidden relative">
                               <button
+                                type="button"
                                 onClick={e => { e.stopPropagation(); toggleDropdown(calendar._id); }}
                                 className="p-1.5 text-gray-500 hover:bg-gray-100 rounded transition-colors"
                               >
                                 <MoreVertical className="h-4 w-4" />
                               </button>
                               {openDropdowns.has(calendar._id) && (
-                                <div className="absolute right-0 top-full mt-1 w-36 bg-white rounded-lg shadow-lg border border-gray-200 z-20 py-1">
+                                <div 
+                                  className="absolute right-0 top-full mt-1 w-36 bg-white rounded-lg shadow-xl border border-gray-200 z-[9999] py-1 pointer-events-auto"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
                                   <button
-                                    onClick={e => { e.stopPropagation(); setSelectedCalendar(calendar); setIsContentModalOpen(true); setOpenDropdowns(new Set()); }}
-                                    className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center"
+                                    type="button"
+                                    onClick={(e) => { 
+                                      e.preventDefault();
+                                      e.stopPropagation(); 
+                                      const cal = calendar;
+                                      setOpenDropdowns(new Set());
+                                      setSelectedCalendar(cal); 
+                                      setTimeout(() => setIsContentModalOpen(true), 0);
+                                    }}
+                                    className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center active:bg-gray-100 cursor-pointer"
                                   >
                                     <Plus className="h-4 w-4 mr-2 text-green-600" />Add Item
                                   </button>
                                   <button
-                                    onClick={e => { e.stopPropagation(); handleEditCalendar(calendar); }}
-                                    className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center"
+                                    type="button"
+                                    onClick={(e) => { 
+                                      e.preventDefault();
+                                      e.stopPropagation(); 
+                                      setOpenDropdowns(new Set());
+                                      setTimeout(() => handleEditCalendar(calendar), 0);
+                                    }}
+                                    className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center active:bg-gray-100 cursor-pointer"
                                   >
                                     <Edit className="h-4 w-4 mr-2 text-blue-600" />Edit
                                   </button>
                                   <button
-                                    onClick={e => { e.stopPropagation(); handleDeleteCalendar(calendar._id); }}
-                                    className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center"
+                                    type="button"
+                                    onClick={(e) => { 
+                                      e.preventDefault();
+                                      e.stopPropagation(); 
+                                      setOpenDropdowns(new Set());
+                                      setTimeout(() => handleDeleteCalendar(calendar._id), 0);
+                                    }}
+                                    className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center active:bg-gray-100 cursor-pointer"
                                   >
                                     <Trash2 className="h-4 w-4 mr-2 text-red-600" />Delete
                                   </button>
@@ -596,7 +664,7 @@ function CustomerDetailsView() {
                       </div>
 
                       {expandedCalendars.has(calendar._id) && (
-                        <div className="border-t border-gray-200/50 bg-gray-50/50 p-3">
+                        <div className="border-t border-gray-200/50 bg-gray-50/50 p-3 overflow-hidden">
                           <h5 className="text-sm font-semibold text-gray-600 mb-2">Content Items</h5>
                           {calendar.contentItems && calendar.contentItems.length > 0 ? (
                             <div className="space-y-2">
@@ -622,7 +690,7 @@ function CustomerDetailsView() {
                                             ))}
                                           </>
                                         )}
-                                        {item.published ? (
+                                        {isItemPublished(item) ? (
                                           <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">
                                             <CheckCircle className="h-3 w-3 mr-0.5" />
                                             Published
@@ -636,9 +704,9 @@ function CustomerDetailsView() {
                                     </div>
                                     <div className="flex items-center gap-0.5 flex-shrink-0">
                                       <button
-                                        className={`p-1.5 rounded transition-colors ${item.published ? 'text-green-600 bg-green-50 hover:bg-green-100' : 'text-gray-400 hover:text-green-600 hover:bg-green-50'}`}
+                                        className={`p-1.5 rounded transition-colors ${isItemPublished(item) ? 'text-green-600 bg-green-50 hover:bg-green-100' : 'text-gray-400 hover:text-green-600 hover:bg-green-50'}`}
                                         onClick={(e) => { e.stopPropagation(); handleTogglePublished(calendar._id, item); }}
-                                        title={item.published ? 'Mark as unpublished' : 'Mark as published'}
+                                        title={isItemPublished(item) ? 'Mark as unpublished' : 'Mark as published'}
                                       >
                                         <CheckCircle className="h-3.5 w-3.5" />
                                       </button>
@@ -701,8 +769,11 @@ function CustomerDetailsView() {
       {/* Click outside to close dropdowns */}
       {openDropdowns.size > 0 && (
         <div 
-          className="fixed inset-0 z-10" 
-          onClick={() => setOpenDropdowns(new Set())}
+          className="fixed inset-0 z-[9998]" 
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpenDropdowns(new Set());
+          }}
         />
       )}
 

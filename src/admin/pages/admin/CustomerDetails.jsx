@@ -72,6 +72,12 @@ const CustomerDetails = () => {
     return item.status || 'pending';
   };
 
+  // Check if all items in a calendar are published
+  const isCalendarPublished = (calendar) => {
+    if (!calendar.contentItems || calendar.contentItems.length === 0) return false;
+    return calendar.contentItems.every(item => isItemPublished(item));
+  };
+
   const fetchCustomer = async () => {
     try {
       const response = await fetch(`${API_URL}/customer/${id}`);
@@ -480,7 +486,8 @@ const CustomerDetails = () => {
             {calendars.length > 0 ? (
               <div className="space-y-2">
                 {calendars.map((calendar) => (
-                  <div key={calendar._id} className="bg-white rounded-lg border border-gray-200/50 shadow-sm overflow-hidden">                   <div
+                  <div key={calendar._id} className="bg-white rounded-lg border border-gray-200/50 shadow-sm relative">
+                    <div
                       className="p-2 sm:p-3 cursor-pointer hover:bg-gray-50 transition-colors"
                       onClick={() => toggleCalendarExpansion(calendar._id)}
                     >
@@ -490,7 +497,17 @@ const CustomerDetails = () => {
                               <Calendar className="h-4 md:h-5 w-4 md:w-5 text-blue-600" />
                             </div>
                             <div className="min-w-0 flex-1">
-                              <h4 className="text-base md:text-lg font-semibold text-gray-900 truncate">{calendar.name}</h4>
+                              <div className="flex items-center gap-2">
+                                <h4 className="text-base md:text-lg font-semibold text-gray-900 truncate">{calendar.name}</h4>
+                                {isCalendarPublished(calendar) && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 border border-green-200 flex-shrink-0">
+                                    <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                    </svg>
+                                    Fully Published
+                                  </span>
+                                )}
+                              </div>
                               <p className="text-sm text-gray-600 truncate">{calendar.description}</p>
                               <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 mt-2 space-y-1 sm:space-y-0">
                                 <span className="text-xs text-gray-500">{calendar.contentItems?.length || 0} content items</span>
@@ -552,6 +569,7 @@ const CustomerDetails = () => {
                           {/* Mobile Actions */}
                           <div className="md:hidden flex items-center space-x-2 ml-2 relative">
                             <button
+                              type="button"
                               onClick={e => {
                                 e.stopPropagation();
                                 toggleDropdown(calendar._id);
@@ -568,36 +586,48 @@ const CustomerDetails = () => {
 
                             {/* Mobile Dropdown Menu */}
                             {openDropdowns.has(calendar._id) && (
-                              <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-20">
+                              <div 
+                                className="absolute right-0 top-full mt-2 w-48 bg-white rounded-lg shadow-xl border border-gray-200 z-[9999] pointer-events-auto"
+                                onClick={(e) => e.stopPropagation()}
+                              >
                                 <div className="py-1">
                                   <button
-                                    onClick={e => {
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.preventDefault();
                                       e.stopPropagation();
-                                      setSelectedCalendar(calendar);
-                                      setIsAddModalOpen(true);
+                                      const cal = calendar;
                                       setOpenDropdowns(new Set());
+                                      setSelectedCalendar(cal);
+                                      setTimeout(() => setIsAddModalOpen(true), 0);
                                     }}
-                                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+                                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center active:bg-gray-100 cursor-pointer"
                                   >
                                     <Plus className="h-4 w-4 mr-2 text-green-600" />
                                     Add Item
                                   </button>
                                   <button
-                                    onClick={e => {
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.preventDefault();
                                       e.stopPropagation();
-                                      handleEditCalendar(calendar);
+                                      setOpenDropdowns(new Set());
+                                      setTimeout(() => handleEditCalendar(calendar), 0);
                                     }}
-                                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+                                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center active:bg-gray-100 cursor-pointer"
                                   >
                                     <Pencil className="h-4 w-4 mr-2 text-blue-600" />
                                     Edit Calendar
                                   </button>
                                   <button
-                                    onClick={e => {
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.preventDefault();
                                       e.stopPropagation();
-                                      handleDeleteCalendar(calendar._id);
+                                      setOpenDropdowns(new Set());
+                                      setTimeout(() => handleDeleteCalendar(calendar._id), 0);
                                     }}
-                                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+                                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center active:bg-gray-100 cursor-pointer"
                                   >
                                     <Trash2 className="h-4 w-4 mr-2 text-red-600" />
                                     Delete Calendar
@@ -610,7 +640,7 @@ const CustomerDetails = () => {
                       </div>
 
                       {expandedCalendars.has(calendar._id) && (
-                        <div className="border-t border-gray-200/50 bg-gray-50/50">
+                        <div className="border-t border-gray-200/50 bg-gray-50/50 overflow-hidden">
                           <div className="p-4 md:p-6">
                             <h5 className="text-sm font-semibold text-gray-700 mb-4">Content Items</h5>
                             {calendar.contentItems && calendar.contentItems.length > 0 ? (
@@ -744,8 +774,11 @@ const CustomerDetails = () => {
       {/* Click outside to close dropdowns */}
       {openDropdowns.size > 0 && (
         <div 
-          className="fixed inset-0 z-10" 
-          onClick={() => setOpenDropdowns(new Set())}
+          className="fixed inset-0 z-[9998]" 
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpenDropdowns(new Set());
+          }}
         />
       )}
 

@@ -286,12 +286,12 @@ function Dashboard() {
               gradientClass="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 focus:ring-green-500"
               onClick={navigationHandlers.publishManager}
             />
-            <QuickActionButton 
+           {/* <QuickActionButton 
               icon={TrendingUp}
               label="Analytics"
               gradientClass="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 focus:ring-violet-500"
               onClick={navigationHandlers.customerAnalytics}
-            />
+            /> */}
           </div>
         </div>
       </div>

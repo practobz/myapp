@@ -143,7 +143,8 @@ function Dashboard() {
     contentPortfolio: () => navigate('/admin/content-portfolio'),
     scheduledPosts: () => navigate('/admin/scheduled-posts'),
     qrGenerator: () => navigate('/admin/qr-generator'),
-    publishManager: () => navigate('/admin/publish-manager')
+    publishManager: () => navigate('/admin/publish-manager'),
+    customerAnalytics: () => navigate('/admin/customer-analytics')
   }), [navigate]);
 
   if (loading) {
@@ -242,7 +243,7 @@ function Dashboard() {
         {/* Quick Actions - Optimized grid for mobile */}
         <div className="bg-white/70 backdrop-blur-sm rounded-xl sm:rounded-2xl shadow-lg border border-gray-200/50 p-4 sm:p-6 lg:p-8">
           <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900 mb-4 sm:mb-6">Quick Actions</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 sm:gap-3 lg:gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 sm:gap-3 lg:gap-4">
             <QuickActionButton 
               icon={Users}
               label="Customers"
@@ -284,6 +285,12 @@ function Dashboard() {
               label="Publish"
               gradientClass="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 focus:ring-green-500"
               onClick={navigationHandlers.publishManager}
+            />
+            <QuickActionButton 
+              icon={TrendingUp}
+              label="Analytics"
+              gradientClass="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 focus:ring-violet-500"
+              onClick={navigationHandlers.customerAnalytics}
             />
           </div>
         </div>

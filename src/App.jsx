@@ -20,6 +20,7 @@ import AdminContentPortfolio from './admin/pages/admin/AdminContentPortfolio';
 import AdminContentUpload from './admin/pages/admin/ContentUpload';
 import AdminQrGenerator from './admin/pages/admin/AdminQrGenerator';
 import PublishManager from './admin/pages/admin/PublishManager';
+import MultiCustomerAnalytics from './admin/pages/admin/MultiCustomerAnalytics';
 
 
 // Super Admin imports
@@ -403,6 +404,12 @@ function App() {
     <AdminSettings />
   </ProtectedRoutePortal>
 } />
+{/* Admin Multi-Customer Analytics Dashboard */}
+              <Route path="/admin/customer-analytics" element={
+                <ProtectedRoutePortal role="admin">
+                  <MultiCustomerAnalytics />
+                </ProtectedRoutePortal>
+              } />
  <Route path="/admin/publish-manager" element={
                 <ProtectedRoutePortal role="admin">
                   <PublishManager />

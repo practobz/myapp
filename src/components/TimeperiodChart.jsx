@@ -1,38 +1,125 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Calendar, TrendingUp, BarChart3, PieChart as PieChartIcon, RefreshCw, Download } from 'lucide-react';
+import React, { useState, useEffect, useRef, memo } from 'react';
+import { 
+  Calendar, TrendingUp, BarChart3, PieChart as PieChartIcon, RefreshCw, Download,
+  ChevronDown, Layers, Clock, CheckCircle2, AlertTriangle, Info, Sparkles,
+  ArrowUpRight, ArrowDownRight, Minus, Filter, Eye
+} from 'lucide-react';
 import { 
   AreaChart, Area, BarChart as RechartsBarChart, Bar, PieChart as RechartsPieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from 'recharts';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
+// Skeleton loader component
+const Skeleton = memo(({ className = '' }) => (
+  <div className={`animate-pulse bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 bg-[length:200%_100%] rounded ${className}`} />
+));
+
+// Chart skeleton loader
+const ChartSkeleton = memo(() => (
+  <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-6">
+    <div className="flex items-center justify-between mb-4">
+      <div className="space-y-2">
+        <Skeleton className="h-5 w-32 rounded" />
+        <Skeleton className="h-3 w-24 rounded" />
+      </div>
+      <div className="text-right space-y-2">
+        <Skeleton className="h-7 w-20 rounded ml-auto" />
+        <Skeleton className="h-3 w-16 rounded ml-auto" />
+      </div>
+    </div>
+    <div className="h-48 sm:h-64 flex items-end justify-between gap-2 pt-4">
+      {[40, 65, 45, 80, 55, 70, 60, 75, 50, 85, 65, 70].map((h, i) => (
+        <Skeleton key={i} className="flex-1 rounded-t" style={{ height: `${h}%` }} />
+      ))}
+    </div>
+  </div>
+));
+
+// Trend indicator component
+const TrendIndicator = memo(({ current, previous, size = 'default' }) => {
+  if (!previous || previous === 0) return null;
+  
+  const change = ((current - previous) / previous * 100);
+  const isPositive = change > 0;
+  const isNeutral = Math.abs(change) < 0.5;
+  
+  const sizeClasses = {
+    small: 'text-[10px] px-1.5 py-0.5',
+    default: 'text-xs px-2 py-1'
+  };
+  
+  if (isNeutral) {
+    return (
+      <span className={`inline-flex items-center gap-0.5 bg-gray-100 text-gray-600 rounded-full font-medium ${sizeClasses[size]}`}>
+        <Minus className="w-3 h-3" />
+        0%
+      </span>
+    );
+  }
+  
+  return (
+    <span className={`inline-flex items-center gap-0.5 rounded-full font-medium ${
+      isPositive 
+        ? 'bg-green-100 text-green-700' 
+        : 'bg-red-100 text-red-700'
+    } ${sizeClasses[size]}`}>
+      {isPositive ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+      {Math.abs(change).toFixed(1)}%
+    </span>
+  );
+});
+
 const TIME_PERIOD_OPTIONS = [
-  { value: 7, label: 'Last 7 days' },
-  { value: 15, label: 'Last 15 days' },
-  { value: 30, label: 'Last 30 days' },
-  { value: 60, label: 'Last 2 months' },
-  { value: 90, label: 'Last 3 months' },
-  { value: 180, label: 'Last 6 months' },
-  { value: 365, label: 'Last 1 year' }
+  { value: 7, label: '7 days', shortLabel: '7D', description: 'Last week' },
+  { value: 15, label: '15 days', shortLabel: '15D', description: 'Last 2 weeks' },
+  { value: 30, label: '30 days', shortLabel: '1M', description: 'Last month' },
+  { value: 60, label: '60 days', shortLabel: '2M', description: 'Last 2 months' },
+  { value: 90, label: '90 days', shortLabel: '3M', description: 'Last quarter' },
+  { value: 180, label: '6 months', shortLabel: '6M', description: 'Last 6 months' },
+  { value: 365, label: '1 year', shortLabel: '1Y', description: 'Last year' }
 ];
 
 const CHART_TYPE_OPTIONS = [
-  { value: 'trend', label: 'Trend Chart', icon: TrendingUp },
-  { value: 'bar', label: 'Bar Chart', icon: BarChart3 },
-  { value: 'pie', label: 'Pie Chart', icon: PieChartIcon }
+  { value: 'trend', label: 'Trend', fullLabel: 'Trend Chart', icon: TrendingUp, description: 'Area chart showing trends over time' },
+  { value: 'bar', label: 'Bar', fullLabel: 'Bar Chart', icon: BarChart3, description: 'Bar chart comparing values' },
+  { value: 'pie', label: 'Pie', fullLabel: 'Pie Chart', icon: PieChartIcon, description: 'Distribution breakdown' }
 ];
 
 const METRICS_OPTIONS = [
-  { value: 'followers', label: 'Followers', color: '#3B82F6' },
-  { value: 'likes', label: 'Likes', color: '#10B981' },
-  { value: 'comments', label: 'Comments', color: '#8B5CF6' },
-  { value: 'shares', label: 'Shares', color: '#F59E0B' },
-  { value: 'engagement', label: 'Total Engagement', color: '#EF4444' },
-  { value: 'views', label: 'Views', color: '#06B6D4' },
-  { value: 'reach', label: 'Reach', color: '#84CC16' },
-  { value: 'impressions', label: 'Impressions', color: '#F97316' }
+  { value: 'followers', label: 'Followers', color: '#3B82F6', gradient: 'from-blue-500 to-blue-600', bgLight: 'bg-blue-50' },
+  { value: 'likes', label: 'Likes', color: '#10B981', gradient: 'from-emerald-500 to-green-600', bgLight: 'bg-emerald-50' },
+  { value: 'comments', label: 'Comments', color: '#8B5CF6', gradient: 'from-violet-500 to-purple-600', bgLight: 'bg-violet-50' },
+  { value: 'shares', label: 'Shares', color: '#F59E0B', gradient: 'from-amber-500 to-orange-500', bgLight: 'bg-amber-50' },
+  { value: 'engagement', label: 'Engagement', color: '#EF4444', gradient: 'from-red-500 to-rose-600', bgLight: 'bg-red-50' },
+  { value: 'views', label: 'Views', color: '#06B6D4', gradient: 'from-cyan-500 to-teal-500', bgLight: 'bg-cyan-50' },
+  { value: 'reach', label: 'Reach', color: '#84CC16', gradient: 'from-lime-500 to-green-500', bgLight: 'bg-lime-50' },
+  { value: 'impressions', label: 'Impressions', color: '#F97316', gradient: 'from-orange-500 to-amber-500', bgLight: 'bg-orange-50' }
 ];
+
+// Custom tooltip component
+const CustomTooltip = ({ active, payload, label, metricInfo }) => {
+  if (!active || !payload || !payload.length) return null;
+  
+  return (
+    <div className="bg-white/95 backdrop-blur-sm border border-gray-200 rounded-xl shadow-xl p-3 min-w-[140px]">
+      <p className="text-xs text-gray-500 mb-1.5 font-medium">
+        {new Date(label).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+      </p>
+      <div className="flex items-center gap-2">
+        <div 
+          className="w-3 h-3 rounded-full shadow-sm"
+          style={{ backgroundColor: metricInfo?.color || payload[0]?.color }}
+        />
+        <span className="font-bold text-gray-900">
+          {payload[0]?.value?.toLocaleString()}
+        </span>
+        <span className="text-xs text-gray-500">{metricInfo?.label}</span>
+      </div>
+    </div>
+  );
+};
 
 export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'followers' }) {
   const [selectedPeriod, setSelectedPeriod] = useState(30);
@@ -157,82 +244,98 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
       const minValue = Math.min(...values);
       const avgValue = values.reduce((a, b) => a + b, 0) / values.length;
       const nonZeroCount = values.filter(v => v > 0).length;
-
-      console.log(`📊 [Chart Render] ${metricInfo?.label || metric}:`, {
-        dataPoints: data.length,
-        currentValue: data[data.length - 1]?.value,
-        maxValue,
-        minValue,
-        avgValue,
-        nonZeroCount,
-        sampleData: data.slice(-3)
-      });
+      const currentValue = data[data.length - 1]?.value || 0;
+      const previousValue = data[0]?.value || 0;
 
       return (
-        <div key={metric} className="bg-white rounded-lg sm:rounded-xl border border-gray-200 p-3 sm:p-4 lg:p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-2 sm:mb-3 lg:mb-4">
-            <div className="min-w-0 flex-1">
-              <h4 className="text-sm sm:text-base lg:text-lg font-semibold text-gray-900 truncate">
-                {metricInfo?.label || metric}
-              </h4>
-              <p className="text-[10px] sm:text-xs lg:text-sm text-gray-600">
-                {selectedPeriod}d • {nonZeroCount} pts
-              </p>
-            </div>
-            <div className="text-right flex-shrink-0 ml-2">
-              <div className="text-base sm:text-lg lg:text-2xl font-bold" style={{ color: metricInfo?.color }}>
-                {data[data.length - 1]?.value?.toLocaleString() || 0}
+        <div key={metric} className="bg-white rounded-xl sm:rounded-2xl border border-gray-200/80 p-4 sm:p-5 lg:p-6 shadow-sm hover:shadow-lg transition-all duration-300 group">
+          {/* Header */}
+          <div className="flex items-start justify-between mb-4 sm:mb-5">
+            <div className="flex items-center gap-3">
+              <div 
+                className={`p-2 sm:p-2.5 rounded-xl bg-gradient-to-br ${metricInfo?.gradient || 'from-gray-500 to-gray-600'} shadow-lg group-hover:scale-105 transition-transform duration-300`}
+              >
+                <Eye className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
               </div>
-              <div className="text-[10px] sm:text-xs text-gray-500">Current</div>
-              {maxValue > 0 && (
-                <div className="text-[10px] sm:text-xs text-gray-400 mt-0.5">
-                  Peak: {maxValue.toLocaleString()}
-                </div>
-              )}
+              <div>
+                <h4 className="text-sm sm:text-base font-semibold text-gray-900">
+                  {metricInfo?.label || metric}
+                </h4>
+                <p className="text-[10px] sm:text-xs text-gray-500 flex items-center gap-1.5">
+                  <Clock className="h-3 w-3" />
+                  {selectedPeriod} days • {nonZeroCount} data points
+                </p>
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-xl sm:text-2xl lg:text-3xl font-bold" style={{ color: metricInfo?.color }}>
+                {currentValue.toLocaleString()}
+              </div>
+              <div className="flex items-center justify-end gap-2 mt-1">
+                <TrendIndicator current={currentValue} previous={previousValue} size="small" />
+              </div>
+            </div>
+          </div>
+
+          {/* Stats Row */}
+          <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-4 p-2 sm:p-3 bg-gray-50/80 rounded-xl">
+            <div className="text-center">
+              <p className="text-[10px] sm:text-xs text-gray-500">Peak</p>
+              <p className="text-xs sm:text-sm font-semibold text-gray-900">{maxValue.toLocaleString()}</p>
+            </div>
+            <div className="text-center border-x border-gray-200">
+              <p className="text-[10px] sm:text-xs text-gray-500">Average</p>
+              <p className="text-xs sm:text-sm font-semibold text-gray-900">{Math.round(avgValue).toLocaleString()}</p>
+            </div>
+            <div className="text-center">
+              <p className="text-[10px] sm:text-xs text-gray-500">Lowest</p>
+              <p className="text-xs sm:text-sm font-semibold text-gray-900">{minValue.toLocaleString()}</p>
             </div>
           </div>
           
-          <div className="h-48 sm:h-56 lg:h-64">
+          {/* Chart */}
+          <div className="h-44 sm:h-52 lg:h-60">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={data}>
+              <AreaChart data={data} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id={`gradient-${metric}`} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={metricInfo?.color} stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor={metricInfo?.color} stopOpacity={0.05}/>
+                    <stop offset="0%" stopColor={metricInfo?.color} stopOpacity={0.4}/>
+                    <stop offset="100%" stopColor={metricInfo?.color} stopOpacity={0.02}/>
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" vertical={false} />
                 <XAxis 
                   dataKey="date" 
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fontSize: 12, fill: '#6B7280' }}
+                  tick={{ fontSize: 10, fill: '#9CA3AF' }}
                   tickFormatter={(value) => {
                     const date = new Date(value);
                     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
                   }}
+                  interval="preserveStartEnd"
+                  minTickGap={30}
                 />
                 <YAxis 
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fontSize: 12, fill: '#6B7280' }}
-                />
-                <Tooltip 
-                  labelFormatter={(value) => new Date(value).toLocaleDateString()}
-                  formatter={(value) => [value?.toLocaleString(), metricInfo?.label]}
-                  contentStyle={{
-                    backgroundColor: 'white',
-                    border: '1px solid #E5E7EB',
-                    borderRadius: '8px',
-                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                  tick={{ fontSize: 10, fill: '#9CA3AF' }}
+                  tickFormatter={(value) => {
+                    if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
+                    if (value >= 1000) return `${(value / 1000).toFixed(0)}K`;
+                    return value;
                   }}
+                  width={45}
                 />
+                <Tooltip content={<CustomTooltip metricInfo={metricInfo} />} />
                 <Area
                   type="monotone"
                   dataKey="value"
                   stroke={metricInfo?.color}
-                  strokeWidth={2}
+                  strokeWidth={2.5}
                   fill={`url(#gradient-${metric})`}
+                  dot={false}
+                  activeDot={{ r: 6, strokeWidth: 2, stroke: 'white' }}
                 />
               </AreaChart>
             </ResponsiveContainer>
@@ -246,71 +349,102 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
       const metricInfo = METRICS_OPTIONS.find(m => m.value === metric);
       
       if (data.length === 0) return null;
-
-      // Always show latest value (actual value) for all metrics
       
       // Determine how many bars to show based on selected period
       let barsToShow;
       if (selectedPeriod <= 7) barsToShow = selectedPeriod;
       else if (selectedPeriod <= 30) barsToShow = Math.min(14, data.length);
       else if (selectedPeriod <= 90) barsToShow = Math.min(30, data.length);
-      else barsToShow = Math.min(60, data.length); // For longer periods, show max 60 bars
+      else barsToShow = Math.min(60, data.length);
       
       const barData = data.slice(-barsToShow);
-      
-      // Calculate display value - always use the latest value
       const displayValue = barData[barData.length - 1]?.value || 0;
+      const previousValue = barData[0]?.value || 0;
+      const values = barData.map(d => d.value || 0);
+      const totalValue = values.reduce((a, b) => a + b, 0);
 
       return (
-        <div key={metric} className="bg-white rounded-lg sm:rounded-xl border border-gray-200 p-3 sm:p-4 lg:p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-2 sm:mb-3 lg:mb-4">
-            <div className="min-w-0 flex-1">
-              <h4 className="text-sm sm:text-base lg:text-lg font-semibold text-gray-900 truncate">
-                {metricInfo?.label || metric}
-              </h4>
-              <p className="text-[10px] sm:text-xs lg:text-sm text-gray-600">Last {barsToShow} {barsToShow === 1 ? 'day' : 'days'}</p>
+        <div key={metric} className="bg-white rounded-xl sm:rounded-2xl border border-gray-200/80 p-4 sm:p-5 lg:p-6 shadow-sm hover:shadow-lg transition-all duration-300 group">
+          {/* Header */}
+          <div className="flex items-start justify-between mb-4 sm:mb-5">
+            <div className="flex items-center gap-3">
+              <div 
+                className={`p-2 sm:p-2.5 rounded-xl bg-gradient-to-br ${metricInfo?.gradient || 'from-gray-500 to-gray-600'} shadow-lg group-hover:scale-105 transition-transform duration-300`}
+              >
+                <BarChart3 className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
+              </div>
+              <div>
+                <h4 className="text-sm sm:text-base font-semibold text-gray-900">
+                  {metricInfo?.label || metric}
+                </h4>
+                <p className="text-[10px] sm:text-xs text-gray-500">
+                  Last {barsToShow} {barsToShow === 1 ? 'day' : 'days'}
+                </p>
+              </div>
             </div>
-            <div className="text-right flex-shrink-0 ml-2">
-              <div className="text-base sm:text-lg lg:text-2xl font-bold" style={{ color: metricInfo?.color }}>
+            <div className="text-right">
+              <div className="text-xl sm:text-2xl lg:text-3xl font-bold" style={{ color: metricInfo?.color }}>
                 {displayValue.toLocaleString()}
               </div>
-              <div className="text-[10px] sm:text-xs text-gray-500">Actual</div>
+              <div className="flex items-center justify-end gap-2 mt-1">
+                <TrendIndicator current={displayValue} previous={previousValue} size="small" />
+              </div>
+            </div>
+          </div>
+
+          {/* Stats Row */}
+          <div className="flex items-center justify-between mb-4 p-2 sm:p-3 bg-gray-50/80 rounded-xl text-center">
+            <div className="flex-1">
+              <p className="text-[10px] sm:text-xs text-gray-500">Total</p>
+              <p className="text-xs sm:text-sm font-semibold text-gray-900">{totalValue.toLocaleString()}</p>
+            </div>
+            <div className="w-px h-8 bg-gray-200" />
+            <div className="flex-1">
+              <p className="text-[10px] sm:text-xs text-gray-500">Average</p>
+              <p className="text-xs sm:text-sm font-semibold text-gray-900">{Math.round(totalValue / barsToShow).toLocaleString()}</p>
             </div>
           </div>
           
-          <div className="h-48 sm:h-56 lg:h-64">
+          {/* Chart */}
+          <div className="h-44 sm:h-52 lg:h-60">
             <ResponsiveContainer width="100%" height="100%">
-              <RechartsBarChart data={barData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+              <RechartsBarChart data={barData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id={`bar-gradient-${metric}`} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={metricInfo?.color} stopOpacity={1}/>
+                    <stop offset="100%" stopColor={metricInfo?.color} stopOpacity={0.7}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" vertical={false} />
                 <XAxis 
                   dataKey="date" 
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fontSize: 12, fill: '#6B7280' }}
+                  tick={{ fontSize: 10, fill: '#9CA3AF' }}
                   tickFormatter={(value) => {
                     const date = new Date(value);
                     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
                   }}
+                  interval="preserveStartEnd"
+                  minTickGap={30}
                 />
                 <YAxis 
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fontSize: 12, fill: '#6B7280' }}
-                />
-                <Tooltip 
-                  labelFormatter={(value) => new Date(value).toLocaleDateString()}
-                  formatter={(value) => [value?.toLocaleString(), metricInfo?.label]}
-                  contentStyle={{
-                    backgroundColor: 'white',
-                    border: '1px solid #E5E7EB',
-                    borderRadius: '8px',
-                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                  tick={{ fontSize: 10, fill: '#9CA3AF' }}
+                  tickFormatter={(value) => {
+                    if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
+                    if (value >= 1000) return `${(value / 1000).toFixed(0)}K`;
+                    return value;
                   }}
+                  width={45}
                 />
+                <Tooltip content={<CustomTooltip metricInfo={metricInfo} />} />
                 <Bar 
                   dataKey="value" 
-                  fill={metricInfo?.color}
-                  radius={[4, 4, 0, 0]}
+                  fill={`url(#bar-gradient-${metric})`}
+                  radius={[6, 6, 0, 0]}
+                  maxBarSize={50}
                 />
               </RechartsBarChart>
             </ResponsiveContainer>
@@ -320,78 +454,99 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
     };
 
     const renderPieChart = () => {
-      // Always use latest value (actual value) for all metrics
-      
       // Create pie chart from values of selected metrics
       const pieData = selectedMetrics.map(metric => {
         const data = chartData[metric] || [];
-        
-        // Always use latest value for all metrics
         const value = data[data.length - 1]?.value || 0;
-        
         const metricInfo = METRICS_OPTIONS.find(m => m.value === metric);
         
         return {
           name: metricInfo?.label || metric,
           value: value,
-          color: metricInfo?.color || '#6B7280'
+          color: metricInfo?.color || '#6B7280',
+          gradient: metricInfo?.gradient || 'from-gray-500 to-gray-600'
         };
       }).filter(item => item.value > 0);
 
       if (pieData.length === 0) return null;
       
-      const subtitle = 'Current values & period totals';
+      const totalValue = pieData.reduce((sum, item) => sum + item.value, 0);
 
       return (
-        <div className="bg-white rounded-lg sm:rounded-xl border border-gray-200 p-3 sm:p-4 lg:p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-2 sm:mb-3 lg:mb-4">
+        <div className="bg-white rounded-xl sm:rounded-2xl border border-gray-200/80 p-4 sm:p-5 lg:p-6 shadow-sm hover:shadow-lg transition-all duration-300">
+          {/* Header */}
+          <div className="flex items-center gap-3 mb-4 sm:mb-5">
+            <div className="p-2 sm:p-2.5 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 shadow-lg">
+              <PieChartIcon className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
+            </div>
             <div>
-              <h4 className="text-sm sm:text-base lg:text-lg font-semibold text-gray-900">Distribution</h4>
-              <p className="text-[10px] sm:text-xs lg:text-sm text-gray-600">{subtitle}</p>
+              <h4 className="text-sm sm:text-base font-semibold text-gray-900">Metrics Distribution</h4>
+              <p className="text-[10px] sm:text-xs text-gray-500">Current values breakdown</p>
             </div>
           </div>
           
-          <div className="h-48 sm:h-56 lg:h-64">
+          {/* Chart */}
+          <div className="h-48 sm:h-56 lg:h-64 relative">
             <ResponsiveContainer width="100%" height="100%">
               <RechartsPieChart>
                 <Pie
                   data={pieData}
                   cx="50%"
                   cy="50%"
-                  innerRadius={60}
-                  outerRadius={100}
-                  paddingAngle={5}
+                  innerRadius="55%"
+                  outerRadius="85%"
+                  paddingAngle={3}
                   dataKey="value"
+                  strokeWidth={0}
                 >
                   {pieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
+                    <Cell 
+                      key={`cell-${index}`} 
+                      fill={entry.color}
+                      className="drop-shadow-sm hover:opacity-80 transition-opacity cursor-pointer"
+                    />
                   ))}
                 </Pie>
                 <Tooltip 
-                  formatter={(value, name) => [value.toLocaleString(), name]}
+                  formatter={(value, name) => [`${value.toLocaleString()} (${((value / totalValue) * 100).toFixed(1)}%)`, name]}
                   contentStyle={{
-                    backgroundColor: 'white',
+                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                    backdropFilter: 'blur(8px)',
                     border: '1px solid #E5E7EB',
-                    borderRadius: '8px',
-                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                    borderRadius: '12px',
+                    boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)'
                   }}
                 />
               </RechartsPieChart>
             </ResponsiveContainer>
+            {/* Center label */}
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="text-center">
+                <p className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900">{totalValue.toLocaleString()}</p>
+                <p className="text-[10px] sm:text-xs text-gray-500">Total</p>
+              </div>
+            </div>
           </div>
           
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 sm:gap-2 lg:gap-3 mt-2 sm:mt-3 lg:mt-4 pt-2 sm:pt-3 lg:pt-4 border-t border-gray-100">
-            {pieData.map((entry, index) => (
-              <div key={entry.name} className="flex items-center space-x-1.5 sm:space-x-2">
-                <div 
-                  className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full flex-shrink-0"
-                  style={{ backgroundColor: entry.color }}
-                ></div>
-                <div className="text-[10px] sm:text-xs text-gray-600 truncate">
-                  <span className="font-medium">{entry.name}:</span> {entry.value.toLocaleString()}
+          {/* Legend */}
+          <div className="grid grid-cols-2 gap-2 sm:gap-3 mt-4 pt-4 border-t border-gray-100">
+            {pieData.map((entry) => {
+              const percentage = ((entry.value / totalValue) * 100).toFixed(1);
+              return (
+                <div key={entry.name} className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 transition-colors">
+                  <div 
+                    className="w-3 h-3 rounded-full shadow-sm flex-shrink-0"
+                    style={{ backgroundColor: entry.color }}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs sm:text-sm font-medium text-gray-700 truncate">{entry.name}</p>
+                    <p className="text-[10px] sm:text-xs text-gray-500">
+                      {entry.value.toLocaleString()} ({percentage}%)
+                    </p>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       );
@@ -399,38 +554,49 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
 
     if (selectedChart === 'pie') {
       return (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5 lg:gap-6">
           {renderPieChart()}
           
-          <div className="bg-white rounded-lg sm:rounded-xl border border-gray-200 p-3 sm:p-4 lg:p-6 shadow-sm">
-            <h4 className="text-sm sm:text-base lg:text-lg font-semibold text-gray-900 mb-2 sm:mb-3 lg:mb-4">Summary</h4>
-            <div className="space-y-2 sm:space-y-3 lg:space-y-4">
+          {/* Summary Card */}
+          <div className="bg-white rounded-xl sm:rounded-2xl border border-gray-200/80 p-4 sm:p-5 lg:p-6 shadow-sm hover:shadow-lg transition-all duration-300">
+            <div className="flex items-center gap-3 mb-4 sm:mb-5">
+              <div className="p-2 sm:p-2.5 rounded-xl bg-gradient-to-br from-emerald-500 to-green-600 shadow-lg">
+                <Sparkles className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
+              </div>
+              <div>
+                <h4 className="text-sm sm:text-base font-semibold text-gray-900">Metrics Summary</h4>
+                <p className="text-[10px] sm:text-xs text-gray-500">Performance at a glance</p>
+              </div>
+            </div>
+            
+            <div className="space-y-3">
               {selectedMetrics.map(metric => {
                 const data = chartData[metric] || [];
-                
-                // Always use latest value (actual value) for all metrics
                 const latest = data[data.length - 1]?.value || 0;
+                const previous = data[0]?.value || 0;
                 const metricInfo = METRICS_OPTIONS.find(m => m.value === metric);
                 
                 return (
-                  <div key={metric} className="p-2 sm:p-3 lg:p-4 bg-gray-50 rounded-lg">
-                    <div className="flex items-center justify-between mb-1.5 sm:mb-2">
-                      <span className="font-medium text-gray-700 text-xs sm:text-sm truncate">{metricInfo?.label}</span>
-                      <div 
-                        className="w-3 h-3 sm:w-4 sm:h-4 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: metricInfo?.color }}
-                      ></div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 text-xs sm:text-sm">
-                      <div>
-                        <div className="text-gray-500 text-[10px] sm:text-xs">Latest</div>
-                        <div className="font-semibold">{latest.toLocaleString()}</div>
+                  <div 
+                    key={metric} 
+                    className={`p-3 sm:p-4 rounded-xl border border-gray-100 ${metricInfo?.bgLight || 'bg-gray-50'} transition-all hover:shadow-sm`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <div 
+                          className="w-2.5 h-2.5 rounded-full"
+                          style={{ backgroundColor: metricInfo?.color }}
+                        />
+                        <span className="font-medium text-gray-800 text-sm">{metricInfo?.label}</span>
                       </div>
-                      <div>
-                        <div className="text-gray-500 text-[10px] sm:text-xs">Actual</div>
-                        <div className="font-semibold">{latest.toLocaleString()}</div>
-                      </div>
+                      <TrendIndicator current={latest} previous={previous} size="small" />
                     </div>
+                    <div className="text-xl sm:text-2xl font-bold text-gray-900">
+                      {latest.toLocaleString()}
+                    </div>
+                    <p className="text-[10px] sm:text-xs text-gray-500 mt-1">
+                      Started at {previous.toLocaleString()}
+                    </p>
                   </div>
                 );
               })}
@@ -441,7 +607,7 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
     }
 
     return (
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5 lg:gap-6">
         {selectedMetrics.map(metric => 
           selectedChart === 'trend' ? renderTrendChart(metric) : renderBarChart(metric)
         )}
@@ -954,162 +1120,205 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
   };
 
   return (
-    <div className="space-y-3 sm:space-y-4 lg:space-y-6">
-      {/* Controls */}
-      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl sm:rounded-2xl p-3 sm:p-4 lg:p-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3 sm:mb-4">
-          <div className="flex items-center space-x-2 sm:space-x-3">
-            <div className="bg-blue-600 p-1.5 sm:p-2 rounded-lg flex-shrink-0">
-              <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 text-white" />
+    <div className="space-y-4 sm:space-y-5 lg:space-y-6">
+      {/* Header & Controls */}
+      <div className="bg-white rounded-xl sm:rounded-2xl border border-gray-200/80 shadow-sm overflow-hidden">
+        {/* Header Banner */}
+        <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 p-4 sm:p-5 lg:p-6 relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full -translate-y-20 translate-x-20" />
+          <div className="absolute bottom-0 left-0 w-32 h-32 bg-black/10 rounded-full translate-y-16 -translate-x-16" />
+          
+          <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 sm:p-3 bg-white/20 backdrop-blur-sm rounded-xl">
+                <TrendingUp className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-base sm:text-lg lg:text-xl font-bold text-white truncate">{title}</h3>
+                <p className="text-xs sm:text-sm text-blue-100 flex items-center gap-1.5 mt-0.5">
+                  <Clock className="h-3.5 w-3.5" />
+                  <span>Last {selectedPeriod} days</span>
+                  {lastUpdated && (
+                    <>
+                      <span className="mx-1">•</span>
+                      <span>Updated {new Date(lastUpdated).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                    </>
+                  )}
+                </p>
+              </div>
             </div>
-            <div className="min-w-0">
-              <h3 className="text-sm sm:text-base lg:text-lg font-semibold text-gray-900 truncate">{title}</h3>
-              <p className="text-xs sm:text-sm text-gray-600 truncate">
-                {selectedPeriod}d data
-              </p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={fetchHistoricalData}
+                disabled={loading}
+                className="p-2 sm:p-2.5 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl text-white transition-all duration-200 disabled:opacity-50"
+                title="Refresh Data"
+              >
+                <RefreshCw className={`h-4 w-4 sm:h-5 sm:w-5 ${loading ? 'animate-spin' : ''}`} />
+              </button>
+              <button
+                onClick={generatePDFReport}
+                disabled={generatingPdf || !chartData}
+                className="inline-flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2.5 bg-white text-indigo-600 font-medium rounded-xl hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 text-xs sm:text-sm shadow-lg"
+                title="Download PDF Report"
+              >
+                {generatingPdf ? (
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+                <span className="hidden sm:inline">{generatingPdf ? 'Generating...' : 'Export PDF'}</span>
+                <span className="sm:hidden">PDF</span>
+              </button>
             </div>
-          </div>
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            <button
-              onClick={generatePDFReport}
-              disabled={generatingPdf || !chartData}
-              className="bg-indigo-600 text-white px-2 py-1.5 sm:px-3 sm:py-2 rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1 sm:space-x-2 text-xs sm:text-sm flex-shrink-0"
-              title="Download PDF Report"
-            >
-              {generatingPdf ? (
-                <RefreshCw className="h-3 w-3 sm:h-4 sm:w-4 animate-spin" />
-              ) : (
-                <Download className="h-3 w-3 sm:h-4 sm:w-4" />
-              )}
-              <span className="hidden sm:inline">{generatingPdf ? 'Generating...' : 'Download'}</span>
-              <span className="sm:hidden">PDF</span>
-            </button>
           </div>
         </div>
         
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3 lg:gap-4">
-          {/* Time Period Selector */}
-          <div>
-            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-1.5">
-              Time Period
-            </label>
-            <select
-              value={selectedPeriod}
-              onChange={(e) => setSelectedPeriod(parseInt(e.target.value))}
-              className="w-full border border-gray-300 rounded-lg px-2 py-1.5 sm:px-3 sm:py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs sm:text-sm"
-            >
-              {TIME_PERIOD_OPTIONS.map(option => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
+        {/* Controls Section */}
+        <div className="p-4 sm:p-5 lg:p-6 bg-white border-t border-gray-100">
+          <div className="flex flex-col sm:flex-row sm:items-end gap-4 sm:gap-6">
+            {/* Time Period - Simple Dropdown */}
+            <div className="flex-1 max-w-[180px]">
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                Time Period
+              </label>
+              <select
+                value={selectedPeriod}
+                onChange={(e) => setSelectedPeriod(parseInt(e.target.value))}
+                className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent cursor-pointer hover:bg-gray-100 transition-colors"
+              >
+                {TIME_PERIOD_OPTIONS.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-          {/* Chart Type Selector */}
-          <div>
-            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-1.5">
-              Chart Type
-            </label>
-            <select
-              value={selectedChart}
-              onChange={(e) => setSelectedChart(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-2 py-1.5 sm:px-3 sm:py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs sm:text-sm"
-            >
-              {CHART_TYPE_OPTIONS.map(option => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
+            {/* Chart Type - Clean Toggle */}
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                Chart Type
+              </label>
+              <div className="inline-flex bg-gray-100 rounded-lg p-1">
+                {CHART_TYPE_OPTIONS.map(option => {
+                  const Icon = option.icon;
+                  return (
+                    <button
+                      key={option.value}
+                      onClick={() => setSelectedChart(option.value)}
+                      className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
+                        selectedChart === option.value
+                          ? 'bg-white text-blue-600 shadow-sm'
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      <Icon className="h-4 w-4" />
+                      <span className="hidden sm:inline">{option.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
-          {/* Metrics Selector */}
-          <div className="sm:col-span-2 lg:col-span-1">
-            <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-1.5">
-              Metrics
-            </label>
-            <select
-              multiple
-              value={selectedMetrics}
-              onChange={(e) => {
-                const values = Array.from(e.target.selectedOptions, option => option.value);
-                setSelectedMetrics(values.length > 0 ? values : [defaultMetric]);
-              }}
-              className="w-full border border-gray-300 rounded-lg px-2 py-1.5 sm:px-3 sm:py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 h-16 sm:h-20 text-xs sm:text-sm"
-            >
-              {METRICS_OPTIONS.map(option => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5 sm:mt-1">Hold Ctrl/Cmd</p>
+            {/* Metrics - Simple Chips */}
+            <div className="flex-1">
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                Metrics
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {METRICS_OPTIONS.map(option => {
+                  const isSelected = selectedMetrics.includes(option.value);
+                  return (
+                    <button
+                      key={option.value}
+                      onClick={() => {
+                        if (isSelected && selectedMetrics.length > 1) {
+                          setSelectedMetrics(selectedMetrics.filter(m => m !== option.value));
+                        } else if (!isSelected) {
+                          setSelectedMetrics([...selectedMetrics, option.value]);
+                        }
+                      }}
+                      className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-150 ${
+                        isSelected
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </div>
-
-        {lastUpdated && (
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mt-2 sm:mt-3 lg:mt-4 pt-2 sm:pt-3 lg:pt-4 border-t border-gray-200">
-            <div className="text-[10px] sm:text-xs text-gray-500 truncate">
-              Updated: {new Date(lastUpdated).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-            </div>
-            <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-gray-500">
-              <div className="bg-blue-100 px-1.5 py-0.5 sm:px-2 sm:py-1 rounded">
-                📊 Stored
-              </div>
-              <div className="bg-green-100 px-1.5 py-0.5 sm:px-2 sm:py-1 rounded">
-                {chartData && Object.keys(chartData).length} Metrics
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* Loading State */}
+      {/* Loading State with Skeleton */}
       {loading && (
-        <div className="bg-white rounded-lg sm:rounded-xl border border-gray-200 p-4 sm:p-6 lg:p-8 text-center">
-          <div className="inline-flex items-center space-x-2 text-blue-600">
-            <RefreshCw className="h-4 w-4 sm:h-5 sm:w-5 animate-spin" />
-            <span className="text-xs sm:text-sm">Loading data...</span>
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+            {selectedMetrics.slice(0, 3).map((_, i) => (
+              <ChartSkeleton key={i} />
+            ))}
           </div>
         </div>
       )}
 
       {/* Error State */}
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg sm:rounded-xl p-3 sm:p-4 lg:p-6">
-          <div className="flex items-center space-x-2 text-red-800 mb-2">
-            <Calendar className="h-4 w-4 sm:h-5 sm:w-5" />
-            <span className="font-medium text-xs sm:text-sm">Data Error</span>
-          </div>
-          <p className="text-red-700 text-xs sm:text-sm mb-3 line-clamp-2">{error}</p>
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
-            <button
-              onClick={fetchHistoricalData}
-              className="bg-red-600 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg hover:bg-red-700 text-xs sm:text-sm"
-            >
-              Retry
-            </button>
+        <div className="bg-gradient-to-r from-red-50 to-rose-50 border-l-4 border-red-500 rounded-xl sm:rounded-2xl p-4 sm:p-5 lg:p-6 shadow-sm">
+          <div className="flex items-start gap-4">
+            <div className="p-2.5 bg-red-100 rounded-xl flex-shrink-0">
+              <AlertTriangle className="h-5 w-5 sm:h-6 sm:w-6 text-red-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h4 className="text-sm sm:text-base font-semibold text-red-800 mb-1">Unable to Load Analytics Data</h4>
+              <p className="text-red-700 text-xs sm:text-sm mb-4 line-clamp-2">{error}</p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={fetchHistoricalData}
+                  className="inline-flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 text-xs sm:text-sm font-medium transition-colors"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Try Again
+                </button>
+                <button
+                  onClick={() => setSelectedPeriod(selectedPeriod === 365 ? 180 : 365)}
+                  className="inline-flex items-center gap-2 bg-white border border-red-200 text-red-700 px-4 py-2 rounded-lg hover:bg-red-50 text-xs sm:text-sm font-medium transition-colors"
+                >
+                  <Calendar className="h-4 w-4" />
+                  Try Different Period
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
 
       {/* No Data State */}
       {!loading && !error && chartData && Object.keys(chartData).every(key => chartData[key].length === 0) && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg sm:rounded-xl p-4 sm:p-6 text-center">
-          <div className="flex items-center justify-center space-x-2 text-blue-800 mb-2 sm:mb-3">
-            <Calendar className="h-5 w-5 sm:h-6 sm:w-6" />
-            <span className="text-sm sm:text-base lg:text-lg font-medium">No Data Available</span>
+        <div className="bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 rounded-xl sm:rounded-2xl border border-blue-200/50 p-6 sm:p-8 lg:p-10">
+          <div className="text-center max-w-md mx-auto">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-4 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-2xl flex items-center justify-center">
+              <Calendar className="h-8 w-8 sm:h-10 sm:w-10 text-blue-500" />
+            </div>
+            <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-2">No Data Available Yet</h3>
+            <p className="text-gray-600 text-sm sm:text-base mb-6">
+              Historical analytics data for this {platform} account hasn't been collected yet. Data will appear here once analytics are captured.
+            </p>
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-100 text-blue-700 rounded-full text-xs sm:text-sm font-medium">
+              <Info className="h-4 w-4" />
+              Analytics are collected daily
+            </div>
           </div>
-          <p className="text-blue-700 text-xs sm:text-sm">
-            No historical data for this {platform} account.
-          </p>
         </div>
       )}
 
       {/* Charts */}
-      {chartData && !loading && (
-        <div ref={chartContainerRef}>
+      {chartData && !loading && !error && (
+        <div ref={chartContainerRef} className="animate-in fade-in duration-500">
           {renderChart()}
         </div>
       )}

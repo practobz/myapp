@@ -143,6 +143,14 @@ function ContentCreatorLogin() {
                     )}
                   </button>
                 </div>
+                <div className="mt-2 text-right">
+                  <Link
+                    to="/content-creator/forgot-password"
+                    className="text-sm text-purple-600 hover:text-purple-800 font-medium transition-colors"
+                  >
+                    Forgot password?
+                  </Link>
+                </div>
               </div>
 
               {/* Submit Button */}

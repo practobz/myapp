@@ -6,6 +6,7 @@ import CustomerDetails from './admin/pages/admin/CustomerDetails';
 import { CustomerProvider } from './admin/contexts/CustomerContext';
 import Signup from './admin/pages/auth/Signup';
 import Login from './admin/pages/auth/Login';
+import ForgotPassword from './components/ForgotPassword';
 import Dashboard from './admin/pages/admin/Dashboard';
 import AdminSettings from './admin/pages/admin/Settings';
 import Comment from './admin/pages/admin/Comment';
@@ -220,12 +221,15 @@ function App() {
             </div>
             <Routes>
               {/* Public Auth Routes */}
-              <Route path="/signup" element={<Signup />} />
+             <Route path="/signup" element={<Signup />} />
               <Route path="/login" element={<Login />} />
+              <Route path="/forgot-password" element={<ForgotPassword userType="admin" />} />
               <Route path="/customer/signup" element={<CustomerSignup />} />
               <Route path="/customer/login" element={<CustomerLogin />} />
+              <Route path="/customer/forgot-password" element={<ForgotPassword userType="customer" />} />
               <Route path="/content-creator/signup" element={<ContentCreatorSignup />} />
               <Route path="/content-creator/login" element={<ContentCreatorLogin />} />
+              <Route path="/content-creator/forgot-password" element={<ForgotPassword userType="content_creator" />} />
               
               {/* QR Code Configure Route - Public (no authentication required) */}
               <Route path="/configure" element={<Configure />} />
@@ -405,6 +409,13 @@ function App() {
   </ProtectedRoutePortal>
 } />
 {/* Admin Multi-Customer Analytics Dashboard */}
+              <Route path="/admin/customer-analytics" element={
+                <ProtectedRoutePortal role="admin">
+                  <MultiCustomerAnalytics />
+                </ProtectedRoutePortal>
+              } />
+                
+              {/* Admin Multi-Customer Analytics Dashboard */}
               <Route path="/admin/customer-analytics" element={
                 <ProtectedRoutePortal role="admin">
                   <MultiCustomerAnalytics />

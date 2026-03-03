@@ -151,6 +151,14 @@ function CustomerLogin() {
                     )}
                   </button>
                 </div>
+                <div className="mt-2 text-right">
+                  <Link
+                    to="/customer/forgot-password"
+                    className="text-sm text-indigo-600 hover:text-indigo-800 font-medium transition-colors"
+                  >
+                    Forgot password?
+                  </Link>
+                </div>
               </div>
 
               {/* Submit Button */}

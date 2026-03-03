@@ -2744,12 +2744,59 @@ function FacebookIntegration() {
                     ) : (
                       <div className="space-y-4">
                         {fbPages.map(page => (
-                          <div key={page.id}>
-                            <div className="overflow-x-auto">
-                              {renderPageDetails(page)}
+                          <div key={page.id} className="bg-white sm:bg-gradient-to-br sm:from-blue-50 sm:to-indigo-50 sm:border sm:border-blue-200 sm:rounded-2xl mb-4">
+                            {/* Profile Header - Instagram Style */}
+                            <div className="p-0 sm:p-6">
+                              <div className="flex items-start gap-2 sm:gap-4 mb-4">
+                                {page.picture ? (
+                                  <img 
+                                    src={page.picture.data.url} 
+                                    alt={page.name}
+                                    className="w-16 h-16 sm:w-20 sm:h-20 rounded-full sm:border-2 sm:border-blue-200 flex-shrink-0"
+                                  />
+                                ) : (
+                                  <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-blue-400 to-indigo-600 rounded-full flex items-center justify-center flex-shrink-0">
+                                    <Facebook className="h-8 w-8 sm:h-10 sm:w-10 text-white" />
+                                  </div>
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <h4 className="text-lg sm:text-xl font-bold text-gray-900 truncate">{page.name}</h4>
+                                    {page.verification_status && (
+                                      <div className="w-4 h-4 sm:w-5 sm:h-5 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
+                                        <span className="text-white text-xs">✓</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                  <p className="text-xs sm:text-sm text-gray-500 truncate">Page ID: {page.id}</p>
+                                </div>
+                              </div>
+                            
+                              {/* Stats Row - Instagram Style */}
+                              <div className="flex justify-around text-center sm:border-t sm:border-b sm:border-gray-200 py-3 -mx-4 sm:mx-0 sm:border sm:rounded-xl sm:bg-white">
+                                <div>
+                                  <div className="text-lg sm:text-xl font-bold text-gray-900">
+                                    {pagePosts[page.id]?.length?.toLocaleString() || '0'}
+                                  </div>
+                                  <div className="text-xs text-gray-500">Posts</div>
+                                </div>
+                                <div className="sm:border-l sm:border-gray-200 pl-4">
+                                  <div className="text-lg sm:text-xl font-bold text-gray-900">
+                                    {page.fan_count?.toLocaleString() || '0'}
+                                  </div>
+                                  <div className="text-xs text-gray-500">Followers</div>
+                                </div>
+                                <div className="sm:border-l sm:border-gray-200 pl-4">
+                                  <div className="text-lg sm:text-xl font-bold text-gray-900">
+                                    {pagePosts[page.id]?.reduce((sum, post) => sum + (post.likes?.summary?.total_count || 0), 0).toLocaleString() || '0'}
+                                  </div>
+                                  <div className="text-xs text-gray-500">Likes</div>
+                                </div>
+                              </div>
                             </div>
+
                             {/* --- Historical Analytics Toggle and Chart --- */}
-                            <div className="mb-4">
+                            <div className="px-0 sm:px-6 mb-4">
                               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-indigo-50 rounded-lg sm:border sm:border-indigo-200 sm:p-4 gap-3">
                                 <div className="flex items-center gap-2 sm:gap-3">
                                   <div className="w-8 h-8 sm:w-10 sm:h-10 bg-indigo-600 rounded-lg flex items-center justify-center">
@@ -2775,7 +2822,7 @@ function FacebookIntegration() {
                               </div>
                             </div>
                             {showHistoricalCharts[page.id] && (
-                              <div className="overflow-x-auto">
+                              <div className="px-0 sm:px-6 mb-4">
                                 <TimePeriodChart
                                   platform="facebook"
                                   accountId={page.id}
@@ -2784,6 +2831,9 @@ function FacebookIntegration() {
                                 />
                               </div>
                             )}
+
+                            {renderPageInsights(page.id)}
+                            {renderPagePosts(page.id)}
                           </div>
                         ))}
                       </div>

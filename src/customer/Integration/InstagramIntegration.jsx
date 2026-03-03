@@ -216,11 +216,14 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
             const profileResponse = await fetch(profileUrl);
             const profileData = await profileResponse.json();
             
-            // Fetch ALL media data with pagination
-            let allMediaData = await fetchAllMedia(acc.id, pageToken);
+            // Fetch media data
+            const mediaUrl = `https://graph.facebook.com/v18.0/${acc.id}/media?fields=id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count&limit=12&access_token=${pageToken}`;
+            console.log(`📡 Fetching media for ${acc.id}...`);
+            const mediaResponse = await fetch(mediaUrl);
+            const mediaData = await mediaResponse.json();
             
             // Fetch video/reel insights for views count
-            let mediaWithInsights = allMediaData;
+            let mediaWithInsights = mediaData.data || [];
             if (mediaWithInsights.length > 0) {
               console.log(`🎬 Hydration: Fetching insights for ${mediaWithInsights.length} media items for account ${acc.id}...`);
               mediaWithInsights = await Promise.all(mediaWithInsights.map(async (media) => {
@@ -571,40 +574,6 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
   const isTokenExpired = (account) => {
     // Backend handles token expiration
     return false;
-  };
-
-  // Helper function to fetch ALL media with pagination
-  const fetchAllMedia = async (accountId, accessToken) => {
-    let allMedia = [];
-    let nextUrl = `https://graph.facebook.com/v18.0/${accountId}/media?fields=id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count&limit=100&access_token=${accessToken}`;
-    
-    console.log(`📡 Fetching ALL media for account ${accountId}...`);
-    
-    try {
-      while (nextUrl) {
-        const response = await fetch(nextUrl);
-        const data = await response.json();
-        
-        if (data.error) {
-          console.error('❌ Error fetching media:', data.error);
-          break;
-        }
-        
-        if (data.data && data.data.length > 0) {
-          allMedia = [...allMedia, ...data.data];
-          console.log(`📥 Fetched ${data.data.length} posts (total: ${allMedia.length})`);
-        }
-        
-        // Check if there's a next page
-        nextUrl = data.paging?.next || null;
-      }
-      
-      console.log(`✅ Finished fetching media. Total posts: ${allMedia.length}`);
-      return allMedia;
-    } catch (error) {
-      console.error('❌ Error in fetchAllMedia:', error);
-      return allMedia; // Return whatever we got so far
-    }
   };
 
   // Helper function to fetch video/reel insights (plays/views)
@@ -973,11 +942,13 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
         return;
       }
 
-      // FIXED: Fetch ALL media using direct Graph API with pagination
-      const allMediaData = await fetchAllMedia(accountData.id, accountData.pageAccessToken);
+      // FIXED: Fetch recent media using direct Graph API
+      const mediaUrl = `https://graph.facebook.com/v18.0/${accountData.id}/media?fields=id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count&limit=12&access_token=${accountData.pageAccessToken}`;
+      const mediaResponse = await fetch(mediaUrl);
+      const mediaData = await mediaResponse.json();
       
       // Fetch video/reel insights for views count
-      const mediaWithInsights = await fetchMediaInsights(allMediaData, accountData.pageAccessToken);
+      const mediaWithInsights = await fetchMediaInsights(mediaData.data || [], accountData.pageAccessToken);
       
       const newAccount = {
         ...accountData,
@@ -1013,7 +984,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
       await storeCustomerSocialAccount(newAccount);
 
       // Store initial historical snapshot
-      const media = mediaWithInsights;
+      const media = mediaData.data || [];
       const totalLikes = media.reduce((sum, m) => sum + (m.like_count || 0), 0);
       const totalComments = media.reduce((sum, m) => sum + (m.comments_count || 0), 0);
       const photosCount = media.filter(m => m.media_type === 'IMAGE').length;
@@ -1433,11 +1404,13 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
         return;
       }
 
-      // Refresh ALL media using direct Graph API with pagination
-      const allMediaData = await fetchAllMedia(accountId, account.pageAccessToken);
+      // Refresh media using direct Graph API
+      const mediaUrl = `https://graph.facebook.com/v18.0/${accountId}/media?fields=id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count&limit=12&access_token=${account.pageAccessToken}`;
+      const mediaResponse = await fetch(mediaUrl);
+      const mediaData = await mediaResponse.json();
       
       // Fetch video/reel insights for views count
-      const mediaWithInsights = await fetchMediaInsights(allMediaData, account.pageAccessToken);
+      const mediaWithInsights = await fetchMediaInsights(mediaData.data || [], account.pageAccessToken);
       
       const updatedAccounts = connectedAccounts.map(acc => 
         acc.id === accountId 

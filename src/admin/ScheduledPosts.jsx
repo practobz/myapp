@@ -16,6 +16,7 @@ function ScheduledPosts() {
   const [viewMode, setViewMode] = useState('grouped'); // 'grouped', 'platform', or 'list'
   const [expandedCustomers, setExpandedCustomers] = useState(new Set());
   const [expandedPlatforms, setExpandedPlatforms] = useState(new Set());
+  const [errorMessage, setErrorMessage] = useState(null); // User-friendly error message
 
   // Fetch scheduled posts on component mount
   useEffect(() => {
@@ -124,6 +125,7 @@ function ScheduledPosts() {
     } catch (error) {
       console.error('❌ Failed to fetch scheduled posts:', error);
       setScheduledPosts([]);
+      setErrorMessage('Unable to load scheduled posts. Please check your connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -139,10 +141,13 @@ function ScheduledPosts() {
 
       if (response.ok) {
         setScheduledPosts(prev => prev.filter(post => post._id !== postId));
+        setErrorMessage(null); // Clear any previous errors
+      } else {
+        setErrorMessage('Could not delete the post. Please try again later.');
       }
     } catch (error) {
       console.error('Delete post error:', error);
-      alert('Failed to delete post');
+      setErrorMessage('Could not delete the post. Please check your connection and try again.');
     }
   }, []);
 
@@ -198,6 +203,118 @@ function ScheduledPosts() {
     }
     // Default to regular post
     return { type: 'Post', color: 'bg-blue-100 text-blue-700', icon: '📝' };
+  }, []);
+
+  // Helper to get user-friendly error message for failed posts
+  const getFailureReason = useCallback((post) => {
+    if (!post.error && !post.errorMessage && !post.failureReason) {
+      return 'Publishing failed. Please try again.';
+    }
+    
+    const errorText = post.error || post.errorMessage || post.failureReason || '';
+    const lowerError = errorText.toLowerCase();
+    
+    // Map technical errors to user-friendly messages
+    
+    // Token/Authentication errors - most common
+    if (lowerError.includes('access token') || lowerError.includes('accesstoken') || 
+        lowerError.includes('invalid token') || lowerError.includes('token expired') ||
+        lowerError.includes('token invalid') || lowerError.includes('oauth') ||
+        lowerError.includes('session expired') || lowerError.includes('session invalid') ||
+        lowerError.includes('auth') || lowerError.includes('unauthorized') ||
+        lowerError.includes('401') || lowerError.includes('not authenticated') ||
+        lowerError.includes('login required') || lowerError.includes('credentials')) {
+      return 'Your social account connection has expired. Please reconnect your account in Settings.';
+    }
+    
+    // Permission/Access errors
+    if (lowerError.includes('permission') || lowerError.includes('403') ||
+        lowerError.includes('forbidden') || lowerError.includes('not allowed') ||
+        lowerError.includes('insufficient') || lowerError.includes('denied')) {
+      return 'Permission issue. Your account may need additional permissions. Please reconnect in Settings.';
+    }
+    
+    // Rate limiting
+    if (lowerError.includes('rate limit') || lowerError.includes('too many') ||
+        lowerError.includes('throttle') || lowerError.includes('quota') ||
+        lowerError.includes('limit exceeded') || lowerError.includes('429')) {
+      return 'Posting limit reached. Please wait a few minutes and try again.';
+    }
+    
+    // Media/File errors
+    if (lowerError.includes('image') || lowerError.includes('photo') ||
+        lowerError.includes('video') || lowerError.includes('media') ||
+        lowerError.includes('file') || lowerError.includes('upload')) {
+      if (lowerError.includes('size') || lowerError.includes('large') || lowerError.includes('big')) {
+        return 'The file is too large. Please use a smaller image or video.';
+      }
+      if (lowerError.includes('format') || lowerError.includes('type') || lowerError.includes('unsupported')) {
+        return 'File format not supported. Please use JPG, PNG, or MP4 files.';
+      }
+      if (lowerError.includes('corrupt') || lowerError.includes('invalid') || lowerError.includes('damaged')) {
+        return 'The file appears to be damaged. Please try uploading a different file.';
+      }
+      return 'There was an issue with the media file. Please try a different image or video.';
+    }
+    
+    // Network/Connection errors
+    if (lowerError.includes('network') || lowerError.includes('connection') ||
+        lowerError.includes('timeout') || lowerError.includes('timed out') ||
+        lowerError.includes('econnrefused') || lowerError.includes('enotfound') ||
+        lowerError.includes('socket') || lowerError.includes('dns')) {
+      return 'Connection issue. Please check your internet and try again.';
+    }
+    
+    // Account/Page not found
+    if (lowerError.includes('page not found') || lowerError.includes('account not found') ||
+        lowerError.includes('user not found') || lowerError.includes('404') ||
+        lowerError.includes('does not exist') || lowerError.includes('no longer available')) {
+      return 'Social account not found. The page may have been removed or disconnected.';
+    }
+    
+    // Content policy violations
+    if (lowerError.includes('policy') || lowerError.includes('violation') ||
+        lowerError.includes('community') || lowerError.includes('guidelines') ||
+        lowerError.includes('spam') || lowerError.includes('blocked') ||
+        lowerError.includes('restricted') || lowerError.includes('banned')) {
+      return 'Content not allowed. Please review your post for policy violations.';
+    }
+    
+    // Caption/Text issues
+    if (lowerError.includes('caption') || lowerError.includes('text') ||
+        lowerError.includes('character') || lowerError.includes('length') ||
+        lowerError.includes('hashtag') || lowerError.includes('mention')) {
+      return 'Caption issue. Please check your text length and formatting.';
+    }
+    
+    // Server errors
+    if (lowerError.includes('500') || lowerError.includes('502') || lowerError.includes('503') ||
+        lowerError.includes('server error') || lowerError.includes('internal error') ||
+        lowerError.includes('service unavailable') || lowerError.includes('temporarily')) {
+      return 'The social platform is temporarily unavailable. Please try again later.';
+    }
+    
+    // Duplicate content
+    if (lowerError.includes('duplicate') || lowerError.includes('already posted') ||
+        lowerError.includes('same content')) {
+      return 'This content was already posted. Please try different content.';
+    }
+    
+    // Scheduling specific
+    if (lowerError.includes('schedule') || lowerError.includes('time') ||
+        lowerError.includes('past') || lowerError.includes('future')) {
+      return 'Scheduling issue. Please check the scheduled date and time.';
+    }
+    
+    // API/Integration errors
+    if (lowerError.includes('api') || lowerError.includes('endpoint') ||
+        lowerError.includes('request') || lowerError.includes('response') ||
+        lowerError.includes('json') || lowerError.includes('parse')) {
+      return 'Technical issue with the social platform. Please try again later.';
+    }
+    
+    // If we can't map it, return a generic message
+    return 'Publishing failed. Please try again or contact support.';
   }, []);
 
   const getPlatformIcon = useCallback((platform) => {
@@ -481,6 +598,23 @@ function ScheduledPosts() {
             </div>
           </div>
 
+          {/* Error Message Banner */}
+          {errorMessage && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-3 sm:mb-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <XCircle className="h-5 w-5 text-red-500 flex-shrink-0" />
+                <p className="text-sm text-red-700">{errorMessage}</p>
+              </div>
+              <button
+                onClick={() => setErrorMessage(null)}
+                className="text-red-500 hover:text-red-700 p-1"
+                title="Dismiss"
+              >
+                <XCircle className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+
           {/* Add Customer Overview Header */}
           <div className="bg-[#F4F9FF] backdrop-blur-sm rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-3 sm:mb-4">
             <div className="px-4 sm:px-6 py-2 sm:py-3 border-b border-gray-100">
@@ -606,111 +740,89 @@ function ScheduledPosts() {
 
                     {/* Expanded Content */}
                     {isExpanded && (
-                      <div className="p-2 sm:p-6 bg-gray-50">
-                        <div className="grid grid-cols-3 sm:grid-cols-2 lg:grid-cols-3 gap-1.5 sm:gap-4">
+                      <div className="p-5 bg-gray-50/50">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                           {platformPosts.map(post => {
                             const customerInfo = getCustomerDisplayInfo(post);
                             
                             return (
-                              <div key={post._id} className="bg-white rounded-lg border p-1.5 sm:p-4 shadow-sm hover:shadow-md transition-shadow">
-                                {/* Calendar and Item Name - Hidden on mobile */}
-                                {post.calendar_name && (
-                                  <div className="text-xs text-blue-700 mb-1 hidden sm:block">
-                                    <strong>Calendar:</strong> {post.calendar_name}
+                              <div key={post._id} className="bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow overflow-hidden flex flex-col h-[420px]">
+                                {/* Header with Calendar/Item info */}
+                                <div className="p-3 border-b border-gray-50 bg-gray-50/50 flex-shrink-0">
+                                  <div className="text-xs text-blue-600 font-medium truncate">
+                                    <span className="text-gray-500">Calendar:</span> {post.calendar_name || 'N/A'}
                                   </div>
-                                )}
-                                {post.item_name && (
-                                  <div className="text-xs text-purple-700 mb-2 hidden sm:block">
-                                    <strong>Item:</strong> {post.item_name}
-                                  </div>
-                                )}
-
-                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-1 sm:mb-3">
-                                  <div className="flex items-center space-x-1 sm:space-x-2">
-                                    <User className="h-3 w-3 sm:h-4 sm:w-4 text-gray-500" />
-                                    <span className="text-xs font-medium text-gray-600 truncate max-w-[60px] sm:max-w-none">
-                                      {customerInfo.name}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center space-x-1 mt-1 sm:mt-0">
-                                    <span className={`px-1 sm:px-2 py-0.5 rounded-full text-xs font-medium flex items-center ${getStatusColor(post.status)}`}>
-                                      {getStatusIcon(post.status)}
-                                      <span className="hidden sm:inline ml-1">{post.status}</span>
-                                    </span>
+                                  <div className="text-xs text-purple-600 font-medium truncate mt-0.5">
+                                    <span className="text-gray-500">Item:</span> {post.item_name || 'N/A'}
                                   </div>
                                 </div>
 
-                                {/* Media Preview - Compact on mobile */}
-                                {post.imageUrls && post.imageUrls.length > 1 ? (
-                                  <div className="mb-1 sm:mb-3">
-                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-0.5 sm:gap-1">
-                                      {post.imageUrls.slice(0, 4).map((url, idx) => (
+                                {/* Platform & Page with Status */}
+                                <div className="px-3 pt-2 pb-2 flex items-center justify-between flex-shrink-0">
+                                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                                    {getPlatformIcon(post.platform)}
+                                    <span className="text-sm font-medium text-gray-700 truncate">
+                                      {post.pageName || post.channelName || customerInfo.name}
+                                    </span>
+                                  </div>
+                                  <span className={`px-2.5 py-1 rounded-full text-xs font-medium flex items-center gap-1 flex-shrink-0 ${getStatusColor(post.status)}`}>
+                                    {getStatusIcon(post.status)}
+                                    {post.status}
+                                  </span>
+                                </div>
+
+                                {/* Media Preview - Fixed height */}
+                                <div className="px-3 flex-shrink-0">
+                                  {post.imageUrls && post.imageUrls.length > 1 ? (
+                                    <div className="grid grid-cols-3 gap-1 h-[140px]">
+                                      {post.imageUrls.slice(0, 3).map((url, idx) => (
                                         isVideoUrl(url) ? (
-                                          <div key={idx} className="relative h-10 sm:h-20 bg-gray-800 rounded flex items-center justify-center">
-                                            <Video className="h-3 w-3 sm:h-6 sm:w-6 text-white" />
+                                          <div key={idx} className="bg-gray-800 rounded-lg flex items-center justify-center h-full">
+                                            <Video className="h-6 w-6 text-white" />
                                           </div>
                                         ) : (
-                                          <div key={idx} className="relative">
-                                            <img
-                                              src={url}
-                                              alt={`Item ${idx + 1}`}
-                                              className="w-full h-10 sm:h-20 object-cover rounded"
-                                              loading="lazy"
-                                            />
-                                          </div>
+                                          <img key={idx} src={url} alt="" className="w-full h-full object-cover rounded-lg" loading="lazy" />
                                         )
                                       ))}
-                                      {post.imageUrls.length > 4 && (
-                                        <div className="h-10 sm:h-20 bg-gray-200 rounded flex items-center justify-center">
-                                          <span className="text-gray-600 text-xs sm:text-sm font-semibold">+{post.imageUrls.length - 4}</span>
-                                        </div>
-                                      )}
                                     </div>
-                                  </div>
-                                ) : post.imageUrl && isVideoUrl(post.imageUrl) ? (
-                                  <video
-                                    src={post.imageUrl}
-                                    className="w-full h-12 sm:h-32 object-cover rounded-lg mb-1 sm:mb-3"
-                                    style={{ background: '#1f2937' }}
-                                  />
-                                ) : post.imageUrl ? (
-                                  <img
-                                    src={post.imageUrl}
-                                    alt="Post content"
-                                    className="w-full h-12 sm:h-32 object-cover rounded-lg mb-1 sm:mb-3"
-                                    loading="lazy"
-                                  />
-                                ) : null}
-
-                                <p className="text-gray-800 text-xs sm:text-sm mb-1 sm:mb-3 line-clamp-1 sm:line-clamp-2 hidden sm:block">
-                                  {post.caption}
-                                </p>
-                                
-                                <div className="space-y-0.5 sm:space-y-1 text-xs text-gray-500 mb-1 sm:mb-3">
-                                  <div className="flex items-center space-x-1 sm:space-x-2">
-                                    <Calendar className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
-                                    <span className="text-xs">{new Date(post.scheduledAt).toLocaleDateString()}</span>
-                                  </div>
-                                  <div className="hidden sm:flex items-center space-x-2">
-                                    <Clock className="h-3 w-3" />
-                                    <span>{new Date(post.scheduledAt).toLocaleTimeString()}</span>
-                                  </div>
+                                  ) : post.imageUrl ? (
+                                    isVideoUrl(post.imageUrl) ? (
+                                      <div className="w-full h-[140px] bg-gray-800 rounded-lg flex items-center justify-center">
+                                        <Video className="h-8 w-8 text-white" />
+                                      </div>
+                                    ) : (
+                                      <img src={post.imageUrl} alt="" className="w-full h-[140px] object-cover rounded-lg" loading="lazy" />
+                                    )
+                                  ) : (
+                                    <div className="w-full h-[140px] bg-gray-100 rounded-lg flex items-center justify-center">
+                                      <Image className="h-8 w-8 text-gray-300" />
+                                    </div>
+                                  )}
                                 </div>
 
-                                {/* Error handling - Hidden on mobile */}
-                                {post.status === 'failed' && post.error && (
-                                  <div className="bg-red-50 border border-red-200 rounded p-1 sm:p-2 mb-1 sm:mb-3 hidden sm:block">
-                                    <p className="text-xs text-red-600 line-clamp-2">{post.error}</p>
-                                  </div>
-                                )}
+                                {/* Caption - Fixed height with scroll */}
+                                <div className="px-3 pt-2 flex-1 overflow-hidden">
+                                  <p className="text-gray-700 text-sm line-clamp-4">{post.caption || 'No caption'}</p>
+                                </div>
 
-                                <div className="flex items-center justify-end">
+                                {/* Footer */}
+                                <div className="px-3 py-2 border-t border-gray-50 flex items-center justify-between flex-shrink-0 mt-auto">
+                                  <div className="flex items-center gap-3 text-xs text-gray-500">
+                                    <span className="flex items-center gap-1">
+                                      <Calendar className="h-3 w-3" />
+                                      {new Date(post.scheduledAt).toLocaleDateString()}
+                                    </span>
+                                    <span className="flex items-center gap-1">
+                                      <Clock className="h-3 w-3" />
+                                      {new Date(post.scheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                  </div>
                                   <button
                                     onClick={(e) => { e.stopPropagation(); handleDeletePost(post._id); }}
-                                    className="text-red-600 hover:text-red-800 p-0.5 sm:p-1"
-                                    title="Delete from scheduler"
+                                    className="text-gray-400 hover:text-red-500 p-1 transition-colors"
+                                    title="Delete"
                                   >
-                                    <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
+                                    <Trash2 className="h-4 w-4" />
                                   </button>
                                 </div>
                               </div>
@@ -793,110 +905,93 @@ function ScheduledPosts() {
 
                     {/* Expanded Content */}
                     {isExpanded && (
-                      <div className="p-2 sm:p-6">
-                        <div className="grid grid-cols-3 sm:grid-cols-2 lg:grid-cols-3 gap-1.5 sm:gap-4">
+                      <div className="p-5 bg-gray-50/50">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                           {customerPosts.map(post => (
-                            <div key={post._id} className="bg-gray-50 rounded-lg border p-1.5 sm:p-4">
-                              {/* --- Display calendar and item name at the top --- Hidden on mobile */}
-                              {post.calendar_name && (
-                                <div className="text-xs text-blue-700 mb-1 hidden sm:block">
-                                  <strong>Calendar:</strong> {post.calendar_name}
+                            <div key={post._id} className="bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow overflow-hidden flex flex-col h-[420px]">
+                              {/* Header with Calendar/Item info */}
+                              <div className="p-3 border-b border-gray-50 bg-gray-50/50 flex-shrink-0">
+                                <div className="text-xs text-blue-600 font-medium truncate">
+                                  <span className="text-gray-500">Calendar:</span> {post.calendar_name || 'N/A'}
                                 </div>
-                              )}
-                              {post.item_name && (
-                                <div className="text-xs text-purple-700 mb-2 hidden sm:block">
-                                  <strong>Item:</strong> {post.item_name}
+                                <div className="text-xs text-purple-600 font-medium truncate mt-0.5">
+                                  <span className="text-gray-500">Item:</span> {post.item_name || 'N/A'}
                                 </div>
-                              )}
-                              {/* --- End --- */}
+                              </div>
 
-                              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-1 sm:mb-3">
-                                <div className="flex items-center space-x-1 sm:space-x-2">
+                              {/* Platform & Page with Status */}
+                              <div className="px-3 pt-2 pb-2 flex items-center justify-between flex-shrink-0">
+                                <div className="flex items-center gap-2 min-w-0 flex-1">
                                   {getPlatformIcon(post.platform)}
-                                  <span className="text-xs sm:text-sm font-medium text-gray-600 truncate max-w-[50px] sm:max-w-none">
+                                  <span className="text-sm font-medium text-gray-700 truncate">
                                     {post.pageName || post.channelName || 'Post'}
                                   </span>
                                 </div>
-                                <div className="flex items-center space-x-1 mt-0.5 sm:mt-0">
-                                  <span className={`px-1 sm:px-2 py-0.5 rounded-full text-xs font-medium flex items-center ${getStatusColor(post.status)}`}>
-                                    {getStatusIcon(post.status)}
-                                    <span className="hidden sm:inline ml-1">{post.status}</span>
-                                  </span>
-                                </div>
+                                <span className={`px-2.5 py-1 rounded-full text-xs font-medium flex items-center gap-1 flex-shrink-0 ${getStatusColor(post.status)}`}>
+                                  {getStatusIcon(post.status)}
+                                  {post.status}
+                                </span>
                               </div>
 
-                              {/* Media Preview - Compact on mobile */}
-                              {post.imageUrls && post.imageUrls.length > 1 ? (
-                                <div className="mb-1 sm:mb-3">
-                                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-0.5 sm:gap-1">
-                                    {post.imageUrls.slice(0, 4).map((url, idx) => (
+                              {/* Media Preview - Fixed height */}
+                              <div className="px-3 flex-shrink-0">
+                                {post.imageUrls && post.imageUrls.length > 1 ? (
+                                  <div className="grid grid-cols-3 gap-1 h-[140px]">
+                                    {post.imageUrls.slice(0, 3).map((url, idx) => (
                                       isVideoUrl(url) ? (
-                                        <div key={idx} className="relative h-10 sm:h-20 bg-gray-800 rounded flex items-center justify-center">
-                                          <Video className="h-3 w-3 sm:h-6 sm:w-6 text-white" />
+                                        <div key={idx} className="bg-gray-800 rounded-lg flex items-center justify-center h-full">
+                                          <Video className="h-6 w-6 text-white" />
                                         </div>
                                       ) : (
-                                        <div key={idx} className="relative">
-                                          <img
-                                            src={url}
-                                            alt={`Item ${idx + 1}`}
-                                            className="w-full h-10 sm:h-20 object-cover rounded"
-                                            loading="lazy"
-                                          />
-                                        </div>
+                                        <img key={idx} src={url} alt="" className="w-full h-full object-cover rounded-lg" loading="lazy" />
                                       )
                                     ))}
-                                    {post.imageUrls.length > 4 && (
-                                      <div className="h-10 sm:h-20 bg-gray-200 rounded flex items-center justify-center">
-                                        <span className="text-gray-600 text-xs sm:text-sm font-semibold">+{post.imageUrls.length - 4}</span>
-                                      </div>
-                                    )}
                                   </div>
-                                </div>
-                              ) : post.imageUrl && isVideoUrl(post.imageUrl) ? (
-                                <video
-                                  src={post.imageUrl}
-                                  className="w-full h-12 sm:h-32 object-cover rounded-lg mb-1 sm:mb-3"
-                                  style={{ background: '#1f2937' }}
-                                />
-                              ) : post.imageUrl ? (
-                                <img
-                                  src={post.imageUrl}
-                                  alt="Post content"
-                                  className="w-full h-12 sm:h-32 object-cover rounded-lg mb-1 sm:mb-3"
-                                  loading="lazy"
-                                />
-                              ) : null}
-
-                              <p className="text-gray-800 text-xs sm:text-sm mb-1 sm:mb-3 line-clamp-1 sm:line-clamp-2 hidden sm:block">
-                                {post.caption}
-                              </p>
-                              
-                              <div className="space-y-0.5 sm:space-y-1 text-xs text-gray-500 mb-1 sm:mb-3">
-                                <div className="flex items-center space-x-1 sm:space-x-2">
-                                  <Calendar className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
-                                  <span className="text-xs">{new Date(post.scheduledAt).toLocaleDateString()}</span>
-                                </div>
-                                <div className="hidden sm:flex items-center space-x-2">
-                                  <Clock className="h-3 w-3" />
-                                  <span>{new Date(post.scheduledAt).toLocaleTimeString()}</span>
-                                </div>
+                                ) : post.imageUrl ? (
+                                  isVideoUrl(post.imageUrl) ? (
+                                    <div className="w-full h-[140px] bg-gray-800 rounded-lg flex items-center justify-center">
+                                      <Video className="h-8 w-8 text-white" />
+                                    </div>
+                                  ) : (
+                                    <img src={post.imageUrl} alt="" className="w-full h-[140px] object-cover rounded-lg" loading="lazy" />
+                                  )
+                                ) : (
+                                  <div className="w-full h-[140px] bg-gray-100 rounded-lg flex items-center justify-center">
+                                    <Image className="h-8 w-8 text-gray-300" />
+                                  </div>
+                                )}
                               </div>
 
-                              {/* Error handling - Hidden on mobile */}
-                              {post.status === 'failed' && post.error && (
-                                <div className="bg-red-50 border border-red-200 rounded p-1 sm:p-2 mb-1 sm:mb-3 hidden sm:block">
-                                  <p className="text-xs text-red-600 line-clamp-2">{post.error}</p>
-                                </div>
-                              )}
+                              {/* Caption - Fixed height with scroll */}
+                              <div className="px-3 pt-2 flex-1 overflow-hidden">
+                                {post.status === 'failed' ? (
+                                  <div className="bg-red-50 border border-red-100 rounded-lg p-2">
+                                    <p className="text-red-700 text-xs font-medium mb-1">Failed to publish</p>
+                                    <p className="text-red-600 text-xs">{getFailureReason(post)}</p>
+                                  </div>
+                                ) : (
+                                  <p className="text-gray-700 text-sm line-clamp-4">{post.caption || 'No caption'}</p>
+                                )}
+                              </div>
 
-                              <div className="flex items-center justify-end">
-                                {/* Delete from system */}
+                              {/* Footer */}
+                              <div className="px-3 py-2 border-t border-gray-50 flex items-center justify-between flex-shrink-0 mt-auto">
+                                <div className="flex items-center gap-3 text-xs text-gray-500">
+                                  <span className="flex items-center gap-1">
+                                    <Calendar className="h-3 w-3" />
+                                    {new Date(post.scheduledAt).toLocaleDateString()}
+                                  </span>
+                                  <span className="flex items-center gap-1">
+                                    <Clock className="h-3 w-3" />
+                                    {new Date(post.scheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                </div>
                                 <button
                                   onClick={(e) => { e.stopPropagation(); handleDeletePost(post._id); }}
-                                  className="text-red-600 hover:text-red-800 p-0.5 sm:p-1"
-                                  title="Delete from scheduler"
+                                  className="text-gray-400 hover:text-red-500 p-1 transition-colors"
+                                  title="Delete"
                                 >
-                                  <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
+                                  <Trash2 className="h-4 w-4" />
                                 </button>
                               </div>
                             </div>
@@ -909,152 +1004,100 @@ function ScheduledPosts() {
               })}
             </div>
           ) : (
-            /* List View - Mobile 3-column grid */
-            <div className="grid grid-cols-3 sm:grid-cols-2 lg:grid-cols-3 gap-1.5 sm:gap-6">
+            /* List View */
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredPosts.map(post => {
                 const customerInfo = getCustomerDisplayInfo(post);
                 
                 return (
                   <div
                     key={post._id}
-                    className="bg-white rounded-lg shadow-sm border p-1.5 sm:p-4 flex flex-col"
-                    style={{ minHeight: 'auto' }}
+                    className="bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow overflow-hidden flex flex-col h-[420px]"
                   >
-                    <div className="flex-1 flex flex-col" style={{ minHeight: 0 }}>
-                      {/* --- Display calendar and item name at the top --- Hidden on mobile */}
-                      {post.calendar_name && (
-                        <div className="text-xs text-blue-700 mb-1 hidden sm:block">
-                          <strong>Calendar:</strong> {post.calendar_name}
-                        </div>
-                      )}
-                      {post.item_name && (
-                        <div className="text-xs text-purple-700 mb-2 hidden sm:block">
-                          <strong>Item:</strong> {post.item_name}
-                        </div>
-                      )}
-                      {/* --- End --- */}
-
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-1 sm:mb-3">
-                        <div className="flex items-center space-x-1 sm:space-x-2">
-                          {getPlatformIcon(post.platform)}
-                          <span className="text-xs sm:text-sm font-medium text-gray-600 truncate max-w-[50px] sm:max-w-none">
-                            {post.pageName || post.channelName || 'Post'}
-                          </span>
-                        </div>
-                        <div className="flex items-center space-x-1 mt-0.5 sm:mt-0">
-                          <span className={`px-1 sm:px-2 py-0.5 rounded-full text-xs font-medium flex items-center ${getStatusColor(post.status)}`}>
-                            {getStatusIcon(post.status)}
-                            <span className="hidden sm:inline ml-1">{post.status}</span>
-                          </span>
-                        </div>
+                    {/* Header with Calendar/Item info */}
+                    <div className="p-3 border-b border-gray-50 bg-gray-50/50 flex-shrink-0">
+                      <div className="text-xs text-blue-600 font-medium truncate">
+                        <span className="text-gray-500">Calendar:</span> {post.calendar_name || 'N/A'}
                       </div>
+                      <div className="text-xs text-purple-600 font-medium truncate mt-0.5">
+                        <span className="text-gray-500">Item:</span> {post.item_name || 'N/A'}
+                      </div>
+                    </div>
 
-                      {/* Customer Information - Hidden on mobile */}
-                      {customerInfo && (
-                        <div className="bg-[#F4F9FF] border border-[#0066CC]/20 rounded-lg p-1 sm:p-2 mb-1 sm:mb-2 hidden sm:block">
-                          <div className="flex items-center space-x-2">
-                            <User className="h-3 w-3 sm:h-4 sm:w-4 text-[#0066CC]" />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs sm:text-sm font-medium text-[#0F172A] truncate">
-                                {customerInfo.name}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      )}
+                    {/* Platform & Page with Status */}
+                    <div className="px-3 pt-2 pb-2 flex items-center justify-between flex-shrink-0">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        {getPlatformIcon(post.platform)}
+                        <span className="text-sm font-medium text-gray-700 truncate">
+                          {post.pageName || post.channelName || customerInfo?.name || 'Post'}
+                        </span>
+                      </div>
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-medium flex items-center gap-1 flex-shrink-0 ${getStatusColor(post.status)}`}>
+                        {getStatusIcon(post.status)}
+                        {post.status}
+                      </span>
+                    </div>
 
-                      {/* Media Preview - Compact on mobile */}
+                    {/* Media Preview - Fixed height */}
+                    <div className="px-3 flex-shrink-0">
                       {post.imageUrls && post.imageUrls.length > 1 ? (
-                        <div className="mb-1 sm:mb-3">
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-0.5 sm:gap-1">
-                            {post.imageUrls.slice(0, 4).map((url, idx) => (
-                              isVideoUrl(url) ? (
-                                <div key={idx} className="relative h-10 sm:h-20 bg-gray-800 rounded flex items-center justify-center">
-                                  <Video className="h-3 w-3 sm:h-6 sm:w-6 text-white" />
-                                </div>
-                              ) : (
-                                <div key={idx} className="relative">
-                                  <img
-                                    src={url}
-                                    alt={`Item ${idx + 1}`}
-                                    className="w-full h-10 sm:h-20 object-cover rounded"
-                                    loading="lazy"
-                                  />
-                                </div>
-                              )
-                            ))}
-                            {post.imageUrls.length > 4 && (
-                              <div className="h-10 sm:h-20 bg-gray-200 rounded flex items-center justify-center">
-                                <span className="text-gray-600 text-xs sm:text-sm font-semibold">+{post.imageUrls.length - 4}</span>
+                        <div className="grid grid-cols-3 gap-1 h-[140px]">
+                          {post.imageUrls.slice(0, 3).map((url, idx) => (
+                            isVideoUrl(url) ? (
+                              <div key={idx} className="bg-gray-800 rounded-lg flex items-center justify-center h-full">
+                                <Video className="h-6 w-6 text-white" />
                               </div>
-                            )}
-                          </div>
+                            ) : (
+                              <img key={idx} src={url} alt="" className="w-full h-full object-cover rounded-lg" loading="lazy" />
+                            )
+                          ))}
                         </div>
-                      ) : post.imageUrl && isVideoUrl(post.imageUrl) ? (
-                        <video
-                          src={post.imageUrl}
-                          className="w-full h-12 sm:h-28 object-cover rounded-lg mb-1 sm:mb-2"
-                          style={{ background: '#1f2937' }}
-                        />
                       ) : post.imageUrl ? (
-                        <img
-                          src={post.imageUrl}
-                          alt="Post content"
-                          className="w-full h-12 sm:h-28 object-cover rounded-lg mb-1 sm:mb-2"
-                          loading="lazy"
-                        />
-                      ) : null}
-
-                      {/* Video notes - Hidden on mobile */}
-                      {post.imageUrl && isVideoUrl(post.imageUrl) && post.platform === 'instagram' && (
-                        <div className="text-xs text-[#0066CC] mb-1 hidden sm:block">
-                          This video will be posted as an Instagram Reel.
-                        </div>
-                      )}
-
-                      {post.imageUrl && isVideoUrl(post.imageUrl) && post.platform === 'youtube' && (
-                        <div className="text-xs text-red-600 mb-1 hidden sm:block">
-                          YouTube video upload scheduled.
-                        </div>
-                      )}
-
-                      <p className="text-gray-800 text-xs sm:text-sm mb-1 sm:mb-2 line-clamp-1 sm:line-clamp-2 hidden sm:block">
-                        {post.caption}
-                      </p>
-                      
-                      <div className="space-y-0.5 sm:space-y-1.5 text-xs text-gray-500 mb-1 sm:mb-2">
-                        <div className="flex items-center space-x-1 sm:space-x-2">
-                          <Calendar className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
-                          <span className="text-xs">{new Date(post.scheduledAt).toLocaleDateString()}</span>
-                        </div>
-                        <div className="hidden sm:flex items-center space-x-2">
-                          <Clock className="h-3 w-3" />
-                          <span>{new Date(post.scheduledAt).toLocaleTimeString()}</span>
-                        </div>
-                        {post.publishedAt && (
-                          <div className="hidden sm:flex items-center space-x-2 text-green-600">
-                            <CheckCircle className="h-3 w-3" />
-                            <span>Published: {new Date(post.publishedAt).toLocaleString()}</span>
+                        isVideoUrl(post.imageUrl) ? (
+                          <div className="w-full h-[140px] bg-gray-800 rounded-lg flex items-center justify-center">
+                            <Video className="h-8 w-8 text-white" />
                           </div>
-                        )}
-                      </div>
-
-                      {/* Error details - Hidden on mobile */}
-                      {post.status === 'failed' && post.error && (
-                        <div className="bg-red-50 border border-red-200 rounded p-1 sm:p-2 mb-1 sm:mb-2 hidden sm:block">
-                          <p className="text-xs text-red-600 line-clamp-2">{post.error}</p>
+                        ) : (
+                          <img src={post.imageUrl} alt="" className="w-full h-[140px] object-cover rounded-lg" loading="lazy" />
+                        )
+                      ) : (
+                        <div className="w-full h-[140px] bg-gray-100 rounded-lg flex items-center justify-center">
+                          <Image className="h-8 w-8 text-gray-300" />
                         </div>
                       )}
+                    </div>
 
-                      <div className="flex items-center justify-end mt-auto">
-                        <button
-                          onClick={() => handleDeletePost(post._id)}
-                          className="text-red-600 hover:text-red-800 p-0.5 sm:p-1"
-                          title="Delete from scheduler"
-                        >
-                          <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
-                        </button>
+                    {/* Caption - Fixed height with scroll */}
+                    <div className="px-3 pt-2 flex-1 overflow-hidden">
+                      {post.status === 'failed' ? (
+                        <div className="bg-red-50 border border-red-100 rounded-lg p-2">
+                          <p className="text-red-700 text-xs font-medium mb-1">Failed to publish</p>
+                          <p className="text-red-600 text-xs">{getFailureReason(post)}</p>
+                        </div>
+                      ) : (
+                        <p className="text-gray-700 text-sm line-clamp-4">{post.caption || 'No caption'}</p>
+                      )}
+                    </div>
+
+                    {/* Footer */}
+                    <div className="px-3 py-2 border-t border-gray-50 flex items-center justify-between flex-shrink-0 mt-auto">
+                      <div className="flex items-center gap-3 text-xs text-gray-500">
+                        <span className="flex items-center gap-1">
+                          <Calendar className="h-3 w-3" />
+                          {new Date(post.scheduledAt).toLocaleDateString()}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          {new Date(post.scheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
                       </div>
+                      <button
+                        onClick={() => handleDeletePost(post._id)}
+                        className="text-gray-400 hover:text-red-500 p-1 transition-colors"
+                        title="Delete"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
                     </div>
                   </div>
                 );

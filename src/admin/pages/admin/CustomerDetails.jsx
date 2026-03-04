@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, memo } from 'react';
+import React, { useState, useEffect, useCallback, memo, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import AdminLayout from '../../components/layout/AdminLayout';
@@ -7,8 +7,20 @@ import AssignCreatorModal from '../../components/modals/AssignCreatorModal';
 import ContentCalendarModal from '../../components/modals/ContentCalendarModal';
 import {
   ChevronLeft, Pencil, Trash2, Plus, AlertCircle, Calendar, Clock,
-  ChevronRight, ChevronDown, MoreVertical, Upload
+  ChevronRight, ChevronDown, MoreVertical, Upload, X, FileText, CheckCircle, Edit
 } from 'lucide-react';
+
+// Status configuration helper
+const getStatusConfig = (status) => {
+  const configs = {
+    published: { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' },
+    approved: { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' },
+    under_review: { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200' },
+    in_progress: { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200' },
+    pending: { bg: 'bg-gray-50', text: 'text-gray-600', border: 'border-gray-200' }
+  };
+  return configs[status] || configs.pending;
+};
 
 const API_URL = process.env.REACT_APP_API_URL;
 
@@ -30,7 +42,7 @@ const CustomerDetails = () => {
   const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
   const [isEditCalendarModalOpen, setIsEditCalendarModalOpen] = useState(false);
   const [calendarToEdit, setCalendarToEdit] = useState(null);
-  const [openDropdowns, setOpenDropdowns] = useState(new Set());
+  const [mobileMenuCalendar, setMobileMenuCalendar] = useState(null);
   const [scheduledPosts, setScheduledPosts] = useState([]);
 
   useEffect(() => {
@@ -77,6 +89,31 @@ const CustomerDetails = () => {
     if (!calendar.contentItems || calendar.contentItems.length === 0) return false;
     return calendar.contentItems.every(item => isItemPublished(item));
   };
+
+  // Get published count for a calendar
+  const getCalendarStats = useCallback((calendar) => {
+    const total = calendar.contentItems?.length || 0;
+    const published = calendar.contentItems?.filter(item => isItemPublished(item)).length || 0;
+    const progressPercent = total > 0 ? Math.round((published / total) * 100) : 0;
+    return { total, published, progressPercent };
+  }, [scheduledPosts]);
+
+  // Overall stats for all calendars
+  const overallStats = useMemo(() => {
+    let totalItems = 0, publishedItems = 0;
+    calendars.forEach(cal => {
+      const items = cal.contentItems || [];
+      totalItems += items.length;
+      publishedItems += items.filter(item => isItemPublished(item)).length;
+    });
+    return { 
+      totalCalendars: calendars.length,
+      totalItems, 
+      publishedItems, 
+      pendingItems: totalItems - publishedItems,
+      completionRate: totalItems > 0 ? Math.round((publishedItems / totalItems) * 100) : 0
+    };
+  }, [calendars, scheduledPosts]);
 
   const fetchCustomer = async () => {
     try {
@@ -297,7 +334,7 @@ const CustomerDetails = () => {
   const handleEditCalendar = (calendar) => {
     setCalendarToEdit(calendar);
     setIsEditCalendarModalOpen(true);
-    setOpenDropdowns(new Set());
+    setMobileMenuCalendar(null);
   };
 
   const handleUpdateCalendar = async (updatedCalendarData) => {
@@ -324,6 +361,7 @@ const CustomerDetails = () => {
   const handleDeleteConfirm = (id) => setDeleteConfirmation(id);
 
   const handleDeleteItem = async (calendarId, item) => {
+    if (!window.confirm('Are you sure you want to delete this content item?')) return;
     try {
       const description = item.description;
       const date = item.date;
@@ -347,7 +385,7 @@ const CustomerDetails = () => {
     } catch (err) {
       // handle error
     }
-    setOpenDropdowns(new Set());
+    setMobileMenuCalendar(null);
   };
 
   const handleCancelDelete = () => setDeleteConfirmation(null);
@@ -364,16 +402,13 @@ const CustomerDetails = () => {
     });
   }, []);
 
-  const toggleDropdown = useCallback((calendarId) => {
-    setOpenDropdowns(prev => {
-      const newDropdowns = new Set(prev);
-      if (newDropdowns.has(calendarId)) {
-        newDropdowns.delete(calendarId);
-      } else {
-        newDropdowns.add(calendarId);
-      }
-      return newDropdowns;
-    });
+  // Mobile menu handlers
+  const openMobileMenu = useCallback((calendar) => {
+    setMobileMenuCalendar(calendar);
+  }, []);
+
+  const closeMobileMenu = useCallback(() => {
+    setMobileMenuCalendar(null);
   }, []);
 
   const handleAssignCreator = async (creator) => {
@@ -464,322 +499,348 @@ const CustomerDetails = () => {
   return (
     <AdminLayout title={`${customer.name}`}>
       <div className="space-y-3 sm:space-y-4">
-        {/* Content Calendars */}
-        <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200/50 overflow-hidden">
-          <div className="px-3 sm:px-4 py-3 border-b border-gray-100">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-              <div className="flex-1 min-w-0">
-                <h3 className="text-base sm:text-lg font-bold text-gray-900 truncate">Content Calendars</h3>
-                <p className="text-xs sm:text-sm text-gray-500 hidden sm:block">Manage content calendars and items</p>
+        {/* Content Calendars Section */}
+        <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+          {/* Header with Stats */}
+          <div className="px-4 sm:px-6 py-4 border-b border-gray-100">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <h2 className="text-base sm:text-lg font-semibold text-gray-900">Content Calendars</h2>
+                <p className="text-sm text-gray-500 mt-0.5">Manage content schedule and items</p>
               </div>
               <button
                 onClick={() => setIsCalendarModalOpen(true)}
-                className="inline-flex items-center px-3 sm:px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                className="inline-flex items-center px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-colors"
               >
-                <Plus className="h-4 w-4 mr-1" />
+                <Plus className="h-4 w-4 mr-1.5" />
                 Add Calendar
               </button>
             </div>
+            
+            {/* Stats Grid */}
+            {calendars.length > 0 && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+                <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-xl font-semibold text-gray-900 tabular-nums">{overallStats.totalCalendars}</div>
+                      <div className="text-xs text-gray-500 font-medium uppercase tracking-wide">Calendars</div>
+                    </div>
+                    <Calendar className="h-6 w-6 text-gray-400" />
+                  </div>
+                </div>
+                <div className="bg-blue-50 rounded-xl p-3 border border-blue-100">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-xl font-semibold text-blue-700 tabular-nums">{overallStats.totalItems}</div>
+                      <div className="text-xs text-blue-600 font-medium uppercase tracking-wide">Items</div>
+                    </div>
+                    <FileText className="h-6 w-6 text-blue-500" />
+                  </div>
+                </div>
+                <div className="bg-emerald-50 rounded-xl p-3 border border-emerald-100">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-xl font-semibold text-emerald-700 tabular-nums">{overallStats.publishedItems}</div>
+                      <div className="text-xs text-emerald-600 font-medium uppercase tracking-wide">Published</div>
+                    </div>
+                    <CheckCircle className="h-6 w-6 text-emerald-500" />
+                  </div>
+                </div>
+                <div className="bg-amber-50 rounded-xl p-3 border border-amber-100">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-xl font-semibold text-amber-700 tabular-nums">{overallStats.pendingItems}</div>
+                      <div className="text-xs text-amber-600 font-medium uppercase tracking-wide">Pending</div>
+                    </div>
+                    <Clock className="h-6 w-6 text-amber-500" />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
-          <div className="p-3 sm:p-4">
+          <div className="p-4 sm:p-5">
             {calendars.length > 0 ? (
-              <div className="space-y-2">
-                {calendars.map((calendar) => (
-                  <div key={calendar._id} className="bg-white rounded-lg border border-gray-200/50 shadow-sm relative">
-                    <div
-                      className="p-2 sm:p-3 cursor-pointer hover:bg-gray-50 transition-colors"
-                      onClick={() => toggleCalendarExpansion(calendar._id)}
-                    >
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-start space-x-3 md:space-x-4 min-w-0 flex-1">
-                            <div className="p-2 bg-blue-100 rounded-lg flex-shrink-0">
-                              <Calendar className="h-4 md:h-5 w-4 md:w-5 text-blue-600" />
+              <div className="space-y-3">
+                {calendars.map((calendar) => {
+                  const calStats = getCalendarStats(calendar);
+                  return (
+                    <div key={calendar._id} className="bg-gray-50 rounded-xl border border-gray-100 overflow-hidden">
+                      {/* Calendar Header */}
+                      <div 
+                        className="p-4 cursor-pointer hover:bg-gray-100/50 transition-colors"
+                        onClick={() => toggleCalendarExpansion(calendar._id)}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                            <div className="h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                              <Calendar className="h-5 w-5 text-blue-600" />
                             </div>
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2">
-                                <h4 className="text-base md:text-lg font-semibold text-gray-900 truncate">{calendar.name}</h4>
+                                <h4 className="text-sm font-semibold text-gray-900 truncate">{calendar.name}</h4>
                                 {isCalendarPublished(calendar) && (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 border border-green-200 flex-shrink-0">
-                                    <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                    </svg>
-                                    Fully Published
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 border border-emerald-200 flex-shrink-0">
+                                    <CheckCircle className="w-3 h-3 mr-1" />
+                                    Complete
                                   </span>
                                 )}
                               </div>
-                              <p className="text-sm text-gray-600 truncate">{calendar.description}</p>
-                              <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 mt-2 space-y-1 sm:space-y-0">
-                                <span className="text-xs text-gray-500">{calendar.contentItems?.length || 0} content items</span>
+                              <div className="flex items-center gap-3 mt-1">
+                                <span className="text-xs text-gray-500">{calStats.total} items</span>
                                 {calendar.assignedTo && (
-                                  <button
-                                    onClick={e => {
-                                      e.stopPropagation();
-                                      navigate(`/admin/content-creator-details/${calendar.assignedTo}`);
-                                    }}
-                                    className="text-xs text-blue-600 hover:text-blue-800 font-medium text-left"
-                                  >
-                                    Assigned to - {calendar.assignedToName || calendar.assignedTo}
-                                  </button>
+                                  <span className="text-xs text-gray-500 truncate">
+                                    Assigned: {calendar.assignedToName || calendar.assignedTo}
+                                  </span>
                                 )}
                               </div>
                             </div>
                           </div>
                           
-                          {/* Desktop Actions */}
-                          <div className="hidden md:flex items-center space-x-2 ml-4">
-                            <button
-                              onClick={e => {
-                                e.stopPropagation();
-                                setSelectedCalendar(calendar);
-                                setIsAddModalOpen(true);
-                              }}
-                              className="inline-flex items-center px-3 py-1 bg-green-100 text-green-700 rounded-lg text-sm font-medium hover:bg-green-200 transition-colors"
-                            >
-                              <Plus className="h-4 w-4 mr-1" />
-                              Add Item
-                            </button>
-                            <button
-                              onClick={e => {
-                                e.stopPropagation();
-                                handleEditCalendar(calendar);
-                              }}
-                              className="inline-flex items-center px-3 py-1 bg-blue-100 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-200 transition-colors"
-                            >
-                              <Pencil className="h-4 w-4 mr-1" />
-                              Edit
-                            </button>
-                            <button
-                              onClick={e => {
-                                e.stopPropagation();
-                                handleDeleteCalendar(calendar._id);
-                              }}
-                              className="inline-flex items-center px-3 py-1 bg-red-100 text-red-700 rounded-lg text-sm font-medium hover:bg-red-200 transition-colors"
-                            >
-                              <Trash2 className="h-4 w-4 mr-1" />
-                              Delete
-                            </button>
-                            {expandedCalendars.has(calendar._id) ? (
-                              <ChevronDown className="h-5 w-5 text-gray-400" />
-                            ) : (
-                              <ChevronRight className="h-5 w-5 text-gray-400" />
-                            )}
-                          </div>
-
-                          {/* Mobile Actions */}
-                          <div className="md:hidden flex items-center space-x-2 ml-2 relative">
-                            <button
-                              type="button"
-                              onClick={e => {
-                                e.stopPropagation();
-                                toggleDropdown(calendar._id);
-                              }}
-                              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                            >
-                              <MoreVertical className="h-5 w-5" />
-                            </button>
-                            {expandedCalendars.has(calendar._id) ? (
-                              <ChevronDown className="h-5 w-5 text-gray-400" />
-                            ) : (
-                              <ChevronRight className="h-5 w-5 text-gray-400" />
-                            )}
-
-                            {/* Mobile Dropdown Menu */}
-                            {openDropdowns.has(calendar._id) && (
-                              <div 
-                                className="absolute right-0 top-full mt-2 w-48 bg-white rounded-lg shadow-xl border border-gray-200 z-[9999] pointer-events-auto"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <div className="py-1">
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      const cal = calendar;
-                                      setOpenDropdowns(new Set());
-                                      setSelectedCalendar(cal);
-                                      setTimeout(() => setIsAddModalOpen(true), 0);
-                                    }}
-                                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center active:bg-gray-100 cursor-pointer"
-                                  >
-                                    <Plus className="h-4 w-4 mr-2 text-green-600" />
-                                    Add Item
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      setOpenDropdowns(new Set());
-                                      setTimeout(() => handleEditCalendar(calendar), 0);
-                                    }}
-                                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center active:bg-gray-100 cursor-pointer"
-                                  >
-                                    <Pencil className="h-4 w-4 mr-2 text-blue-600" />
-                                    Edit Calendar
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      setOpenDropdowns(new Set());
-                                      setTimeout(() => handleDeleteCalendar(calendar._id), 0);
-                                    }}
-                                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center active:bg-gray-100 cursor-pointer"
-                                  >
-                                    <Trash2 className="h-4 w-4 mr-2 text-red-600" />
-                                    Delete Calendar
-                                  </button>
-                                </div>
+                          {/* Progress & Actions */}
+                          <div className="flex items-center gap-3 ml-3">
+                            {/* Progress Bar - Desktop */}
+                            <div className="hidden sm:flex items-center gap-2">
+                              <span className="text-xs text-gray-600 tabular-nums min-w-[40px] text-right">
+                                {calStats.published}/{calStats.total}
+                              </span>
+                              <div className="w-20 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                                <div 
+                                  className="h-full bg-emerald-500 rounded-full transition-all"
+                                  style={{ width: `${calStats.progressPercent}%` }}
+                                />
                               </div>
+                            </div>
+                            
+                            {/* Desktop Actions */}
+                            <div className="hidden sm:flex items-center gap-1">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setSelectedCalendar(calendar); setIsAddModalOpen(true); }}
+                                className="p-1.5 text-green-600 hover:bg-green-100 rounded-lg transition-colors"
+                                title="Add Item"
+                              >
+                                <Plus className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleEditCalendar(calendar); }}
+                                className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors"
+                                title="Edit"
+                              >
+                                <Edit className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleDeleteCalendar(calendar._id); }}
+                                className="p-1.5 text-red-600 hover:bg-red-100 rounded-lg transition-colors"
+                                title="Delete"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+
+                            {/* Mobile Menu Button */}
+                            <div className="sm:hidden">
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); openMobileMenu(calendar); }}
+                                className="p-1.5 text-gray-500 hover:bg-gray-200 rounded-lg transition-colors"
+                              >
+                                <MoreVertical className="h-4 w-4" />
+                              </button>
+                            </div>
+
+                            {expandedCalendars.has(calendar._id) ? (
+                              <ChevronDown className="h-4 w-4 text-gray-400" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4 text-gray-400" />
                             )}
                           </div>
+                        </div>
+                        
+                        {/* Progress Bar - Mobile */}
+                        <div className="sm:hidden mt-3 flex items-center gap-2">
+                          <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-emerald-500 rounded-full transition-all"
+                              style={{ width: `${calStats.progressPercent}%` }}
+                            />
+                          </div>
+                          <span className="text-xs text-gray-500 tabular-nums">{calStats.progressPercent}%</span>
                         </div>
                       </div>
 
+                      {/* Expanded Content Items */}
                       {expandedCalendars.has(calendar._id) && (
-                        <div className="border-t border-gray-200/50 bg-gray-50/50 overflow-hidden">
-                          <div className="p-4 md:p-6">
-                            <h5 className="text-sm font-semibold text-gray-700 mb-4">Content Items</h5>
-                            {calendar.contentItems && calendar.contentItems.length > 0 ? (
-                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 justify-items-center">
-                                {calendar.contentItems.map((item, index) => (
-                                  <div key={index} className="bg-white rounded-lg p-3 border border-gray-200 hover:border-blue-500 hover:shadow-lg transition-all duration-200 h-48 flex flex-col max-w-sm w-full">
-                                    <div className="flex items-start justify-between">
-                                      <div className="min-w-0 flex-1 pr-2">
-                                        {item.title && (
-                                          <p className="font-semibold text-blue-800 mb-1 text-sm md:text-base truncate">{item.title}</p>
-                                        )}
-                                        <div className="text-sm text-gray-900 max-h-20 overflow-auto pr-1">
-                                          <p className="whitespace-pre-wrap">{item.description}</p>
-                                        </div>
-                                        <p className="text-xs md:text-sm text-gray-600 mt-2">Due: {formatDate(item.date)}</p>
-                                        {item.type && (
-                                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200 mt-2">
-                                            {item.type}
-                                          </span>
-                                        )}
-
-                                        {item.platform && (
-                                          <div className="mt-2 flex flex-wrap gap-2">
-                                            {(() => {
-                                              const raw = item.platform;
-                                              const parsePlatforms = (val) => {
-                                                if (!val) return [];
-                                                if (Array.isArray(val)) return val.map(v => String(v).trim()).filter(Boolean);
-                                                const s = String(val || '');
-                                                if (s.includes(',')) return s.split(',').map(v => v.trim()).filter(Boolean);
-                                                if (s.includes(' ')) return s.split(/\s+/).map(v => v.trim()).filter(Boolean);
-                                                const matches = s.match(/facebook|instagram|youtube|linkedin|twitter|tiktok|pinterest/ig);
-                                                if (matches) return matches.map(m => m.toLowerCase());
-                                                return [s];
-                                              };
-
-                                              const platformColor = (p) => {
-                                                switch((p||'').toLowerCase()){
-                                                  case 'facebook': return 'bg-blue-100 text-blue-800 border border-blue-200';
-                                                  case 'instagram': return 'bg-pink-100 text-pink-800 border border-pink-200';
-                                                  case 'youtube': return 'bg-red-100 text-red-800 border border-red-200';
-                                                  case 'linkedin': return 'bg-blue-50 text-blue-800 border border-blue-100';
-                                                  case 'twitter': return 'bg-sky-100 text-sky-800 border border-sky-200';
-                                                  case 'tiktok': return 'bg-black text-white border border-gray-800';
-                                                  default: return 'bg-gray-100 text-gray-800 border border-gray-200';
-                                                }
-                                              };
-
-                                              return parsePlatforms(raw).map((p, i) => (
-                                                <span key={i} className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${platformColor(p)}`}>{p.charAt(0).toUpperCase() + p.slice(1)}</span>
-                                              ));
-                                            })()}
-                                          </div>
-                                        )}
-                                      </div>
-
-                                      <div className="flex-shrink-0 text-right ml-2">
-                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(getItemStatus(item))}`}>
-                                          {getItemStatus(item).replace('_', ' ').toUpperCase()}
-                                        </span>
-                                      </div>
+                        <div className="border-t border-gray-200/50 p-3 space-y-2">
+                          {calendar.contentItems && calendar.contentItems.length > 0 ? (
+                            calendar.contentItems.map((item, index) => {
+                              const itemStatus = getItemStatus(item);
+                              const statusConfig = getStatusConfig(itemStatus);
+                              return (
+                                <div key={item.id || index} className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-100 hover:border-gray-200 transition-colors">
+                                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                                    <div className="h-9 w-9 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                                      <FileText className="h-4 w-4 text-gray-400" />
                                     </div>
-
-                                    <div className="mt-auto flex items-center justify-end space-x-2">
-                                      <button
-                                        className="p-2 text-gray-500 hover:text-blue-600 transition-colors rounded-md hover:bg-blue-50"
-                                        onClick={e => { e.stopPropagation(); handleEditItem(item, calendar._id); }}
-                                        title="Edit item"
-                                      >
-                                        <Pencil className="h-4 w-4" />
-                                      </button>
-                                      <button
-                                        className="p-2 text-gray-500 hover:text-red-600 transition-colors rounded-md hover:bg-red-50"
-                                        onClick={e => { e.stopPropagation(); handleDeleteItem(calendar._id, item); }}
-                                        title="Delete item"
-                                      >
-                                        <Trash2 className="h-4 w-4" />
-                                      </button>
-                                      <button
-                                        className="p-2 text-gray-500 hover:text-indigo-600 transition-colors rounded-md hover:bg-indigo-50"
-                                        onClick={e => {
-                                          e.stopPropagation();
-                                          navigate(`/admin/content-upload/${calendar._id}/${index}`, {
-                                            state: {
-                                              calendarId: calendar._id,
-                                              calendarName: calendar.name,
-                                              itemId: item._id || `${calendar._id}_${item.date}_${item.description}`,
-                                              itemName: item.title || item.description
-                                            }
-                                          });
-                                        }}
-                                        title="Upload Content"
-                                      >
-                                        <Upload className="h-4 w-4" />
-                                      </button>
+                                    <div className="min-w-0 flex-1">
+                                      {item.title && <p className="text-sm font-medium text-blue-800 truncate">{item.title}</p>}
+                                      <p className="text-sm text-gray-900 truncate">{item.description || 'Untitled'}</p>
+                                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                        <p className="text-xs text-gray-500 flex items-center gap-1">
+                                          <Clock className="h-3 w-3" />
+                                          Due: {formatDate(item.date)}
+                                        </p>
+                                        {item.type && (
+                                          <>
+                                            {(Array.isArray(item.type) ? item.type : 
+                                              (typeof item.type === 'string' ? item.type.split(',').map(p => p.trim()) : [item.type])
+                                            ).map((platform, idx) => (
+                                              <span 
+                                                key={idx}
+                                                className="inline-flex px-1.5 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700 capitalize"
+                                              >
+                                                {platform}
+                                              </span>
+                                            ))}
+                                          </>
+                                        )}
+                                      </div>
                                     </div>
                                   </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <p className="text-gray-500 text-sm">No content items in this calendar.</p>
-                            )}
-                          </div>
+                                  <div className="flex items-center gap-1 ml-2">
+                                    <span className={`px-2 py-1 rounded-md text-xs font-medium ${statusConfig.bg} ${statusConfig.text} border ${statusConfig.border} hidden sm:inline-flex`}>
+                                      {itemStatus.replace('_', ' ')}
+                                    </span>
+                                    <button
+                                      className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors touch-manipulation"
+                                      onClick={(e) => { e.stopPropagation(); handleEditItem(item, calendar._id); }}
+                                      onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleEditItem(item, calendar._id); }}
+                                      title="Edit"
+                                    >
+                                      <Edit className="h-3.5 w-3.5" />
+                                    </button>
+                                    <button
+                                      className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors touch-manipulation"
+                                      onClick={(e) => { e.stopPropagation(); handleDeleteItem(calendar._id, item); }}
+                                      onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteItem(calendar._id, item); }}
+                                      title="Delete"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                    <button
+                                      className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors touch-manipulation"
+                                      onClick={(e) => { e.stopPropagation(); navigate(`/admin/content-upload/${calendar._id}/${index}`); }}
+                                      onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); navigate(`/admin/content-upload/${calendar._id}/${index}`); }}
+                                      title="Upload"
+                                    >
+                                      <Upload className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })
+                          ) : (
+                            <div className="text-center py-6 text-sm text-gray-500">
+                              No content items in this calendar
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
-                  ))}
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+                  <Calendar className="h-7 w-7 text-gray-400" />
                 </div>
-              ) : (
-                <div className="text-center py-12">
-                  <div className="bg-gray-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-                    <Calendar className="h-8 w-8 text-gray-400" />
-                  </div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No content calendars created yet</h3>
-                  <p className="text-gray-500 mb-6 text-sm md:text-base px-4">
-                    Create a content calendar to start managing this customer's content schedule.
-                  </p>
-                  <button
-                    onClick={() => setIsCalendarModalOpen(true)}
-                    className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
-                  >
-                    <Plus className="h-5 w-5 mr-2" />
-                    Create First Calendar
-                  </button>
-                </div>
-              )}
-            </div>
+                <h3 className="text-lg font-medium text-gray-800 mb-1">No calendars yet</h3>
+                <p className="text-gray-500 text-sm max-w-sm mx-auto mb-4">
+                  Create a content calendar to start managing this customer's content schedule.
+                </p>
+                <button
+                  onClick={() => setIsCalendarModalOpen(true)}
+                  className="inline-flex items-center px-5 py-2.5 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-colors"
+                >
+                  <Plus className="h-4 w-4 mr-1.5" />
+                  Create First Calendar
+                </button>
+              </div>
+            )}
           </div>
         </div>
+      </div>
 
-      {/* Click outside to close dropdowns */}
-      {openDropdowns.size > 0 && (
-        <div 
-          className="fixed inset-0 z-[9998]" 
-          onClick={(e) => {
-            e.stopPropagation();
-            setOpenDropdowns(new Set());
-          }}
-        />
+      {/* Mobile Bottom Sheet Menu */}
+      {mobileMenuCalendar && (
+        <div className="fixed inset-0 z-[9999] sm:hidden">
+          {/* Backdrop */}
+          <div 
+            className="absolute inset-0 bg-black/50"
+            onClick={closeMobileMenu}
+          />
+          {/* Bottom Sheet */}
+          <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl animate-slide-up">
+            {/* Handle bar */}
+            <div className="flex justify-center pt-3 pb-2">
+              <div className="w-10 h-1 bg-gray-300 rounded-full" />
+            </div>
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 pb-3 border-b border-gray-100">
+              <h3 className="font-semibold text-gray-900">{mobileMenuCalendar.name}</h3>
+              <button
+                onClick={closeMobileMenu}
+                className="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            {/* Actions */}
+            <div className="p-2">
+              <button
+                onClick={() => {
+                  const cal = mobileMenuCalendar;
+                  closeMobileMenu();
+                  setSelectedCalendar(cal);
+                  setIsAddModalOpen(true);
+                }}
+                className="w-full flex items-center px-4 py-4 text-gray-700 hover:bg-gray-50 active:bg-gray-100 rounded-xl transition-colors"
+              >
+                <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mr-3">
+                  <Plus className="h-5 w-5 text-green-600" />
+                </div>
+                <span className="font-medium">Add Item</span>
+              </button>
+              <button
+                onClick={() => {
+                  handleEditCalendar(mobileMenuCalendar);
+                }}
+                className="w-full flex items-center px-4 py-4 text-gray-700 hover:bg-gray-50 active:bg-gray-100 rounded-xl transition-colors"
+              >
+                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center mr-3">
+                  <Pencil className="h-5 w-5 text-blue-600" />
+                </div>
+                <span className="font-medium">Edit Calendar</span>
+              </button>
+              <button
+                onClick={() => {
+                  const calId = mobileMenuCalendar._id;
+                  closeMobileMenu();
+                  handleDeleteCalendar(calId);
+                }}
+                className="w-full flex items-center px-4 py-4 text-red-600 hover:bg-red-50 active:bg-red-100 rounded-xl transition-colors"
+              >
+                <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center mr-3">
+                  <Trash2 className="h-5 w-5 text-red-600" />
+                </div>
+                <span className="font-medium">Delete Calendar</span>
+              </button>
+            </div>
+            {/* Safe area padding for phones with home indicator */}
+            <div className="h-6" />
+          </div>
+        </div>
       )}
 
       {/* Modals */}

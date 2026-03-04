@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, memo, useMemo, useCallback } from 'react';
 import { 
   Send, XCircle, Video, Facebook, Instagram, Youtube, Linkedin, 
-  Check, Hash, Loader2, Zap, AlertCircle, Upload, Trash2, MoveVertical, X
+  Check, Hash, Loader2, Zap, AlertCircle, Upload, Trash2, MoveVertical, X, Image
 } from 'lucide-react';
 
 // ========================================
@@ -465,13 +465,13 @@ function SchedulePostModal({
     return `sub_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   };
 
-  // Check if a submission was recently made (within 5 minutes - increased for slow uploads)
+  // Check if a submission was recently made (within 10 seconds - to prevent accidental double-clicks only)
   const isRecentSubmission = (contentId, platforms) => {
     try {
       const recentSubmissions = JSON.parse(localStorage.getItem('recentPostSubmissions') || '{}');
       const key = `${contentId}_${platforms.sort().join('_')}`;
       const lastSubmission = recentSubmissions[key];
-      if (lastSubmission && Date.now() - lastSubmission.timestamp < 300000) { // 5 minutes
+      if (lastSubmission && Date.now() - lastSubmission.timestamp < 120000) { // 2 minutes
         console.warn(`⚠️ Blocking duplicate submission - last submission was ${Math.floor((Date.now() - lastSubmission.timestamp) / 1000)}s ago`);
         return true;
       }
@@ -487,9 +487,9 @@ function SchedulePostModal({
       const recentSubmissions = JSON.parse(localStorage.getItem('recentPostSubmissions') || '{}');
       const key = `${contentId}_${platforms.sort().join('_')}`;
       recentSubmissions[key] = { timestamp: Date.now(), platforms };
-      // Clean up old entries (older than 5 minutes)
+      // Clean up old entries (older than 2 minutes)
       Object.keys(recentSubmissions).forEach(k => {
-        if (Date.now() - recentSubmissions[k].timestamp > 300000) {
+        if (Date.now() - recentSubmissions[k].timestamp > 120000) {
           delete recentSubmissions[k];
         }
       });
@@ -528,6 +528,12 @@ function SchedulePostModal({
   // Drag and drop state for carousel reordering
   const [draggedIndex, setDraggedIndex] = useState(null);
   const [uploadingCarousel, setUploadingCarousel] = useState(false);
+  
+  // Media library browser state
+  const [showMediaLibrary, setShowMediaLibrary] = useState(false);
+  const [libraryImages, setLibraryImages] = useState([]);
+  const [loadingLibrary, setLoadingLibrary] = useState(false);
+  const [mediaFilter, setMediaFilter] = useState('all'); // 'all', 'images', 'videos'
 
   useEffect(() => {
     if (selectedContent) {
@@ -740,6 +746,63 @@ function SchedulePostModal({
       ...prev,
       selectedImages: prev.selectedImages.filter((_, i) => i !== index)
     }));
+  };
+
+  // Fetch images from media library
+  const fetchLibraryImages = async () => {
+    setLoadingLibrary(true);
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/gcs/list-images?limit=100`);
+      const result = await response.json();
+      if (result.success) {
+        setLibraryImages(result.images);
+      }
+    } catch (error) {
+      console.error('Error fetching library images:', error);
+      setLibraryImages([]);
+    } finally {
+      setLoadingLibrary(false);
+    }
+  };
+
+  // Select image(s) from library
+  const handleSelectLibraryImage = (imageUrl) => {
+    // Check if it's a video
+    const isVideo = isVideoUrl(imageUrl);
+    const mediaType = isVideo ? 'video' : 'image';
+    
+    // Check if already selected
+    const alreadySelected = scheduleFormData.selectedImages.some(item => item.url === imageUrl);
+    
+    if (alreadySelected) {
+      // Remove from selection
+      setScheduleFormData(prev => ({
+        ...prev,
+        selectedImages: prev.selectedImages.filter(item => item.url !== imageUrl)
+      }));
+    } else {
+      // Add to selection
+      if (scheduleFormData.platforms.includes('youtube')) {
+        // YouTube: only one video allowed
+        setScheduleFormData(prev => ({
+          ...prev,
+          selectedImages: [{ url: imageUrl, type: mediaType }]
+        }));
+        setShowMediaLibrary(false);
+      } else {
+        // Other platforms: allow multiple (up to 10)
+        setScheduleFormData(prev => {
+          if (prev.selectedImages.length >= 10) {
+            alert('Maximum 10 items allowed for carousel');
+            return prev;
+          }
+          return {
+            ...prev,
+            selectedImages: [...prev.selectedImages, { url: imageUrl, type: mediaType }]
+          };
+        });
+      }
+    }
   };
 
   // Upload multiple files for carousel
@@ -1024,20 +1087,6 @@ function SchedulePostModal({
       return false;
     }
 
-    // Prevent scheduling for video posts on Facebook/Instagram (except Stories)
-    if (isScheduled) {
-      for (const platform of scheduleFormData.platforms) {
-        if ((platform === 'facebook' || platform === 'instagram') && scheduleFormData.selectedImages.length > 0) {
-          const isVideo = isVideoUrl(scheduleFormData.selectedImages[0]?.url);
-          const isStory = scheduleFormData.postType === 'story';
-          if (isVideo && !isStory) {
-            alert('Scheduled video posts are not supported for Facebook or Instagram Feed. Please use "Post Now" for video content or post as Stories.');
-            return false;
-          }
-        }
-      }
-    }
-
     return true;
   };
 
@@ -1310,14 +1359,14 @@ function SchedulePostModal({
 
     // LAYER 2: Timestamp-based lock (prevents rapid clicks even if ref resets)
     const now = Date.now();
-    if (now - submissionLockTimeRef.current < 5000) {
+    if (now - submissionLockTimeRef.current < 120000) { // 2 minutes
       console.warn('⚠️ Post submission too recent (time lock), ignoring duplicate click');
       return;
     }
 
-    // LAYER 3: Check localStorage for recent identical submissions
+    // LAYER 3: Check localStorage for recent identical submissions (within 10 seconds)
     if (isRecentSubmission(selectedContent?.id, scheduleFormData.platforms)) {
-      alert('This content was recently posted. Please wait before posting again.');
+      alert('⚠️ Please wait a moment before posting again (prevents accidental double-clicks).');
       return;
     }
 
@@ -2334,13 +2383,27 @@ function SchedulePostModal({
                         </div>
                       )}
                       <Upload className="h-5 w-5 mx-auto mb-1 text-gray-400" />
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="text-blue-600 hover:text-blue-800 font-medium text-xs"
-                      >
-                        {scheduleFormData.platforms.includes('youtube') ? 'Upload Video' : 'Upload Files'}
-                      </button>
+                      <div className="flex items-center justify-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="text-blue-600 hover:text-blue-800 font-medium text-xs"
+                        >
+                          {scheduleFormData.platforms.includes('youtube') ? 'Upload Video' : 'Upload Files'}
+                        </button>
+                        <span className="text-gray-400">|</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowMediaLibrary(true);
+                            fetchLibraryImages();
+                          }}
+                          className="text-green-600 hover:text-green-800 font-medium text-xs flex items-center gap-1"
+                        >
+                          <Image className="h-3 w-3" />
+                          Library
+                        </button>
+                      </div>
                       <p className="text-[10px] text-gray-500 mt-1">
                         {scheduleFormData.platforms.includes('youtube') ? 'Max 100MB' : '2-10 items, Max 100MB each'}
                       </p>
@@ -2431,6 +2494,204 @@ function SchedulePostModal({
           </div>
         </div>
       </div>
+
+      {/* Media Library Browser Modal */}
+      {showMediaLibrary && (
+        <div className="fixed inset-0 z-[60] bg-black/50 flex items-end sm:items-center justify-center sm:p-4">
+          <div className="bg-white sm:rounded-lg shadow-lg w-full sm:max-w-4xl max-h-[90vh] sm:max-h-[80vh] overflow-hidden rounded-t-2xl sm:rounded-2xl">
+            <div className="p-4 sm:p-6">
+              <div className="flex items-center justify-between mb-4 sm:mb-6">
+                <div>
+                  <h2 className="text-base sm:text-xl font-bold text-gray-900">Media Library</h2>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {scheduleFormData.platforms.includes('youtube') 
+                      ? 'Select a video'
+                      : `Select images/videos (${scheduleFormData.selectedImages.length}/10)`}
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowMediaLibrary(false);
+                    setMediaFilter('all');
+                  }}
+                  className="w-8 h-8 flex items-center justify-center bg-gray-100 rounded-full text-gray-600 hover:bg-gray-200"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              
+              {/* Filter buttons */}
+              <div className="flex items-center gap-2 mb-4">
+                <span className="text-xs font-medium text-gray-600">Filter:</span>
+                <button
+                  onClick={() => setMediaFilter('all')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                    mediaFilter === 'all'
+                      ? 'bg-blue-600 text-white shadow'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  All ({libraryImages.length})
+                </button>
+                <button
+                  onClick={() => setMediaFilter('images')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1 ${
+                    mediaFilter === 'images'
+                      ? 'bg-green-600 text-white shadow'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  <Image className="h-3 w-3" />
+                  Images ({libraryImages.filter(img => !isVideoUrl(img.publicUrl)).length})
+                </button>
+                <button
+                  onClick={() => setMediaFilter('videos')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1 ${
+                    mediaFilter === 'videos'
+                      ? 'bg-purple-600 text-white shadow'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  <Video className="h-3 w-3" />
+                  Videos ({libraryImages.filter(img => isVideoUrl(img.publicUrl)).length})
+                </button>
+              </div>
+              
+              {loadingLibrary ? (
+                <div className="flex items-center justify-center py-8 sm:py-12">
+                  <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 animate-spin text-blue-600" />
+                  <span className="ml-2 text-sm">Loading media...</span>
+                </div>
+              ) : (
+                <div className="space-y-3 sm:space-y-4">
+                  {libraryImages.length === 0 ? (
+                    <div className="text-center py-8 sm:py-12 text-gray-500">
+                      <Image className="h-12 w-12 sm:h-16 sm:w-16 mx-auto mb-3 sm:mb-4 opacity-50" />
+                      <p className="text-sm sm:text-base">No media found</p>
+                      <p className="text-xs sm:text-sm">Upload some files first</p>
+                    </div>
+                  ) : (
+                    <>
+                      {(() => {
+                        const filteredImages = libraryImages.filter(img => {
+                          if (mediaFilter === 'images') return !isVideoUrl(img.publicUrl);
+                          if (mediaFilter === 'videos') return isVideoUrl(img.publicUrl);
+                          return true; // 'all'
+                        });
+                        
+                        if (filteredImages.length === 0) {
+                          return (
+                            <div className="text-center py-8 sm:py-12 text-gray-500">
+                              {mediaFilter === 'images' ? (
+                                <>
+                                  <Image className="h-12 w-12 sm:h-16 sm:w-16 mx-auto mb-3 sm:mb-4 opacity-50" />
+                                  <p className="text-sm sm:text-base">No images found</p>
+                                </>
+                              ) : (
+                                <>
+                                  <Video className="h-12 w-12 sm:h-16 sm:w-16 mx-auto mb-3 sm:mb-4 opacity-50" />
+                                  <p className="text-sm sm:text-base">No videos found</p>
+                                </>
+                              )}
+                              <p className="text-xs sm:text-sm mt-1">Try a different filter</p>
+                            </div>
+                          );
+                        }
+                        
+                        return (
+                          <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-2 sm:gap-4 max-h-64 sm:max-h-96 overflow-y-auto">
+                            {filteredImages.map((image, index) => {
+                          const isSelected = scheduleFormData.selectedImages.some(item => item.url === image.publicUrl);
+                          const isVideoFile = isVideoUrl(image.publicUrl);
+                          const fileExtension = image.name.split('.').pop().toLowerCase();
+                          
+                          return (
+                            <div
+                              key={index}
+                              className={`relative border-2 rounded-lg overflow-hidden cursor-pointer hover:shadow-lg transition-all ${
+                                isSelected 
+                                  ? 'border-blue-500 ring-2 ring-blue-200' 
+                                  : isVideoFile 
+                                    ? 'border-purple-300 hover:border-purple-400' 
+                                    : 'border-gray-200 hover:border-blue-300'
+                              }`}
+                              onClick={() => handleSelectLibraryImage(image.publicUrl)}
+                            >
+                              {isVideoFile ? (
+                                <div className="w-full aspect-square sm:h-32 bg-gradient-to-br from-purple-900 to-indigo-900 flex flex-col items-center justify-center relative">
+                                  <Video className="h-8 w-8 text-white mb-1" />
+                                  <span className="text-xs text-white font-medium">Video</span>
+                                  {/* Video badge */}
+                                  <div className="absolute top-1 left-1 bg-purple-600 text-white px-1.5 py-0.5 rounded text-[9px] font-bold">
+                                    VIDEO
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="relative">
+                                  <img
+                                    src={image.publicUrl}
+                                    alt={image.name}
+                                    className="w-full aspect-square sm:h-32 object-cover"
+                                    loading="lazy"
+                                  />
+                                  {/* Image badge */}
+                                  <div className="absolute top-1 left-1 bg-green-600 text-white px-1.5 py-0.5 rounded text-[9px] font-bold">
+                                    IMAGE
+                                  </div>
+                                </div>
+                              )}
+                              
+                              {/* Selection indicator */}
+                              {isSelected && (
+                                <div className="absolute top-1 right-1 bg-blue-500 text-white w-6 h-6 rounded-full flex items-center justify-center shadow-lg">
+                                  <Check className="h-4 w-4" />
+                                </div>
+                              )}
+                              
+                              <div className="hidden sm:block p-2 bg-gray-50">
+                                <p className="text-xs text-gray-600 truncate" title={image.name}>
+                                  {image.name.split('/').pop()}
+                                </p>
+                                <div className="flex items-center justify-between mt-0.5">
+                                  <p className="text-xs text-gray-500">
+                                    {new Date(image.updated).toLocaleDateString()}
+                                  </p>
+                                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                                    isVideoFile ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'
+                                  }`}>
+                                    {fileExtension.toUpperCase()}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                          </div>
+                        );
+                      })()}
+                      
+                      {/* Selection summary and actions */}
+                      {scheduleFormData.selectedImages.length > 0 && (
+                        <div className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                          <span className="text-sm font-medium text-blue-800">
+                            {scheduleFormData.selectedImages.length} selected
+                          </span>
+                          <button
+                            onClick={() => setShowMediaLibrary(false)}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+                          >
+                            Done
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

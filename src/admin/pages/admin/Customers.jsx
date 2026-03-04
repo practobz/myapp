@@ -93,6 +93,7 @@ function Customers() {
   const [calendarsByCustomer, setCalendarsByCustomer] = useState({});
   const [scheduledPosts, setScheduledPosts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [hasFetched, setHasFetched] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
@@ -148,7 +149,14 @@ function Customers() {
 
   // Fetch only assigned customers for current admin
   const fetchAssignedCustomers = async () => {
-    if (!currentUser || currentUser.role !== 'admin') {
+    // Wait for currentUser to be available
+    if (!currentUser) {
+      return; // Keep loading true until currentUser is resolved
+    }
+
+    // If not admin, stop loading but mark as fetched
+    if (currentUser.role !== 'admin') {
+      setHasFetched(true);
       setLoading(false);
       return;
     }
@@ -167,6 +175,7 @@ function Customers() {
       console.error('Error fetching assigned customers:', err);
       setError('Failed to fetch your assigned customers');
     } finally {
+      setHasFetched(true);
       setLoading(false);
     }
   };
@@ -298,7 +307,7 @@ function Customers() {
               );
             })}
           </div>
-        ) : (
+        ) : hasFetched ? (
           <div className="bg-white/80 rounded-xl p-6 text-center border border-gray-200/50">
             <div className="bg-gray-100 rounded-full w-12 h-12 flex items-center justify-center mx-auto mb-3">
               <AlertCircle className="h-6 w-6 text-gray-400" />
@@ -309,6 +318,13 @@ function Customers() {
             <p className="text-xs text-gray-500">
               No customers with content calendars found.
             </p>
+          </div>
+        ) : (
+          <div className="flex items-center justify-center h-32">
+            <div className="flex flex-col items-center">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mb-2"></div>
+              <p className="text-gray-500 text-xs">Loading customers...</p>
+            </div>
           </div>
         )}
       </div>

@@ -291,6 +291,7 @@ const SocialAccountCard = memo(({ account, isSelected, onSelect }) => {
 // Page/Channel selector with improved design
 const PageSelector = memo(({ pages, selectedPageId, onSelectPage, platform }) => {
   const config = PLATFORM_ICONS[platform?.toLowerCase()] || {};
+  const isInstagram = platform?.toLowerCase() === 'instagram';
   
   return (
     <div className="bg-gradient-to-br from-gray-50 via-white to-slate-50 rounded-2xl p-4 sm:p-5 border border-gray-200/80 shadow-sm">
@@ -303,8 +304,16 @@ const PageSelector = memo(({ pages, selectedPageId, onSelectPage, platform }) =>
       </h4>
       <div className="grid gap-2 sm:grid-cols-2">
         {pages.map(page => {
-          const pageId = page.id || page.platformUserId || page.channelId;
-          const pageName = page.name || page.pageName || page.channelName || pageId;
+          // For Instagram, use instagramBusinessAccount.id, otherwise use regular page id
+          const pageId = isInstagram && page.instagramBusinessAccount 
+            ? page.instagramBusinessAccount.id 
+            : (page.id || page.platformUserId || page.channelId);
+          const pageName = isInstagram && page.instagramBusinessAccount
+            ? (page.instagramBusinessAccount.name || page.instagramBusinessAccount.username || page.name)
+            : (page.name || page.pageName || page.channelName || pageId);
+          const profilePic = isInstagram && page.instagramBusinessAccount
+            ? page.instagramBusinessAccount.profile_picture_url
+            : (page.picture?.data?.url || page.profilePicture);
           const isActive = selectedPageId === pageId;
           
           return (
@@ -318,9 +327,9 @@ const PageSelector = memo(({ pages, selectedPageId, onSelectPage, platform }) =>
               }`}
             >
               <div className="flex items-center gap-3">
-                {page.picture?.data?.url || page.profilePicture ? (
+                {profilePic ? (
                   <img 
-                    src={page.picture?.data?.url || page.profilePicture}
+                    src={profilePic}
                     alt={pageName}
                     className="w-10 h-10 rounded-xl object-cover ring-2 ring-white shadow-sm"
                   />
@@ -508,9 +517,17 @@ function MultiCustomerAnalytics() {
   // Get the account ID for TimePeriodChart
   const chartAccountId = useMemo(() => {
     if (selectedPage) {
+      // For Instagram, use instagramBusinessAccount.id if available
+      if (selectedAccount?.platform?.toLowerCase() === 'instagram' && selectedPage.instagramBusinessAccount) {
+        return selectedPage.instagramBusinessAccount.id;
+      }
       return selectedPage.id || selectedPage.platformUserId || selectedPage.channelId;
     }
     if (selectedAccount) {
+      // For Instagram accounts with pages, extract the Instagram Business Account ID
+      if (selectedAccount.platform?.toLowerCase() === 'instagram' && selectedAccount.pages?.[0]?.instagramBusinessAccount) {
+        return selectedAccount.pages[0].instagramBusinessAccount.id;
+      }
       return selectedAccount.platformUserId || selectedAccount.pages?.[0]?.id || selectedAccount.id;
     }
     return null;
@@ -834,7 +851,9 @@ function MultiCustomerAnalytics() {
                                       {formatPlatformName(selectedAccount.platform)}
                                     </p>
                                     <p className="text-xs text-gray-500">
-                                      {selectedPage?.name || selectedAccount.name || chartAccountId}
+                                      {selectedAccount.platform?.toLowerCase() === 'instagram' && selectedPage?.instagramBusinessAccount
+                                        ? (selectedPage.instagramBusinessAccount.name || selectedPage.instagramBusinessAccount.username)
+                                        : (selectedPage?.name || selectedAccount.name || chartAccountId)}
                                     </p>
                                   </div>
                                 </>
@@ -851,7 +870,11 @@ function MultiCustomerAnalytics() {
                 {selectedAccount && (selectedAccount.pages?.length > 1 || selectedAccount.channels?.length > 1) && (
                   <PageSelector
                     pages={selectedAccount.pages || selectedAccount.channels || []}
-                    selectedPageId={selectedPage?.id || selectedPage?.platformUserId || selectedPage?.channelId}
+                    selectedPageId={
+                      selectedAccount.platform?.toLowerCase() === 'instagram' && selectedPage?.instagramBusinessAccount
+                        ? selectedPage.instagramBusinessAccount.id
+                        : (selectedPage?.id || selectedPage?.platformUserId || selectedPage?.channelId)
+                    }
                     onSelectPage={handleSelectPage}
                     platform={selectedAccount.platform}
                   />
@@ -873,7 +896,11 @@ function MultiCustomerAnalytics() {
                     <TimePeriodChart
                       platform={selectedAccount.platform?.toLowerCase()}
                       accountId={chartAccountId}
-                      title={`${formatPlatformName(selectedAccount.platform)} Analytics - ${selectedPage?.name || selectedAccount.name || 'Account'}`}
+                      title={`${formatPlatformName(selectedAccount.platform)} Analytics - ${
+                        selectedAccount.platform?.toLowerCase() === 'instagram' && selectedPage?.instagramBusinessAccount
+                          ? (selectedPage.instagramBusinessAccount.name || selectedPage.instagramBusinessAccount.username)
+                          : (selectedPage?.name || selectedAccount.name || 'Account')
+                      }`}
                       defaultMetric="followers"
                     />
                   </div>

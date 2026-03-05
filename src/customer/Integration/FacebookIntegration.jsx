@@ -579,7 +579,7 @@ function FacebookIntegration() {
     }, {
       scope: 'pages_show_list,pages_read_engagement,pages_read_user_content,pages_manage_metadata,pages_manage_engagement,instagram_basic,email,public_profile',
       return_scopes: true,
-      auth_type: 'rerequest'
+      auth_type: 'reauthenticate'  // Force fresh login to ensure customer uses their own Facebook account
     });
   };
 

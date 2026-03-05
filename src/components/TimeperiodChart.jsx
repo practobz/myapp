@@ -353,9 +353,10 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
       // Determine how many bars to show based on selected period
       let barsToShow;
       if (selectedPeriod <= 7) barsToShow = selectedPeriod;
-      else if (selectedPeriod <= 30) barsToShow = Math.min(14, data.length);
-      else if (selectedPeriod <= 90) barsToShow = Math.min(30, data.length);
-      else barsToShow = Math.min(60, data.length);
+      else if (selectedPeriod <= 15) barsToShow = selectedPeriod;
+      else if (selectedPeriod <= 30) barsToShow = Math.min(30, data.length);
+      else if (selectedPeriod <= 90) barsToShow = Math.min(60, data.length);
+      else barsToShow = Math.min(90, data.length);
       
       const barData = data.slice(-barsToShow);
       const displayValue = barData[barData.length - 1]?.value || 0;

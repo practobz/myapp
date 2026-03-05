@@ -786,7 +786,8 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
         setError('Please log in to Facebook to access Instagram features. Regular Facebook accounts can connect Instagram Business accounts.');
       }
     }, {
-      scope: 'email,public_profile,pages_show_list,pages_read_engagement,instagram_basic,instagram_content_publish,instagram_manage_insights,instagram_manage_comments'
+      scope: 'email,public_profile,pages_show_list,pages_read_engagement,instagram_basic,instagram_content_publish,instagram_manage_insights,instagram_manage_comments',
+      auth_type: 'reauthenticate'  // Force fresh login to ensure customer uses their own Facebook account
     });
   };
 

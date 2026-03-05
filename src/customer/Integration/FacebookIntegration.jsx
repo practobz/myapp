@@ -284,7 +284,7 @@ function FacebookIntegration() {
     window.fbAsyncInit = function() {
       window.FB.init({
         appId: FACEBOOK_APP_ID,
-        cookie: true,
+        cookie: false, // Disable session cookie sharing to prevent browser FB session bleeding into customer accounts
         xfbml: false,
         version: 'v19.0'
       });

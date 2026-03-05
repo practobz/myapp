@@ -403,15 +403,9 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
   useEffect(() => {
     if (window.FB) {
       setFbSdkLoaded(true);
-      // Check existing login status
-      window.FB.getLoginStatus(response => {
-        if (response.status === 'connected') {
-          setUserAccessToken(response.authResponse.accessToken);
-          if (connectedAccounts.length === 0) {
-            loadAvailableAccounts(response.authResponse.accessToken);
-          }
-        }
-      });
+      // ⚠️ DO NOT call getLoginStatus here — it reads the browser's Facebook session
+      // which may belong to a different user (e.g. developer's account).
+      // Accounts are loaded exclusively from the backend on mount.
     } else {
       loadFacebookSDK();
     }
@@ -496,15 +490,9 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
   useEffect(() => {
     if (window.FB) {
       setFbSdkLoaded(true);
-      // Check existing login status
-      window.FB.getLoginStatus(response => {
-        if (response.status === 'connected') {
-          setUserAccessToken(response.authResponse.accessToken);
-          if (connectedAccounts.length === 0) {
-            loadAvailableAccounts(response.authResponse.accessToken);
-          }
-        }
-      });
+      // ⚠️ DO NOT call getLoginStatus here — it reads the browser's Facebook session
+      // which may belong to a different user (e.g. developer's account).
+      // Accounts are loaded exclusively from the backend on mount.
     } else {
       loadFacebookSDK();
     }
@@ -536,7 +524,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
     window.fbAsyncInit = function() {
       window.FB.init({
         appId: FACEBOOK_APP_ID,
-        cookie: true,
+        cookie: false, // Disable session cookie sharing to prevent browser FB session bleeding into customer accounts
         xfbml: false,
         version: 'v18.0'
       });
@@ -545,15 +533,9 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
       const checkReady = () => {
         if (isFacebookApiReady()) {
           setFbSdkLoaded(true);
-          
-          window.FB.getLoginStatus(response => {
-            if (response.status === 'connected') {
-              setUserAccessToken(response.authResponse.accessToken);
-              if (connectedAccounts.length === 0) {
-                loadAvailableAccounts(response.authResponse.accessToken);
-              }
-            }
-          });
+          // ⚠️ DO NOT call getLoginStatus here — it reads the browser's Facebook session
+          // which may belong to a different user (e.g. developer's personal account).
+          // Connected accounts are loaded exclusively from the backend in the mount useEffect.
         } else {
           setTimeout(checkReady, 100);
         }

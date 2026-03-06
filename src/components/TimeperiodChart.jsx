@@ -863,15 +863,17 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
 
         yPosition += 10;
 
-        // Data Table (last 7 days)
-        checkPageBreak(50);
+        // Data Table (selected period)
+        const recentData = data.slice(-selectedPeriod);
+        const tableRowHeight = 6;
+        const tableHeaderHeight = 15;
+        const estimatedTableHeight = tableHeaderHeight + recentData.length * tableRowHeight + 10;
+        checkPageBreak(estimatedTableHeight);
         pdf.setFontSize(11);
         pdf.setFont('helvetica', 'bold');
         pdf.setTextColor(31, 41, 55);
-        pdf.text('Recent Data (Last 7 Days):', margin, yPosition);
+        pdf.text(`Data for Last ${selectedPeriod} Days:`, margin, yPosition);
         yPosition += 8;
-
-        const recentData = data.slice(-7);
         const tableColWidth = (pageWidth - 2 * margin) / 3;
         
         pdf.setFillColor(243, 244, 246);
@@ -885,6 +887,22 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
 
         pdf.setFont('helvetica', 'normal');
         recentData.forEach((item, index) => {
+          // Add new page if needed mid-table, and re-draw header
+          if (yPosition + 6 > pageHeight - margin) {
+            pdf.addPage();
+            yPosition = margin;
+            pdf.setFillColor(243, 244, 246);
+            pdf.rect(margin, yPosition, pageWidth - 2 * margin, 7, 'F');
+            pdf.setFontSize(9);
+            pdf.setFont('helvetica', 'bold');
+            pdf.setTextColor(31, 41, 55);
+            pdf.text('Date', margin + 3, yPosition + 5);
+            pdf.text('Value', margin + tableColWidth + 3, yPosition + 5);
+            pdf.text('Change', margin + 2 * tableColWidth + 3, yPosition + 5);
+            yPosition += 7;
+            pdf.setFont('helvetica', 'normal');
+          }
+
           const prevItem = index > 0 ? recentData[index - 1] : null;
           const change = prevItem ? item.value - prevItem.value : 0;
           const changeText = prevItem ? `${change >= 0 ? '+' : ''}${change.toLocaleString()}` : '-';

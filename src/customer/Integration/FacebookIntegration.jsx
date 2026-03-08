@@ -1147,7 +1147,7 @@ function FacebookIntegration() {
     
     try {
       // Use direct Graph API call to avoid SDK session conflicts
-      const postsUrl = `https://graph.facebook.com/v18.0/${pageId}/posts?fields=id,message,created_time,likes.summary(true),comments.summary(true),shares,reactions.summary(true),full_picture&limit=10&access_token=${pageAccessToken}`;
+      const postsUrl = `https://graph.facebook.com/v18.0/${pageId}/posts?fields=id,message,created_time,likes.summary(true),comments.summary(true),shares,reactions.summary(true),full_picture&limit=1000&access_token=${pageAccessToken}`;
       const response = await fetch(postsUrl);
       const data = await response.json();
       
@@ -1858,7 +1858,7 @@ function FacebookIntegration() {
 
     try {
       // Use direct Graph API call to avoid SDK session conflicts between multiple accounts
-      const postsUrl = `https://graph.facebook.com/v18.0/${pageId}/posts?fields=id,message,created_time,permalink_url,full_picture,likes.summary(true),comments.summary(true),shares,reactions.summary(true)&limit=10&access_token=${pageAccessToken}`;
+      const postsUrl = `https://graph.facebook.com/v18.0/${pageId}/posts?fields=id,message,created_time,permalink_url,full_picture,likes.summary(true),comments.summary(true),shares,reactions.summary(true)&limit=1000&access_token=${pageAccessToken}`;
       const response = await fetch(postsUrl);
       const data = await response.json();
 
@@ -2029,12 +2029,7 @@ function FacebookIntegration() {
             </div>
             <div className="text-xs text-gray-500">Followers</div>
           </div>
-          <div className="sm:border-l sm:border-gray-200 pl-4">
-            <div className="text-lg sm:text-xl font-bold text-gray-900">
-              {pagePosts[page.id]?.reduce((sum, post) => sum + (post.likes?.summary?.total_count || 0), 0).toLocaleString() || '0'}
-            </div>
-            <div className="text-xs text-gray-500">Likes</div>
-          </div>
+
         </div>
       </div>
 

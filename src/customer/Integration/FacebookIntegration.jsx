@@ -1857,29 +1857,36 @@ function FacebookIntegration() {
     setLoadingPosts(prev => ({ ...prev, [pageId]: true }));
 
     try {
-      // Use direct Graph API call to avoid SDK session conflicts between multiple accounts
-      const postsUrl = `https://graph.facebook.com/v18.0/${pageId}/posts?fields=id,message,created_time,permalink_url,full_picture,likes.summary(true),comments.summary(true),shares,reactions.summary(true)&limit=1000&access_token=${pageAccessToken}`;
-      const response = await fetch(postsUrl);
-      const data = await response.json();
+      // Paginate through all posts (max 25 per request is safe for Facebook API)
+      let allPosts = [];
+      let nextUrl = `https://graph.facebook.com/v18.0/${pageId}/posts?fields=id,message,created_time,permalink_url,full_picture,likes.summary(true),comments.summary(true),shares,reactions.summary(true)&limit=25&access_token=${pageAccessToken}`;
 
-      setLoadingPosts(prev => ({ ...prev, [pageId]: false }));
+      while (nextUrl) {
+        const response = await fetch(nextUrl);
+        const data = await response.json();
 
-      if (data.error) {
-        console.error('❌ Facebook posts fetch error:', data.error);
-        // Handle token expiration - try to refresh from stored tokens
-        if (data.error.code === 190) {
-          await handleApiError(data.error, pageId);
+        if (data.error) {
+          console.error('❌ Facebook posts fetch error:', data.error);
+          if (data.error.code === 190) {
+            await handleApiError(data.error, pageId);
+          }
+          break;
         }
-      } else {
-        console.log(`✅ Fetched ${data.data?.length || 0} posts for page ${pageId}`);
-        setPagePosts(prev => ({
-          ...prev,
-          [pageId]: data.data || []
-        }));
-        setShowFacebookPosts(prev => ({ ...prev, [pageId]: true }));
+
+        allPosts = allPosts.concat(data.data || []);
+        // Follow pagination cursor if available
+        nextUrl = data.paging?.next || null;
       }
+
+      console.log(`✅ Fetched ${allPosts.length} posts for page ${pageId}`);
+      setPagePosts(prev => ({
+        ...prev,
+        [pageId]: allPosts
+      }));
+      setShowFacebookPosts(prev => ({ ...prev, [pageId]: true }));
     } catch (error) {
       console.error('❌ Error fetching page posts:', error);
+    } finally {
       setLoadingPosts(prev => ({ ...prev, [pageId]: false }));
     }
   };

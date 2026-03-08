@@ -93,9 +93,9 @@ const METRICS_OPTIONS = [
   { value: 'comments', label: 'Comments', color: '#8B5CF6', gradient: 'from-violet-500 to-purple-600', bgLight: 'bg-violet-50' },
   { value: 'shares', label: 'Shares', color: '#F59E0B', gradient: 'from-amber-500 to-orange-500', bgLight: 'bg-amber-50' },
   { value: 'engagement', label: 'Engagement', color: '#EF4444', gradient: 'from-red-500 to-rose-600', bgLight: 'bg-red-50' },
-  { value: 'views', label: 'Views', color: '#06B6D4', gradient: 'from-cyan-500 to-teal-500', bgLight: 'bg-cyan-50' },
-  { value: 'reach', label: 'Reach', color: '#84CC16', gradient: 'from-lime-500 to-green-500', bgLight: 'bg-lime-50' },
-  { value: 'impressions', label: 'Impressions', color: '#F97316', gradient: 'from-orange-500 to-amber-500', bgLight: 'bg-orange-50' }
+  // { value: 'views', label: 'Views', color: '#06B6D4', gradient: 'from-cyan-500 to-teal-500', bgLight: 'bg-cyan-50' },
+  // { value: 'reach', label: 'Reach', color: '#84CC16', gradient: 'from-lime-500 to-green-500', bgLight: 'bg-lime-50' },
+  // { value: 'impressions', label: 'Impressions', color: '#F97316', gradient: 'from-orange-500 to-amber-500', bgLight: 'bg-orange-50' }
 ];
 
 // Custom tooltip component
@@ -122,7 +122,7 @@ const CustomTooltip = ({ active, payload, label, metricInfo }) => {
 };
 
 export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'followers' }) {
-  const [selectedPeriod, setSelectedPeriod] = useState(30);
+  const [selectedPeriod, setSelectedPeriod] = useState(7);
   const [selectedChart, setSelectedChart] = useState('trend');
   const [selectedMetrics, setSelectedMetrics] = useState([defaultMetric]);
   const [chartData, setChartData] = useState(null);

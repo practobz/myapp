@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Instagram, TrendingUp, BarChart3, ExternalLink, CheckCircle, AlertCircle, Loader2, Users, Heart, MessageCircle, Eye, Plus, Settings, ChevronDown, ChevronRight, UserCheck, Trash2, Calendar, LayoutGrid, Edit2, X } from 'lucide-react';
 import TrendChart from '../../components/TrendChart';
 import TimePeriodChart from '../../components/TimeperiodChart';
+import InstagramPostInsights from './InstagramPostInsights';
 import { subDays, format } from 'date-fns';
 import { getUserData, setUserData, removeUserData, migrateToUserSpecificStorage } from '../../utils/sessionUtils';
 
@@ -60,6 +61,10 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
   const [viewingCommentDetails, setViewingCommentDetails] = useState(null);
   const [commentDetails, setCommentDetails] = useState(null);
   const [loadingCommentDetails, setLoadingCommentDetails] = useState(false);
+
+  // State for detailed post insights modal
+  const [showDetailedInsights, setShowDetailedInsights] = useState(false);
+  const [selectedPostForInsights, setSelectedPostForInsights] = useState(null);
 
   // State for followers timeline
   const [followersTimeline, setFollowersTimeline] = useState({});
@@ -403,9 +408,15 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
   useEffect(() => {
     if (window.FB) {
       setFbSdkLoaded(true);
-      // ⚠️ DO NOT call getLoginStatus here — it reads the browser's Facebook session
-      // which may belong to a different user (e.g. developer's account).
-      // Accounts are loaded exclusively from the backend on mount.
+      // Check existing login status
+      window.FB.getLoginStatus(response => {
+        if (response.status === 'connected') {
+          setUserAccessToken(response.authResponse.accessToken);
+          if (connectedAccounts.length === 0) {
+            loadAvailableAccounts(response.authResponse.accessToken);
+          }
+        }
+      });
     } else {
       loadFacebookSDK();
     }
@@ -490,9 +501,15 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
   useEffect(() => {
     if (window.FB) {
       setFbSdkLoaded(true);
-      // ⚠️ DO NOT call getLoginStatus here — it reads the browser's Facebook session
-      // which may belong to a different user (e.g. developer's account).
-      // Accounts are loaded exclusively from the backend on mount.
+      // Check existing login status
+      window.FB.getLoginStatus(response => {
+        if (response.status === 'connected') {
+          setUserAccessToken(response.authResponse.accessToken);
+          if (connectedAccounts.length === 0) {
+            loadAvailableAccounts(response.authResponse.accessToken);
+          }
+        }
+      });
     } else {
       loadFacebookSDK();
     }
@@ -524,7 +541,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
     window.fbAsyncInit = function() {
       window.FB.init({
         appId: FACEBOOK_APP_ID,
-        cookie: false, // Disable session cookie sharing to prevent browser FB session bleeding into customer accounts
+        cookie: true,
         xfbml: false,
         version: 'v18.0'
       });
@@ -533,9 +550,15 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
       const checkReady = () => {
         if (isFacebookApiReady()) {
           setFbSdkLoaded(true);
-          // ⚠️ DO NOT call getLoginStatus here — it reads the browser's Facebook session
-          // which may belong to a different user (e.g. developer's personal account).
-          // Connected accounts are loaded exclusively from the backend in the mount useEffect.
+          
+          window.FB.getLoginStatus(response => {
+            if (response.status === 'connected') {
+              setUserAccessToken(response.authResponse.accessToken);
+              if (connectedAccounts.length === 0) {
+                loadAvailableAccounts(response.authResponse.accessToken);
+              }
+            }
+          });
         } else {
           setTimeout(checkReady, 100);
         }
@@ -558,7 +581,8 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
     return false;
   };
 
-  // Helper function to fetch video/reel insights (plays/views)
+  // Helper function to fetch video/reel insights (views)
+  // API Documentation: https://developers.facebook.com/docs/instagram-api/reference/ig-media/insights
   const fetchMediaInsights = async (mediaItems, accessToken) => {
     if (!mediaItems || mediaItems.length === 0) return mediaItems;
     
@@ -567,23 +591,14 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
     const mediaWithInsights = await Promise.all(mediaItems.map(async (media) => {
       // Only fetch insights for VIDEO type (includes Reels)
       if (media.media_type === 'VIDEO') {
-        // Check if plays field is already present from the initial query (legacy support)
-        if (media.plays !== undefined && media.plays !== null) {
-          console.log(`✅ Video ${media.id} already has plays: ${media.plays}`);
-          return {
-            ...media,
-            video_views: media.plays
-          };
-        }
-        
         try {
           console.log(`📹 Fetching insights for video ${media.id} (product_type: ${media.media_product_type})...`);
           
           // Use the new 'views' metric (available for FEED, REELS, STORY)
           // This replaced the deprecated plays, clips_replays_count, and ig_reels_aggregated_all_plays_count
-          const metricsToFetch = 'views,total_interactions,reach';
+          // Reference: https://developers.facebook.com/docs/instagram-api/reference/ig-media/insights#metrics
+          const metricsToFetch = 'views';
           
-          // Try method 1: Fetch insights API
           const insightsUrl = `https://graph.facebook.com/v18.0/${media.id}/insights?metric=${metricsToFetch}&access_token=${accessToken}`;
           const insightsResponse = await fetch(insightsUrl);
           const insightsData = await insightsResponse.json();
@@ -593,13 +608,10 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
           let viewsCount = 0;
           
           if (insightsData.data && !insightsData.error) {
-            // Look for the 'views' metric (new standard metric for all video types)
-            const viewsMetric = insightsData.data.find(m => 
-              m.name === 'views' ||       // New standard metric
-              m.name === 'reach'          // Fallback
-            );
+            // Get the 'views' metric value
+            const viewsMetric = insightsData.data.find(m => m.name === 'views');
             viewsCount = viewsMetric?.values?.[0]?.value || 0;
-            console.log(`✅ Found views for ${media.id}: ${viewsCount} (metric: ${viewsMetric?.name})`);
+            console.log(`✅ Found views for ${media.id}: ${viewsCount}`);
           } else if (insightsData.error) {
             const errorMsg = insightsData.error.message || '';
             console.warn(`⚠️ Insights API error for ${media.id}:`, errorMsg);
@@ -612,25 +624,6 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
                 video_views: -1, // Use -1 to indicate permission error
                 views_error: 'Missing permissions'
               };
-            }
-            
-            // If plays metric deprecated, try reach/impressions
-            if (errorMsg.includes('plays metric') || errorMsg.includes('not supported') || errorMsg.includes('clips_replays_count')) {
-              console.warn(`⚠️ Deprecated metric error, trying 'views' metric`);
-              // Try the new 'views' metric
-              try {
-                const altMetricsUrl = `https://graph.facebook.com/v18.0/${media.id}/insights?metric=views,reach&access_token=${accessToken}`;
-                const altResponse = await fetch(altMetricsUrl);
-                const altData = await altResponse.json();
-                
-                if (altData.data && !altData.error) {
-                  const viewsMetric = altData.data.find(m => m.name === 'views' || m.name === 'reach');
-                  viewsCount = viewsMetric?.values?.[0]?.value || 0;
-                  console.log(`✅ Using ${viewsMetric?.name} metric for views: ${viewsCount}`);
-                }
-              } catch (altError) {
-                console.warn(`⚠️ Could not fetch alternative metrics`);
-              }
             }
           }
           
@@ -768,8 +761,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
         setError('Please log in to Facebook to access Instagram features. Regular Facebook accounts can connect Instagram Business accounts.');
       }
     }, {
-      scope: 'email,public_profile,pages_show_list,pages_read_engagement,instagram_basic,instagram_content_publish,instagram_manage_insights,instagram_manage_comments',
-      auth_type: 'reauthenticate'  // Force fresh login to ensure customer uses their own Facebook account
+      scope: 'email,public_profile,pages_show_list,pages_read_engagement,instagram_basic,instagram_content_publish,instagram_manage_insights,instagram_manage_comments'
     });
   };
 
@@ -1906,16 +1898,18 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
   };
 
   // --- SINGLE POST ANALYTICS LOGIC ---
+  // Fetches detailed per-post insights including reach, impressions, shares, and saved
+  // Official Documentation: https://developers.facebook.com/docs/instagram-api/reference/ig-media/insights
   const fetchSinglePostAnalytics = async (post) => {
     if (!post) return;
     setSelectedPostId(post.id);
     
-    // Create comprehensive analytics data similar to Facebook
+    // Initialize analytics with basic post data
     const analytics = {
       id: post.id,
       caption: post.caption || 'No caption',
       timestamp: post.timestamp,
-      permalink: getInstagramPostUrl(post), // Use helper to get correct URL
+      permalink: getInstagramPostUrl(post),
       media_url: post.media_url,
       thumbnail_url: post.thumbnail_url,
       media_type: post.media_type,
@@ -1924,13 +1918,112 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
       comments_count: post.comments_count || 0,
       video_views: post.video_views || 0,
       total_engagement: (post.like_count || 0) + (post.comments_count || 0),
-      engagement_rate: 0 // Will be calculated if we have follower count
+      engagement_rate: 0,
+      // New insight metrics
+      reach: null,
+      impressions: null,
+      saved: null,
+      shares: null, // Only available for REELS
+      insights_error: null
     };
     
+    // Set initial state immediately for UI responsiveness
     setSinglePostAnalytics(analytics);
     
-    // Fetch comments for this post
+    // Fetch detailed insights from Instagram API
     if (activeAccount && activeAccount.pageAccessToken) {
+      try {
+        console.log(`📊 Fetching insights for post ${post.id} (type: ${post.media_type}, product: ${post.media_product_type})...`);
+        
+        // Determine which metrics to fetch based on media type
+        // Reference: https://developers.facebook.com/docs/instagram-api/reference/ig-media/insights#metrics
+        let metricsToFetch = [];
+        const isReel = post.media_product_type === 'REELS' || post.media_type === 'REELS';
+        const isVideo = post.media_type === 'VIDEO';
+        const isCarousel = post.media_type === 'CAROUSEL_ALBUM';
+        
+        if (isReel) {
+          // REELS metrics (per official docs): comments, likes, reach, saved, shares, total_interactions, views
+          // Note: impressions NOT available for Reels
+          // plays is DEPRECATED - use views instead
+          metricsToFetch = ['reach', 'saved', 'shares', 'views', 'total_interactions'];
+        } else if (isVideo) {
+          // Video (non-reel FEED) metrics: comments, likes, reach, saved, shares, total_interactions, views
+          // Note: impressions deprecated for media created after July 2, 2024
+          metricsToFetch = ['reach', 'saved', 'shares', 'views', 'total_interactions'];
+        } else if (isCarousel) {
+          // Carousel (FEED) metrics: comments, likes, reach, saved, shares, total_interactions, views
+          // Note: impressions deprecated for media created after July 2, 2024
+          metricsToFetch = ['reach', 'saved', 'shares', 'total_interactions'];
+        } else {
+          // IMAGE (FEED) metrics: comments, follows, likes, profile_activity, profile_visits, reach, saved, shares, total_interactions, views
+          // Note: impressions deprecated for media created after July 2, 2024
+          metricsToFetch = ['reach', 'saved', 'shares', 'total_interactions'];
+        }
+        
+        const insightsUrl = `https://graph.facebook.com/v18.0/${post.id}/insights?metric=${metricsToFetch.join(',')}&access_token=${activeAccount.pageAccessToken}`;
+        const insightsResponse = await fetch(insightsUrl);
+        const insightsData = await insightsResponse.json();
+        
+        console.log(`📊 Insights API response for ${post.id}:`, insightsData);
+        
+        if (insightsData.data && !insightsData.error) {
+          // Parse insight metrics
+          const getMetricValue = (metricName) => {
+            const metric = insightsData.data.find(m => m.name === metricName);
+            return metric?.values?.[0]?.value || 0;
+          };
+          
+          analytics.reach = getMetricValue('reach');
+          analytics.impressions = null; // Deprecated for new media (post-July 2, 2024)
+          analytics.saved = getMetricValue('saved');
+          analytics.shares = getMetricValue('shares');
+          
+          // Views available for all FEED, REELS, STORY media
+          if (isReel || isVideo) {
+            const viewsCount = getMetricValue('views');
+            if (viewsCount > 0) {
+              analytics.video_views = viewsCount;
+            }
+          }
+          
+          // Recalculate total engagement including saved and shares
+          analytics.total_engagement = 
+            (analytics.likes_count || 0) + 
+            (analytics.comments_count || 0) + 
+            (analytics.saved || 0) + 
+            (analytics.shares || 0);
+          
+          // Calculate engagement rate if we have reach
+          if (analytics.reach > 0) {
+            analytics.engagement_rate = ((analytics.total_engagement / analytics.reach) * 100).toFixed(2);
+          }
+          
+          console.log(`✅ Insights fetched successfully:`, {
+            reach: analytics.reach,
+            impressions: analytics.impressions,
+            saved: analytics.saved,
+            shares: analytics.shares,
+            engagement_rate: analytics.engagement_rate
+          });
+        } else if (insightsData.error) {
+          console.warn(`⚠️ Insights API error:`, insightsData.error);
+          analytics.insights_error = insightsData.error.message || 'Failed to fetch insights';
+          
+          // Check if it's a permissions error
+          if (insightsData.error.code === 10 || insightsData.error.message?.includes('permission')) {
+            analytics.insights_error = 'Missing instagram_manage_insights permission';
+          }
+        }
+      } catch (error) {
+        console.error(`❌ Error fetching post insights:`, error);
+        analytics.insights_error = error.message || 'Network error';
+      }
+      
+      // Update state with full insights
+      setSinglePostAnalytics({...analytics});
+      
+      // Fetch comments for this post
       fetchPostComments(post.id, activeAccount.pageAccessToken);
     }
   };
@@ -2090,15 +2183,25 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
               </div>
 
               {/* Engagement Metrics Grid */}
-              <div className={`grid gap-2 sm:gap-3 ${(singlePostAnalytics.media_type === 'VIDEO' || singlePostAnalytics.media_type === 'REELS') ? 'grid-cols-4' : 'grid-cols-3'}`}>
+              <div className="grid gap-2 sm:gap-3 grid-cols-2 sm:grid-cols-3">
+                {/* Reach */}
+                <div className={`${singlePostAnalytics.reach === null ? 'bg-gray-50 border-gray-200' : 'bg-green-50 border-green-200'} border rounded-lg sm:p-3 text-center`}>
+                  <div className={`text-base sm:text-lg font-bold mb-1 ${singlePostAnalytics.reach === null ? 'text-gray-400' : 'text-green-600'}`}>
+                    {singlePostAnalytics.reach === null ? '—' : (singlePostAnalytics.reach?.toLocaleString() || 0)}
+                  </div>
+                  <div className={`text-[10px] sm:text-xs font-medium ${singlePostAnalytics.reach === null ? 'text-gray-500' : 'text-green-700'}`}>
+                    👥 Reach
+                  </div>
+                </div>
+
                 {/* Views - Only for Videos/Reels */}
-                {(singlePostAnalytics.media_type === 'VIDEO' || singlePostAnalytics.media_type === 'REELS') && (
+                {(singlePostAnalytics.media_type === 'VIDEO' || singlePostAnalytics.media_type === 'REELS' || singlePostAnalytics.media_product_type === 'REELS') && (
                   <div className={`${singlePostAnalytics.video_views === -1 ? 'bg-yellow-50 border-yellow-200' : 'bg-blue-50 border-blue-200'} border rounded-lg sm:p-3 text-center`}>
                     <div className={`text-base sm:text-lg font-bold mb-1 ${singlePostAnalytics.video_views === -1 ? 'text-yellow-600' : 'text-blue-600'}`}>
                       {singlePostAnalytics.video_views === -1 ? 'N/A' : (singlePostAnalytics.video_views?.toLocaleString() || 0)}
                     </div>
                     <div className={`text-[10px] sm:text-xs font-medium ${singlePostAnalytics.video_views === -1 ? 'text-yellow-700' : 'text-blue-700'}`}>
-                      👁️ Views
+                      ▶️ Views
                     </div>
                     {singlePostAnalytics.video_views === -1 && (
                       <div className="text-[8px] sm:text-[10px] text-yellow-600 mt-1">
@@ -2126,12 +2229,91 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
                   </div>
                 </div>
 
+                {/* Saved */}
+                <div className={`${singlePostAnalytics.saved === null ? 'bg-gray-50 border-gray-200' : 'bg-amber-50 border-amber-200'} border rounded-lg sm:p-3 text-center`}>
+                  <div className={`text-base sm:text-lg font-bold mb-1 ${singlePostAnalytics.saved === null ? 'text-gray-400' : 'text-amber-600'}`}>
+                    {singlePostAnalytics.saved === null ? '—' : (singlePostAnalytics.saved?.toLocaleString() || 0)}
+                  </div>
+                  <div className={`text-[10px] sm:text-xs font-medium ${singlePostAnalytics.saved === null ? 'text-gray-500' : 'text-amber-700'}`}>
+                    🔖 Saved
+                  </div>
+                </div>
+
+                {/* Shares - Available for all FEED, REELS, and STORY posts */}
+                <div className={`${singlePostAnalytics.shares === null ? 'bg-gray-50 border-gray-200' : 'bg-teal-50 border-teal-200'} border rounded-lg sm:p-3 text-center`}>
+                  <div className={`text-base sm:text-lg font-bold mb-1 ${singlePostAnalytics.shares === null ? 'text-gray-400' : 'text-teal-600'}`}>
+                    {singlePostAnalytics.shares === null ? '—' : (singlePostAnalytics.shares?.toLocaleString() || 0)}
+                  </div>
+                  <div className={`text-[10px] sm:text-xs font-medium ${singlePostAnalytics.shares === null ? 'text-gray-500' : 'text-teal-700'}`}>
+                    🔗 Shares
+                  </div>
+                </div>
+
                 <div className="bg-indigo-50 border border-indigo-200 rounded-lg sm:p-3 text-center">
                   <div className="text-base sm:text-lg font-bold text-indigo-600 mb-1">
                     {singlePostAnalytics.total_engagement?.toLocaleString() || 0}
                   </div>
                   <div className="text-[10px] sm:text-xs text-indigo-700 font-medium">
-                    📊 Total
+                    📊 Engagement
+                  </div>
+                </div>
+
+                {/* Engagement Rate */}
+                {singlePostAnalytics.engagement_rate > 0 && (
+                  <div className="bg-rose-50 border border-rose-200 rounded-lg sm:p-3 text-center">
+                    <div className="text-base sm:text-lg font-bold text-rose-600 mb-1">
+                      {singlePostAnalytics.engagement_rate}%
+                    </div>
+                    <div className="text-[10px] sm:text-xs text-rose-700 font-medium">
+                      📈 Eng. Rate
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Insights Error Message */}
+              {singlePostAnalytics.insights_error && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mt-2">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="h-4 w-4 text-yellow-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-[10px] sm:text-xs font-medium text-yellow-800">
+                        Some insights unavailable: {singlePostAnalytics.insights_error}
+                      </p>
+                      <a 
+                        href="https://developers.facebook.com/docs/instagram-api/reference/ig-media/insights" 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-[9px] sm:text-[10px] text-yellow-700 underline hover:text-yellow-900 mt-1 inline-block"
+                      >
+                        View Instagram API Documentation →
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* API Reference Note */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 sm:p-3">
+                <div className="flex items-start gap-2">
+                  <span className="text-blue-600 text-sm">ℹ️</span>
+                  <div>
+                    <p className="text-[9px] sm:text-[10px] text-blue-700 mb-1">
+                      <strong>Metrics by Media Type (v22.0+):</strong>
+                    </p>
+                    <ul className="text-[9px] sm:text-[10px] text-blue-700 space-y-0.5 list-disc list-inside">
+                      <li><strong>FEED Posts:</strong> reach, saved, shares, views (for images/videos)</li>
+                      <li><strong>REELS:</strong> reach, saved, shares, views</li>
+                      <li><strong>Deprecated:</strong> impressions (for media after July 2, 2024), plays, clips_replays_count</li>
+                    </ul>
+                    <a 
+                      href="https://developers.facebook.com/docs/instagram-api/reference/ig-media/insights" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-[9px] sm:text-[10px] text-blue-600 underline hover:text-blue-800 mt-1 inline-block"
+                    >
+                      📚 Official Instagram Media Insights API Documentation
+                    </a>
                   </div>
                 </div>
               </div>
@@ -2188,7 +2370,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
               <div className="bg-gray-50 border border-gray-200 rounded-lg sm:p-4 mt-1">
                 <h4 className="font-medium text-xs sm:text-sm text-gray-900 mb-3 flex items-center">
                   <BarChart3 className="h-3 w-3 sm:h-4 sm:w-4 mr-1.5" />
-                  Breakdown
+                  Engagement Breakdown
                 </h4>
                 <div className="space-y-3">
                   {/* Likes Bar */}
@@ -2240,12 +2422,90 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
                       ></div>
                     </div>
                   </div>
+
+                  {/* Saved Bar */}
+                  {singlePostAnalytics.saved !== null && singlePostAnalytics.saved > 0 && (
+                    <div className="pb-1">
+                      <div className="flex items-center justify-between text-[10px] sm:text-xs mb-1">
+                        <span className="font-medium text-gray-700">🔖 Saved</span>
+                        <span className="text-amber-600 font-semibold">
+                          {singlePostAnalytics.saved?.toLocaleString() || 0}
+                          {singlePostAnalytics.total_engagement > 0 && (
+                            <span className="text-gray-500 ml-1">
+                              ({((singlePostAnalytics.saved / singlePostAnalytics.total_engagement) * 100).toFixed(0)}%)
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          className="bg-amber-500 h-2 rounded-full" 
+                          style={{ 
+                            width: singlePostAnalytics.total_engagement > 0 
+                              ? `${(singlePostAnalytics.saved / singlePostAnalytics.total_engagement) * 100}%` 
+                              : '0%' 
+                          }}
+                        ></div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Shares Bar - Only for Reels */}
+                  {singlePostAnalytics.shares !== null && singlePostAnalytics.shares > 0 && (
+                    <div className="pb-1">
+                      <div className="flex items-center justify-between text-[10px] sm:text-xs mb-1">
+                        <span className="font-medium text-gray-700">🔗 Shares</span>
+                        <span className="text-teal-600 font-semibold">
+                          {singlePostAnalytics.shares?.toLocaleString() || 0}
+                          {singlePostAnalytics.total_engagement > 0 && (
+                            <span className="text-gray-500 ml-1">
+                              ({((singlePostAnalytics.shares / singlePostAnalytics.total_engagement) * 100).toFixed(0)}%)
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          className="bg-teal-500 h-2 rounded-full" 
+                          style={{ 
+                            width: singlePostAnalytics.total_engagement > 0 
+                              ? `${(singlePostAnalytics.shares / singlePostAnalytics.total_engagement) * 100}%` 
+                              : '0%' 
+                          }}
+                        ></div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Quick Insights */}
                 <div className="mt-2 pt-2 border-t border-gray-200 text-[10px] sm:text-xs text-gray-600">
-                  <span className="font-medium">Top:</span> {singlePostAnalytics.likes_count >= singlePostAnalytics.comments_count ? 'Likes' : 'Comments'}
-                  {singlePostAnalytics.total_engagement > 50 && <span className="ml-2">🔥 High performing!</span>}
+                  <div className="flex flex-wrap gap-x-3 gap-y-1">
+                    <span>
+                      <span className="font-medium">Top:</span> {
+                        Math.max(
+                          singlePostAnalytics.likes_count || 0,
+                          singlePostAnalytics.comments_count || 0,
+                          singlePostAnalytics.saved || 0,
+                          singlePostAnalytics.shares || 0
+                        ) === singlePostAnalytics.likes_count ? 'Likes' :
+                        Math.max(
+                          singlePostAnalytics.likes_count || 0,
+                          singlePostAnalytics.comments_count || 0,
+                          singlePostAnalytics.saved || 0,
+                          singlePostAnalytics.shares || 0
+                        ) === singlePostAnalytics.comments_count ? 'Comments' :
+                        Math.max(
+                          singlePostAnalytics.likes_count || 0,
+                          singlePostAnalytics.comments_count || 0,
+                          singlePostAnalytics.saved || 0,
+                          singlePostAnalytics.shares || 0
+                        ) === singlePostAnalytics.saved ? 'Saved' : 'Shares'
+                      }
+                    </span>
+                    {singlePostAnalytics.total_engagement > 50 && <span>🔥 High performing!</span>}
+                    {singlePostAnalytics.reach > 0 && singlePostAnalytics.engagement_rate > 5 && <span>📈 Great engagement rate!</span>}
+                  </div>
                 </div>
               </div>
 
@@ -3156,8 +3416,9 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
                 key={media.id} 
                 className="aspect-square relative group cursor-pointer"
                 onClick={() => {
-                  setSelectedPostId(media.id);
-                  fetchSinglePostAnalytics(media);
+                  // Open the new detailed insights modal
+                  setSelectedPostForInsights(media);
+                  setShowDetailedInsights(true);
                 }}
               >
                 <img
@@ -3231,6 +3492,19 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
       )}
 
       {renderSinglePostAnalytics()}
+
+      {/* New Detailed Post Insights Modal */}
+      <InstagramPostInsights
+        isOpen={showDetailedInsights}
+        onClose={() => {
+          setShowDetailedInsights(false);
+          setSelectedPostForInsights(null);
+        }}
+        post={selectedPostForInsights}
+        accessToken={activeAccount?.pageAccessToken}
+        accountProfile={activeAccount?.profile}
+        onBoostPost={handleBoostPost}
+      />
     </div>
   );
 

@@ -5,6 +5,7 @@ import {
 import TimePeriodChart from '../../components/TimeperiodChart';
 import TrendChart from '../../components/TrendChart';
 import { getUserData, setUserData, removeUserData, migrateToUserSpecificStorage } from '../../utils/sessionUtils';
+import FacebookPostInsights from './FacebookPostInsights';
 
 // Your Facebook App ID
 const FACEBOOK_APP_ID = '4416243821942660';
@@ -48,6 +49,11 @@ function FacebookIntegration() {
 
   // Retry tracking to prevent infinite loops
   const [retryAttempts, setRetryAttempts] = useState({});
+
+  // FacebookPostInsights modal state
+  const [fbInsightsOpen, setFbInsightsOpen] = useState(false);
+  const [fbInsightsPost, setFbInsightsPost] = useState(null);
+  const [fbInsightsPageId, setFbInsightsPageId] = useState(null);
 
   // Helper function to check if Facebook API is ready
   const isFacebookApiReady = () => {
@@ -1949,8 +1955,9 @@ function FacebookIntegration() {
               key={post.id} 
               className="aspect-square relative group cursor-pointer"
               onClick={() => {
-                setSelectedPostId(post.id);
-                fetchSinglePostAnalytics(post);
+                setFbInsightsPost(post);
+                setFbInsightsPageId(pageId);
+                setFbInsightsOpen(true);
               }}
             >
               {post.full_picture ? (
@@ -2848,6 +2855,22 @@ function FacebookIntegration() {
           
           {/* Render single post analytics */}
           {renderSinglePostAnalytics()}
+
+          {/* FacebookPostInsights modal */}
+          {fbInsightsOpen && fbInsightsPost && (() => {
+            const insightsPage = fbPages.find(p => p.id === fbInsightsPageId) || fbPages[0];
+            return (
+              <FacebookPostInsights
+                isOpen={fbInsightsOpen}
+                onClose={() => { setFbInsightsOpen(false); setFbInsightsPost(null); }}
+                post={fbInsightsPost}
+                pageAccessToken={insightsPage?.access_token}
+                pageName={insightsPage?.name}
+                pageProfilePic={insightsPage?.picture?.data?.url}
+                onBoostPost={() => {}}
+              />
+            );
+          })()}
         </div>
       </div>
     </div>

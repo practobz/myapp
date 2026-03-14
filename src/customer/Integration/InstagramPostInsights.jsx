@@ -191,23 +191,59 @@ function usePostTrendData(post, accountId) {
         snapshots.forEach(snap => {
           const mediaArr = snap.media || [];
 
-          // Match by full id  OR  just the numeric suffix after "_"
-          // (Instagram stores IDs like "123456789_987654321" – backends may store either form)
+          // Instagram Graph API IDs are purely numeric: "18058684322662584"
+          // Backends store them as-is, so direct match is sufficient.
+          // We also try stripping the page-prefix suffix (format "pageId_mediaId")
+          // as a fallback for accounts that store the compound form.
           const found = mediaArr.find(m =>
             m.id === post.id ||
-            m.id === post.id?.split('_').pop()
+            m.id === post.id?.split('_').pop() ||
+            post.id === m.id?.split('_').pop()
           );
 
           if (found) {
-            const date = snap.collectedAt.slice(0, 10); // YYYY-MM-DD
-            likes.push({    date, value: found.likes    ?? found.like_count    ?? 0 });
-            comments.push({ date, value: found.comments ?? found.comments_count ?? 0 });
-            shares.push({   date, value: found.shares   ?? 0 });
+            // Use YYYY-MM-DD as the x-axis label.
+            // If multiple snapshots share the same day, keep the last one
+            // (array is already sorted oldest→newest so later writes win).
+            const date = snap.collectedAt.slice(0, 10);
+
+            // Use named keys that match the metric prop passed to TrendChart.
+            // This avoids TrendChart accidentally summing a generic "value" key.
+            const likesVal    = found.likes    ?? found.like_count     ?? 0;
+            const commentsVal = found.comments ?? found.comments_count ?? 0;
+            const sharesVal   = found.shares   ?? 0;
+
+            // Deduplicate by date — replace if same date already exists
+            const existingLikesIdx = likes.findIndex(p => p.date === date);
+            if (existingLikesIdx >= 0) {
+              likes[existingLikesIdx]    = { date, likes:    likesVal    };
+              comments[existingLikesIdx] = { date, comments: commentsVal };
+              shares[existingLikesIdx]   = { date, shares:   sharesVal   };
+            } else {
+              likes.push(    { date, likes:    likesVal    });
+              comments.push( { date, comments: commentsVal });
+              shares.push(   { date, shares:   sharesVal   });
+            }
           }
         });
 
         if (likes.length > 0) {
-          setTrendData({ likes, comments, shares });
+          // ── Deduplicate by date: if the daily job ran multiple times on the
+          // same calendar day, keep only the LAST entry for that date so the
+          // chart doesn't double-count / accumulate values.
+          // snapshots are already sorted oldest→newest, so the last entry per
+          // date wins automatically when we use a Map keyed by date.
+          const dedup = (arr) => {
+            const map = new Map();
+            arr.forEach(pt => map.set(pt.date, pt)); // later entries overwrite earlier ones
+            return Array.from(map.values());           // preserves insertion order (oldest first)
+          };
+
+          setTrendData({
+            likes:    dedup(likes),
+            comments: dedup(comments),
+            shares:   dedup(shares),
+          });
         } else {
           // Post not yet present in any snapshot (too new, or ID mismatch)
           setTrendData(null);
@@ -231,7 +267,13 @@ function usePostTrendData(post, accountId) {
 }
 
 // ─── Fallback single-point so TrendChart never crashes ───────────────────────
-const singlePoint = (value, date) => [{ date: date || new Date().toISOString().slice(0, 10), value: value || 0 }];
+// metricKey must match the `metric` prop passed to <TrendChart metric="...">
+// Named keys (likes/comments/shares) prevent TrendChart from summing a generic
+// "value" field across all data points.
+const singlePoint = (metricKey, value, date) => [{
+  date: date || new Date().toISOString().slice(0, 10),
+  [metricKey]: value || 0,
+}];
 
 // ─── Main Component ──────────────────────────────────────────────────────────
 
@@ -268,9 +310,9 @@ function InstagramPostInsights({ isOpen, onClose, post, accessToken, accountProf
     if (trendData) return trendData;
     const postDate = post?.timestamp?.slice(0, 10);
     return {
-      likes:    singlePoint(insights?.likes,    postDate),
-      comments: singlePoint(insights?.comments, postDate),
-      shares:   singlePoint(insights?.shares,   postDate),
+      likes:    singlePoint('likes',    insights?.likes,    postDate),
+      comments: singlePoint('comments', insights?.comments, postDate),
+      shares:   singlePoint('shares',   insights?.shares,   postDate),
     };
   }, [trendData, insights, post?.timestamp]);
 
@@ -770,69 +812,62 @@ function InstagramPostInsights({ isOpen, onClose, post, accessToken, accountProf
                 </p>
 
                 <div className="grid grid-cols-2 gap-3">
-                  {/* ❤️ Likes */}
-                  <div className="bg-gray-800/50 rounded-xl border border-gray-700 overflow-hidden flex flex-col">
-                    <div className="flex items-center justify-between px-3 pt-3 pb-1">
-                      <span className="text-xs font-medium text-gray-300">❤️ Likes</span>
-                      <span className="text-xs font-bold text-pink-500">{formatNumber(insights?.likes)}</span>
-                    </div>
-                    {/* data source micro-label */}
-                    <div className="px-3 pb-1">
-                      <span className={`text-[9px] ${isRealData ? 'text-green-600' : 'text-gray-700'}`}>
-                        {isRealData ? '● live data' : '○ single point'}
-                      </span>
-                    </div>
-                    <div className="flex-1" style={{ height: 120, overflow: 'hidden' }}>
-                      <TrendChart
-                        data={chartData.likes}
-                        title=""
-                        color="#EC4899"
-                        metric="value"
-                      />
-                    </div>
-                  </div>
+                  {[
+                    {
+                      label: '❤️ Likes',
+                      data: chartData.likes,
+                      color: '#EC4899',
+                      labelColor: 'text-pink-500',
+                      span: '',
+                    },
+                    {
+                      label: '💬 Comments',
+                      data: chartData.comments,
+                      color: '#8B5CF6',
+                      labelColor: 'text-purple-500',
+                      span: '',
+                    },
+                    {
+                      label: '🔗 Shares',
+                      data: chartData.shares,
+                      color: '#14B8A6',
+                      labelColor: 'text-teal-500',
+                      span: 'col-span-2',
+                    },
+                  ].map(({ label, data, color, labelColor, span }) => {
+                    // Most-recent snapshot value — this is what the chart's rightmost
+                    // point shows, so the header number always matches the chart.
+                    const lastValue = isRealData && data?.length > 0
+                      ? data[data.length - 1].value
+                      : (data?.[0]?.value ?? 0);
 
-                  {/* 💬 Comments */}
-                  <div className="bg-gray-800/50 rounded-xl border border-gray-700 overflow-hidden flex flex-col">
-                    <div className="flex items-center justify-between px-3 pt-3 pb-1">
-                      <span className="text-xs font-medium text-gray-300">💬 Comments</span>
-                      <span className="text-xs font-bold text-purple-500">{formatNumber(insights?.comments)}</span>
-                    </div>
-                    <div className="px-3 pb-1">
-                      <span className={`text-[9px] ${isRealData ? 'text-green-600' : 'text-gray-700'}`}>
-                        {isRealData ? '● live data' : '○ single point'}
-                      </span>
-                    </div>
-                    <div className="flex-1" style={{ height: 120, overflow: 'hidden' }}>
-                      <TrendChart
-                        data={chartData.comments}
-                        title=""
-                        color="#8B5CF6"
-                        metric="value"
-                      />
-                    </div>
-                  </div>
-
-                  {/* 🔗 Shares */}
-                  <div className="bg-gray-800/50 rounded-xl border border-gray-700 overflow-hidden flex flex-col col-span-2">
-                    <div className="flex items-center justify-between px-3 pt-3 pb-1">
-                      <span className="text-xs font-medium text-gray-300">🔗 Shares</span>
-                      <span className="text-xs font-bold text-teal-500">{formatNumber(insights?.shares||0)}</span>
-                    </div>
-                    <div className="px-3 pb-1">
-                      <span className={`text-[9px] ${isRealData ? 'text-green-600' : 'text-gray-700'}`}>
-                        {isRealData ? '● live data' : '○ single point'}
-                      </span>
-                    </div>
-                    <div className="flex-1" style={{ height: 120, overflow: 'hidden' }}>
-                      <TrendChart
-                        data={chartData.shares}
-                        title=""
-                        color="#14B8A6"
-                        metric="value"
-                      />
-                    </div>
-                  </div>
+                    return (
+                      <div key={label} className={`bg-gray-800/50 rounded-xl border border-gray-700 overflow-hidden flex flex-col ${span}`}>
+                        <div className="flex items-center justify-between px-3 pt-3 pb-0.5">
+                          <span className="text-xs font-medium text-gray-300">{label}</span>
+                          <span className={`text-xs font-bold ${labelColor}`}>
+                            {formatNumber(lastValue)}
+                          </span>
+                        </div>
+                        <div className="px-3 pb-1">
+                          <span className={`text-[9px] ${isRealData ? 'text-green-600' : 'text-gray-700'}`}>
+                            {isRealData
+                              ? `● ${data.length} snapshots`
+                              : '○ awaiting daily job'}
+                          </span>
+                        </div>
+                        <div className="flex-1" style={{ height: 120, overflow: 'hidden' }}>
+                          {/* metric="value" because our data shape is { date, value } */}
+                          <TrendChart
+                            data={data}
+                            title=""
+                            color={color}
+                            metric="value"
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 

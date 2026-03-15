@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef, memo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Calendar, TrendingUp, BarChart3, PieChart as PieChartIcon, RefreshCw, Download,
   ChevronDown, Layers, Clock, CheckCircle2, AlertTriangle, Info, Sparkles,
-  ArrowUpRight, ArrowDownRight, Minus, Filter, Eye
+  ArrowUpRight, ArrowDownRight, Minus, Filter, Eye, ExternalLink
 } from 'lucide-react';
 import { 
   AreaChart, Area, BarChart as RechartsBarChart, Bar, PieChart as RechartsPieChart, Pie, Cell,
@@ -99,15 +100,22 @@ const METRICS_OPTIONS = [
 ];
 
 // Custom tooltip component
-const CustomTooltip = ({ active, payload, label, metricInfo }) => {
+const CustomTooltip = ({ active, payload, label, metricInfo, onViewDetails, platform, accountId }) => {
   if (!active || !payload || !payload.length) return null;
   
+  const handleViewDetails = (e) => {
+    e.stopPropagation();
+    if (onViewDetails && label) {
+      onViewDetails(label, metricInfo?.value || metricInfo?.label?.toLowerCase());
+    }
+  };
+
   return (
-    <div className="bg-white/95 backdrop-blur-sm border border-gray-200 rounded-xl shadow-xl p-3 min-w-[140px]">
+    <div className="bg-white/95 backdrop-blur-sm border border-gray-200 rounded-xl shadow-xl p-3 min-w-[160px]">
       <p className="text-xs text-gray-500 mb-1.5 font-medium">
         {new Date(label).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
       </p>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 mb-2">
         <div 
           className="w-3 h-3 rounded-full shadow-sm"
           style={{ backgroundColor: metricInfo?.color || payload[0]?.color }}
@@ -117,20 +125,42 @@ const CustomTooltip = ({ active, payload, label, metricInfo }) => {
         </span>
         <span className="text-xs text-gray-500">{metricInfo?.label}</span>
       </div>
+      <button
+        onMouseDown={handleViewDetails}
+        className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-medium rounded-lg transition-colors cursor-pointer"
+      >
+        <ExternalLink className="w-3 h-3" />
+        View Details
+      </button>
     </div>
   );
 };
 
 export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'followers' }) {
+  const navigate = useNavigate();
   const [selectedPeriod, setSelectedPeriod] = useState(7);
   const [selectedChart, setSelectedChart] = useState('trend');
   const [selectedMetrics, setSelectedMetrics] = useState([defaultMetric]);
   const [chartData, setChartData] = useState(null);
   const [loading, setLoading] = useState(false);
+
+  // Detect if inside customer or admin portal for navigation
+  const routePrefix = window.location.hash.includes('/customer/') ? '/customer' : '/admin';
   const [error, setError] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const chartContainerRef = useRef(null);
+
+  // Navigate to post details page for a specific date and metric
+  const handleViewDetails = (dateStr, metricName) => {
+    const params = new URLSearchParams({
+      platform,
+      accountId,
+      date: dateStr,
+      metric: metricName || ''
+    });
+    navigate(`${routePrefix}/post-details?${params.toString()}`);
+  };
 
   // Fetch historical data when parameters change
   useEffect(() => {
@@ -327,7 +357,10 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
                   }}
                   width={45}
                 />
-                <Tooltip content={<CustomTooltip metricInfo={metricInfo} />} />
+                <Tooltip 
+                  content={<CustomTooltip metricInfo={metricInfo} onViewDetails={handleViewDetails} platform={platform} accountId={accountId} />}
+                  wrapperStyle={{ pointerEvents: 'auto' }}
+                />
                 <Area
                   type="monotone"
                   dataKey="value"
@@ -335,7 +368,7 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
                   strokeWidth={2.5}
                   fill={`url(#gradient-${metric})`}
                   dot={false}
-                  activeDot={{ r: 6, strokeWidth: 2, stroke: 'white' }}
+                  activeDot={{ r: 6, strokeWidth: 2, stroke: 'white', cursor: 'pointer' }}
                 />
               </AreaChart>
             </ResponsiveContainer>
@@ -440,12 +473,16 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
                   }}
                   width={45}
                 />
-                <Tooltip content={<CustomTooltip metricInfo={metricInfo} />} />
+                <Tooltip
+                  content={<CustomTooltip metricInfo={metricInfo} onViewDetails={handleViewDetails} platform={platform} accountId={accountId} />}
+                  wrapperStyle={{ pointerEvents: 'auto' }}
+                />
                 <Bar 
                   dataKey="value" 
                   fill={`url(#bar-gradient-${metric})`}
                   radius={[6, 6, 0, 0]}
                   maxBarSize={50}
+                  cursor="pointer"
                 />
               </RechartsBarChart>
             </ResponsiveContainer>

@@ -73,6 +73,7 @@ import ContentCreatorMediaLibrary from './content-creators/MediaLibrary';
 import { useAuth } from './admin/contexts/AuthContext';
 import AIImageGenerator from './components/AIImageGenerator';
 import TimePeriodChart from './components/TimeperiodChart';
+import PostDetailsPage from './components/PostDetailsPage';
 import WhatsAppIntegration from './components/WhatsAppIntegration';
 import SchedulePostModal from './admin/components/modals/SchedulePostModal';
 import ContentDetailView from './admin/components/modals/ContentDetailView';
@@ -388,6 +389,11 @@ function App() {
                   <TimePeriodChart />
                 </ProtectedRoutePortal>
               } />
+              <Route path="/admin/post-details" element={
+                <ProtectedRoutePortal role="admin">
+                  <PostDetailsPage />
+                </ProtectedRoutePortal>
+              } />
               <Route path="/admin/schedule-post-modal" element={
                 <ProtectedRoutePortal role="admin">
                   <SchedulePostModal />
@@ -540,7 +546,13 @@ function App() {
                   </CustomerLayout>
                 </ProtectedRoutePortal>
               } />
-
+<Route path="/customer/post-details" element={
+                <ProtectedRoutePortal role="customer">
+                  <CustomerLayout>
+                    <PostDetailsPage />
+                  </CustomerLayout>
+                </ProtectedRoutePortal>
+              } />
               {/* Customer WhatsApp Integration */}
               <Route path="/customer/whatsapp-integration" element={
                 <ProtectedRoutePortal role="customer">

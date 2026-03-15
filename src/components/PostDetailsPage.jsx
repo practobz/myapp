@@ -24,14 +24,22 @@ const MEDIA_TYPE_ICONS = {
   REEL: Film
 };
 
-function PostDetailsPage() {
+/**
+ * PostDetailsPage can be used two ways:
+ * 1. As a route page — reads platform/accountId/date/metric from URL search params.
+ * 2. As a modal — pass those values as props plus an `onBack` callback to close.
+ */
+function PostDetailsPage({ platform: propPlatform, accountId: propAccountId, date: propDate, metric: propMetric, onBack } = {}) {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
-  const platform = searchParams.get('platform') || '';
-  const accountId = searchParams.get('accountId') || '';
-  const date = searchParams.get('date') || '';
-  const metric = searchParams.get('metric') || '';
+  // Props take priority (modal mode); fall back to URL params (route mode)
+  const platform = propPlatform || searchParams.get('platform') || '';
+  const accountId = propAccountId || searchParams.get('accountId') || '';
+  const date = propDate || searchParams.get('date') || '';
+  const metric = propMetric || searchParams.get('metric') || '';
+
+  const handleBack = onBack || (() => navigate(-1));
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -206,7 +214,7 @@ function PostDetailsPage() {
     return (
       <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
         <div className="max-w-7xl mx-auto">
-          <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6">
+          <button onClick={handleBack} className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6">
             <ArrowLeft className="w-4 h-4" /> Back to Analytics
           </button>
           <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
@@ -225,7 +233,7 @@ function PostDetailsPage() {
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
         <div>
-          <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4 text-sm font-medium transition-colors">
+          <button onClick={handleBack} className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4 text-sm font-medium transition-colors">
             <ArrowLeft className="w-4 h-4" /> Back to Analytics
           </button>
 

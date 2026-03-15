@@ -11,6 +11,7 @@ import {
 } from 'recharts';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import PostDetailsPage from './PostDetailsPage';
 
 // Skeleton loader component
 const Skeleton = memo(({ className = '' }) => (
@@ -136,11 +137,49 @@ const CustomTooltip = ({ active, payload, label, metricInfo, onViewDetails, plat
   );
 };
 
+const CHART_STATE_KEY = 'timeperiod_chart_state';
+
 export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'followers' }) {
   const navigate = useNavigate();
-  const [selectedPeriod, setSelectedPeriod] = useState(7);
-  const [selectedChart, setSelectedChart] = useState('trend');
-  const [selectedMetrics, setSelectedMetrics] = useState([defaultMetric]);
+
+  // Restore state from sessionStorage if returning from post-details page
+  const [selectedPeriod, setSelectedPeriod] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem(CHART_STATE_KEY);
+      if (saved) {
+        const state = JSON.parse(saved);
+        if (state.platform === platform && state.accountId === accountId) {
+          return state.selectedPeriod || 7;
+        }
+      }
+    } catch {}
+    return 7;
+  });
+  const [selectedChart, setSelectedChart] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem(CHART_STATE_KEY);
+      if (saved) {
+        const state = JSON.parse(saved);
+        if (state.platform === platform && state.accountId === accountId) {
+          return state.selectedChart || 'trend';
+        }
+      }
+    } catch {}
+    return 'trend';
+  });
+  const [selectedMetrics, setSelectedMetrics] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem(CHART_STATE_KEY);
+      if (saved) {
+        const state = JSON.parse(saved);
+        if (state.platform === platform && state.accountId === accountId) {
+          sessionStorage.removeItem(CHART_STATE_KEY); // clear after reading
+          return state.selectedMetrics || [defaultMetric];
+        }
+      }
+    } catch {}
+    return [defaultMetric];
+  });
   const [chartData, setChartData] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -149,17 +188,12 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
   const [error, setError] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [postDetails, setPostDetails] = useState(null); // { date, metric } — when set, show overlay
   const chartContainerRef = useRef(null);
 
-  // Navigate to post details page for a specific date and metric
+  // Open post details as an inline overlay (no navigation, parent state preserved)
   const handleViewDetails = (dateStr, metricName) => {
-    const params = new URLSearchParams({
-      platform,
-      accountId,
-      date: dateStr,
-      metric: metricName || ''
-    });
-    navigate(`${routePrefix}/post-details?${params.toString()}`);
+    setPostDetails({ date: dateStr, metric: metricName || '' });
   };
 
   // Fetch historical data when parameters change
@@ -1177,6 +1211,18 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
 
   return (
     <div className="space-y-4 sm:space-y-5 lg:space-y-6">
+      {/* Post Details Overlay — shown instead of navigating away */}
+      {postDetails && (
+        <div className="fixed inset-0 z-50 bg-gray-50 overflow-y-auto">
+          <PostDetailsPage
+            platform={platform}
+            accountId={accountId}
+            date={postDetails.date}
+            metric={postDetails.metric}
+            onBack={() => setPostDetails(null)}
+          />
+        </div>
+      )}
       {/* Header & Controls */}
       <div className="bg-white rounded-xl sm:rounded-2xl border border-gray-200/80 shadow-sm overflow-hidden">
         {/* Header Banner */}

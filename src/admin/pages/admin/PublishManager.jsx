@@ -366,6 +366,7 @@ function PublishManager() {
   const [publishModal, setPublishModal] = useState(null); // { calendarId, item }
   const [selectedPlatforms, setSelectedPlatforms] = useState([]);
   const [publishNotes, setPublishNotes] = useState('');
+  const [sendEmailNotification, setSendEmailNotification] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -693,6 +694,7 @@ function PublishManager() {
     setPublishModal({ calendarId: calendar._id, item });
     setSelectedPlatforms(item.publishedPlatforms || []);
     setPublishNotes(item.publishedNotes || '');
+    setSendEmailNotification(false);
   };
 
   // Close publish modal
@@ -700,6 +702,7 @@ function PublishManager() {
     setPublishModal(null);
     setSelectedPlatforms([]);
     setPublishNotes('');
+    setSendEmailNotification(false);
   };
 
   // Toggle platform selection
@@ -714,7 +717,7 @@ function PublishManager() {
   };
 
   // Mark item as published
-  const markAsPublished = async (calendarId, itemId, platforms, notes, published = true) => {
+  const markAsPublished = async (calendarId, itemId, platforms, notes, published = true, notifyEmail = false) => {
     setSaving(true);
     try {
       const response = await fetch(
@@ -727,7 +730,8 @@ function PublishManager() {
             published,
             publishedPlatforms: platforms,
             publishedNotes: notes,
-            publishedAt: new Date().toISOString()
+            publishedAt: new Date().toISOString(),
+            sendEmailNotification: notifyEmail
           })
         }
       );
@@ -1094,6 +1098,27 @@ function PublishManager() {
                   className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-gray-900 focus:border-gray-900 focus:bg-white resize-none transition-all"
                 />
               </div>
+
+              {/* Email Notification Toggle */}
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+                <div>
+                  <div className="text-sm font-medium text-gray-700">Notify client via email</div>
+                  <div className="text-xs text-gray-400 mt-0.5">Send a published notification to the client's registered email</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSendEmailNotification(prev => !prev)}
+                  className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${
+                    sendEmailNotification ? 'bg-gray-900' : 'bg-gray-200'
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ${
+                      sendEmailNotification ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
             </div>
             
             {/* Modal Footer */}
@@ -1125,7 +1150,9 @@ function PublishManager() {
                     publishModal.calendarId, 
                     publishModal.item.id, 
                     selectedPlatforms, 
-                    publishNotes
+                    publishNotes,
+                    true,
+                    sendEmailNotification
                   )}
                   disabled={saving || selectedPlatforms.length === 0}
                   className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"

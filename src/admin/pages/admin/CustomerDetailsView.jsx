@@ -5,6 +5,7 @@ import AdminLayout from '../../components/layout/AdminLayout';
 import ContentItemModal from '../../components/modals/ContentItemModal';
 import ContentCalendarModal from '../../components/modals/ContentCalendarModal';
 import AssignCreatorModal from '../../components/modals/AssignCreatorModal';
+import ReportModal from '../../components/modals/ReportModal';
 import {
   ArrowLeft,
   User,
@@ -25,7 +26,8 @@ import {
   Upload,
   CheckCircle,
   X,
-  Clock
+  Clock,
+  Download
 } from 'lucide-react';
 
 // Status configuration helper
@@ -144,6 +146,7 @@ function CustomerDetailsView() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isEditCalendarModalOpen, setIsEditCalendarModalOpen] = useState(false);
   const [calendarToEdit, setCalendarToEdit] = useState(null);
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [selectedCalendar, setSelectedCalendar] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
   const [expandedCalendars, setExpandedCalendars] = useState(new Set());
@@ -646,13 +649,22 @@ function CustomerDetailsView() {
                 <h2 className="text-base sm:text-lg font-semibold text-gray-900">Content Calendars</h2>
                 <p className="text-sm text-gray-500 mt-0.5">Manage content schedule and items</p>
               </div>
-              <button
-                onClick={() => setIsCalendarModalOpen(true)}
-                className="inline-flex items-center px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-colors"
-              >
-                <Plus className="h-4 w-4 mr-1.5" />
-                Add Calendar
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setIsReportModalOpen(true)}
+                  className="inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+                >
+                  <Download className="h-4 w-4 mr-1.5" />
+                  Download Report
+                </button>
+                <button
+                  onClick={() => setIsCalendarModalOpen(true)}
+                  className="inline-flex items-center px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-colors"
+                >
+                  <Plus className="h-4 w-4 mr-1.5" />
+                  Add Calendar
+                </button>
+              </div>
             </div>
             
             {/* Stats Grid */}
@@ -988,6 +1000,15 @@ function CustomerDetailsView() {
         onSave={handleUpdateCalendar}
         title="Edit Content Calendar"
         initialData={calendarToEdit}
+      />
+
+      {/* Report Modal */}
+      <ReportModal
+        isOpen={isReportModalOpen}
+        onClose={() => setIsReportModalOpen(false)}
+        customer={customer}
+        calendars={calendars}
+        isItemPublished={isItemPublished}
       />
     </AdminLayout>
   );

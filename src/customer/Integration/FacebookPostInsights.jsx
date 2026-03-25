@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import {
   ArrowLeft, Eye, MessageCircle, Share2, Heart,
   Users, TrendingUp, Clock, ChevronRight, Play,
-  Info, Rocket, UserPlus, BarChart3, ThumbsUp
+  Info, Rocket, UserPlus, BarChart3, ThumbsUp,
+  Loader2, AlertCircle, Send
 } from 'lucide-react';
 import TrendChart from '../../components/TrendChart';
 
@@ -197,15 +198,96 @@ function FacebookPostInsights({
   const [audienceTab, setAudienceTab] = useState('age'); // age | countries
   const [trafficTab, setTrafficTab] = useState('traffic'); // traffic | source
 
+  // Comments state
+  const [comments, setComments] = useState([]);
+  const [loadingComments, setLoadingComments] = useState(false);
+  const [commentsError, setCommentsError] = useState(null);
+  const [replyingToComment, setReplyingToComment] = useState(null);
+  const [replyText, setReplyText] = useState('');
+  const [sendingReply, setSendingReply] = useState(false);
+  const [deletingComment, setDeletingComment] = useState(null);
+
   const isVideo =
     post?.type === 'video' ||
     post?.attachments?.data?.[0]?.type === 'video_inline' ||
     post?.attachments?.data?.[0]?.media_type === 'video';
 
+  // ── Fetch comments from Facebook Graph API ───────────────────────────────
+  const fetchComments = async () => {
+    if (!post?.id || !pageAccessToken) return;
+    setLoadingComments(true);
+    setCommentsError(null);
+    try {
+      const response = await fetch(
+        `https://graph.facebook.com/v18.0/${post.id}/comments?fields=id,from{id,name,picture},message,created_time,like_count,comment_count,comments{id,from{id,name,picture},message,created_time,like_count}&limit=50&access_token=${pageAccessToken}`
+      );
+      const data = await response.json();
+      if (!response.ok || data.error) {
+        setCommentsError(data.error?.message || 'Failed to load comments');
+        return;
+      }
+      setComments(data.data || []);
+    } catch (err) {
+      setCommentsError(err.message || 'Network error');
+    } finally {
+      setLoadingComments(false);
+    }
+  };
+
+  // ── Delete a comment ───────────────────────────────────────────────────────
+  const deleteComment = async (commentId) => {
+    if (!pageAccessToken) return;
+    if (!window.confirm('Delete this comment? This cannot be undone.')) return;
+    setDeletingComment(commentId);
+    try {
+      const response = await fetch(
+        `https://graph.facebook.com/v25.0/${commentId}?access_token=${pageAccessToken}`,
+        { method: 'DELETE' }
+      );
+      const data = await response.json();
+      if (!response.ok || data.error) {
+        console.error('Failed to delete comment:', data.error);
+        alert(`Failed to delete: ${data.error?.message || 'Unknown error'}`);
+        return;
+      }
+      await fetchComments();
+    } catch (err) {
+      console.error('Error deleting comment:', err);
+      alert('Network error while deleting comment.');
+    } finally {
+      setDeletingComment(null);
+    }
+  };
+
+  // ── Post reply to a comment ───────────────────────────────────────────────
+  const postReply = async (commentId) => {
+    if (!replyText.trim() || !pageAccessToken) return;
+    setSendingReply(true);
+    try {
+      const response = await fetch(
+        `https://graph.facebook.com/v18.0/${commentId}/comments?message=${encodeURIComponent(replyText)}&access_token=${pageAccessToken}`,
+        { method: 'POST' }
+      );
+      const data = await response.json();
+      if (!response.ok || data.error) {
+        console.error('Failed to post reply:', data.error);
+        return;
+      }
+      setReplyText('');
+      setReplyingToComment(null);
+      await fetchComments();
+    } catch (err) {
+      console.error('Error posting reply:', err);
+    } finally {
+      setSendingReply(false);
+    }
+  };
+
   // ── Fetch insights from Facebook Graph API ────────────────────────────────
   useEffect(() => {
     if (isOpen && post && pageAccessToken) {
       fetchInsights();
+      fetchComments();
     }
   }, [isOpen, post?.id, pageAccessToken]);
 
@@ -280,12 +362,16 @@ function FacebookPostInsights({
       ] : [];
 
       const allMetrics = [
+        'post_media_view',
+        'post_total_media_view_unique',
         'post_impressions',
         'post_impressions_unique',
         'post_impressions_organic',
         'post_impressions_organic_unique',
         'post_impressions_paid',
         'post_impressions_paid_unique',
+        'post_impressions_fan',
+        'post_impressions_fan_unique',
         'post_clicks',
         'post_reactions_like_total',
         'post_reactions_love_total',
@@ -313,15 +399,29 @@ function FacebookPostInsights({
         const dataset = metricMap[name];
         const m = dataset?.data?.[0];
         if (!m) return 0;
-        const raw = m?.total_value?.value ?? m?.values?.[0]?.value;
-        return raw ?? 0;
+        // Prefer total_value (new API format); fall back to values array.
+        // Use the LAST entry in values[] — for lifetime period, Facebook may return
+        // two boundary-split entries where values[0] is 0 and values[last] is the
+        // actual cumulative total.
+        if (m?.total_value?.value !== undefined && m.total_value.value !== null) {
+          return m.total_value.value;
+        }
+        const vals = m?.values;
+        if (!vals || vals.length === 0) return 0;
+        return vals[vals.length - 1]?.value ?? 0;
       };
 
       // ── Impressions & reach ───────────────────────────────────────────────
-      // Some non-unique impression metrics are being deprecated by Facebook (June 2026).
-      // Fall back to the _unique (reach) variants when the primary returns 0.
-      const reach          = getVal('post_impressions_unique');
-      const impressions    = getVal('post_impressions') || reach;
+      // post_media_view / post_total_media_view_unique are the correct "views" metrics
+      // per the Facebook Graph API docs (Page Post Media View section). These map
+      // directly to the "Views (impressions)" and "Viewers (reach)" labels that
+      // Facebook's own Post Insights UI displays.
+      // Fall back to post_impressions / post_impressions_unique if the new metrics
+      // return 0 (older posts or limited token permissions).
+      const mediaViews       = getVal('post_media_view');
+      const mediaViewsUnique = getVal('post_total_media_view_unique');
+      const impressions    = mediaViews       || getVal('post_impressions')        || getVal('post_impressions_unique');
+      const reach          = mediaViewsUnique || getVal('post_impressions_unique') || 0;
       const impressOrganic = getVal('post_impressions_organic') || getVal('post_impressions_organic_unique');
       const impressPaid    = getVal('post_impressions_paid')    || getVal('post_impressions_paid_unique');
       const clicks         = getVal('post_clicks');
@@ -445,12 +545,19 @@ function FacebookPostInsights({
       const organicShare = impressions > 0 ? (impressOrganic / impressions) * 100 : 80;
       const paidShare    = impressions > 0 ? (impressPaid    / impressions) * 100 : 0;
 
-      // ── Followers vs Non-followers (simulated — not in post-level API) ────
-      const followersPct    = Math.min(50, Math.max(5, 14 + Math.random() * 6));
-      const nonFollowersPct = 100 - followersPct;
+      // ── Followers vs Non-followers ─────────────────────────────────────────
+      // post_impressions_fan_unique = unique Page followers/likers who saw this post.
+      // Divide by reach to get the real followers vs non-followers percentage split.
+      // Fall back to a plausible estimate when API data is unavailable.
+      const impressionsFanUnique = getVal('post_impressions_fan_unique');
+      const followersPct = (impressionsFanUnique > 0 && reach > 0)
+        ? Math.min(100, parseFloat(((impressionsFanUnique / reach) * 100).toFixed(1)))
+        : Math.min(50, Math.max(5, 14));
+      const nonFollowersPct = parseFloat((100 - followersPct).toFixed(1));
 
-      // ── Views over time — simulate cumulative growth from lifetime impressions ──
-      const viewsOverTime = generateViewsOverTime(impressions || videoViews);
+      // ── Views over time — simulate cumulative growth from lifetime views ──
+      // Prefer the new post_media_view total; fall back to impressions / video views.
+      const viewsOverTime = generateViewsOverTime(mediaViews || impressions || videoViews);
 
       // ── Traffic sources (simulated — not in post-level API) ────────────────
       const trafficSources = [
@@ -487,6 +594,8 @@ function FacebookPostInsights({
       setInsights({
         // Impressions
         impressions,
+        mediaViews,
+        mediaViewsUnique,
         impressOrganic,
         impressPaid,
         // Reach & engagement
@@ -672,8 +781,8 @@ function FacebookPostInsights({
                 </div>
                 <ViewsLineChart data={insights.viewsOverTime} />
                 <div className="mt-3 space-y-0">
-                  <MetricRow label="Views (impressions)" value={fmtNum(insights.impressions || insights.videoViews)} />
-                  <MetricRow label="Viewers (reach)"     value={fmtNum(insights.reach)} />
+                  <MetricRow label="Views (impressions)" value={fmtNum(insights.mediaViews || insights.impressions || insights.videoViews)} />
+                  <MetricRow label="Viewers (reach)"     value={fmtNum(insights.mediaViewsUnique || insights.reach)} />
                   {insights.impressOrganic > 0 && (
                     <MetricRow label="Organic impressions" value={fmtNum(insights.impressOrganic)} />
                   )}
@@ -979,7 +1088,177 @@ function FacebookPostInsights({
                 </div>
               </div>
 
-              {/* ── 10. Boost Post CTA ──────────────────────────────────── */}
+              {/* ── 10. Comments Section ─────────────────────────────────── */}
+              <div className="bg-white border-b border-gray-100 px-4 py-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                    <MessageCircle className="w-4 h-4 text-green-600" />
+                    Comments ({insights?.commentsCount || post?.comments?.summary?.total_count || 0})
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    {loadingComments && <Loader2 className="w-4 h-4 animate-spin text-blue-500" />}
+                    <button
+                      onClick={fetchComments}
+                      disabled={loadingComments}
+                      className="text-[10px] bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      🔄 Refresh
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {loadingComments && comments.length === 0 ? (
+                    <div className="text-center py-4">
+                      <Loader2 className="h-5 w-5 animate-spin mx-auto text-blue-500" />
+                      <p className="text-xs text-gray-500 mt-2">Loading comments...</p>
+                    </div>
+                  ) : commentsError ? (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-center">
+                      <AlertCircle className="h-6 w-6 mx-auto mb-1 text-red-500" />
+                      <p className="text-xs font-semibold text-red-700 mb-1">Failed to load comments</p>
+                      <p className="text-[10px] text-red-600">{commentsError}</p>
+                      <button onClick={fetchComments} className="mt-2 bg-red-600 text-white px-3 py-1 rounded text-[10px] hover:bg-red-700">Retry</button>
+                    </div>
+                  ) : comments.length > 0 ? (
+                    comments.map((comment) => (
+                      <div key={comment.id} className="bg-gray-50 border border-gray-200 rounded-lg p-2.5">
+                        <div className="flex items-start gap-2">
+                          <div className="w-7 h-7 bg-gradient-to-br from-blue-400 to-indigo-600 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
+                            {comment.from?.picture?.data?.url ? (
+                              <img src={comment.from.picture.data.url} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                              <span className="text-white text-[10px] font-bold">
+                                {comment.from?.name ? comment.from.name.charAt(0).toUpperCase() : '?'}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2 mb-0.5">
+                              <span className="text-xs font-semibold text-gray-900 truncate">{comment.from?.name || 'Unknown'}</span>
+                              <span className="text-[9px] text-gray-500 flex-shrink-0">
+                                {new Date(comment.created_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-gray-700 break-words">{comment.message}</p>
+                            <div className="mt-1 flex items-center gap-2">
+                              {comment.like_count > 0 && (
+                                <div className="flex items-center gap-1">
+                                  <Heart className="h-2.5 w-2.5 text-blue-500" fill="currentColor" />
+                                  <span className="text-[9px] text-gray-500">{comment.like_count}</span>
+                                </div>
+                              )}
+                              <button
+                                onClick={() => { setReplyingToComment(comment.id); setReplyText(''); }}
+                                className="text-[10px] text-blue-600 hover:text-blue-700 font-medium"
+                              >
+                                💬 Reply
+                              </button>
+                              <button
+                                onClick={() => deleteComment(comment.id)}
+                                disabled={deletingComment === comment.id}
+                                className="text-[10px] text-red-500 hover:text-red-700 font-medium disabled:opacity-50 flex items-center gap-0.5"
+                              >
+                                {deletingComment === comment.id ? (
+                                  <><Loader2 className="h-2.5 w-2.5 animate-spin" /><span>Deleting…</span></>
+                                ) : '🗑️ Delete'}
+                              </button>
+                              {comment.comment_count > 0 && (
+                                <span className="text-[9px] text-gray-500">
+                                  {comment.comment_count} {comment.comment_count === 1 ? 'reply' : 'replies'}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Reply Input */}
+                        {replyingToComment === comment.id && (
+                          <div className="mt-2 pl-9">
+                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-2">
+                              <textarea
+                                value={replyText}
+                                onChange={(e) => setReplyText(e.target.value)}
+                                placeholder="Write a reply..."
+                                className="w-full text-xs bg-white border border-blue-200 rounded p-2 resize-none focus:outline-none focus:border-blue-400"
+                                rows="2"
+                                disabled={sendingReply}
+                              />
+                              <div className="flex items-center gap-2 mt-2">
+                                <button
+                                  onClick={() => postReply(comment.id)}
+                                  disabled={sendingReply || !replyText.trim()}
+                                  className="bg-blue-600 text-white px-3 py-1 rounded text-[10px] hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1"
+                                >
+                                  {sendingReply ? (
+                                    <><Loader2 className="h-3 w-3 animate-spin" /><span>Sending...</span></>
+                                  ) : (
+                                    <><Send className="h-3 w-3" /><span>Reply</span></>
+                                  )}
+                                </button>
+                                <button
+                                  onClick={() => { setReplyingToComment(null); setReplyText(''); }}
+                                  disabled={sendingReply}
+                                  className="bg-gray-200 text-gray-700 px-3 py-1 rounded text-[10px] hover:bg-gray-300 disabled:opacity-50"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Nested Replies */}
+                        {comment.comments?.data?.length > 0 && (
+                          <div className="mt-2 pl-9 space-y-2">
+                            {comment.comments.data.map((reply) => (
+                              <div key={reply.id} className="bg-blue-50 border border-blue-100 rounded-lg p-2">
+                                <div className="flex items-start gap-2">
+                                  <div className="w-5 h-5 bg-gradient-to-br from-blue-400 to-indigo-600 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
+                                    {reply.from?.picture?.data?.url ? (
+                                      <img src={reply.from.picture.data.url} alt="" className="w-full h-full object-cover" />
+                                    ) : (
+                                      <span className="text-white text-[9px] font-bold">
+                                        {reply.from?.name ? reply.from.name.charAt(0).toUpperCase() : '?'}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center justify-between gap-2 mb-0.5">
+                                      <span className="text-[10px] font-semibold text-gray-900 truncate">{reply.from?.name || 'Unknown'}</span>
+                                      <span className="text-[8px] text-gray-500 flex-shrink-0">
+                                        {new Date(reply.created_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                      </span>
+                                    </div>
+                                    <p className="text-[10px] text-gray-700 break-words">{reply.message}</p>
+                                    {reply.like_count > 0 && (
+                                      <div className="mt-0.5 flex items-center gap-1">
+                                        <Heart className="h-2 w-2 text-blue-500" fill="currentColor" />
+                                        <span className="text-[8px] text-gray-500">{reply.like_count}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-6">
+                      <MessageCircle className="h-8 w-8 mx-auto mb-2 text-gray-300" />
+                      <p className="text-xs text-gray-500">No comments yet</p>
+                    </div>
+                  )}
+                </div>
+
+                {comments.length >= 50 && (
+                  <p className="text-[10px] text-gray-400 text-center mt-2">Showing first 50 comments</p>
+                )}
+              </div>
+
+              {/* ── 11. Boost Post CTA ──────────────────────────────────── */}
               {onBoostPost && (
                 <div className="bg-white px-4 py-4">
                   <button

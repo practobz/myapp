@@ -81,7 +81,8 @@ import MetaLoginPopup from './components/MetaLoginPopup';
 import CustomerWelcome from './customer/auth/CustomerWelcome';
 import Configure from './components/Configure';
 import SocialIntegrations from './customer/Integration/SocialIntegrations';
-
+// Docs
+import AirSparkDocs from './Airspark_Docs/AirSparkDocs';
 // Import the new component
 import CustomerAnalytics from './customer/Analytics';
 import ROIDashboard from './customer/ROIDashboard';
@@ -629,7 +630,7 @@ function App() {
                   <WhatsAppIntegration />
                 </ProtectedRoutePortal>
               } />
-
+<Route path="/docs" element={<AirSparkDocs />} />
               
               {/* Default route */}
               <Route path="/" element={<Navigate to="/login" replace />} />

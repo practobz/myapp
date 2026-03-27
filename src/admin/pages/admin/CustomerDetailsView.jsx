@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
+import {
+  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer
+} from 'recharts';
 import AdminLayout from '../../components/layout/AdminLayout';
 import ContentItemModal from '../../components/modals/ContentItemModal';
 import ContentCalendarModal from '../../components/modals/ContentCalendarModal';
@@ -27,8 +30,146 @@ import {
   CheckCircle,
   X,
   Clock,
-  Download
+  Download,
+  TrendingUp
 } from 'lucide-react';
+
+// ── Social platform badges ───────────────────────────────────────────────────
+const PLATFORM_META = {
+  facebook:  { abbr: 'FB', cls: 'bg-blue-600',                                   title: 'Facebook'  },
+  instagram: { abbr: 'IG', cls: 'bg-gradient-to-br from-purple-600 to-pink-500', title: 'Instagram' },
+  youtube:   { abbr: 'YT', cls: 'bg-red-600',                                    title: 'YouTube'   },
+  linkedin:  { abbr: 'LI', cls: 'bg-blue-800',                                   title: 'LinkedIn'  },
+  twitter:   { abbr: 'TW', cls: 'bg-sky-500',                                    title: 'Twitter'   },
+  x:         { abbr: 'X',  cls: 'bg-gray-900',                                   title: 'X'         },
+  tiktok:    { abbr: 'TK', cls: 'bg-gray-800',                                   title: 'TikTok'    },
+};
+
+const SocialBadge = memo(({ platform }) => {
+  const key = platform?.toLowerCase();
+  const meta = PLATFORM_META[key] || {
+    abbr: (key?.[0] || '?').toUpperCase(),
+    cls: 'bg-gray-400',
+    title: platform,
+  };
+  return (
+    <span
+      title={meta.title}
+      className={`inline-flex items-center justify-center w-6 h-6 rounded text-white text-[10px] font-bold flex-shrink-0 ${meta.cls}`}
+    >
+      {meta.abbr}
+    </span>
+  );
+});
+SocialBadge.displayName = 'SocialBadge';
+
+// ── Trend helpers ─────────────────────────────────────────────────────────────
+function buildTrend(calendars, rangeMonths) {
+  const allItems = calendars.flatMap(cal => cal.contentItems || []);
+  const now = new Date();
+  const buckets = [];
+  for (let i = rangeMonths - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    buckets.push({
+      monthKey,
+      label: d.toLocaleDateString(undefined, { month: 'short', year: rangeMonths > 6 ? '2-digit' : undefined }),
+      published: 0,
+      pending: 0,
+    });
+  }
+  const map = Object.fromEntries(buckets.map(b => [b.monthKey, b]));
+  allItems.forEach(item => {
+    const key = (item.date || '').slice(0, 7);
+    if (map[key]) {
+      if (item.published) map[key].published++;
+      else map[key].pending++;
+    }
+  });
+  return buckets;
+}
+
+const RANGE_OPTIONS = [
+  { label: '1M', months: 1 },
+  { label: '3M', months: 3 },
+  { label: '6M', months: 6 },
+  { label: '1Y', months: 12 },
+  { label: 'All', months: 24 },
+];
+
+const TrendChart = memo(({ calendars, onClose }) => {
+  const [range, setRange] = useState(6);
+  const data = useMemo(() => buildTrend(calendars, range), [calendars, range]);
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 p-4">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <TrendingUp className="h-4 w-4 text-blue-500" />
+          <span className="text-sm font-semibold text-gray-700">Publishing Trend</span>
+        </div>
+        <div className="flex items-center gap-1">
+          {RANGE_OPTIONS.map(opt => (
+            <button
+              key={opt.label}
+              onClick={() => setRange(opt.months)}
+              className={`px-2.5 py-0.5 rounded-md text-xs font-medium transition-colors ${
+                range === opt.months
+                  ? 'bg-emerald-600 text-white'
+                  : 'text-gray-500 hover:bg-gray-100'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+          <button
+            onClick={onClose}
+            className="ml-1 p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+
+      <div className="h-48">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={data} margin={{ top: 5, right: 5, bottom: 0, left: -20 }}>
+            <defs>
+              <linearGradient id="cdvGreen" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#10b981" stopOpacity={0.25} />
+                <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+              </linearGradient>
+              <linearGradient id="cdvAmber" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.25} />
+                <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <XAxis dataKey="label" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
+            <Tooltip
+              contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb', background: '#fff' }}
+              formatter={(value, name) => [value, name === 'published' ? 'Published' : 'Pending']}
+            />
+            <Area type="monotone" dataKey="published" stroke="#10b981" strokeWidth={2} fill="url(#cdvGreen)" dot={false} activeDot={{ r: 4 }} />
+            <Area type="monotone" dataKey="pending"   stroke="#f59e0b" strokeWidth={2} fill="url(#cdvAmber)" dot={false} activeDot={{ r: 4 }} />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+
+      <div className="flex items-center gap-4 mt-2">
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-1.5 bg-emerald-500 rounded-full" />
+          <span className="text-xs text-gray-500">Published</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-1.5 bg-amber-500 rounded-full" />
+          <span className="text-xs text-gray-500">Pending</span>
+        </div>
+      </div>
+    </div>
+  );
+});
+TrendChart.displayName = 'TrendChart';
 
 // Status configuration helper
 const getStatusConfig = (status) => {
@@ -152,6 +293,8 @@ function CustomerDetailsView() {
   const [expandedCalendars, setExpandedCalendars] = useState(new Set());
   const [mobileMenuCalendar, setMobileMenuCalendar] = useState(null);
   const [scheduledPosts, setScheduledPosts] = useState([]);
+  const [socialAccounts, setSocialAccounts] = useState([]);
+  const [showTrend, setShowTrend] = useState(false);
 
   const API_URL = process.env.REACT_APP_API_URL;
 
@@ -180,6 +323,7 @@ function CustomerDetailsView() {
       fetchCalendars();
       fetchCreators();
       fetchScheduledPosts();
+      fetchSocialAccounts();
     }
   }, [id]);
 
@@ -237,6 +381,22 @@ function CustomerDetailsView() {
       setScheduledPosts([]);
     }
   };
+
+  const fetchSocialAccounts = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/customer-social-links/${encodeURIComponent(id)}`);
+      if (response.ok) {
+        const data = await response.json();
+        setSocialAccounts(data.accounts || []);
+      }
+    } catch {
+      setSocialAccounts([]);
+    }
+  };
+
+  const socialPlatforms = useMemo(() => (
+    [...new Set(socialAccounts.map(a => a.platform?.toLowerCase()).filter(Boolean))]
+  ), [socialAccounts]);
 
   // Check if item is published (manual or via scheduled post)
   const isItemPublished = useCallback((item) => {
@@ -616,6 +776,11 @@ function CustomerDetailsView() {
             <div className="ml-2 sm:ml-3 min-w-0 flex-1">
               <h2 className="text-lg sm:text-xl font-bold text-gray-900 truncate">{customer.name || 'Customer'}</h2>
               <p className="text-sm text-gray-500 truncate">{customer.email}</p>
+              {socialPlatforms.length > 0 && (
+                <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                  {socialPlatforms.map(p => <SocialBadge key={p} platform={p} />)}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -650,6 +815,17 @@ function CustomerDetailsView() {
                 <p className="text-sm text-gray-500 mt-0.5">Manage content schedule and items</p>
               </div>
               <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowTrend(v => !v)}
+                  className={`inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                    showTrend
+                      ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                      : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                  }`}
+                >
+                  <TrendingUp className="h-4 w-4 mr-1.5" />
+                  Trend
+                </button>
                 <button
                   onClick={() => setIsReportModalOpen(true)}
                   className="inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
@@ -709,6 +885,13 @@ function CustomerDetailsView() {
               </div>
             )}
           </div>
+
+          {/* Trend chart */}
+          {showTrend && calendars.length > 0 && (
+            <div className="px-4 sm:px-6 pb-4">
+              <TrendChart calendars={calendars} onClose={() => setShowTrend(false)} />
+            </div>
+          )}
 
           <div className="p-4 sm:p-5">
             {calendars.length > 0 ? (

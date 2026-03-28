@@ -4,7 +4,7 @@ import {
   X, Eye, Heart, MessageCircle, Send, Share2, Bookmark, 
   Users, TrendingUp, ChevronRight, Play, Clock, UserPlus,
   Repeat, ArrowLeft, Info, Rocket, ChevronDown, BarChart3,
-  Loader2, AlertCircle, Trash2, EyeOff, Download
+  Loader2, AlertCircle, EyeOff, Download
 } from 'lucide-react';
 import TrendChart from '../../components/TrendChart';
 
@@ -235,7 +235,7 @@ const singlePoint = (value, date) => [{ date: date || new Date().toISOString().s
 
 // ─── Main Component ──────────────────────────────────────────────────────────
 
-function InstagramPostInsights({ isOpen, onClose, post, accessToken, accountProfile, onBoostPost }) {
+function InstagramPostInsights({ isOpen, onClose, post, accessToken, accountProfile, onBoostPost, onDeletePost, onUpdatePost }) {
   const [insights,                setInsights]                = useState(null);
   const [loading,                 setLoading]                 = useState(false);
   const [error,                   setError]                   = useState(null);
@@ -578,6 +578,7 @@ function InstagramPostInsights({ isOpen, onClose, post, accessToken, accountProf
                     <p className="text-xs text-gray-500 mt-1">
                       {new Date(post.timestamp).toLocaleDateString('en-US',{day:'numeric',month:'short',year:'numeric'})} · {accountProfile?.username || 'Business Account'}
                     </p>
+
                   </div>
                 </div>
               </div>
@@ -952,6 +953,7 @@ function InstagramPostInsights({ isOpen, onClose, post, accessToken, accountProf
           )}
         </div>
       </div>
+
     </div>
   );
 }

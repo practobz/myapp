@@ -3,7 +3,7 @@ import {
   ArrowLeft, Eye, MessageCircle, Share2, Heart,
   Users, TrendingUp, Clock, ChevronRight, Play,
   Info, Rocket, UserPlus, BarChart3, ThumbsUp,
-  Loader2, AlertCircle, Send
+  Loader2, AlertCircle, Send, Pencil, Trash2
 } from 'lucide-react';
 import TrendChart from '../../components/TrendChart';
 
@@ -16,51 +16,6 @@ import TrendChart from '../../components/TrendChart';
  *
  * API Reference: https://developers.facebook.com/docs/graph-api/reference/insights#page-post-insights
  */
-
-// ─── Simple line chart (Views over time) ──────────────────────────────────────
-const ViewsLineChart = ({ data }) => {
-  if (!data || data.length === 0) return null;
-
-  const maxVal = Math.max(...data.map(d => d.value), 1);
-  const width = 320;
-  const height = 80;
-  const pad = { top: 8, right: 8, bottom: 20, left: 8 };
-  const innerW = width - pad.left - pad.right;
-  const innerH = height - pad.top - pad.bottom;
-
-  const pts = data.map((d, i) => {
-    const x = pad.left + (i / (data.length - 1)) * innerW;
-    const y = pad.top + (1 - d.value / maxVal) * innerH;
-    return `${x},${y}`;
-  }).join(' ');
-
-  const areaClose = `${pad.left + innerW},${pad.top + innerH} ${pad.left},${pad.top + innerH}`;
-
-  return (
-    <div className="w-full">
-      <svg viewBox={`0 0 ${width} ${height}`} className="w-full" style={{ height: 80 }}>
-        <defs>
-          <linearGradient id="fbViewsGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor="#1877F2" stopOpacity="0.25" />
-            <stop offset="100%" stopColor="#1877F2" stopOpacity="0.03" />
-          </linearGradient>
-        </defs>
-        <polygon fill="url(#fbViewsGrad)" points={`${pts} ${areaClose}`} />
-        <polyline fill="none" stroke="#1877F2" strokeWidth="2" strokeLinejoin="round" points={pts} />
-        {data.map((d, i) => {
-          const x = pad.left + (i / (data.length - 1)) * innerW;
-          const y = pad.top + (1 - d.value / maxVal) * innerH;
-          return <circle key={i} cx={x} cy={y} r="2.5" fill="#1877F2" />;
-        })}
-      </svg>
-      <div className="flex justify-between text-[10px] text-gray-400 mt-1">
-        <span>{data[0]?.label || ''}</span>
-        <span>{data[Math.floor(data.length / 2)]?.label || ''}</span>
-        <span>{data[data.length - 1]?.label || ''}</span>
-      </div>
-    </div>
-  );
-};
 
 // ─── Audience Retention Chart ──────────────────────────────────────────────────
 const RetentionChart = ({ data }) => {
@@ -191,6 +146,8 @@ function FacebookPostInsights({
   pageName,
   pageProfilePic,
   onBoostPost,
+  onDeletePost,
+  onUpdatePost,
 }) {
   const [insights, setInsights] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -206,6 +163,14 @@ function FacebookPostInsights({
   const [replyText, setReplyText] = useState('');
   const [sendingReply, setSendingReply] = useState(false);
   const [deletingComment, setDeletingComment] = useState(null);
+
+  // Post delete / update state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showUpdateModal,   setShowUpdateModal]   = useState(false);
+  const [updateMessage,     setUpdateMessage]     = useState('');
+  const [isDeleting,        setIsDeleting]        = useState(false);
+  const [isUpdating,        setIsUpdating]        = useState(false);
+  const [deleteApiError,    setDeleteApiError]    = useState(null);  // set when API delete is blocked
 
   const isVideo =
     post?.type === 'video' ||
@@ -280,6 +245,75 @@ function FacebookPostInsights({
       console.error('Error posting reply:', err);
     } finally {
       setSendingReply(false);
+    }
+  };
+
+  // ── Delete post via Facebook Graph API ─────────────────────────────────────
+  // Tries the API first; falls back to opening the post on Facebook if the app
+  // doesn't have the "select developer" permission required by Meta.
+  const deletePost = async () => {
+    if (!post?.id || !pageAccessToken) return;
+    setIsDeleting(true);
+    setDeleteApiError(null);
+    try {
+      // Extract the numeric page ID from the composite post ID ({page-id}_{post-id})
+      const pageId  = post.id.split('_')[0];
+      const res = await fetch(
+        `https://graph.facebook.com/v25.0/${post.id}?access_token=${pageAccessToken}`,
+        { method: 'DELETE' }
+      );
+      const data = await res.json();
+      if (data?.success === true) {
+        // API delete succeeded
+        setShowDeleteConfirm(false);
+        onDeletePost?.(post.id);
+        onClose();
+        return;
+      }
+      // API rejected — surface a fallback UI inside the modal
+      setDeleteApiError(
+        data?.error?.message || 'Meta restricts API deletion to select developers.'
+      );
+    } catch (err) {
+      setDeleteApiError('Network error. Please try again.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const openPostOnFacebook = () => {
+    const url = post?.permalink_url || `https://www.facebook.com/${post?.id}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+    setShowDeleteConfirm(false);
+    setDeleteApiError(null);
+  };
+
+  // ── Update post message via Facebook Graph API ────────────────────────────
+  // Graph API expects application/x-www-form-urlencoded, not JSON.
+  const updatePost = async () => {
+    if (!post?.id || !pageAccessToken || !updateMessage.trim()) return;
+    setIsUpdating(true);
+    try {
+      const body = new URLSearchParams({ message: updateMessage, access_token: pageAccessToken });
+      const res = await fetch(
+        `https://graph.facebook.com/v25.0/${post.id}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: body.toString(),
+        }
+      );
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        alert(`Failed to update post: ${data.error?.message || 'Unknown error'}`);
+        return;
+      }
+      setShowUpdateModal(false);
+      onUpdatePost?.(post.id, updateMessage);
+    } catch (err) {
+      alert('Network error while updating post.');
+    } finally {
+      setIsUpdating(false);
     }
   };
 
@@ -767,30 +801,25 @@ function FacebookPostInsights({
                         View post →
                       </a>
                     )}
+                    <div className="flex items-center gap-2 mt-2">
+                      <button
+                        onClick={() => { setUpdateMessage(post.message || ''); setShowUpdateModal(true); }}
+                        className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium px-2 py-1 rounded-md hover:bg-blue-50 transition-colors"
+                      >
+                        <Pencil className="w-3 h-3" />
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => setShowDeleteConfirm(true)}
+                        className="flex items-center gap-1 text-xs text-red-500 hover:text-red-600 font-medium px-2 py-1 rounded-md hover:bg-red-50 transition-colors"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        Delete
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
-
-              {/* ── 1. Views over time ──────────────────────────────────── */}
-              <div className="bg-white border-b border-gray-100 px-4 py-4">
-                <div className="flex items-center justify-between mb-1">
-                  <h3 className="text-sm font-bold text-gray-900">Views over time</h3>
-                  <button className="p-0.5">
-                    <Info className="w-4 h-4 text-gray-400" />
-                  </button>
-                </div>
-                <ViewsLineChart data={insights.viewsOverTime} />
-                <div className="mt-3 space-y-0">
-                  <MetricRow label="Views (impressions)" value={fmtNum(insights.mediaViews || insights.impressions || insights.videoViews)} />
-                  <MetricRow label="Viewers (reach)"     value={fmtNum(insights.mediaViewsUnique || insights.reach)} />
-                  {insights.impressOrganic > 0 && (
-                    <MetricRow label="Organic impressions" value={fmtNum(insights.impressOrganic)} />
-                  )}
-                  {insights.impressPaid > 0 && (
-                    <MetricRow label="Paid impressions" value={fmtNum(insights.impressPaid)} />
-                  )}
-                </div>
-              </div>
 
               {/* ── 2. Audience Retention (video only) ─────────────────── */}
               {isVideo && insights.retentionData && (
@@ -1124,18 +1153,21 @@ function FacebookPostInsights({
                     comments.map((comment) => (
                       <div key={comment.id} className="bg-gray-50 border border-gray-200 rounded-lg p-2.5">
                         <div className="flex items-start gap-2">
-                          <div className="w-7 h-7 bg-gradient-to-br from-blue-400 to-indigo-600 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
+                          <div
+                            className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden"
+                            style={{ background: avatarColor(comment.id) }}
+                          >
                             {comment.from?.picture?.data?.url ? (
                               <img src={comment.from.picture.data.url} alt="" className="w-full h-full object-cover" />
                             ) : (
                               <span className="text-white text-[10px] font-bold">
-                                {comment.from?.name ? comment.from.name.charAt(0).toUpperCase() : '?'}
+                                {comment.from?.name ? comment.from.name.charAt(0).toUpperCase() : '👤'}
                               </span>
                             )}
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between gap-2 mb-0.5">
-                              <span className="text-xs font-semibold text-gray-900 truncate">{comment.from?.name || 'Unknown'}</span>
+                              <span className="text-xs font-semibold text-gray-900 truncate">{comment.from?.name || 'Facebook User'}</span>
                               <span className="text-[9px] text-gray-500 flex-shrink-0">
                                 {new Date(comment.created_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                               </span>
@@ -1214,18 +1246,21 @@ function FacebookPostInsights({
                             {comment.comments.data.map((reply) => (
                               <div key={reply.id} className="bg-blue-50 border border-blue-100 rounded-lg p-2">
                                 <div className="flex items-start gap-2">
-                                  <div className="w-5 h-5 bg-gradient-to-br from-blue-400 to-indigo-600 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
+                                  <div
+                                    className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden"
+                                    style={{ background: avatarColor(reply.id) }}
+                                  >
                                     {reply.from?.picture?.data?.url ? (
                                       <img src={reply.from.picture.data.url} alt="" className="w-full h-full object-cover" />
                                     ) : (
                                       <span className="text-white text-[9px] font-bold">
-                                        {reply.from?.name ? reply.from.name.charAt(0).toUpperCase() : '?'}
+                                        {reply.from?.name ? reply.from.name.charAt(0).toUpperCase() : '👤'}
                                       </span>
                                     )}
                                   </div>
                                   <div className="flex-1 min-w-0">
                                     <div className="flex items-center justify-between gap-2 mb-0.5">
-                                      <span className="text-[10px] font-semibold text-gray-900 truncate">{reply.from?.name || 'Unknown'}</span>
+                                      <span className="text-[10px] font-semibold text-gray-900 truncate">{reply.from?.name || 'Facebook User'}</span>
                                       <span className="text-[8px] text-gray-500 flex-shrink-0">
                                         {new Date(reply.created_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                                       </span>
@@ -1293,8 +1328,145 @@ function FacebookPostInsights({
           )}
         </div>
       </div>
+
+      {/* ── Delete Confirmation Modal ── */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60" onClick={() => { if (!isDeleting) { setShowDeleteConfirm(false); setDeleteApiError(null); } }} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-80 mx-4 p-6">
+            {!deleteApiError ? (
+              // ─ Initial confirm state
+              <>
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                    <Trash2 className="w-5 h-5 text-red-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-gray-900">Delete this post?</h3>
+                    <p className="text-xs text-gray-500 mt-0.5">This action cannot be undone.</p>
+                  </div>
+                </div>
+                <div className="flex gap-2 mt-5">
+                  <button
+                    onClick={() => { setShowDeleteConfirm(false); setDeleteApiError(null); }}
+                    disabled={isDeleting}
+                    className="flex-1 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={deletePost}
+                    disabled={isDeleting}
+                    className="flex-1 py-2 rounded-lg bg-red-500 text-white text-sm font-medium hover:bg-red-600 transition-colors disabled:opacity-60 flex items-center justify-center gap-1.5"
+                  >
+                    {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                    {isDeleting ? 'Deleting…' : 'Delete post'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              // ─ API blocked fallback state
+              <>
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-full bg-yellow-100 flex items-center justify-center flex-shrink-0">
+                    <Info className="w-5 h-5 text-yellow-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-gray-900">Can't delete via API</h3>
+                    <p className="text-xs text-gray-500 mt-0.5">Meta restricts this to select apps.</p>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-600 mb-1">{deleteApiError}</p>
+                <p className="text-xs text-gray-500 mb-4">
+                  Open the post on Facebook and delete it from the
+                  three-dot menu, or manage it in{' '}
+                  <a
+                    href="https://business.facebook.com/content_management"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:underline"
+                  >
+                    Meta Business Suite
+                  </a>.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { setShowDeleteConfirm(false); setDeleteApiError(null); }}
+                    className="flex-1 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    Close
+                  </button>
+                  <button
+                    onClick={openPostOnFacebook}
+                    className="flex-1 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    Open on Facebook ↗
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Update Post Modal ── */}
+      {showUpdateModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60" onClick={() => !isUpdating && setShowUpdateModal(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6">
+            <h3 className="text-sm font-bold text-gray-900 mb-1">Edit post</h3>
+            <p className="text-xs text-gray-500 mb-3">
+              Note: updates only work if this post was created by the same app.{' '}
+              <a
+                href="https://developers.facebook.com/docs/graph-api/reference/page-post#updating"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 hover:underline"
+              >
+                Docs ↗
+              </a>
+            </p>
+            <textarea
+              value={updateMessage}
+              onChange={e => setUpdateMessage(e.target.value)}
+              rows={4}
+              placeholder="Write something…"
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-800 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+            <div className="flex gap-2 mt-4">
+              <button
+                onClick={() => setShowUpdateModal(false)}
+                disabled={isUpdating}
+                className="flex-1 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={updatePost}
+                disabled={isUpdating || !updateMessage.trim()}
+                className="flex-1 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-1.5"
+              >
+                {isUpdating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Pencil className="w-4 h-4" />}
+                {isUpdating ? 'Saving…' : 'Save changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
+}
+
+// Generates a consistent avatar background color from a comment/reply ID string
+function avatarColor(id = '') {
+  const palette = [
+    '#4F46E5', '#0891B2', '#059669', '#D97706',
+    '#DC2626', '#7C3AED', '#DB2777', '#2563EB',
+  ];
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
+  return palette[hash % palette.length];
 }
 
 // Helper for trend charts — standalone (not a method in the component)

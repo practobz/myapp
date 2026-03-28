@@ -2868,6 +2868,27 @@ function FacebookIntegration() {
                 pageName={insightsPage?.name}
                 pageProfilePic={insightsPage?.picture?.data?.url}
                 onBoostPost={() => {}}
+                onDeletePost={(deletedPostId) => {
+                  setPagePosts(prev => {
+                    const updated = {};
+                    for (const pageId of Object.keys(prev)) {
+                      updated[pageId] = prev[pageId].filter(p => p.id !== deletedPostId);
+                    }
+                    return updated;
+                  });
+                }}
+                onUpdatePost={(updatedPostId, newMessage) => {
+                  setPagePosts(prev => {
+                    const updated = {};
+                    for (const pageId of Object.keys(prev)) {
+                      updated[pageId] = prev[pageId].map(p =>
+                        p.id === updatedPostId ? { ...p, message: newMessage } : p
+                      );
+                    }
+                    return updated;
+                  });
+                  setFbInsightsPost(prev => prev?.id === updatedPostId ? { ...prev, message: newMessage } : prev);
+                }}
               />
             );
           })()}

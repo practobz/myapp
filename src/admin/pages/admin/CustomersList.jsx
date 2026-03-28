@@ -318,11 +318,12 @@ function CustomersList() {
       setLoading(true);
       setError('');
 
-      // Fetch customers + all calendars in parallel
+      // Fetch customers, all calendars, and scheduled posts in parallel
       const adminId = currentUser._id || currentUser.id;
-      const [customersRes, calendarsRes] = await Promise.all([
+      const [customersRes, calendarsRes, scheduledPostsRes] = await Promise.all([
         fetch(`${API_URL}/admin/assigned-customers?adminId=${adminId}`),
         fetch(`${API_URL}/calendars`),
+        fetch(`${API_URL}/api/scheduled-posts`),
       ]);
 
       let customerList = [];
@@ -339,6 +340,12 @@ function CustomersList() {
         allCalendars = await calendarsRes.json() || [];
       }
 
+      let scheduledPosts = [];
+      if (scheduledPostsRes.ok) {
+        const spData = await scheduledPostsRes.json();
+        scheduledPosts = Array.isArray(spData) ? spData : [];
+      }
+
       setCustomers(customerList);
 
       // Build enrichment: calendars per customer
@@ -348,29 +355,47 @@ function CustomersList() {
         calendarsByCustomer[cal.customerId].push(cal);
       });
 
-      // Fetch social platforms for all customers in parallel
-      setEnrichLoading(true);
-      const socialResults = await Promise.allSettled(
-        customerList.map(c =>
-          fetch(`${API_URL}/api/customer-social-links/${encodeURIComponent(c._id)}`)
-            .then(r => r.ok ? r.json() : { accounts: [] })
-            .catch(() => ({ accounts: [] }))
-        )
-      );
-
+      // Build enrichment per customer (derived entirely from calendar data)
       const enrichMap = {};
-      customerList.forEach((c, i) => {
-        const socialData = socialResults[i].status === 'fulfilled' ? socialResults[i].value : { accounts: [] };
-        const accounts = socialData.accounts || [];
-        const platforms = [...new Set(accounts.map(a => a.platform?.toLowerCase()).filter(Boolean))];
+      customerList.forEach((c) => {
         const calendars = calendarsByCustomer[c._id] || [];
-        const allItems = calendars.flatMap(cal => cal.contentItems || []);
-        const published = allItems.filter(item => item.published === true).length;
+        const isItemPublished = (item) => {
+          if (item.published === true) return true;
+          return scheduledPosts.some(post =>
+            ((post.item_id && post.item_id === item.id) ||
+             (post.contentId && post.contentId === item.id) ||
+             (post.item_name && post.item_name === (item.title || item.description))) &&
+            (post.status === 'published' || post.publishedAt)
+          );
+        };
+        // Normalize calendars: stamp published=true on items covered by scheduled posts
+        // so buildTrend (which reads item.published) gets accurate data
+        const normalizedCalendars = calendars.map(cal => ({
+          ...cal,
+          contentItems: (cal.contentItems || []).map(item => ({
+            ...item,
+            published: isItemPublished(item),
+          })),
+        }));
+        // Derive platform badges from content item types — not from OAuth accounts.
+        // This means customers with no calendars / no content items show no badges,
+        // and the badges accurately reflect which platforms content is being created for.
+        const platforms = [...new Set(
+          normalizedCalendars.flatMap(cal =>
+            (cal.contentItems || []).flatMap(item => {
+              if (!item.type) return [];
+              if (Array.isArray(item.type)) return item.type.map(p => String(p).toLowerCase().trim()).filter(Boolean);
+              return String(item.type).split(',').map(p => p.toLowerCase().trim()).filter(Boolean);
+            })
+          )
+        )];
+        const allItems = normalizedCalendars.flatMap(cal => cal.contentItems || []);
+        const published = allItems.filter(item => item.published).length;
         enrichMap[c._id] = {
           platforms,
-          calendars,
+          calendars: normalizedCalendars,
           stats: {
-            calendars: calendars.length,
+            calendars: normalizedCalendars.length,
             total: allItems.length,
             published,
             pending: allItems.length - published,

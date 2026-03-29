@@ -482,6 +482,18 @@ function CustomerDetailsView() {
     };
   }, [calendars, isItemPublished]);
 
+  // Calendars with resolved published flags for accurate trend chart
+  const resolvedCalendars = useMemo(() =>
+    calendars.map(cal => ({
+      ...cal,
+      contentItems: (cal.contentItems || []).map(item => ({
+        ...item,
+        published: isItemPublished(item),
+      })),
+    })),
+    [calendars, isItemPublished]
+  );
+
   const handleCreateCalendar = async (calendarData) => {
     try {
       const response = await fetch(`${API_URL}/calendars`, {
@@ -922,7 +934,7 @@ function CustomerDetailsView() {
           {/* Trend chart */}
           {showTrend && calendars.length > 0 && (
             <div className="px-4 sm:px-6 pb-4">
-              <TrendChart calendars={calendars} onClose={() => setShowTrend(false)} />
+              <TrendChart calendars={resolvedCalendars} onClose={() => setShowTrend(false)} />
             </div>
           )}
 

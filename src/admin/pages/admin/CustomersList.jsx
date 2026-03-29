@@ -46,24 +46,57 @@ SocialBadge.displayName = 'SocialBadge';
 function buildTrend(calendars, rangeMonths) {
   const allItems = calendars.flatMap(cal => cal.contentItems || []);
   const now = new Date();
+
+  // 1M → daily buckets (last 30 days)
+  if (rangeMonths === 1) {
+    const buckets = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+      const dayKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      buckets.push({ dayKey, label: d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }), published: 0, pending: 0 });
+    }
+    const map = Object.fromEntries(buckets.map(b => [b.dayKey, b]));
+    allItems.forEach(item => {
+      const key = (item.date || '').slice(0, 10);
+      if (map[key]) { if (item.published) map[key].published++; else map[key].pending++; }
+    });
+    return buckets;
+  }
+
+  // 3M → weekly buckets (12 weeks)
+  if (rangeMonths === 3) {
+    const buckets = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i * 7);
+      const weekStart = new Date(d.getFullYear(), d.getMonth(), d.getDate() - d.getDay());
+      const weekEnd = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + 6);
+      const weekKey = `${weekStart.getFullYear()}-${String(weekStart.getMonth() + 1).padStart(2, '0')}-${String(weekStart.getDate()).padStart(2, '0')}`;
+      buckets.push({ weekKey, weekEnd, label: weekStart.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }), published: 0, pending: 0 });
+    }
+    allItems.forEach(item => {
+      if (!item.date) return;
+      const itemDate = new Date(item.date);
+      for (const bucket of buckets) {
+        if (itemDate >= new Date(bucket.weekKey) && itemDate <= bucket.weekEnd) {
+          if (item.published) bucket.published++; else bucket.pending++;
+          break;
+        }
+      }
+    });
+    return buckets;
+  }
+
+  // 6M, 1Y, All → monthly buckets (always show year)
   const buckets = [];
   for (let i = rangeMonths - 1; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    buckets.push({
-      monthKey,
-      label: d.toLocaleDateString(undefined, { month: 'short', year: rangeMonths > 6 ? '2-digit' : undefined }),
-      published: 0,
-      pending: 0,
-    });
+    buckets.push({ monthKey, label: d.toLocaleDateString(undefined, { month: 'short', year: '2-digit' }), published: 0, pending: 0 });
   }
   const map = Object.fromEntries(buckets.map(b => [b.monthKey, b]));
   allItems.forEach(item => {
     const key = (item.date || '').slice(0, 7);
-    if (map[key]) {
-      if (item.published) map[key].published++;
-      else map[key].pending++;
-    }
+    if (map[key]) { if (item.published) map[key].published++; else map[key].pending++; }
   });
   return buckets;
 }
@@ -159,7 +192,7 @@ const ExpandedTrend = memo(({ calendars, onClose }) => {
                 <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
               </linearGradient>
             </defs>
-            <XAxis dataKey="label" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+            <XAxis dataKey="label" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} interval={range === 1 ? 4 : range === 3 ? 1 : 0} />
             <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
             <Tooltip
               contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb', background: '#fff' }}
@@ -318,12 +351,11 @@ function CustomersList() {
       setLoading(true);
       setError('');
 
-      // Fetch customers, all calendars, and scheduled posts in parallel
+      // Fetch customers + all calendars in parallel
       const adminId = currentUser._id || currentUser.id;
-      const [customersRes, calendarsRes, scheduledPostsRes] = await Promise.all([
+      const [customersRes, calendarsRes] = await Promise.all([
         fetch(`${API_URL}/admin/assigned-customers?adminId=${adminId}`),
         fetch(`${API_URL}/calendars`),
-        fetch(`${API_URL}/api/scheduled-posts`),
       ]);
 
       let customerList = [];
@@ -340,12 +372,6 @@ function CustomersList() {
         allCalendars = await calendarsRes.json() || [];
       }
 
-      let scheduledPosts = [];
-      if (scheduledPostsRes.ok) {
-        const spData = await scheduledPostsRes.json();
-        scheduledPosts = Array.isArray(spData) ? spData : [];
-      }
-
       setCustomers(customerList);
 
       // Build enrichment: calendars per customer
@@ -355,47 +381,29 @@ function CustomersList() {
         calendarsByCustomer[cal.customerId].push(cal);
       });
 
-      // Build enrichment per customer (derived entirely from calendar data)
+      // Fetch social platforms for all customers in parallel
+      setEnrichLoading(true);
+      const socialResults = await Promise.allSettled(
+        customerList.map(c =>
+          fetch(`${API_URL}/api/customer-social-links/${encodeURIComponent(c._id)}`)
+            .then(r => r.ok ? r.json() : { accounts: [] })
+            .catch(() => ({ accounts: [] }))
+        )
+      );
+
       const enrichMap = {};
-      customerList.forEach((c) => {
+      customerList.forEach((c, i) => {
+        const socialData = socialResults[i].status === 'fulfilled' ? socialResults[i].value : { accounts: [] };
+        const accounts = socialData.accounts || [];
+        const platforms = [...new Set(accounts.map(a => a.platform?.toLowerCase()).filter(Boolean))];
         const calendars = calendarsByCustomer[c._id] || [];
-        const isItemPublished = (item) => {
-          if (item.published === true) return true;
-          return scheduledPosts.some(post =>
-            ((post.item_id && post.item_id === item.id) ||
-             (post.contentId && post.contentId === item.id) ||
-             (post.item_name && post.item_name === (item.title || item.description))) &&
-            (post.status === 'published' || post.publishedAt)
-          );
-        };
-        // Normalize calendars: stamp published=true on items covered by scheduled posts
-        // so buildTrend (which reads item.published) gets accurate data
-        const normalizedCalendars = calendars.map(cal => ({
-          ...cal,
-          contentItems: (cal.contentItems || []).map(item => ({
-            ...item,
-            published: isItemPublished(item),
-          })),
-        }));
-        // Derive platform badges from content item types — not from OAuth accounts.
-        // This means customers with no calendars / no content items show no badges,
-        // and the badges accurately reflect which platforms content is being created for.
-        const platforms = [...new Set(
-          normalizedCalendars.flatMap(cal =>
-            (cal.contentItems || []).flatMap(item => {
-              if (!item.type) return [];
-              if (Array.isArray(item.type)) return item.type.map(p => String(p).toLowerCase().trim()).filter(Boolean);
-              return String(item.type).split(',').map(p => p.toLowerCase().trim()).filter(Boolean);
-            })
-          )
-        )];
-        const allItems = normalizedCalendars.flatMap(cal => cal.contentItems || []);
-        const published = allItems.filter(item => item.published).length;
+        const allItems = calendars.flatMap(cal => cal.contentItems || []);
+        const published = allItems.filter(item => item.published === true).length;
         enrichMap[c._id] = {
           platforms,
-          calendars: normalizedCalendars,
+          calendars,
           stats: {
-            calendars: normalizedCalendars.length,
+            calendars: calendars.length,
             total: allItems.length,
             published,
             pending: allItems.length - published,

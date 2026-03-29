@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, memo, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, memo, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import AdminLayout from '../../components/layout/AdminLayout';
@@ -7,8 +7,74 @@ import AssignCreatorModal from '../../components/modals/AssignCreatorModal';
 import ContentCalendarModal from '../../components/modals/ContentCalendarModal';
 import {
   ChevronLeft, Pencil, Trash2, Plus, AlertCircle, Calendar, Clock,
-  ChevronRight, ChevronDown, MoreVertical, Upload, X, FileText, CheckCircle, Edit
+  ChevronRight, ChevronDown, MoreVertical, Upload, X, FileText, CheckCircle, Edit,
+  ExternalLink, TrendingUp, Eye, Heart, Share2, MessageCircle
 } from 'lucide-react';
+import { XAxis, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
+
+// Platform logo icon component
+const PlatformIcon = ({ platform }) => {
+  const p = (platform || '').toLowerCase().trim();
+  if (p === 'facebook') return (
+    <svg viewBox="0 0 24 24" className="w-4 h-4 flex-shrink-0" fill="#1877F2" aria-label="Facebook">
+      <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+    </svg>
+  );
+  if (p === 'instagram') return (
+    <svg viewBox="0 0 24 24" className="w-4 h-4 flex-shrink-0" fill="#E1306C" aria-label="Instagram">
+      <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/>
+    </svg>
+  );
+  if (p === 'linkedin') return (
+    <svg viewBox="0 0 24 24" className="w-4 h-4 flex-shrink-0" fill="#0A66C2" aria-label="LinkedIn">
+      <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+    </svg>
+  );
+  if (p === 'youtube') return (
+    <svg viewBox="0 0 24 24" className="w-4 h-4 flex-shrink-0" fill="#FF0000" aria-label="YouTube">
+      <path d="M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+    </svg>
+  );
+  if (p === 'twitter' || p === 'x') return (
+    <svg viewBox="0 0 24 24" className="w-4 h-4 flex-shrink-0" fill="#000000" aria-label="X (Twitter)">
+      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.73-8.835L1.254 2.25H8.08l4.253 5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+    </svg>
+  );
+  return <span className="text-[10px] font-medium text-gray-600 capitalize">{platform}</span>;
+};
+
+// Timeline component showing item lifecycle stages
+const ItemTimeline = ({ item, itemStatus }) => {
+  const isAssigned = !!item.assignedTo || ['assigned', 'in_progress', 'under_review', 'approved', 'published'].includes(itemStatus);
+  const isReviewed = ['under_review', 'approved', 'published'].includes(itemStatus);
+  const isPublished = itemStatus === 'published';
+  const steps = [
+    { key: 'created',   label: 'Created',   done: true },
+    { key: 'assigned',  label: 'Assigned',  done: isAssigned },
+    { key: 'reviewed',  label: 'Reviewed',  done: isReviewed },
+    { key: 'published', label: 'Published', done: isPublished },
+  ];
+  return (
+    <div className="flex items-start mt-2">
+      {steps.map((step, idx) => (
+        <React.Fragment key={step.key}>
+          <div className="flex flex-col items-center">
+            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${step.done ? 'bg-emerald-500' : 'bg-gray-200'}`} />
+            <span className={`text-[9px] leading-none mt-0.5 whitespace-nowrap ${step.done ? 'text-emerald-600 font-medium' : 'text-gray-400'}`}>
+              {step.label}
+            </span>
+          </div>
+          {idx < steps.length - 1 && (
+            <div
+              className={`flex-1 h-px mt-1 mx-0.5 ${step.done && steps[idx + 1].done ? 'bg-emerald-400' : 'bg-gray-200'}`}
+              style={{ minWidth: '8px' }}
+            />
+          )}
+        </React.Fragment>
+      ))}
+    </div>
+  );
+};
 
 // Status configuration helper
 const getStatusConfig = (status) => {
@@ -21,6 +87,120 @@ const getStatusConfig = (status) => {
   };
   return configs[status] || configs.pending;
 };
+
+// Trend button shown on published items — triggers per-post analytics fetch on click
+const PostTrendButton = memo(({ isLoading, isActive, onClick }) => (
+  <button
+    className={`flex items-center gap-1 px-1.5 py-0.5 rounded border transition-colors flex-shrink-0 ${
+      isActive
+        ? 'bg-blue-100 border-blue-300 text-blue-700'
+        : 'bg-blue-50 hover:bg-blue-100 border-blue-100 text-blue-600'
+    }`}
+    onClick={onClick}
+    title="View post engagement trend"
+  >
+    {isLoading
+      ? <div className="w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+      : <TrendingUp className="h-3 w-3" />
+    }
+    <span className="text-[10px] font-medium hidden sm:inline">Trend</span>
+  </button>
+));
+PostTrendButton.displayName = 'PostTrendButton';
+
+// Expanded per-post trend chart with date range selector
+const ExpandedTrendChart = memo(({ data, dateRange, onDateRangeChange, onClose }) => {
+  const ranges = [
+    { label: '7D', value: 7 },
+    { label: '14D', value: 14 },
+    { label: '30D', value: 30 },
+    { label: '90D', value: 90 },
+  ];
+  const displayData = (data || []).slice(-dateRange);
+  const totalLikes    = displayData.reduce((s, d) => s + (d.likes    || 0), 0);
+  const totalComments = displayData.reduce((s, d) => s + (d.comments || 0), 0);
+  const totalShares   = displayData.reduce((s, d) => s + (d.shares   || 0), 0);
+
+  return (
+    <div className="mt-3 bg-blue-50/50 rounded-lg border border-blue-100 p-3" onClick={e => e.stopPropagation()}>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-semibold text-gray-700">Post Engagement Trend</span>
+          <div className="flex gap-1">
+            {ranges.map(r => (
+              <button
+                key={r.value}
+                onClick={() => onDateRangeChange(r.value)}
+                className={`px-2 py-0.5 text-[10px] rounded-full font-medium transition-colors ${
+                  dateRange === r.value
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white text-gray-500 hover:bg-gray-100 border border-gray-200'
+                }`}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 rounded">
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      {/* Summary stats */}
+      <div className="grid grid-cols-3 gap-2 mb-2">
+        <div className="flex items-center gap-1.5 bg-white rounded-md px-2 py-1 border border-gray-100">
+          <Heart className="h-3 w-3 text-red-500" />
+          <span className="text-[10px] text-gray-500">Likes</span>
+          <span className="text-xs font-semibold text-gray-800 ml-auto">{totalLikes.toLocaleString()}</span>
+        </div>
+        <div className="flex items-center gap-1.5 bg-white rounded-md px-2 py-1 border border-gray-100">
+          <MessageCircle className="h-3 w-3 text-blue-500" />
+          <span className="text-[10px] text-gray-500">Comments</span>
+          <span className="text-xs font-semibold text-gray-800 ml-auto">{totalComments.toLocaleString()}</span>
+        </div>
+        <div className="flex items-center gap-1.5 bg-white rounded-md px-2 py-1 border border-gray-100">
+          <Share2 className="h-3 w-3 text-green-500" />
+          <span className="text-[10px] text-gray-500">Shares</span>
+          <span className="text-xs font-semibold text-gray-800 ml-auto">{totalShares.toLocaleString()}</span>
+        </div>
+      </div>
+
+      {/* Chart or empty state */}
+      {(!data || data.length === 0) ? (
+        <div className="h-24 flex items-center justify-center">
+          <p className="text-xs text-gray-400">No analytics snapshots found for this post yet.</p>
+        </div>
+      ) : (
+        <div className="h-32 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={displayData} margin={{ top: 4, right: 4, left: 4, bottom: 4 }}>
+              <XAxis
+                dataKey="date"
+                tick={{ fontSize: 9 }}
+                tickFormatter={v => {
+                  const d = new Date(v);
+                  return `${d.getDate()}/${d.getMonth() + 1}`;
+                }}
+                stroke="#9CA3AF"
+                axisLine={false}
+                tickLine={false}
+              />
+              <Tooltip
+                contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #e5e7eb' }}
+                labelFormatter={v => new Date(v).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
+              />
+              <Line type="monotone" dataKey="likes"    stroke="#EF4444" strokeWidth={1.5} dot={false} name="Likes" />
+              <Line type="monotone" dataKey="comments" stroke="#3B82F6" strokeWidth={1.5} dot={false} name="Comments" />
+              <Line type="monotone" dataKey="shares"   stroke="#22C55E" strokeWidth={1.5} dot={false} name="Shares" />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </div>
+  );
+});
+ExpandedTrendChart.displayName = 'ExpandedTrendChart';
 
 const API_URL = process.env.REACT_APP_API_URL;
 
@@ -44,6 +224,11 @@ const CustomerDetails = () => {
   const [calendarToEdit, setCalendarToEdit] = useState(null);
   const [mobileMenuCalendar, setMobileMenuCalendar] = useState(null);
   const [scheduledPosts, setScheduledPosts] = useState([]);
+  // Per-post trend cache: itemKey → [{date, likes, comments, shares}] | null (loading) | undefined (not fetched)
+  const [postTrendCache, setPostTrendCache] = useState({});
+  const fetchedTrendItemsRef = useRef(new Set());
+  const [expandedTrendItem, setExpandedTrendItem] = useState(null);
+  const [trendDateRange, setTrendDateRange] = useState(7);
 
   useEffect(() => {
     fetchCustomer();
@@ -65,6 +250,70 @@ const CustomerDetails = () => {
     }
   };
 
+  // Fetch per-post trend data from analytics snapshots (on-demand, cached by itemKey)
+  const fetchPostTrend = useCallback(async (itemKey, item) => {
+    if (fetchedTrendItemsRef.current.has(itemKey)) return;
+    fetchedTrendItemsRef.current.add(itemKey);
+
+    // null = loading
+    setPostTrendCache(prev => ({ ...prev, [itemKey]: null }));
+
+    // Find the matching published scheduled post for this item
+    const matchedPost = scheduledPosts.find(post =>
+      ((post.item_id && post.item_id === item.id) ||
+       (post.contentId && post.contentId === item.id) ||
+       (post.item_name && post.item_name === (item.title || item.description))) &&
+      (post.status === 'published' || post.publishedAt)
+    );
+
+    const instagramId  = matchedPost?.instagramId;
+    const postMediaId  = matchedPost?.instagramPostId;
+
+    if (!instagramId || !postMediaId) {
+      setPostTrendCache(prev => ({ ...prev, [itemKey]: [] }));
+      return;
+    }
+
+    try {
+      const res = await fetch(
+        `${API_URL}/api/analytics/data?platform=instagram&accountId=${encodeURIComponent(instagramId)}`
+      );
+      if (!res.ok) throw new Error(`Analytics API ${res.status}`);
+
+      const json = await res.json();
+      const allDocs = Array.isArray(json) ? json : (json.docs || json.data || []);
+
+      const snapshots = allDocs
+        .filter(doc =>
+          doc.type     === 'analytics_data' &&
+          doc.platform === 'instagram' &&
+          (doc.accountId === instagramId || doc.instagramId === instagramId)
+        )
+        .sort((a, b) => new Date(a.collectedAt) - new Date(b.collectedAt));
+
+      const dataByDate = {};
+      snapshots.forEach(snap => {
+        const found = (snap.media || []).find(m =>
+          m.id === postMediaId || m.id === String(postMediaId)
+        );
+        if (found) {
+          const date = snap.collectedAt.slice(0, 10);
+          dataByDate[date] = {
+            date,
+            likes:    found.likes    ?? found.like_count     ?? 0,
+            comments: found.comments ?? found.comments_count ?? 0,
+            shares:   found.shares   ?? 0,
+          };
+        }
+      });
+
+      const sorted = Object.values(dataByDate).sort((a, b) => a.date.localeCompare(b.date));
+      setPostTrendCache(prev => ({ ...prev, [itemKey]: sorted }));
+    } catch {
+      setPostTrendCache(prev => ({ ...prev, [itemKey]: [] }));
+    }
+  }, [scheduledPosts]);
+
   // Check if item is published (manual or via scheduled post)
   const isItemPublished = (item) => {
     // Check manual publish flag
@@ -77,6 +326,59 @@ const CustomerDetails = () => {
       (post.status === 'published' || post.publishedAt)
     );
   };
+
+  // Find the matching scheduled post(s) for a calendar item and build platform links
+  const getItemPublishedLinks = useCallback((item) => {
+    const links = [];
+
+    // Manual postUrl set via edit modal
+    if (item.postUrl) {
+      links.push({ url: item.postUrl, label: 'View Post', platform: null });
+    }
+
+    // Derive links from scheduled post IDs stored by the scheduler
+    for (const post of scheduledPosts) {
+      const matches =
+        (post.item_id && post.item_id === item.id) ||
+        (post.contentId && post.contentId === item.id) ||
+        (post.item_name && post.item_name === (item.title || item.description));
+
+      if (!matches || !(post.status === 'published' || post.publishedAt)) continue;
+
+      if (post.facebookPostId && !post.facebookPostId.startsWith('fb_shared_from_')) {
+        // Facebook post IDs are usually in format pageId_postId
+        const fbId = post.facebookPostId;
+        const fbUrl = fbId.includes('_')
+          ? `https://www.facebook.com/permalink.php?story_fbid=${fbId.split('_')[1]}&id=${fbId.split('_')[0]}`
+          : `https://www.facebook.com/${fbId}`;
+        if (!links.find(l => l.url === fbUrl)) {
+          links.push({ url: fbUrl, label: 'Facebook', platform: 'facebook' });
+        }
+      }
+
+      if (post.instagramPermalink) {
+        if (!links.find(l => l.url === post.instagramPermalink)) {
+          links.push({ url: post.instagramPermalink, label: 'Instagram', platform: 'instagram' });
+        }
+      }
+
+      if (post.youtubePostId) {
+        const ytUrl = `https://www.youtube.com/watch?v=${post.youtubePostId}`;
+        if (!links.find(l => l.url === ytUrl)) {
+          links.push({ url: ytUrl, label: 'YouTube', platform: 'youtube' });
+        }
+      }
+
+      if (post.linkedinPostId) {
+        const liUrl = `https://www.linkedin.com/feed/update/${post.linkedinPostId}`;
+        if (!links.find(l => l.url === liUrl)) {
+          links.push({ url: liUrl, label: 'LinkedIn', platform: 'linkedin' });
+        }
+      }
+    }
+
+    return links;
+  }, [scheduledPosts]);
 
   // Get item status with published check
   const getItemStatus = (item) => {
@@ -256,7 +558,8 @@ const CustomerDetails = () => {
       ...item,
       _calendarId: calendarId,
       originalDate: item.date,
-      originalDescription: item.description
+      originalDescription: item.description,
+      postUrl: item.postUrl || ''
     });
     setIsEditModalOpen(true);
   };
@@ -272,7 +575,8 @@ const CustomerDetails = () => {
         originalDescription,
         type,
         status,
-        title
+        title,
+        postUrl
       } = updatedItem;
 
       if (!_calendarId || !originalDate || !originalDescription) return;
@@ -306,7 +610,8 @@ const CustomerDetails = () => {
             description,
             type: type !== undefined ? type : item.type,
             status: status !== undefined ? status : item.status,
-            title: title !== undefined ? title : item.title
+            title: title !== undefined ? title : item.title,
+            postUrl: postUrl !== undefined ? postUrl : item.postUrl
           };
         }
         return item;
@@ -673,69 +978,154 @@ const CustomerDetails = () => {
                       {expandedCalendars.has(calendar._id) && (
                         <div className="border-t border-gray-200/50 p-3 space-y-2">
                           {calendar.contentItems && calendar.contentItems.length > 0 ? (
-                            calendar.contentItems.map((item, index) => {
+                            [...calendar.contentItems].sort((a, b) => new Date(b.date) - new Date(a.date)).map((item, index) => {
                               const itemStatus = getItemStatus(item);
                               const statusConfig = getStatusConfig(itemStatus);
+                              const itemKey = item.id || `${calendar._id}_${index}`;
+                              const itemTrendData = postTrendCache[itemKey]; // undefined=not fetched, null=loading, []=no data, [...]= data
+                              const isTrendLoading = itemTrendData === null;
+                              const isExpanded = expandedTrendItem === itemKey;
+                              const publishedLinks = itemStatus === 'published' ? getItemPublishedLinks(item) : [];
                               return (
-                                <div key={item.id || index} className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-100 hover:border-gray-200 transition-colors">
-                                  <div className="flex items-center gap-3 min-w-0 flex-1">
-                                    <div className="h-9 w-9 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                                      <FileText className="h-4 w-4 text-gray-400" />
-                                    </div>
-                                    <div className="min-w-0 flex-1">
-                                      {item.title && <p className="text-sm font-medium text-blue-800 truncate">{item.title}</p>}
-                                      <p className="text-sm text-gray-900 truncate">{item.description || 'Untitled'}</p>
-                                      <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                        <p className="text-xs text-gray-500 flex items-center gap-1">
-                                          <Clock className="h-3 w-3" />
-                                          Due: {formatDate(item.date)}
-                                        </p>
+                                <div key={itemKey} className="bg-white rounded-lg border border-gray-100 hover:border-gray-200 transition-colors overflow-hidden">
+                                  <div className="flex items-center justify-between p-3">
+                                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                                      <div className="h-9 w-9 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                                        <FileText className="h-4 w-4 text-gray-400" />
+                                      </div>
+                                      <div className="min-w-0 flex-1">
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                          {item.title && <p className="text-sm font-medium text-blue-800 truncate">{item.title}</p>}
+                                          {/* Published post links — one per platform */}
+                                          {publishedLinks.map((link, li) => (
+                                            <a
+                                              key={li}
+                                              href={link.url}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="flex-shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-100 transition-colors"
+                                              onClick={e => e.stopPropagation()}
+                                              title={`Open on ${link.label}`}
+                                            >
+                                              <PlatformIcon platform={link.platform || link.label} />
+                                              <ExternalLink className="h-2.5 w-2.5 ml-0.5" />
+                                            </a>
+                                          ))}
+                                        </div>
+                                        <p className="text-sm text-gray-900 truncate">{item.description || 'Untitled'}</p>
                                         {item.type && (
-                                          <>
-                                            {(Array.isArray(item.type) ? item.type : 
+                                          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                            {(Array.isArray(item.type) ? item.type :
                                               (typeof item.type === 'string' ? item.type.split(',').map(p => p.trim()) : [item.type])
                                             ).map((platform, idx) => (
-                                              <span 
-                                                key={idx}
-                                                className="inline-flex px-1.5 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700 capitalize"
-                                              >
-                                                {platform}
+                                              <span key={idx} title={platform} className="flex items-center justify-center">
+                                                <PlatformIcon platform={platform} />
                                               </span>
                                             ))}
-                                          </>
+                                          </div>
                                         )}
+                                        <ItemTimeline item={item} itemStatus={itemStatus} />
                                       </div>
                                     </div>
+                                    <div className="flex items-center gap-1.5 ml-2">
+                                      {/* Trend button — shown for all published items */}
+                                      {itemStatus === 'published' && (
+                                        <div className="hidden sm:block" onClick={e => e.stopPropagation()}>
+                                          <PostTrendButton
+                                            isLoading={isTrendLoading}
+                                            isActive={isExpanded}
+                                            onClick={() => {
+                                              if (isExpanded) {
+                                                setExpandedTrendItem(null);
+                                              } else {
+                                                fetchPostTrend(itemKey, item);
+                                                setExpandedTrendItem(itemKey);
+                                              }
+                                            }}
+                                          />
+                                        </div>
+                                      )}
+                                      <span className={`px-2 py-1 rounded-md text-xs font-medium ${statusConfig.bg} ${statusConfig.text} border ${statusConfig.border} hidden sm:inline-flex`}>
+                                        {itemStatus.replace('_', ' ')}
+                                      </span>
+                                      <button
+                                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors touch-manipulation"
+                                        onClick={(e) => { e.stopPropagation(); handleEditItem(item, calendar._id); }}
+                                        onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleEditItem(item, calendar._id); }}
+                                        title="Edit"
+                                      >
+                                        <Edit className="h-3.5 w-3.5" />
+                                      </button>
+                                      <button
+                                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors touch-manipulation"
+                                        onClick={(e) => { e.stopPropagation(); handleDeleteItem(calendar._id, item); }}
+                                        onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteItem(calendar._id, item); }}
+                                        title="Delete"
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </button>
+                                      <button
+                                        className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors touch-manipulation"
+                                        onClick={(e) => { e.stopPropagation(); navigate(`/admin/content-upload/${calendar._id}/${index}`); }}
+                                        onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); navigate(`/admin/content-upload/${calendar._id}/${index}`); }}
+                                        title="Upload"
+                                      >
+                                        <Upload className="h-3.5 w-3.5" />
+                                      </button>
+                                    </div>
                                   </div>
-                                  <div className="flex items-center gap-1 ml-2">
-                                    <span className={`px-2 py-1 rounded-md text-xs font-medium ${statusConfig.bg} ${statusConfig.text} border ${statusConfig.border} hidden sm:inline-flex`}>
+                                  
+                                  {/* Mobile trend & post link row */}
+                                  <div className="sm:hidden px-3 pb-2 flex items-center gap-2 flex-wrap">
+                                    <span className={`px-2 py-0.5 rounded-md text-[10px] font-medium ${statusConfig.bg} ${statusConfig.text} border ${statusConfig.border}`}>
                                       {itemStatus.replace('_', ' ')}
                                     </span>
-                                    <button
-                                      className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors touch-manipulation"
-                                      onClick={(e) => { e.stopPropagation(); handleEditItem(item, calendar._id); }}
-                                      onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleEditItem(item, calendar._id); }}
-                                      title="Edit"
-                                    >
-                                      <Edit className="h-3.5 w-3.5" />
-                                    </button>
-                                    <button
-                                      className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors touch-manipulation"
-                                      onClick={(e) => { e.stopPropagation(); handleDeleteItem(calendar._id, item); }}
-                                      onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteItem(calendar._id, item); }}
-                                      title="Delete"
-                                    >
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                    </button>
-                                    <button
-                                      className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors touch-manipulation"
-                                      onClick={(e) => { e.stopPropagation(); navigate(`/admin/content-upload/${calendar._id}/${index}`); }}
-                                      onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); navigate(`/admin/content-upload/${calendar._id}/${index}`); }}
-                                      title="Upload"
-                                    >
-                                      <Upload className="h-3.5 w-3.5" />
-                                    </button>
+                                    {publishedLinks.map((link, li) => (
+                                      <a
+                                        key={li}
+                                        href={link.url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-600 border border-blue-100"
+                                        onClick={e => e.stopPropagation()}
+                                      >
+                                        <ExternalLink className="h-2.5 w-2.5" /> {link.label}
+                                      </a>
+                                    ))}
+                                    {itemStatus === 'published' && (
+                                      <PostTrendButton
+                                        isLoading={isTrendLoading}
+                                        isActive={isExpanded}
+                                        onClick={() => {
+                                          if (isExpanded) {
+                                            setExpandedTrendItem(null);
+                                          } else {
+                                            fetchPostTrend(itemKey, item);
+                                            setExpandedTrendItem(itemKey);
+                                          }
+                                        }}
+                                      />
+                                    )}
                                   </div>
+
+                                  {/* Expanded Trend Chart */}
+                                  {isExpanded && (
+                                    <div className="px-3 pb-3">
+                                      {isTrendLoading ? (
+                                        <div className="mt-3 bg-blue-50/50 rounded-lg border border-blue-100 p-6 flex items-center justify-center gap-2">
+                                          <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                                          <span className="text-xs text-gray-500">Loading trend data…</span>
+                                        </div>
+                                      ) : (
+                                        <ExpandedTrendChart
+                                          data={itemTrendData || []}
+                                          dateRange={trendDateRange}
+                                          onDateRangeChange={setTrendDateRange}
+                                          onClose={() => setExpandedTrendItem(null)}
+                                        />
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
                               );
                             })

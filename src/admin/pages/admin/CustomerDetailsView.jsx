@@ -67,24 +67,57 @@ SocialBadge.displayName = 'SocialBadge';
 function buildTrend(calendars, rangeMonths) {
   const allItems = calendars.flatMap(cal => cal.contentItems || []);
   const now = new Date();
+
+  // 1M → daily buckets (last 30 days)
+  if (rangeMonths === 1) {
+    const buckets = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+      const dayKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      buckets.push({ dayKey, label: d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }), published: 0, pending: 0 });
+    }
+    const map = Object.fromEntries(buckets.map(b => [b.dayKey, b]));
+    allItems.forEach(item => {
+      const key = (item.date || '').slice(0, 10);
+      if (map[key]) { if (item.published) map[key].published++; else map[key].pending++; }
+    });
+    return buckets;
+  }
+
+  // 3M → weekly buckets (12 weeks)
+  if (rangeMonths === 3) {
+    const buckets = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i * 7);
+      const weekStart = new Date(d.getFullYear(), d.getMonth(), d.getDate() - d.getDay());
+      const weekEnd = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + 6);
+      const weekKey = `${weekStart.getFullYear()}-${String(weekStart.getMonth() + 1).padStart(2, '0')}-${String(weekStart.getDate()).padStart(2, '0')}`;
+      buckets.push({ weekKey, weekEnd, label: weekStart.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }), published: 0, pending: 0 });
+    }
+    allItems.forEach(item => {
+      if (!item.date) return;
+      const itemDate = new Date(item.date);
+      for (const bucket of buckets) {
+        if (itemDate >= new Date(bucket.weekKey) && itemDate <= bucket.weekEnd) {
+          if (item.published) bucket.published++; else bucket.pending++;
+          break;
+        }
+      }
+    });
+    return buckets;
+  }
+
+  // 6M, 1Y, All → monthly buckets (always show year)
   const buckets = [];
   for (let i = rangeMonths - 1; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    buckets.push({
-      monthKey,
-      label: d.toLocaleDateString(undefined, { month: 'short', year: rangeMonths > 6 ? '2-digit' : undefined }),
-      published: 0,
-      pending: 0,
-    });
+    buckets.push({ monthKey, label: d.toLocaleDateString(undefined, { month: 'short', year: '2-digit' }), published: 0, pending: 0 });
   }
   const map = Object.fromEntries(buckets.map(b => [b.monthKey, b]));
   allItems.forEach(item => {
     const key = (item.date || '').slice(0, 7);
-    if (map[key]) {
-      if (item.published) map[key].published++;
-      else map[key].pending++;
-    }
+    if (map[key]) { if (item.published) map[key].published++; else map[key].pending++; }
   });
   return buckets;
 }
@@ -144,7 +177,7 @@ const TrendChart = memo(({ calendars, onClose }) => {
                 <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
               </linearGradient>
             </defs>
-            <XAxis dataKey="label" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+            <XAxis dataKey="label" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} interval={range === 1 ? 4 : range === 3 ? 1 : 0} />
             <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
             <Tooltip
               contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb', background: '#fff' }}

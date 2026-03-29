@@ -13,11 +13,15 @@ const CustomerCard = memo(({ customer, calendars, publishedDates, onView, format
   );
   
   const allDueDates = calendars
-    .flatMap(cal => Array.isArray(cal.contentItems) ? cal.contentItems.map(item => item.date).filter(Boolean) : [])
-    .filter(date => {
-      const isoDate = new Date(date).toISOString().slice(0, 10);
-      return !publishedDates.has(isoDate) && !isNaN(new Date(date));
-    });
+    .flatMap(cal => Array.isArray(cal.contentItems) ? cal.contentItems : [])
+    .filter(item => {
+      if (!item.date || isNaN(new Date(item.date))) return false;
+      if (item.published === true) return false;
+      if (item.status === 'published') return false;
+      const isoDate = new Date(item.date).toISOString().slice(0, 10);
+      return !publishedDates.has(isoDate);
+    })
+    .map(item => item.date);
   
   const nextDueDate = allDueDates.length > 0
     ? allDueDates.sort((a, b) => new Date(a) - new Date(b))[0]
@@ -75,9 +79,6 @@ const CustomerCard = memo(({ customer, calendars, publishedDates, onView, format
               <span className="text-[10px] sm:text-xs text-gray-500">Next due:</span>
               <span className="text-[10px] sm:text-xs font-medium text-gray-900">{formatDate(nextDueDate)}</span>
             </div>
-            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border mt-1 ${getStatusBadgeColor(status)}`}>
-              {status.text}
-            </span>
           </div>
         )}
       </div>

@@ -31,7 +31,8 @@ import {
   X,
   Clock,
   Download,
-  TrendingUp
+  TrendingUp,
+  ArrowUpDown
 } from 'lucide-react';
 
 // ── Social platform badges ───────────────────────────────────────────────────
@@ -328,6 +329,7 @@ function CustomerDetailsView() {
   const [scheduledPosts, setScheduledPosts] = useState([]);
   const [socialAccounts, setSocialAccounts] = useState([]);
   const [showTrend, setShowTrend] = useState(false);
+  const [itemSortOrder, setItemSortOrder] = useState('desc');
 
   const API_URL = process.env.REACT_APP_API_URL;
 
@@ -481,18 +483,6 @@ function CustomerDetailsView() {
       completionRate: totalItems > 0 ? Math.round((publishedItems / totalItems) * 100) : 0
     };
   }, [calendars, isItemPublished]);
-
-  // Calendars with resolved published flags for accurate trend chart
-  const resolvedCalendars = useMemo(() =>
-    calendars.map(cal => ({
-      ...cal,
-      contentItems: (cal.contentItems || []).map(item => ({
-        ...item,
-        published: isItemPublished(item),
-      })),
-    })),
-    [calendars, isItemPublished]
-  );
 
   const handleCreateCalendar = async (calendarData) => {
     try {
@@ -934,7 +924,7 @@ function CustomerDetailsView() {
           {/* Trend chart */}
           {showTrend && calendars.length > 0 && (
             <div className="px-4 sm:px-6 pb-4">
-              <TrendChart calendars={resolvedCalendars} onClose={() => setShowTrend(false)} />
+              <TrendChart calendars={calendars} onClose={() => setShowTrend(false)} />
             </div>
           )}
 
@@ -1051,7 +1041,24 @@ function CustomerDetailsView() {
                       {expandedCalendars.has(calendar._id) && (
                         <div className="border-t border-gray-200/50 p-3 space-y-2">
                           {calendar.contentItems && calendar.contentItems.length > 0 ? (
-                            calendar.contentItems.map((item, index) => {
+                            <>
+                              <div className="flex items-center justify-end pb-1">
+                                <button
+                                  onClick={e => { e.stopPropagation(); setItemSortOrder(o => o === 'desc' ? 'asc' : 'desc'); }}
+                                  className="flex items-center gap-1 px-2 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+                                  title={itemSortOrder === 'desc' ? 'Newest first — click for oldest first' : 'Oldest first — click for newest first'}
+                                >
+                                  <ArrowUpDown className="h-3 w-3" />
+                                  {itemSortOrder === 'desc' ? 'Newest first' : 'Oldest first'}
+                                </button>
+                              </div>
+                              {[...calendar.contentItems].sort((a, b) => itemSortOrder === 'desc'
+                                ? new Date(b.date) - new Date(a.date)
+                                : new Date(a.date) - new Date(b.date)
+                              ).map((item, index) => {
+                              const originalIndex = calendar.contentItems.findIndex(
+                                orig => orig.date === item.date && orig.description === item.description
+                              );
                               const itemStatus = getItemStatus(item);
                               const statusConfig = getStatusConfig(itemStatus);
                               return (
@@ -1063,14 +1070,15 @@ function CustomerDetailsView() {
                                   formatDate={formatSimpleDate}
                                   isPublished={isItemPublished(item)}
                                   calendarId={calendar._id}
-                                  index={index}
+                                  index={originalIndex}
                                   onTogglePublished={() => handleTogglePublished(calendar._id, item)}
                                   onEdit={() => handleEditItem(item, calendar._id)}
                                   onDelete={() => handleDeleteItem(calendar._id, item)}
-                                  onUpload={() => navigate(`/admin/content-upload/${calendar._id}/${index}`)}
+                                  onUpload={() => navigate(`/admin/content-upload/${calendar._id}/${originalIndex}`)}
                                 />
                               );
-                            })
+                            })}
+                            </>
                           ) : (
                             <div className="text-center py-6 text-sm text-gray-500">
                               No content items in this calendar

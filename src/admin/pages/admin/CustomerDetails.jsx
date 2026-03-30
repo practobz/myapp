@@ -8,7 +8,7 @@ import ContentCalendarModal from '../../components/modals/ContentCalendarModal';
 import {
   ChevronLeft, Pencil, Trash2, Plus, AlertCircle, Calendar, Clock,
   ChevronRight, ChevronDown, MoreVertical, Upload, X, FileText, CheckCircle, Edit,
-  ExternalLink, TrendingUp, Eye, Heart, Share2, MessageCircle
+  ExternalLink, TrendingUp, Eye, Heart, Share2, MessageCircle, ArrowUpDown
 } from 'lucide-react';
 import { XAxis, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
 
@@ -229,6 +229,7 @@ const CustomerDetails = () => {
   const fetchedTrendItemsRef = useRef(new Set());
   const [expandedTrendItem, setExpandedTrendItem] = useState(null);
   const [trendDateRange, setTrendDateRange] = useState(7);
+  const [itemSortOrder, setItemSortOrder] = useState('desc');
 
   useEffect(() => {
     fetchCustomer();
@@ -978,7 +979,24 @@ const CustomerDetails = () => {
                       {expandedCalendars.has(calendar._id) && (
                         <div className="border-t border-gray-200/50 p-3 space-y-2">
                           {calendar.contentItems && calendar.contentItems.length > 0 ? (
-                            [...calendar.contentItems].sort((a, b) => new Date(b.date) - new Date(a.date)).map((item, index) => {
+                            <>
+                              <div className="flex items-center justify-end pb-1">
+                                <button
+                                  onClick={e => { e.stopPropagation(); setItemSortOrder(o => o === 'desc' ? 'asc' : 'desc'); }}
+                                  className="flex items-center gap-1 px-2 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+                                  title={itemSortOrder === 'desc' ? 'Newest first — click for oldest first' : 'Oldest first — click for newest first'}
+                                >
+                                  <ArrowUpDown className="h-3 w-3" />
+                                  {itemSortOrder === 'desc' ? 'Newest first' : 'Oldest first'}
+                                </button>
+                              </div>
+                              {[...calendar.contentItems].sort((a, b) => itemSortOrder === 'desc'
+                                ? new Date(b.date) - new Date(a.date)
+                                : new Date(a.date) - new Date(b.date)
+                              ).map((item, index) => {
+                              const originalIndex = calendar.contentItems.findIndex(
+                                orig => orig.date === item.date && orig.description === item.description
+                              );
                               const itemStatus = getItemStatus(item);
                               const statusConfig = getStatusConfig(itemStatus);
                               const itemKey = item.id || `${calendar._id}_${index}`;
@@ -1013,17 +1031,21 @@ const CustomerDetails = () => {
                                           ))}
                                         </div>
                                         <p className="text-sm text-gray-900 truncate">{item.description || 'Untitled'}</p>
-                                        {item.type && (
-                                          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                                            {(Array.isArray(item.type) ? item.type :
+                                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                          <p className="text-xs text-gray-500 flex items-center gap-1">
+                                            <Clock className="h-3 w-3" />
+                                            Due: {formatDate(item.date)}
+                                          </p>
+                                          {item.type && (
+                                            (Array.isArray(item.type) ? item.type :
                                               (typeof item.type === 'string' ? item.type.split(',').map(p => p.trim()) : [item.type])
                                             ).map((platform, idx) => (
                                               <span key={idx} title={platform} className="flex items-center justify-center">
                                                 <PlatformIcon platform={platform} />
                                               </span>
-                                            ))}
-                                          </div>
-                                        )}
+                                            ))
+                                          )}
+                                        </div>
                                         <ItemTimeline item={item} itemStatus={itemStatus} />
                                       </div>
                                     </div>
@@ -1066,8 +1088,8 @@ const CustomerDetails = () => {
                                       </button>
                                       <button
                                         className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors touch-manipulation"
-                                        onClick={(e) => { e.stopPropagation(); navigate(`/admin/content-upload/${calendar._id}/${index}`); }}
-                                        onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); navigate(`/admin/content-upload/${calendar._id}/${index}`); }}
+                                        onClick={(e) => { e.stopPropagation(); navigate(`/admin/content-upload/${calendar._id}/${originalIndex}`); }}
+                                        onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); navigate(`/admin/content-upload/${calendar._id}/${originalIndex}`); }}
                                         title="Upload"
                                       >
                                         <Upload className="h-3.5 w-3.5" />
@@ -1128,7 +1150,8 @@ const CustomerDetails = () => {
                                   )}
                                 </div>
                               );
-                            })
+                            })}
+                            </>
                           ) : (
                             <div className="text-center py-6 text-sm text-gray-500">
                               No content items in this calendar

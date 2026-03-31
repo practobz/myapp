@@ -72,6 +72,14 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
   // Chart view state
   const [showHistoricalCharts, setShowHistoricalCharts] = useState({});
 
+  // State for post edit/delete operations
+  const [deletingPostId, setDeletingPostId] = useState(null);
+  const [togglingCommentsPostId, setTogglingCommentsPostId] = useState(null);
+
+  // Posts pagination
+  const POSTS_PER_PAGE = 9;
+  const [visiblePostsCount, setVisiblePostsCount] = useState(POSTS_PER_PAGE);
+
   // Helper function to check if Facebook API is ready
   const isFacebookApiReady = () => {
     return window.FB && window.FB.api && typeof window.FB.api === 'function';
@@ -222,7 +230,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
             const profileData = await profileResponse.json();
             
             // Fetch media data
-            const mediaUrl = `https://graph.facebook.com/v18.0/${acc.id}/media?fields=id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count&limit=12&access_token=${pageToken}`;
+            const mediaUrl = `https://graph.facebook.com/v18.0/${acc.id}/media?fields=id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count,is_comment_enabled&limit=12&access_token=${pageToken}`;
             console.log(`📡 Fetching media for ${acc.id}...`);
             const mediaResponse = await fetch(mediaUrl);
             const mediaData = await mediaResponse.json();
@@ -670,6 +678,15 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
         console.log('❌ Session refresh failed');
         setError('Your Facebook session has expired. Please reconnect your account to continue using Instagram features.');
       }
+    } else if (error.code === 10 || (error.type === 'OAuthException' && String(error.message).includes('(#10)'))) {
+      // (#10) Insufficient permissions — the Facebook app needs additional permissions approved
+      console.error('❌ Insufficient permissions (#10):', error.message);
+      setError(
+        'Your Facebook app does not have the required permissions to access this Instagram account. ' +
+        'Please disconnect and reconnect your account to grant all required permissions (instagram_basic, ' +
+        'pages_read_engagement, instagram_manage_contents). If the problem persists, ask your app admin to ' +
+        'approve these permissions in the Facebook App Dashboard.'
+      );
     } else {
       setError(error.message || 'An error occurred while accessing Instagram data.');
     }
@@ -761,7 +778,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
         setError('Please log in to Facebook to access Instagram features. Regular Facebook accounts can connect Instagram Business accounts.');
       }
     }, {
-      scope: 'email,public_profile,pages_show_list,pages_read_engagement,instagram_basic,instagram_content_publish,instagram_manage_insights,instagram_manage_comments'
+      scope: 'email,public_profile,pages_show_list,pages_read_engagement,instagram_basic,instagram_content_publish,instagram_manage_insights,instagram_manage_comments,instagram_manage_contents'
     });
   };
 
@@ -918,7 +935,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
       }
 
       // FIXED: Fetch recent media using direct Graph API
-      const mediaUrl = `https://graph.facebook.com/v18.0/${accountData.id}/media?fields=id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count&limit=12&access_token=${accountData.pageAccessToken}`;
+      const mediaUrl = `https://graph.facebook.com/v18.0/${accountData.id}/media?fields=id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count,is_comment_enabled&limit=12&access_token=${accountData.pageAccessToken}`;
       const mediaResponse = await fetch(mediaUrl);
       const mediaData = await mediaResponse.json();
       
@@ -1380,7 +1397,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
       }
 
       // Refresh media using direct Graph API
-      const mediaUrl = `https://graph.facebook.com/v18.0/${accountId}/media?fields=id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count&limit=12&access_token=${account.pageAccessToken}`;
+      const mediaUrl = `https://graph.facebook.com/v18.0/${accountId}/media?fields=id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count,is_comment_enabled&limit=12&access_token=${account.pageAccessToken}`;
       const mediaResponse = await fetch(mediaUrl);
       const mediaData = await mediaResponse.json();
       
@@ -1508,6 +1525,117 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
     
     // Alternatively, for mobile apps, you could use deep linking:
     // window.location.href = `instagram://media?id=${post.id}`;
+  };
+
+  // --- DELETE POST ---
+  // DELETE https://graph.facebook.com/v18.0/<IG_MEDIA_ID>?access_token=<ACCESS_TOKEN>
+  const deletePost = async (mediaId) => {
+    if (!window.confirm('Are you sure you want to delete this post? This action cannot be undone.')) return;
+    if (!activeAccount || !activeAccount.pageAccessToken) {
+      setError('No active account or access token found');
+      return;
+    }
+
+    setDeletingPostId(mediaId);
+
+    try {
+      console.log(`🗑️ Deleting Instagram post ${mediaId}...`);
+      const response = await fetch(
+        `https://graph.facebook.com/v18.0/${mediaId}?access_token=${activeAccount.pageAccessToken}`,
+        { method: 'DELETE' }
+      );
+      const data = await response.json();
+
+      if (!response.ok || data.error) {
+        console.error('❌ Failed to delete post:', data.error);
+        const msg = data.error?.error_user_msg || data.error?.message || 'Failed to delete post. The media type may not be supported.';
+        setError(msg);
+        return;
+      }
+
+      console.log('✅ Post deleted successfully:', data);
+
+      // Remove from local media list
+      const updatedAccounts = connectedAccounts.map(acc =>
+        acc.id === activeAccount.id
+          ? { ...acc, media: (acc.media || []).filter(m => m.id !== mediaId) }
+          : acc
+      );
+      setConnectedAccounts(updatedAccounts);
+      saveAccountsToStorage(updatedAccounts);
+      setActiveAccount(updatedAccounts.find(a => a.id === activeAccount.id));
+
+      // Close analytics modal if this post was open
+      if (selectedPostId === mediaId) {
+        setSelectedPostId(null);
+        setSinglePostAnalytics(null);
+      }
+      if (selectedPostForInsights && selectedPostForInsights.id === mediaId) {
+        setShowDetailedInsights(false);
+        setSelectedPostForInsights(null);
+      }
+      setError(null);
+    } catch (err) {
+      console.error('❌ Error deleting post:', err);
+      setError('Failed to delete post. Please try again.');
+    } finally {
+      setDeletingPostId(null);
+    }
+  };
+
+  // --- TOGGLE POST COMMENTS (ENABLE / DISABLE) ---
+  // POST https://graph.facebook.com/v18.0/<IG_MEDIA_ID>?comment_enabled=<BOOL>&access_token=<ACCESS_TOKEN>
+  const togglePostComments = async (mediaId, currentCommentEnabled) => {
+    if (!activeAccount || !activeAccount.pageAccessToken) {
+      setError('No active account or access token found');
+      return;
+    }
+
+    const newState = !currentCommentEnabled;
+    setTogglingCommentsPostId(mediaId);
+
+    try {
+      console.log(`💬 ${newState ? 'Enabling' : 'Disabling'} comments on post ${mediaId}...`);
+      const response = await fetch(
+        `https://graph.facebook.com/v18.0/${mediaId}?comment_enabled=${newState}&access_token=${activeAccount.pageAccessToken}`,
+        { method: 'POST' }
+      );
+      const data = await response.json();
+
+      if (!response.ok || data.error) {
+        console.error('❌ Failed to toggle comments:', data.error);
+        setError(data.error?.message || `Failed to ${newState ? 'enable' : 'disable'} comments.`);
+        return;
+      }
+
+      console.log(`✅ Comments ${newState ? 'enabled' : 'disabled'} for post ${mediaId}`);
+
+      // Update local media state
+      const updatedAccounts = connectedAccounts.map(acc =>
+        acc.id === activeAccount.id
+          ? {
+              ...acc,
+              media: (acc.media || []).map(m =>
+                m.id === mediaId ? { ...m, is_comment_enabled: newState } : m
+              )
+            }
+          : acc
+      );
+      setConnectedAccounts(updatedAccounts);
+      saveAccountsToStorage(updatedAccounts);
+      setActiveAccount(updatedAccounts.find(a => a.id === activeAccount.id));
+
+      // Update single post analytics view if this post is open
+      if (singlePostAnalytics && singlePostAnalytics.id === mediaId) {
+        setSinglePostAnalytics(prev => ({ ...prev, is_comment_enabled: newState }));
+      }
+      setError(null);
+    } catch (err) {
+      console.error('❌ Error toggling comments:', err);
+      setError('Failed to update comment settings. Please try again.');
+    } finally {
+      setTogglingCommentsPostId(null);
+    }
   };
 
   // Generate trend data for post analytics
@@ -2174,6 +2302,32 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
                               <path fillRule="evenodd" d="M7 2a1 1 0 012 0v1h2V2a1 1 0 112 0v1h2a2 2 0 012 2v2h1a1 1 0 110 2h-1v2h1a1 1 0 110 2h-1v2a2 2 0 01-2 2h-2v1a1 1 0 11-2 0v-1H9v1a1 1 0 11-2 0v-1H5a2 2 0 01-2-2v-2H2a1 1 0 110-2h1V9H2a1 1 0 010-2h1V5a2 2 0 012-2h2V2zM5 5h10v10H5V5z" clipRule="evenodd"/>
                             </svg>
                             Boost
+                          </button>
+                          <button
+                            onClick={() => togglePostComments(singlePostAnalytics.id, singlePostAnalytics.is_comment_enabled !== false)}
+                            disabled={togglingCommentsPostId === singlePostAnalytics.id}
+                            className="bg-yellow-500 hover:bg-yellow-600 disabled:opacity-50 text-white px-2 py-0.5 rounded text-[10px] sm:text-xs font-medium flex items-center gap-1"
+                            title={singlePostAnalytics.is_comment_enabled === false ? 'Enable comments' : 'Disable comments'}
+                          >
+                            {togglingCommentsPostId === singlePostAnalytics.id ? (
+                              <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                            ) : (
+                              <Edit2 className="w-2.5 h-2.5" />
+                            )}
+                            {singlePostAnalytics.is_comment_enabled === false ? 'Enable' : 'Disable'} Comments
+                          </button>
+                          <button
+                            onClick={() => deletePost(singlePostAnalytics.id)}
+                            disabled={deletingPostId === singlePostAnalytics.id}
+                            className="bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white px-2 py-0.5 rounded text-[10px] sm:text-xs font-medium flex items-center gap-1"
+                            title="Delete this post"
+                          >
+                            {deletingPostId === singlePostAnalytics.id ? (
+                              <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-2.5 h-2.5" />
+                            )}
+                            Delete Post
                           </button>
                         </>
                       )}
@@ -3411,7 +3565,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
           
           {/* Instagram-style 3-column grid */}
           <div className="grid grid-cols-3 gap-0.5 sm:gap-1">
-            {activeAccount.media && activeAccount.media.length > 0 ? activeAccount.media.map(media => (
+            {activeAccount.media && activeAccount.media.length > 0 ? activeAccount.media.slice(0, visiblePostsCount).map(media => (
               <div 
                 key={media.id} 
                 className="aspect-square relative group cursor-pointer"
@@ -3479,6 +3633,41 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
                     </svg>
                     Boost Post
                   </button>
+                  {/* Edit & Delete actions */}
+                  <div className="flex items-center gap-1.5 mt-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        togglePostComments(media.id, media.is_comment_enabled !== false);
+                      }}
+                      disabled={togglingCommentsPostId === media.id}
+                      className="bg-yellow-500 hover:bg-yellow-600 disabled:opacity-50 text-white px-2.5 py-1 rounded-full text-[10px] font-semibold flex items-center gap-1 transition-colors"
+                      title={media.is_comment_enabled !== false ? 'Disable comments' : 'Enable comments'}
+                    >
+                      {togglingCommentsPostId === media.id ? (
+                        <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                      ) : (
+                        <Edit2 className="w-2.5 h-2.5" />
+                      )}
+                      {media.is_comment_enabled === false ? 'Enable' : 'Disable'} Comments
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deletePost(media.id);
+                      }}
+                      disabled={deletingPostId === media.id}
+                      className="bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white px-2.5 py-1 rounded-full text-[10px] font-semibold flex items-center gap-1 transition-colors"
+                      title="Delete this post"
+                    >
+                      {deletingPostId === media.id ? (
+                        <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-2.5 h-2.5" />
+                      )}
+                      Delete
+                    </button>
+                  </div>
                 </div>
               </div>
             )) : (
@@ -3488,6 +3677,29 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
               </div>
             )}
           </div>
+
+          {/* Show More / Show Less */}
+          {activeAccount.media && activeAccount.media.length > POSTS_PER_PAGE && (
+            <div className="flex items-center justify-center py-4 border-t border-gray-100">
+              {visiblePostsCount < activeAccount.media.length ? (
+                <button
+                  onClick={() => setVisiblePostsCount(prev => Math.min(prev + POSTS_PER_PAGE, activeAccount.media.length))}
+                  className="flex items-center gap-2 text-sm font-medium text-pink-600 hover:text-pink-700 transition-colors"
+                >
+                  <ChevronDown className="h-4 w-4" />
+                  Show More ({activeAccount.media.length - visiblePostsCount} remaining)
+                </button>
+              ) : (
+                <button
+                  onClick={() => setVisiblePostsCount(POSTS_PER_PAGE)}
+                  className="flex items-center gap-2 text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors"
+                >
+                  <ChevronDown className="h-4 w-4 rotate-180" />
+                  Show Less
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
 

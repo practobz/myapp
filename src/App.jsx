@@ -22,6 +22,7 @@ import AdminContentUpload from './admin/pages/admin/ContentUpload';
 import AdminQrGenerator from './admin/pages/admin/AdminQrGenerator';
 import PublishManager from './admin/pages/admin/PublishManager';
 import MultiCustomerAnalytics from './admin/pages/admin/MultiCustomerAnalytics';
+import CustomerSocialAccounts from './admin/pages/admin/CustomerSocialAccounts';
 
 
 // Super Admin imports
@@ -354,6 +355,12 @@ function App() {
               <Route path="/admin/approve/:id" element={
                 <ProtectedRoutePortal role="admin">
                   <ContentApproval />
+                </ProtectedRoutePortal>
+              } />
+              {/* Admin Customer Social Accounts Overview */}
+              <Route path="/admin/social-accounts" element={
+                <ProtectedRoutePortal role="admin">
+                  <CustomerSocialAccounts />
                 </ProtectedRoutePortal>
               } />
               

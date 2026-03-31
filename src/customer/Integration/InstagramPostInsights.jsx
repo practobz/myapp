@@ -525,7 +525,7 @@ function InstagramPostInsights({ isOpen, onClose, post, accessToken, accountProf
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+    <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center">
       <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
 
       <div className="relative bg-[#121212] w-full sm:max-w-md sm:max-h-[90vh] h-full sm:h-auto sm:rounded-2xl overflow-hidden flex flex-col shadow-2xl">

@@ -734,7 +734,7 @@ function FacebookPostInsights({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+    <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center">
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
 
@@ -1331,7 +1331,7 @@ function FacebookPostInsights({
 
       {/* ── Delete Confirmation Modal ── */}
       {showDeleteConfirm && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center">
+        <div className="fixed inset-0 z-[80] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/60" onClick={() => { if (!isDeleting) { setShowDeleteConfirm(false); setDeleteApiError(null); } }} />
           <div className="relative bg-white rounded-2xl shadow-2xl w-80 mx-4 p-6">
             {!deleteApiError ? (
@@ -1411,7 +1411,7 @@ function FacebookPostInsights({
 
       {/* ── Update Post Modal ── */}
       {showUpdateModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center">
+        <div className="fixed inset-0 z-[80] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/60" onClick={() => !isUpdating && setShowUpdateModal(false)} />
           <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6">
             <h3 className="text-sm font-bold text-gray-900 mb-1">Edit post</h3>

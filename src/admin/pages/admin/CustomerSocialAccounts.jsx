@@ -665,7 +665,9 @@ function CustomerRow({ customer, isExpanded, onToggle, onSelectAccount, searchQu
           </div>
           <div className="min-w-0">
             <h3 className="font-semibold text-gray-900 truncate">{customer.customerName}</h3>
-            <p className="text-xs text-gray-500 truncate">{customer.customerEmail}</p>
+            <p className="text-xs text-gray-500 truncate">
+              {customer.customerEmail || <span className="italic text-gray-400">No email</span>}
+            </p>
           </div>
         </div>
         <div className="flex items-center gap-3 flex-shrink-0">

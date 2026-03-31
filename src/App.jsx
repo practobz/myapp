@@ -83,6 +83,9 @@ import Configure from './components/Configure';
 import SocialIntegrations from './customer/Integration/SocialIntegrations';
 // Docs
 import AirSparkDocs from './Airspark_Docs/AirSparkDocs';
+import AccountsConfigure from './Airspark_Docs/AccountsConfigure';
+import FacebookConnectGuide from './Airspark_Docs/FacebookConnectGuide';
+
 // Import the new component
 import CustomerAnalytics from './customer/Analytics';
 import ROIDashboard from './customer/ROIDashboard';
@@ -631,7 +634,9 @@ function App() {
                 </ProtectedRoutePortal>
               } />
 <Route path="/docs" element={<AirSparkDocs />} />
-              
+  <Route path="/docs/accounts-configure" element={<AccountsConfigure />} />
+              <Route path="/docs/facebook-connect" element={<FacebookConnectGuide />} />
+             
               {/* Default route */}
               <Route path="/" element={<Navigate to="/login" replace />} />
             </Routes>

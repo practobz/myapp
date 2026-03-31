@@ -1,4 +1,18 @@
 import { useState, useEffect, useRef } from "react";
+import AccountsConfigure from "./AccountsConfigure";
+import FacebookConnectGuide from "./FacebookConnectGuide";
+
+// ─── HOOK ─────────────────────────────────────────────────────────────────────
+
+function useWindowWidth() {
+  const [width, setWidth] = useState(typeof window !== "undefined" ? window.innerWidth : 1200);
+  useEffect(() => {
+    const handler = () => setWidth(window.innerWidth);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
+  return width;
+}
 
 // ─── DATA ────────────────────────────────────────────────────────────────────
 
@@ -167,61 +181,118 @@ const Divider = () => <hr style={{ border: "none", borderTop: "1px solid #e4e6e8
 
 // ─── LANDING PAGE ─────────────────────────────────────────────────────────────
 
-const LandingPage = ({ onNavigate }) => (
-  <div style={{ maxWidth: 960, margin: "0 auto", padding: "48px 24px" }}>
-    <h1 style={{ fontSize: 36, fontWeight: 800, color: "#1c1e21", marginBottom: 12 }}>
-      AirSpark Customer Portal Documentation
-    </h1>
-    <p style={{ fontSize: 16, color: "#606770", maxWidth: 680, lineHeight: 1.7, marginBottom: 48, fontStyle: "italic" }}>
-      Learn how to manage your social media content, review posts, track analytics, and connect your social accounts using the AirSpark Customer Portal.
-    </p>
+const LandingPage = ({ onNavigate }) => {
+  const width = useWindowWidth();
+  const isMobile = width < 640;
+  const isTablet = width < 1024;
 
-    {/* Feature cards row */}
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 32, marginBottom: 48 }}>
-      {LANDING_CARDS.map((card) => (
-        <div key={card.title}>
-          <h3 style={{ fontSize: 16, fontWeight: 700, color: "#1c1e21", marginBottom: 8 }}>{card.title}</h3>
-          <p style={{ fontSize: 14, color: "#606770", lineHeight: 1.6, marginBottom: 12 }}>{card.desc}</p>
-          <button
-            onClick={() => onNavigate(card.link)}
-            style={{ background: "none", border: "none", color: "#1877f2", fontSize: 14, cursor: "pointer", padding: 0, fontWeight: 500 }}
+  return (
+    <div style={{ maxWidth: 960, margin: "0 auto", padding: isMobile ? "24px 16px" : "48px 24px" }}>
+      <h1 style={{ fontSize: isMobile ? 24 : 36, fontWeight: 800, color: "#1c1e21", marginBottom: 12 }}>
+        AirSpark Customer Portal Documentation
+      </h1>
+      <p style={{ fontSize: isMobile ? 14 : 16, color: "#606770", maxWidth: 680, lineHeight: 1.7, marginBottom: 32, fontStyle: "italic" }}>
+        Learn how to manage your social media content, review posts, track analytics, and connect your social accounts using the AirSpark Customer Portal.
+      </p>
+
+      <h2 style={{ fontSize: isMobile ? 18 : 22, fontWeight: 700, color: "#1c1e21", marginBottom: 8, marginTop: 0 }}>
+        Setup &amp; Integration Guides
+      </h2>
+      <p style={{ fontSize: 14, color: "#606770", lineHeight: 1.6, marginBottom: 24, marginTop: 0 }}>
+        Step-by-step walkthroughs for configuring your social accounts and connecting them to AirSpark.
+      </p>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, 1fr)", gap: isMobile ? 16 : 24, marginBottom: 48 }}>
+        {[
+          {
+            title: "Accounts & Configuration",
+            desc: "Create a Facebook Page, convert your Instagram to a Business account, link them together, and connect to AirSpark.",
+            badge: "Setup Guide",
+            badgeColor: "#1b873f",
+            badgeBg: "#e8f5e9",
+            page: "accounts-configure",
+          },
+          {
+            title: "Connect Facebook to AirSpark",
+            desc: "Step-by-step walkthrough with screenshots of every screen when connecting your Facebook & Instagram accounts via QR code.",
+            badge: "Integration Guide",
+            badgeColor: "#1877f2",
+            badgeBg: "#e7f3ff",
+            page: "facebook-connect",
+          },
+        ].map((card) => (
+          <div
+            key={card.title}
+            onClick={() => onNavigate(card.page)}
+            style={{
+              border: "1px solid #e4e6e8", borderRadius: 10, padding: "20px 24px",
+              cursor: "pointer",
+            }}
           >
-            Docs
-          </button>
-        </div>
-      ))}
-    </div>
+            <div style={{ marginBottom: 10 }}>
+              <span style={{ display: "inline-block", padding: "2px 10px", borderRadius: 20, background: card.badgeBg, color: card.badgeColor, fontSize: 12, fontWeight: 600 }}>
+                {card.badge}
+              </span>
+            </div>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: "#1c1e21", margin: "0 0 8px" }}>{card.title}</h3>
+            <p style={{ fontSize: 14, color: "#606770", lineHeight: 1.6, margin: "0 0 16px" }}>{card.desc}</p>
+            <span style={{ color: "#1877f2", fontSize: 14, fontWeight: 500 }}>Read Guide →</span>
+          </div>
+        ))}
+      </div>
 
-    <hr style={{ border: "none", borderTop: "1px solid #e4e6e8", marginBottom: 48 }} />
+      <hr style={{ border: "none", borderTop: "1px solid #e4e6e8", marginBottom: 48 }} />
 
-    {/* Grid of sections */}
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 24 }}>
-      {LANDING_GRID.map((group) => (
-        <div key={group.title}>
-          <h3 style={{ fontSize: 15, fontWeight: 700, color: "#1c1e21", marginBottom: 12 }}>{group.title}</h3>
-          <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-            {group.items.map((item) => (
-              <li key={item} style={{ borderBottom: "1px solid #e4e6e8", padding: "8px 0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <button
-                  onClick={() => onNavigate(group.title.toLowerCase().replace(/ /g, "-"))}
-                  style={{ background: "none", border: "none", color: "#606770", fontSize: 13, cursor: "pointer", padding: 0, textAlign: "left" }}
-                >
-                  {item}
-                </button>
-                <span style={{ color: "#bcc0c4" }}><DocIcon /></span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))}
+      {/* Feature cards row */}
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: isMobile ? 20 : 32, marginBottom: 48 }}>
+        {LANDING_CARDS.map((card) => (
+          <div key={card.title}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: "#1c1e21", marginBottom: 8 }}>{card.title}</h3>
+            <p style={{ fontSize: 14, color: "#606770", lineHeight: 1.6, marginBottom: 12 }}>{card.desc}</p>
+            <button
+              onClick={() => onNavigate(card.link)}
+              style={{ background: "none", border: "none", color: "#1877f2", fontSize: 14, cursor: "pointer", padding: 0, fontWeight: 500 }}
+            >
+              Docs
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <hr style={{ border: "none", borderTop: "1px solid #e4e6e8", marginBottom: 48 }} />
+
+      {/* Grid of sections */}
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : isTablet ? "repeat(2, 1fr)" : "repeat(4, 1fr)", gap: 24 }}>
+        {LANDING_GRID.map((group) => (
+          <div key={group.title}>
+            <h3 style={{ fontSize: 15, fontWeight: 700, color: "#1c1e21", marginBottom: 12 }}>{group.title}</h3>
+            <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+              {group.items.map((item) => (
+                <li key={item} style={{ borderBottom: "1px solid #e4e6e8", padding: "8px 0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <button
+                    onClick={() => onNavigate(group.title.toLowerCase().replace(/ /g, "-"))}
+                    style={{ background: "none", border: "none", color: "#606770", fontSize: 13, cursor: "pointer", padding: 0, textAlign: "left" }}
+                  >
+                    {item}
+                  </button>
+                  <span style={{ color: "#bcc0c4" }}><DocIcon /></span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 // ─── DOC PAGE ─────────────────────────────────────────────────────────────────
 
 const DocPage = ({ scrollTo }) => {
   const [activeId, setActiveId] = useState("overview");
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const width = useWindowWidth();
+  const isMobile = width < 768;
+  const isTablet = width < 1024;
 
   useEffect(() => {
     const obs = new IntersectionObserver(
@@ -235,44 +306,90 @@ const DocPage = ({ scrollTo }) => {
   }, []);
 
   const goto = (id) => {
+    setMobileNavOpen(false);
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
   };
 
   return (
     <div style={{ display: "flex", gap: 0, alignItems: "flex-start" }}>
 
-      {/* LEFT NAV */}
-      <aside style={{
-        width: 220, flexShrink: 0, position: "sticky", top: 60,
-        maxHeight: "calc(100vh - 60px)", overflowY: "auto",
-        padding: "24px 0", borderRight: "1px solid #e4e6e8",
-      }}>
-        <div style={{ fontWeight: 700, color: "#1c1e21", fontSize: 14, padding: "0 20px 12px" }}>
-          Customer Portal
-        </div>
-        <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-          {LEFT_NAV.map((item) => (
-            <li key={item.id}>
-              <button
-                onClick={() => goto(item.id)}
-                style={{
-                  display: "block", width: "100%", textAlign: "left",
-                  padding: "8px 20px", fontSize: 14, background: "none", border: "none",
-                  cursor: "pointer", borderLeft: activeId === item.id ? "3px solid #1877f2" : "3px solid transparent",
-                  color: activeId === item.id ? "#1877f2" : "#606770",
-                  fontWeight: activeId === item.id ? 600 : 400,
-                  transition: "all 0.15s",
-                }}
-              >
-                {item.label}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </aside>
+      {/* LEFT NAV — hidden on mobile */}
+      {!isMobile && (
+        <aside style={{
+          width: 220, flexShrink: 0, position: "sticky", top: 60,
+          maxHeight: "calc(100vh - 60px)", overflowY: "auto",
+          padding: "24px 0", borderRight: "1px solid #e4e6e8",
+        }}>
+          <div style={{ fontWeight: 700, color: "#1c1e21", fontSize: 14, padding: "0 20px 12px" }}>
+            Customer Portal
+          </div>
+          <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+            {LEFT_NAV.map((item) => (
+              <li key={item.id}>
+                <button
+                  onClick={() => goto(item.id)}
+                  style={{
+                    display: "block", width: "100%", textAlign: "left",
+                    padding: "8px 20px", fontSize: 14, background: "none", border: "none",
+                    cursor: "pointer", borderLeft: activeId === item.id ? "3px solid #1877f2" : "3px solid transparent",
+                    color: activeId === item.id ? "#1877f2" : "#606770",
+                    fontWeight: activeId === item.id ? 600 : 400,
+                    transition: "all 0.15s",
+                  }}
+                >
+                  {item.label}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </aside>
+      )}
 
       {/* MAIN CONTENT */}
-      <main style={{ flex: 1, minWidth: 0, padding: "32px 48px" }}>
+      <main style={{ flex: 1, minWidth: 0, padding: isMobile ? "20px 16px" : "32px 48px" }}>
+
+        {/* Mobile table of contents */}
+        {isMobile && (
+          <div style={{ marginBottom: 24 }}>
+            <button
+              onClick={() => setMobileNavOpen(!mobileNavOpen)}
+              style={{
+                display: "flex", alignItems: "center", gap: 8, width: "100%",
+                padding: "10px 16px", borderRadius: 6, border: "1px solid #e4e6e8",
+                background: "#f0f2f5", color: "#1c1e21", fontSize: 14,
+                fontWeight: 600, cursor: "pointer",
+              }}
+            >
+              <span>☰</span>
+              Contents
+              <span style={{ marginLeft: "auto", display: "inline-block", transform: mobileNavOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▼</span>
+            </button>
+            {mobileNavOpen && (
+              <div style={{
+                border: "1px solid #e4e6e8", borderTop: "none",
+                borderRadius: "0 0 6px 6px", background: "#fff",
+                boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+              }}>
+                {LEFT_NAV.map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => goto(item.id)}
+                    style={{
+                      display: "block", width: "100%", textAlign: "left",
+                      padding: "10px 16px", fontSize: 14, background: "none", border: "none",
+                      borderBottom: "1px solid #e4e6e8", cursor: "pointer",
+                      borderLeft: activeId === item.id ? "3px solid #1877f2" : "3px solid transparent",
+                      color: activeId === item.id ? "#1877f2" : "#606770",
+                      fontWeight: activeId === item.id ? 600 : 400,
+                    }}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         <section id="overview">
           <h1 style={{ fontSize: 32, fontWeight: 800, color: "#1c1e21", marginBottom: 16 }}>Customer Portal</h1>
@@ -598,33 +715,35 @@ const DocPage = ({ scrollTo }) => {
         </div>
       </main>
 
-      {/* RIGHT OUTLINE — "On This Page" */}
-      <aside style={{
-        width: 200, flexShrink: 0, position: "sticky", top: 60,
-        maxHeight: "calc(100vh - 60px)", overflowY: "auto",
-        padding: "32px 16px 24px",
-      }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: "#1c1e21", marginBottom: 12, letterSpacing: "0.05em", textTransform: "uppercase" }}>
-          On This Page
-        </div>
-        <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-          {RIGHT_NAV.map((item) => (
-            <li key={item.id} style={{ marginBottom: 4 }}>
-              <button
-                onClick={() => goto(item.id)}
-                style={{
-                  background: "none", border: "none", cursor: "pointer", padding: "3px 0",
-                  fontSize: 13, color: activeId === item.id ? "#1877f2" : "#8a8d91",
-                  fontWeight: activeId === item.id ? 600 : 400, textAlign: "left",
-                  transition: "color 0.15s",
-                }}
-              >
-                {item.label}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </aside>
+      {/* RIGHT OUTLINE — "On This Page" — hidden on mobile/tablet */}
+      {!isMobile && !isTablet && (
+        <aside style={{
+          width: 200, flexShrink: 0, position: "sticky", top: 60,
+          maxHeight: "calc(100vh - 60px)", overflowY: "auto",
+          padding: "32px 16px 24px",
+        }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#1c1e21", marginBottom: 12, letterSpacing: "0.05em", textTransform: "uppercase" }}>
+            On This Page
+          </div>
+          <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+            {RIGHT_NAV.map((item) => (
+              <li key={item.id} style={{ marginBottom: 4 }}>
+                <button
+                  onClick={() => goto(item.id)}
+                  style={{
+                    background: "none", border: "none", cursor: "pointer", padding: "3px 0",
+                    fontSize: 13, color: activeId === item.id ? "#1877f2" : "#8a8d91",
+                    fontWeight: activeId === item.id ? 600 : 400, textAlign: "left",
+                    transition: "color 0.15s",
+                  }}
+                >
+                  {item.label}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </aside>
+      )}
     </div>
   );
 };
@@ -632,10 +751,17 @@ const DocPage = ({ scrollTo }) => {
 // ─── APP SHELL ─────────────────────────────────────────────────────────────────
 
 export default function AirSparkDocs() {
-  const [page, setPage] = useState("landing"); // "landing" | "docs"
+  const [page, setPage] = useState("landing"); // "landing" | "docs" | "accounts-configure" | "facebook-connect"
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const width = useWindowWidth();
+  const isMobile = width < 768;
 
   const goToDocs = (scrollId) => {
+    if (scrollId === "accounts-configure" || scrollId === "facebook-connect") {
+      setPage(scrollId);
+      window.scrollTo(0, 0);
+      return;
+    }
     setPage("docs");
     if (scrollId) {
       setTimeout(() => {
@@ -644,30 +770,33 @@ export default function AirSparkDocs() {
     }
   };
 
+  if (page === "accounts-configure") return <AccountsConfigure onBack={() => setPage("landing")} />;
+  if (page === "facebook-connect") return <FacebookConnectGuide onBack={() => setPage("landing")} />;
+
   return (
     <div style={{ fontFamily: "'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif", background: "#fff", minHeight: "100vh" }}>
 
-      {/* TOP NAV — matches Meta style */}
+      {/* TOP NAV */}
       <header style={{
         position: "sticky", top: 0, zIndex: 100,
         background: "#fff", borderBottom: "1px solid #e4e6e8",
-        height: 60, display: "flex", alignItems: "center",
-        padding: "0 24px", gap: 24,
+        minHeight: 60, display: "flex", alignItems: "center",
+        padding: isMobile ? "0 12px" : "0 24px", gap: isMobile ? 8 : 24,
       }}>
         {/* Logo */}
         <button
           onClick={() => setPage("landing")}
-          style={{ display: "flex", alignItems: "center", gap: 10, background: "none", border: "none", cursor: "pointer", padding: 0 }}
+          style={{ display: "flex", alignItems: "center", gap: 10, background: "none", border: "none", cursor: "pointer", padding: 0, flexShrink: 0 }}
         >
           <img
             src="/logoAirspark.png"
             alt="AirSpark Logo"
-            style={{ height: 85, width: "auto", display: "block" }}
+            style={{ height: isMobile ? 48 : 85, width: "auto", display: "block" }}
           />
         </button>
 
         {/* Nav pills */}
-        <nav style={{ display: "flex", gap: 4 }}>
+        <nav style={{ display: "flex", gap: 4, flexShrink: 0 }}>
           {[
             { label: "Docs", view: "landing" },
             { label: "Portal", view: "docs" },
@@ -676,11 +805,11 @@ export default function AirSparkDocs() {
               key={item.label}
               onClick={() => item.view === "docs" ? goToDocs() : setPage("landing")}
               style={{
-                padding: "6px 14px", borderRadius: 6, border: "none",
+                padding: isMobile ? "5px 10px" : "6px 14px", borderRadius: 6, border: "none",
                 background: page === item.view ? "#e7f3ff" : "none",
                 color: page === item.view ? "#1877f2" : "#606770",
                 fontWeight: page === item.view ? 600 : 400,
-                fontSize: 14, cursor: "pointer",
+                fontSize: isMobile ? 13 : 14, cursor: "pointer",
               }}
             >
               {item.label}
@@ -688,8 +817,8 @@ export default function AirSparkDocs() {
           ))}
         </nav>
 
-        {/* Breadcrumb for doc page */}
-        {page === "docs" && (
+        {/* Breadcrumb for doc page — hidden on mobile */}
+        {page === "docs" && !isMobile && (
           <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#606770" }}>
             <button onClick={() => setPage("landing")} style={{ background: "none", border: "none", color: "#606770", cursor: "pointer", padding: 0, fontSize: 13 }}>Docs</button>
             <ChevronRight />
@@ -697,38 +826,39 @@ export default function AirSparkDocs() {
           </div>
         )}
 
-        {/* Search */}
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{
-            display: "flex", alignItems: "center", gap: 8,
-            background: "#f0f2f5", border: "1px solid #e4e6e8",
-            borderRadius: 6, padding: "7px 12px", width: 200,
-          }}>
-            <span style={{ color: "#8a8d91" }}><SearchIcon /></span>
-            <span style={{ fontSize: 14, color: "#8a8d91" }}>Search...</span>
-          </div>
+        {/* Search + Portal button */}
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: isMobile ? 8 : 12, flexShrink: 0 }}>
+          {!isMobile && (
+            <div style={{
+              display: "flex", alignItems: "center", gap: 8,
+              background: "#f0f2f5", border: "1px solid #e4e6e8",
+              borderRadius: 6, padding: "7px 12px", width: 200,
+            }}>
+              <span style={{ color: "#8a8d91" }}><SearchIcon /></span>
+              <span style={{ fontSize: 14, color: "#8a8d91" }}>Search...</span>
+            </div>
+          )}
 
           <a
             href="https://airspark.storage.googleapis.com/index.html#/customer/login"
             target="_blank" rel="noopener noreferrer"
             style={{
               display: "flex", alignItems: "center", gap: 6,
-              padding: "7px 16px", borderRadius: 6,
+              padding: isMobile ? "7px 12px" : "7px 16px", borderRadius: 6,
               background: "#1877f2", color: "#fff",
-              fontSize: 14, fontWeight: 600, textDecoration: "none",
+              fontSize: isMobile ? 13 : 14, fontWeight: 600, textDecoration: "none",
+              whiteSpace: "nowrap",
             }}
           >
-            Open Portal <ExternalIcon />
+            {isMobile ? "Portal" : "Open Portal"}
+            {!isMobile && <ExternalIcon />}
           </a>
         </div>
       </header>
 
       {/* PAGE CONTENT */}
-      {page === "landing" ? (
-        <LandingPage onNavigate={goToDocs} />
-      ) : (
-        <DocPage scrollTo={null} />
-      )}
+      {page === "landing" && <LandingPage onNavigate={goToDocs} />}
+      {page === "docs" && <DocPage scrollTo={null} />}
     </div>
   );
 }

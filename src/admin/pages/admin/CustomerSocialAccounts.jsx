@@ -734,24 +734,42 @@ function CustomerSocialAccounts() {
     async (isRefresh = false) => {
       if (abortControllerRef.current) abortControllerRef.current.abort();
       abortControllerRef.current = new AbortController();
+      const signal = abortControllerRef.current.signal;
 
       if (isRefresh) setIsRefreshing(true);
       else setLoading(true);
       setError('');
 
       try {
-        const res = await fetch(`${apiUrl}/api/admin/customer-social-links`, {
-          signal: abortControllerRef.current.signal,
-        });
+        // Fetch all social accounts and assigned customers in parallel
+        const [socialRes, assignedRes] = await Promise.all([
+          fetch(`${apiUrl}/api/admin/customer-social-links`, { signal }),
+          currentUser?.role === 'admin'
+            ? fetch(`${apiUrl}/admin/assigned-customers?adminId=${currentUser._id || currentUser.id}`, { signal })
+            : Promise.resolve(null),
+        ]);
 
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (!socialRes.ok) throw new Error(`HTTP ${socialRes.status}`);
 
-        const data = await res.json();
-        if (data.success) {
-          setCustomers(data.data || []);
-        } else {
-          throw new Error(data.error || 'Failed to fetch data');
+        const data = await socialRes.json();
+        if (!data.success) throw new Error(data.error || 'Failed to fetch data');
+
+        let allCustomers = data.data || [];
+
+        // If admin, filter to only show their assigned customers
+        if (currentUser?.role === 'admin' && assignedRes) {
+          if (assignedRes.ok) {
+            const assignedList = await assignedRes.json();
+            const assignedIds = new Set(
+              (Array.isArray(assignedList) ? assignedList : []).map((c) => c._id)
+            );
+            allCustomers = allCustomers.filter((c) => assignedIds.has(c.customerId));
+          } else {
+            allCustomers = [];
+          }
         }
+
+        setCustomers(allCustomers);
       } catch (err) {
         if (err.name === 'AbortError') return;
         setError(err.message || 'Failed to load social accounts');
@@ -760,7 +778,7 @@ function CustomerSocialAccounts() {
         setIsRefreshing(false);
       }
     },
-    [apiUrl]
+    [apiUrl, currentUser]
   );
 
   useEffect(() => {

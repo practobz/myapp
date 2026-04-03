@@ -8,7 +8,7 @@ import ContentCalendarModal from '../../components/modals/ContentCalendarModal';
 import {
   ChevronLeft, Pencil, Trash2, Plus, AlertCircle, Calendar, Clock,
   ChevronRight, ChevronDown, MoreVertical, Upload, X, FileText, CheckCircle, Edit,
-  ExternalLink, TrendingUp, Eye, Heart, Share2, MessageCircle, ArrowUpDown
+  ExternalLink, TrendingUp, Eye, Heart, Share2, MessageCircle, ArrowUpDown, User
 } from 'lucide-react';
 import { XAxis, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
 
@@ -43,16 +43,35 @@ const PlatformIcon = ({ platform }) => {
   return <span className="text-[10px] font-medium text-gray-600 capitalize">{platform}</span>;
 };
 
-// Timeline component showing item lifecycle stages
-const ItemTimeline = ({ item, itemStatus }) => {
+// Timeline component showing item lifecycle stages with dates
+const ItemTimeline = ({ item, itemStatus, scheduledPosts = [] }) => {
   const isAssigned = !!item.assignedTo || ['assigned', 'in_progress', 'under_review', 'approved', 'published'].includes(itemStatus);
   const isReviewed = ['under_review', 'approved', 'published'].includes(itemStatus);
   const isPublished = itemStatus === 'published';
+  const isDue = isPublished || (item.date && new Date(item.date) <= new Date());
+
+  const matchedPost = scheduledPosts.find(post =>
+    ((post.item_id && post.item_id === item.id) ||
+     (post.contentId && post.contentId === item.id) ||
+     (post.item_name && post.item_name === (item.title || item.description))) &&
+    (post.status === 'published' || post.publishedAt)
+  );
+
+  const fmtDate = (d) => {
+    if (!d) return null;
+    try {
+      const dt = new Date(d);
+      if (isNaN(dt.getTime())) return null;
+      return `${dt.getDate()}/${dt.getMonth() + 1} ${dt.getHours().toString().padStart(2, '0')}:${dt.getMinutes().toString().padStart(2, '0')}`;
+    } catch { return null; }
+  };
+
   const steps = [
-    { key: 'created',   label: 'Created',   done: true },
-    { key: 'assigned',  label: 'Assigned',  done: isAssigned },
-    { key: 'reviewed',  label: 'Reviewed',  done: isReviewed },
-    { key: 'published', label: 'Published', done: isPublished },
+    { key: 'created',   label: 'Created',   done: true,        date: fmtDate(item.createdAt) },
+    { key: 'due',       label: 'Due',        done: isDue,       date: fmtDate(item.date) },
+    { key: 'assigned',  label: 'Assigned',   done: isAssigned,  date: fmtDate(item.assignedAt) },
+    { key: 'reviewed',  label: 'Reviewed',   done: isReviewed,  date: fmtDate(item.reviewedAt) },
+    { key: 'published', label: 'Published',  done: isPublished, date: fmtDate(matchedPost?.publishedAt || item.publishedAt) },
   ];
   return (
     <div className="flex items-start mt-2">
@@ -63,6 +82,11 @@ const ItemTimeline = ({ item, itemStatus }) => {
             <span className={`text-[9px] leading-none mt-0.5 whitespace-nowrap ${step.done ? 'text-emerald-600 font-medium' : 'text-gray-400'}`}>
               {step.label}
             </span>
+            {step.date && (
+              <span className={`text-[8px] leading-none mt-0.5 whitespace-nowrap ${step.done ? 'text-emerald-500' : 'text-gray-300'}`}>
+                {step.date}
+              </span>
+            )}
           </div>
           {idx < steps.length - 1 && (
             <div
@@ -108,18 +132,66 @@ const PostTrendButton = memo(({ isLoading, isActive, onClick }) => (
 ));
 PostTrendButton.displayName = 'PostTrendButton';
 
-// Expanded per-post trend chart with date range selector
-const ExpandedTrendChart = memo(({ data, dateRange, onDateRangeChange, onClose }) => {
+// Helper to combine per-platform trend data by date
+const getCombinedTrendData = (platformData) => {
+  if (!platformData || typeof platformData !== 'object') return [];
+  const byDate = {};
+  Object.values(platformData).forEach(arr => {
+    (arr || []).forEach(d => {
+      if (!byDate[d.date]) byDate[d.date] = { date: d.date, likes: 0, comments: 0, shares: 0 };
+      byDate[d.date].likes += d.likes || 0;
+      byDate[d.date].comments += d.comments || 0;
+      byDate[d.date].shares += d.shares || 0;
+    });
+  });
+  return Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date));
+};
+
+// Mini sparkline trend charts shown inline on published calendar items
+const MiniTrendCharts = memo(({ platformData }) => {
+  const combined = getCombinedTrendData(platformData).slice(-14);
+  if (!combined.length) return null;
+  const metrics = [
+    { key: 'likes', color: '#EF4444', Icon: Heart, label: 'Likes' },
+    { key: 'comments', color: '#3B82F6', Icon: MessageCircle, label: 'Comments' },
+    { key: 'shares', color: '#22C55E', Icon: Share2, label: 'Shares' },
+  ];
+  return (
+    <div className="flex items-center gap-3 mt-1.5">
+      {metrics.map(m => {
+        const total = combined.reduce((s, d) => s + (d[m.key] || 0), 0);
+        return (
+          <div key={m.key} className="flex items-center gap-1">
+            <m.Icon className="h-2.5 w-2.5 flex-shrink-0" style={{ color: m.color }} />
+            <div className="w-14 h-5">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={combined}>
+                  <Line type="monotone" dataKey={m.key} stroke={m.color} strokeWidth={1} dot={false} isAnimationActive={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+            <span className="text-[9px] text-gray-500 tabular-nums">{total}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+});
+MiniTrendCharts.displayName = 'MiniTrendCharts';
+
+// Expanded per-post trend chart with date range selector — per platform
+const ExpandedTrendChart = memo(({ platformData, dateRange, onDateRangeChange, onClose }) => {
   const ranges = [
     { label: '7D', value: 7 },
     { label: '14D', value: 14 },
     { label: '30D', value: 30 },
     { label: '90D', value: 90 },
   ];
-  const displayData = (data || []).slice(-dateRange);
-  const totalLikes    = displayData.reduce((s, d) => s + (d.likes    || 0), 0);
-  const totalComments = displayData.reduce((s, d) => s + (d.comments || 0), 0);
-  const totalShares   = displayData.reduce((s, d) => s + (d.shares   || 0), 0);
+  const platforms = Object.keys(platformData || {});
+  const hasData = platforms.some(p => (platformData[p] || []).length > 0);
+  const gridClass = platforms.length >= 3 ? 'grid grid-cols-1 sm:grid-cols-3 gap-3'
+    : platforms.length === 2 ? 'grid grid-cols-1 sm:grid-cols-2 gap-3'
+    : '';
 
   return (
     <div className="mt-3 bg-blue-50/50 rounded-lg border border-blue-100 p-3" onClick={e => e.stopPropagation()}>
@@ -147,54 +219,58 @@ const ExpandedTrendChart = memo(({ data, dateRange, onDateRangeChange, onClose }
         </button>
       </div>
 
-      {/* Summary stats */}
-      <div className="grid grid-cols-3 gap-2 mb-2">
-        <div className="flex items-center gap-1.5 bg-white rounded-md px-2 py-1 border border-gray-100">
-          <Heart className="h-3 w-3 text-red-500" />
-          <span className="text-[10px] text-gray-500">Likes</span>
-          <span className="text-xs font-semibold text-gray-800 ml-auto">{totalLikes.toLocaleString()}</span>
-        </div>
-        <div className="flex items-center gap-1.5 bg-white rounded-md px-2 py-1 border border-gray-100">
-          <MessageCircle className="h-3 w-3 text-blue-500" />
-          <span className="text-[10px] text-gray-500">Comments</span>
-          <span className="text-xs font-semibold text-gray-800 ml-auto">{totalComments.toLocaleString()}</span>
-        </div>
-        <div className="flex items-center gap-1.5 bg-white rounded-md px-2 py-1 border border-gray-100">
-          <Share2 className="h-3 w-3 text-green-500" />
-          <span className="text-[10px] text-gray-500">Shares</span>
-          <span className="text-xs font-semibold text-gray-800 ml-auto">{totalShares.toLocaleString()}</span>
-        </div>
-      </div>
-
-      {/* Chart or empty state */}
-      {(!data || data.length === 0) ? (
+      {!hasData && platforms.length === 0 ? (
         <div className="h-24 flex items-center justify-center">
           <p className="text-xs text-gray-400">No analytics snapshots found for this post yet.</p>
         </div>
       ) : (
-        <div className="h-32 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={displayData} margin={{ top: 4, right: 4, left: 4, bottom: 4 }}>
-              <XAxis
-                dataKey="date"
-                tick={{ fontSize: 9 }}
-                tickFormatter={v => {
-                  const d = new Date(v);
-                  return `${d.getDate()}/${d.getMonth() + 1}`;
-                }}
-                stroke="#9CA3AF"
-                axisLine={false}
-                tickLine={false}
-              />
-              <Tooltip
-                contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #e5e7eb' }}
-                labelFormatter={v => new Date(v).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
-              />
-              <Line type="monotone" dataKey="likes"    stroke="#EF4444" strokeWidth={1.5} dot={false} name="Likes" />
-              <Line type="monotone" dataKey="comments" stroke="#3B82F6" strokeWidth={1.5} dot={false} name="Comments" />
-              <Line type="monotone" dataKey="shares"   stroke="#22C55E" strokeWidth={1.5} dot={false} name="Shares" />
-            </LineChart>
-          </ResponsiveContainer>
+        <div className={gridClass}>
+          {platforms.map(platform => {
+            const data = (platformData[platform] || []).slice(-dateRange);
+            const totalLikes    = data.reduce((s, d) => s + (d.likes    || 0), 0);
+            const totalComments = data.reduce((s, d) => s + (d.comments || 0), 0);
+            const totalShares   = data.reduce((s, d) => s + (d.shares   || 0), 0);
+            return (
+              <div key={platform} className="bg-white rounded-lg border border-gray-100 p-2.5">
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <PlatformIcon platform={platform} />
+                  <span className="text-[10px] font-semibold text-gray-700 capitalize">{platform}</span>
+                </div>
+                <div className="flex items-center gap-3 mb-1.5">
+                  <span className="flex items-center gap-1 text-[10px] text-gray-600"><Heart className="h-2.5 w-2.5 text-red-500" />{totalLikes.toLocaleString()}</span>
+                  <span className="flex items-center gap-1 text-[10px] text-gray-600"><MessageCircle className="h-2.5 w-2.5 text-blue-500" />{totalComments.toLocaleString()}</span>
+                  <span className="flex items-center gap-1 text-[10px] text-gray-600"><Share2 className="h-2.5 w-2.5 text-green-500" />{totalShares.toLocaleString()}</span>
+                </div>
+                {data.length === 0 ? (
+                  <div className="h-20 flex items-center justify-center">
+                    <p className="text-[10px] text-gray-400">No data yet</p>
+                  </div>
+                ) : (
+                  <div className="h-24 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={data} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
+                        <XAxis
+                          dataKey="date"
+                          tick={{ fontSize: 8 }}
+                          tickFormatter={v => { const d = new Date(v); return `${d.getDate()}/${d.getMonth() + 1}`; }}
+                          stroke="#9CA3AF"
+                          axisLine={false}
+                          tickLine={false}
+                        />
+                        <Tooltip
+                          contentStyle={{ fontSize: 10, borderRadius: 8, border: '1px solid #e5e7eb' }}
+                          labelFormatter={v => new Date(v).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
+                        />
+                        <Line type="monotone" dataKey="likes"    stroke="#EF4444" strokeWidth={1.5} dot={false} name="Likes" />
+                        <Line type="monotone" dataKey="comments" stroke="#3B82F6" strokeWidth={1.5} dot={false} name="Comments" />
+                        <Line type="monotone" dataKey="shares"   stroke="#22C55E" strokeWidth={1.5} dot={false} name="Shares" />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
@@ -251,7 +327,7 @@ const CustomerDetails = () => {
     }
   };
 
-  // Fetch per-post trend data from analytics snapshots (on-demand, cached by itemKey)
+  // Fetch per-post trend data from analytics snapshots (on-demand, cached by itemKey, per-platform)
   const fetchPostTrend = useCallback(async (itemKey, item) => {
     if (fetchedTrendItemsRef.current.has(itemKey)) return;
     fetchedTrendItemsRef.current.add(itemKey);
@@ -259,61 +335,82 @@ const CustomerDetails = () => {
     // null = loading
     setPostTrendCache(prev => ({ ...prev, [itemKey]: null }));
 
-    // Find the matching published scheduled post for this item
-    const matchedPost = scheduledPosts.find(post =>
+    // Determine platforms from item type
+    const itemPlatforms = item.type
+      ? (Array.isArray(item.type) ? item.type : (typeof item.type === 'string' ? item.type.split(',').map(p => p.trim()) : []))
+      : [];
+
+    const platformResult = {};
+    itemPlatforms.forEach(p => { platformResult[p.toLowerCase()] = []; });
+
+    // Find ALL matching published scheduled posts
+    const matchedPosts = scheduledPosts.filter(post =>
       ((post.item_id && post.item_id === item.id) ||
        (post.contentId && post.contentId === item.id) ||
        (post.item_name && post.item_name === (item.title || item.description))) &&
       (post.status === 'published' || post.publishedAt)
     );
 
-    const instagramId  = matchedPost?.instagramId;
-    const postMediaId  = matchedPost?.instagramPostId;
+    // Fetch Instagram analytics if available
+    for (const matchedPost of matchedPosts) {
+      const instagramId = matchedPost?.instagramId;
+      const postMediaId = matchedPost?.instagramPostId;
 
-    if (!instagramId || !postMediaId) {
-      setPostTrendCache(prev => ({ ...prev, [itemKey]: [] }));
-      return;
+      if (instagramId && postMediaId) {
+        try {
+          const res = await fetch(
+            `${API_URL}/api/analytics/data?platform=instagram&accountId=${encodeURIComponent(instagramId)}`
+          );
+          if (!res.ok) continue;
+          const json = await res.json();
+          const allDocs = Array.isArray(json) ? json : (json.docs || json.data || []);
+
+          const snapshots = allDocs
+            .filter(doc =>
+              doc.type === 'analytics_data' &&
+              doc.platform === 'instagram' &&
+              (doc.accountId === instagramId || doc.instagramId === instagramId)
+            )
+            .sort((a, b) => new Date(a.collectedAt) - new Date(b.collectedAt));
+
+          const dataByDate = {};
+          snapshots.forEach(snap => {
+            const found = (snap.media || []).find(m =>
+              m.id === postMediaId || m.id === String(postMediaId)
+            );
+            if (found) {
+              const date = snap.collectedAt.slice(0, 10);
+              dataByDate[date] = {
+                date,
+                likes:    found.likes    ?? found.like_count     ?? 0,
+                comments: found.comments ?? found.comments_count ?? 0,
+                shares:   found.shares   ?? 0,
+              };
+            }
+          });
+
+          platformResult['instagram'] = Object.values(dataByDate).sort((a, b) => a.date.localeCompare(b.date));
+        } catch { /* skip */ }
+      }
     }
 
-    try {
-      const res = await fetch(
-        `${API_URL}/api/analytics/data?platform=instagram&accountId=${encodeURIComponent(instagramId)}`
-      );
-      if (!res.ok) throw new Error(`Analytics API ${res.status}`);
+    setPostTrendCache(prev => ({ ...prev, [itemKey]: platformResult }));
+  }, [scheduledPosts]);
 
-      const json = await res.json();
-      const allDocs = Array.isArray(json) ? json : (json.docs || json.data || []);
-
-      const snapshots = allDocs
-        .filter(doc =>
-          doc.type     === 'analytics_data' &&
-          doc.platform === 'instagram' &&
-          (doc.accountId === instagramId || doc.instagramId === instagramId)
-        )
-        .sort((a, b) => new Date(a.collectedAt) - new Date(b.collectedAt));
-
-      const dataByDate = {};
-      snapshots.forEach(snap => {
-        const found = (snap.media || []).find(m =>
-          m.id === postMediaId || m.id === String(postMediaId)
-        );
-        if (found) {
-          const date = snap.collectedAt.slice(0, 10);
-          dataByDate[date] = {
-            date,
-            likes:    found.likes    ?? found.like_count     ?? 0,
-            comments: found.comments ?? found.comments_count ?? 0,
-            shares:   found.shares   ?? 0,
-          };
+  // Auto-fetch trend data for published items in expanded calendars (for mini charts)
+  useEffect(() => {
+    if (scheduledPosts.length === 0) return;
+    expandedCalendars.forEach(calId => {
+      const cal = calendars.find(c => c._id === calId);
+      if (!cal?.contentItems) return;
+      cal.contentItems.forEach((item, index) => {
+        if (isItemPublished(item)) {
+          const itemKey = item.id || `${cal._id}_${index}`;
+          fetchPostTrend(itemKey, item);
         }
       });
-
-      const sorted = Object.values(dataByDate).sort((a, b) => a.date.localeCompare(b.date));
-      setPostTrendCache(prev => ({ ...prev, [itemKey]: sorted }));
-    } catch {
-      setPostTrendCache(prev => ({ ...prev, [itemKey]: [] }));
-    }
-  }, [scheduledPosts]);
+    });
+  }, [expandedCalendars, calendars, scheduledPosts, fetchPostTrend]);
 
   // Check if item is published (manual or via scheduled post)
   const isItemPublished = (item) => {
@@ -1004,6 +1101,8 @@ const CustomerDetails = () => {
                               const isTrendLoading = itemTrendData === null;
                               const isExpanded = expandedTrendItem === itemKey;
                               const publishedLinks = itemStatus === 'published' ? getItemPublishedLinks(item) : [];
+                              const creatorId = item.assignedTo || calendar.assignedTo;
+                              const creatorName = item.assignedToName || calendar.assignedToName || (creators.find(c => c.email === creatorId)?.name) || creatorId || '';
                               return (
                                 <div key={itemKey} className="bg-white rounded-lg border border-gray-100 hover:border-gray-200 transition-colors overflow-hidden">
                                   <div className="flex items-center justify-between p-3">
@@ -1013,7 +1112,15 @@ const CustomerDetails = () => {
                                       </div>
                                       <div className="min-w-0 flex-1">
                                         <div className="flex items-center gap-1.5 flex-wrap">
-                                          {item.title && <p className="text-sm font-medium text-blue-800 truncate">{item.title}</p>}
+                                          {item.title && (
+                                            <button
+                                              className="text-sm font-medium text-blue-800 truncate hover:text-blue-600 hover:underline cursor-pointer text-left"
+                                              onClick={(e) => { e.stopPropagation(); navigate(`/admin/content-upload/${calendar._id}/${originalIndex}`); }}
+                                              title="View content details"
+                                            >
+                                              {item.title}
+                                            </button>
+                                          )}
                                           {/* Published post links — one per platform */}
                                           {publishedLinks.map((link, li) => (
                                             <a
@@ -1032,10 +1139,6 @@ const CustomerDetails = () => {
                                         </div>
                                         <p className="text-sm text-gray-900 truncate">{item.description || 'Untitled'}</p>
                                         <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                          <p className="text-xs text-gray-500 flex items-center gap-1">
-                                            <Clock className="h-3 w-3" />
-                                            Due: {formatDate(item.date)}
-                                          </p>
                                           {item.type && (
                                             (Array.isArray(item.type) ? item.type :
                                               (typeof item.type === 'string' ? item.type.split(',').map(p => p.trim()) : [item.type])
@@ -1045,8 +1148,17 @@ const CustomerDetails = () => {
                                               </span>
                                             ))
                                           )}
+                                          {creatorName && (
+                                            <span className="text-[10px] text-gray-500 flex items-center gap-0.5">
+                                              <User className="h-2.5 w-2.5" />
+                                              {creatorName}
+                                            </span>
+                                          )}
                                         </div>
-                                        <ItemTimeline item={item} itemStatus={itemStatus} />
+                                        <ItemTimeline item={item} itemStatus={itemStatus} scheduledPosts={scheduledPosts} />
+                                        {itemStatus === 'published' && itemTrendData && typeof itemTrendData === 'object' && (
+                                          <MiniTrendCharts platformData={itemTrendData} />
+                                        )}
                                       </div>
                                     </div>
                                     <div className="flex items-center gap-1.5 ml-2">
@@ -1140,7 +1252,7 @@ const CustomerDetails = () => {
                                         </div>
                                       ) : (
                                         <ExpandedTrendChart
-                                          data={itemTrendData || []}
+                                          platformData={itemTrendData || {}}
                                           dateRange={trendDateRange}
                                           onDateRangeChange={setTrendDateRange}
                                           onClose={() => setExpandedTrendItem(null)}

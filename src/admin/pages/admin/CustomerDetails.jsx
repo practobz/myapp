@@ -159,7 +159,8 @@ const MiniTrendCharts = memo(({ platformData }) => {
   return (
     <div className="flex items-center gap-3 mt-1.5">
       {metrics.map(m => {
-        const total = combined.reduce((s, d) => s + (d[m.key] || 0), 0);
+        // Use latest snapshot value — Instagram stores cumulative counts per snapshot
+        const total = combined.length > 0 ? (combined[combined.length - 1][m.key] || 0) : 0;
         return (
           <div key={m.key} className="flex items-center gap-1">
             <m.Icon className="h-2.5 w-2.5 flex-shrink-0" style={{ color: m.color }} />
@@ -227,9 +228,10 @@ const ExpandedTrendChart = memo(({ platformData, dateRange, onDateRangeChange, o
         <div className={gridClass}>
           {platforms.map(platform => {
             const data = (platformData[platform] || []).slice(-dateRange);
-            const totalLikes    = data.reduce((s, d) => s + (d.likes    || 0), 0);
-            const totalComments = data.reduce((s, d) => s + (d.comments || 0), 0);
-            const totalShares   = data.reduce((s, d) => s + (d.shares   || 0), 0);
+            // Use latest snapshot value — Instagram stores cumulative counts per snapshot
+            const totalLikes    = data.length > 0 ? (data[data.length - 1].likes    || 0) : 0;
+            const totalComments = data.length > 0 ? (data[data.length - 1].comments || 0) : 0;
+            const totalShares   = data.length > 0 ? (data[data.length - 1].shares   || 0) : 0;
             return (
               <div key={platform} className="bg-white rounded-lg border border-gray-100 p-2.5">
                 <div className="flex items-center gap-1.5 mb-1.5">

@@ -353,51 +353,121 @@ const CustomerDetails = () => {
       (post.status === 'published' || post.publishedAt)
     );
 
-    // Fetch Instagram analytics if available
+    // Fetch analytics for each matched published post, per platform
     for (const matchedPost of matchedPosts) {
+
+      // ── Instagram ──────────────────────────────────────────────────────────
       const instagramId = matchedPost?.instagramId;
       const postMediaId = matchedPost?.instagramPostId;
-
       if (instagramId && postMediaId) {
         try {
           const res = await fetch(
             `${API_URL}/api/analytics/data?platform=instagram&accountId=${encodeURIComponent(instagramId)}`
           );
-          if (!res.ok) continue;
-          const json = await res.json();
-          const allDocs = Array.isArray(json) ? json : (json.docs || json.data || []);
+          if (res.ok) {
+            const json = await res.json();
+            const allDocs = Array.isArray(json) ? json : (json.docs || json.data || []);
+            const snapshots = allDocs
+              .filter(doc =>
+                doc.type === 'analytics_data' &&
+                doc.platform === 'instagram' &&
+                (doc.accountId === instagramId || doc.instagramId === instagramId)
+              )
+              .sort((a, b) => new Date(a.collectedAt) - new Date(b.collectedAt));
+            const dataByDate = {};
+            snapshots.forEach(snap => {
+              const found = (snap.media || []).find(m =>
+                m.id === postMediaId || m.id === String(postMediaId)
+              );
+              if (found) {
+                const date = snap.collectedAt.slice(0, 10);
+                dataByDate[date] = {
+                  date,
+                  likes:    found.likes    ?? found.like_count     ?? 0,
+                  comments: found.comments ?? found.comments_count ?? 0,
+                  shares:   found.shares   ?? 0,
+                };
+              }
+            });
+            platformResult['instagram'] = Object.values(dataByDate).sort((a, b) => a.date.localeCompare(b.date));
+          }
+        } catch { /* skip */ }
+      }
 
-          const snapshots = allDocs
-            .filter(doc =>
-              doc.type === 'analytics_data' &&
-              doc.platform === 'instagram' &&
-              (doc.accountId === instagramId || doc.instagramId === instagramId)
-            )
-            .sort((a, b) => new Date(a.collectedAt) - new Date(b.collectedAt));
+      // ── Facebook ───────────────────────────────────────────────────────────
+      const fbPostId  = matchedPost?.facebookPostId;
+      if (fbPostId && !fbPostId.startsWith('fb_shared_from_')) {
+        // accountId is the page ID — either stored directly or derived from postId
+        const fbAccountId = matchedPost?.pageId || fbPostId.split('_')[0];
+        try {
+          const res = await fetch(
+            `${API_URL}/api/analytics/data?platform=facebook&accountId=${encodeURIComponent(fbAccountId)}`
+          );
+          if (res.ok) {
+            const json = await res.json();
+            const allDocs = Array.isArray(json) ? json : (json.docs || json.data || []);
+            const snapshots = allDocs
+              .filter(doc => doc.type === 'analytics_data' && doc.platform === 'facebook')
+              .sort((a, b) => new Date(a.collectedAt) - new Date(b.collectedAt));
+            const dataByDate = {};
+            snapshots.forEach(snap => {
+              const found = (snap.posts || []).find(p =>
+                p.id === fbPostId || p.id === String(fbPostId)
+              );
+              if (found) {
+                const date = snap.collectedAt.slice(0, 10);
+                dataByDate[date] = {
+                  date,
+                  likes:    found.likes    ?? found.reactionsTotal ?? 0,
+                  comments: found.comments ?? 0,
+                  shares:   found.shares   ?? 0,
+                };
+              }
+            });
+            platformResult['facebook'] = Object.values(dataByDate).sort((a, b) => a.date.localeCompare(b.date));
+          }
+        } catch { /* skip */ }
+      }
 
-          const dataByDate = {};
-          snapshots.forEach(snap => {
-            const found = (snap.media || []).find(m =>
-              m.id === postMediaId || m.id === String(postMediaId)
-            );
-            if (found) {
-              const date = snap.collectedAt.slice(0, 10);
-              dataByDate[date] = {
-                date,
-                likes:    found.likes    ?? found.like_count     ?? 0,
-                comments: found.comments ?? found.comments_count ?? 0,
-                shares:   found.shares   ?? 0,
-              };
-            }
-          });
-
-          platformResult['instagram'] = Object.values(dataByDate).sort((a, b) => a.date.localeCompare(b.date));
+      // ── LinkedIn ───────────────────────────────────────────────────────────
+      const liPostId = matchedPost?.linkedinPostId;
+      if (liPostId) {
+        // Try known accountId fields; fall back to a customer-scoped query
+        const liAccountId = matchedPost?.linkedinAccountId || matchedPost?.organizationId;
+        const liQuery = liAccountId
+          ? `platform=linkedin&accountId=${encodeURIComponent(liAccountId)}`
+          : `platform=linkedin&customerId=${encodeURIComponent(id)}`;
+        try {
+          const res = await fetch(`${API_URL}/api/analytics/data?${liQuery}`);
+          if (res.ok) {
+            const json = await res.json();
+            const allDocs = Array.isArray(json) ? json : (json.docs || json.data || []);
+            const snapshots = allDocs
+              .filter(doc => doc.type === 'analytics_data' && doc.platform === 'linkedin')
+              .sort((a, b) => new Date(a.collectedAt) - new Date(b.collectedAt));
+            const dataByDate = {};
+            snapshots.forEach(snap => {
+              const found = (snap.posts || []).find(p =>
+                p.id === liPostId || p.id === String(liPostId)
+              );
+              if (found) {
+                const date = snap.collectedAt.slice(0, 10);
+                dataByDate[date] = {
+                  date,
+                  likes:    found.likes    ?? 0,
+                  comments: found.comments ?? 0,
+                  shares:   found.shares   ?? 0,
+                };
+              }
+            });
+            platformResult['linkedin'] = Object.values(dataByDate).sort((a, b) => a.date.localeCompare(b.date));
+          }
         } catch { /* skip */ }
       }
     }
 
     setPostTrendCache(prev => ({ ...prev, [itemKey]: platformResult }));
-  }, [scheduledPosts]);
+  }, [scheduledPosts, id]);
 
   // Auto-fetch trend data for published items in expanded calendars (for mini charts)
   useEffect(() => {

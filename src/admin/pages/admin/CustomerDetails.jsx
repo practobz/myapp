@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, memo, useMemo, useRef } from '
 import { useParams, useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import AdminLayout from '../../components/layout/AdminLayout';
+import ContentDetailView from '../../components/modals/ContentDetailView';
 import ContentItemModal from '../../components/modals/ContentItemModal';
 import AssignCreatorModal from '../../components/modals/AssignCreatorModal';
 import ContentCalendarModal from '../../components/modals/ContentCalendarModal';
@@ -308,6 +309,8 @@ const CustomerDetails = () => {
   const [expandedTrendItem, setExpandedTrendItem] = useState(null);
   const [trendDateRange, setTrendDateRange] = useState(7);
   const [itemSortOrder, setItemSortOrder] = useState('desc');
+  const [selectedContentDetail, setSelectedContentDetail] = useState(null);
+  const [contentDetailLoading, setContentDetailLoading] = useState(false);
 
   useEffect(() => {
     fetchCustomer();
@@ -935,6 +938,126 @@ const CustomerDetails = () => {
     }
   }, []);
 
+  const getStatusIcon = useCallback((status) => {
+    switch (status) {
+      case 'approved':
+      case 'published':
+        return <CheckCircle className="h-3 w-3" />;
+      case 'waiting_input':
+        return <AlertCircle className="h-3 w-3" />;
+      default:
+        return <Clock className="h-3 w-3" />;
+    }
+  }, []);
+
+  const isVideoUrl = useCallback((url) => {
+    if (!url) return false;
+    const ext = url.split('.').pop().toLowerCase();
+    return ['mp4', 'webm', 'ogg', 'mov', 'avi'].includes(ext);
+  }, []);
+
+  const isContentPublished = useCallback((contentId, item = null) => {
+    if (item && item.published === true) return true;
+    return scheduledPosts.some(post => {
+      if (post.status !== 'published') return false;
+      if (post.contentId === contentId) return true;
+      if (post.item_id === contentId) return true;
+      if (item?.versions?.some(v => post.contentId === v.id)) return true;
+      return false;
+    });
+  }, [scheduledPosts]);
+
+  const getPublishedPlatformsForContent = useCallback((contentId, item = null) => {
+    const manualPlatforms = (item && item.publishedPlatforms) ? item.publishedPlatforms : [];
+    const scheduledPlatformsArr = scheduledPosts
+      .filter(post => {
+        if (post.status !== 'published') return false;
+        if (post.contentId === contentId) return true;
+        if (post.item_id === contentId) return true;
+        if (item?.versions?.some(v => post.contentId === v.id)) return true;
+        return false;
+      })
+      .map(post => post.platform);
+    return [...new Set([...manualPlatforms, ...scheduledPlatformsArr])];
+  }, [scheduledPosts]);
+
+  const getCustomerName = useCallback(() => customer?.name || '', [customer]);
+
+  const handleScheduleContent = useCallback(() => {
+    navigate('/admin/content-portfolio');
+  }, [navigate]);
+
+  const handleDeleteVersion = useCallback(async (versionId, portfolioId) => {
+    try {
+      await fetch(`${API_URL}/api/content-submissions/${versionId}`, { method: 'DELETE' });
+    } catch (err) {
+      console.error('Failed to delete version', err);
+    }
+    setSelectedContentDetail(prev => {
+      if (!prev || prev.id !== portfolioId) return prev;
+      const newVersions = prev.versions.filter(v => v.id !== versionId);
+      return { ...prev, versions: newVersions, totalVersions: newVersions.length };
+    });
+  }, []);
+
+  const openContentDetail = useCallback(async (item, calendar) => {
+    setContentDetailLoading(true);
+    setSelectedContentDetail({ _loading: true });
+    try {
+      const res = await fetch(`${API_URL}/api/content-submissions`);
+      if (res.ok) {
+        const submissionsData = await res.json();
+        const allSubmissions = Array.isArray(submissionsData) ? submissionsData : [];
+        const itemId = item.id;
+        const itemTitle = item.title || item.description;
+        const matching = allSubmissions
+          .filter(s =>
+            (s.assignment_id && s.assignment_id === itemId) ||
+            (s.item_name && s.item_name === itemTitle) ||
+            (s.item_id && s.item_id === itemId)
+          )
+          .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+        const normalizeMedia = (media) => {
+          if (!Array.isArray(media)) return [];
+          return media.map(m => {
+            if (typeof m === 'string') return { url: m, type: /\.(mp4|webm|ogg|mov|avi)$/i.test(m) ? 'video' : 'image' };
+            return m;
+          });
+        };
+        setSelectedContentDetail({
+          id: itemId,
+          customerId: calendar.customerId || id,
+          title: (matching[0]?.caption) || item.title || '',
+          description: (matching[0]?.notes) || item.description || '',
+          platform: item.type || (matching[0]?.platform) || '',
+          status: (matching[matching.length - 1]?.status) || item.status || 'pending',
+          published: item.published === true,
+          publishedPlatforms: item.publishedPlatforms || [],
+          totalVersions: matching.length,
+          versions: matching.map((s, idx) => ({
+            id: s._id,
+            assignment_id: s.assignment_id,
+            versionNumber: idx + 1,
+            media: normalizeMedia(s.media || s.images || []),
+            caption: s.caption || '',
+            hashtags: s.hashtags || '',
+            notes: s.notes || '',
+            createdAt: s.created_at,
+            status: s.status || 'submitted',
+            comments: s.comments || [],
+          })),
+          calendarName: calendar.name || '',
+          itemName: item.title || item.description || '',
+        });
+      }
+    } catch (err) {
+      console.error('Error fetching content submissions', err);
+      setSelectedContentDetail(null);
+    } finally {
+      setContentDetailLoading(false);
+    }
+  }, [id]);
+
   const getPriorityColor = useCallback((priority) => {
     switch ((priority || '').toLowerCase()) {
       case 'high':
@@ -1187,7 +1310,7 @@ const CustomerDetails = () => {
                                           {item.title && (
                                             <button
                                               className="text-sm font-medium text-blue-800 truncate hover:text-blue-600 hover:underline cursor-pointer text-left"
-                                              onClick={(e) => { e.stopPropagation(); navigate(`/admin/content-upload/${calendar._id}/${originalIndex}`); }}
+                                              onClick={(e) => { e.stopPropagation(); openContentDetail(item, calendar); }}
                                               title="View content details"
                                             >
                                               {item.title}
@@ -1497,6 +1620,51 @@ const CustomerDetails = () => {
         calendarName={selectedCalendar?.name || ''}
         creators={creators}
       />
+
+      {/* Content Detail Modal */}
+      {contentDetailLoading && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center">
+          <div className="bg-white rounded-xl p-8 flex flex-col items-center gap-3">
+            <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+            <p className="text-sm text-gray-600">Loading content details...</p>
+          </div>
+        </div>
+      )}
+      {selectedContentDetail && !selectedContentDetail._loading && (
+        <div
+          className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center overflow-y-auto py-4 px-2"
+          onClick={() => setSelectedContentDetail(null)}
+        >
+          <div
+            className="w-full max-w-5xl bg-gray-50 rounded-2xl p-4 my-auto"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-base font-semibold text-gray-900">Content Details</h2>
+              <button
+                onClick={() => setSelectedContentDetail(null)}
+                className="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <ContentDetailView
+              selectedContent={selectedContentDetail}
+              getCustomerName={getCustomerName}
+              formatDate={formatDate}
+              getStatusColor={getStatusColor}
+              getStatusIcon={getStatusIcon}
+              isContentPublished={isContentPublished}
+              getPublishedPlatformsForContent={getPublishedPlatformsForContent}
+              handleScheduleContent={handleScheduleContent}
+              isVideoUrl={isVideoUrl}
+              calendarName={selectedContentDetail.calendarName}
+              itemName={selectedContentDetail.itemName}
+              onDeleteVersion={handleDeleteVersion}
+            />
+          </div>
+        </div>
+      )}
     </AdminLayout>
   );
 };

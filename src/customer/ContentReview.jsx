@@ -792,6 +792,27 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
     }
   };
 
+  // Get the content creator assigned to this content item
+  const getAssignedCreator = (item) => {
+    // Try to look up assignedTo from the calendar item
+    if (calendars && calendars.length > 0 && item.calendar_id) {
+      const calendar = calendars.find(cal =>
+        cal._id === item.calendar_id || cal.id === item.calendar_id
+      );
+      if (calendar && Array.isArray(calendar.contentItems)) {
+        const calItem = calendar.contentItems.find(ci =>
+          (item.item_id && ci.id === item.item_id) ||
+          (item.item_name && (ci.title === item.item_name || ci.description === item.item_name))
+        );
+        if (calItem && calItem.assignedTo) {
+          return calItem.assignedTo;
+        }
+      }
+    }
+    // Fall back to created_by (content creator's email)
+    return item.createdBy || 'Unknown';
+  };
+
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
     try {
@@ -1069,7 +1090,7 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
                                   </span>
                                 </div>
                                 <div className="flex items-center justify-between mt-1 text-[10px] sm:text-xs text-slate-400">
-                                  <span className="truncate">{item.createdBy}</span>
+                                  <span className="truncate">{getAssignedCreator(item)}</span>
                                   <span>{formatDate(item.createdAt)}</span>
                                 </div>
                               </div>
@@ -1150,7 +1171,7 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
                     <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-slate-900 tracking-tight line-clamp-2">{selectedContent.title}</h2>
                     <p className="text-slate-600 text-xs sm:text-sm leading-relaxed mt-1 line-clamp-2 hidden sm:block">{selectedContent.description}</p>
                     <div className="flex items-center mt-1.5 sm:mt-2 space-x-2 sm:space-x-3 text-[10px] sm:text-xs">
-                      <span className="text-slate-700 font-medium truncate max-w-[100px] sm:max-w-none">{selectedContent.createdBy}</span>
+                      <span className="text-slate-700 font-medium truncate max-w-[100px] sm:max-w-none">{getAssignedCreator(selectedContent)}</span>
                       <span className="text-slate-400">•</span>
                       <span className="text-slate-700 font-medium">{selectedContent.platform}</span>
                     </div>

@@ -448,19 +448,24 @@ function ContentCreatorDetails() {
         (calendar.contentItems && calendar.contentItems.some(item => item.assignedTo === creatorEmail))
       );
       
-      // Enrich with customer names
+      // Enrich with customer names and filter content items to only those assigned to this creator
       const enrichedCalendars = await Promise.all(
         assigned.map(async (calendar) => {
+          const filteredItems = calendar.assignedTo === creatorEmail
+            ? (calendar.contentItems || [])
+            : (calendar.contentItems || []).filter(item => item.assignedTo === creatorEmail);
           try {
             const customerResponse = await fetch(`${API_URL}/customer/${calendar.customerId}`);
             const customerData = await customerResponse.json();
             return {
               ...calendar,
+              contentItems: filteredItems,
               customerName: customerData.name || 'Unknown Customer'
             };
           } catch (err) {
             return {
               ...calendar,
+              contentItems: filteredItems,
               customerName: 'Unknown Customer'
             };
           }

@@ -1,10 +1,31 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { PlusCircle, Clock, MessageSquare, CheckCircle, Globe, User, ChevronDown, Palette, Eye, Image, FolderOpen } from 'lucide-react';
+import { PlusCircle, Clock, MessageSquare, CheckCircle, Globe, User, ChevronDown, Palette, Eye, Image, FolderOpen, Users, ClipboardList } from 'lucide-react';
 import { format } from 'date-fns';
 import { useAuth } from "../admin/contexts/AuthContext";
 import Logo from '../admin/components/layout/Logo';
 import Footer from '../admin/components/layout/Footer';
+
+const parsePlatforms = (val) => {
+  if (!val) return [];
+  if (Array.isArray(val)) return val.map(v => String(v).trim()).filter(Boolean);
+  const s = String(val);
+  if (s.includes(',')) return s.split(',').map(v => v.trim()).filter(Boolean);
+  if (s.includes(' ')) return s.split(/\s+/).map(v => v.trim()).filter(Boolean);
+  return [s];
+};
+
+const platformColor = (p) => {
+  switch ((p || '').toLowerCase()) {
+    case 'facebook': return 'bg-blue-100 text-blue-800';
+    case 'instagram': return 'bg-pink-100 text-pink-800';
+    case 'youtube': return 'bg-red-100 text-red-800';
+    case 'linkedin': return 'bg-blue-50 text-blue-700';
+    case 'twitter': return 'bg-sky-100 text-sky-800';
+    case 'tiktok': return 'bg-gray-900 text-white';
+    default: return 'bg-gray-100 text-gray-700';
+  }
+};
 
 // Helper to get creator email from localStorage
 function getCreatorEmail() {
@@ -115,16 +136,26 @@ function Dashboard() {
   };
 
   // Calculate stats from assignments
+  const oneWeekAgo = new Date();
+  oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+
   const stats = {
-    newContentAssigned: assignments.filter(a => getActualStatus(a) === 'assigned').length,
+    // New Assigned this week: use assignedAt/createdAt if available, else count all pending (initial state)
+    newContentAssigned: assignments.filter(a => {
+      const refDate = a.assignedAt || a.createdAt;
+      if (refDate) return new Date(refDate) >= oneWeekAgo;
+      return getActualStatus(a) === 'pending';
+    }).length,
     contentWaitingInputs: assignments.filter(a => getActualStatus(a) === 'pending').length,
     contentApproved: assignments.filter(a => getActualStatus(a) === 'approved').length,
-    contentPublished: assignments.filter(a => getActualStatus(a) === 'published').length
+    contentPublished: assignments.filter(a => getActualStatus(a) === 'published').length,
+    totalAssigned: assignments.length
   };
 
-  // Recent assignments (show last 3 by due date)
-  const recentAssignments = [...assignments]
-    .sort((a, b) => new Date(b.dueDate) - new Date(a.dueDate))
+  // Recent assignments: show pending (newly assigned) items sorted by soonest due date
+  const pendingRecentAssignments = assignments.filter(a => getActualStatus(a) === 'pending');
+  const recentAssignments = (pendingRecentAssignments.length > 0 ? pendingRecentAssignments : assignments)
+    .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate))
     .slice(0, 3);
 
   const handleUserMenuToggle = () => {
@@ -133,6 +164,7 @@ function Dashboard() {
 
   const handleLogout = () => {
     logout();
+    localStorage.removeItem('userEmail');
     navigate('/content-creator/login');
   };
 
@@ -180,14 +212,7 @@ function Dashboard() {
                 </button>
 
                 {isUserMenuOpen && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg py-2 z-50 border border-gray-200">
-                    <button
-                      onClick={() => handleNavigation('/content-creator/profile')}
-                      className="block w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                    >
-                      My Profile
-                    </button>
-                    <hr className="my-2 border-gray-100" />
+                  <div className="absolute right-0 mt-2 w-40 bg-white rounded-xl shadow-lg py-2 z-50 border border-gray-200">
                     <button
                       onClick={handleLogout}
                       className="block w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
@@ -213,7 +238,24 @@ function Dashboard() {
             </div>
 
             {/* Stats Grid */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+              {/* Total Assigned */}
+              <div 
+                className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-5 cursor-pointer hover:shadow-md hover:border-indigo-200 transition-all"
+                onClick={() => goToAssignments('all')}
+              >
+                <div className="flex items-center gap-3 sm:gap-4">
+                  <div className="p-2.5 sm:p-3 bg-indigo-50 rounded-xl flex-shrink-0">
+                    <Users className="h-5 w-5 sm:h-6 sm:w-6 text-indigo-600" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs sm:text-sm font-medium text-gray-500 truncate">Total Assigned</p>
+                    <h3 className="text-xl sm:text-2xl font-bold text-gray-900">{stats.totalAssigned}</h3>
+                  </div>
+                </div>
+              </div>
+
+              {/* New Assigned This Week */}
               <div 
                 className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-5 cursor-pointer hover:shadow-md hover:border-blue-200 transition-all"
                 onClick={() => goToAssignments('assigned')}
@@ -223,12 +265,13 @@ function Dashboard() {
                     <PlusCircle className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-xs sm:text-sm font-medium text-gray-500 truncate">New Assigned</p>
+                    <p className="text-xs sm:text-sm font-medium text-gray-500 truncate">New This Week</p>
                     <h3 className="text-xl sm:text-2xl font-bold text-gray-900">{stats.newContentAssigned}</h3>
                   </div>
                 </div>
               </div>
 
+              {/* Pending */}
               <div 
                 className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-5 cursor-pointer hover:shadow-md hover:border-orange-200 transition-all"
                 onClick={() => goToAssignments('pending')}
@@ -244,6 +287,7 @@ function Dashboard() {
                 </div>
               </div>
 
+              {/* Approved */}
               <div 
                 className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-5 cursor-pointer hover:shadow-md hover:border-green-200 transition-all"
                 onClick={() => goToAssignments('approved')}
@@ -259,6 +303,7 @@ function Dashboard() {
                 </div>
               </div>
 
+              {/* Published */}
               <div 
                 className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-5 cursor-pointer hover:shadow-md hover:border-purple-200 transition-all"
                 onClick={() => goToAssignments('published')}
@@ -309,32 +354,53 @@ function Dashboard() {
                     <div className="space-y-3">
                       {recentAssignments.map((assignment) => {
                         const status = getActualStatus(assignment);
+                        const platforms = parsePlatforms(assignment.platform || assignment.type);
                         return (
                           <div 
                             key={assignment.id} 
-                            className="group flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-slate-50 rounded-xl hover:from-purple-50 hover:to-indigo-50 border border-gray-100 hover:border-purple-200 transition-all duration-300 cursor-pointer"
+                            className="group p-4 bg-gradient-to-r from-gray-50 to-slate-50 rounded-xl hover:from-purple-50 hover:to-indigo-50 border border-gray-100 hover:border-purple-200 transition-all duration-300 cursor-pointer"
                             onClick={() => goToAssignments(status)}
                           >
-                            <div className="min-w-0 flex-1">
-                              <p className="font-bold text-gray-900 truncate group-hover:text-purple-900">{assignment.customerName || assignment.customer || 'Unknown'}</p>
-                              <p className="text-sm text-gray-600 mt-0.5">{assignment.type}</p>
-                              <div className="flex items-center gap-1.5 mt-2">
-                                <Clock className="h-3.5 w-3.5 text-gray-400" />
-                                <p className="text-xs text-gray-500">Due: {format(new Date(assignment.dueDate), 'MMM dd, yyyy')}</p>
-                              </div>
+                            {/* Title + Status Badge */}
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="font-bold text-gray-900 truncate group-hover:text-purple-900 flex-1">
+                                {assignment.title || assignment.description || 'Untitled'}
+                              </p>
+                              <span className={`px-2.5 py-1 rounded-lg text-xs font-bold flex-shrink-0 shadow-sm ${
+                                status === 'assigned' ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white' :
+                                status === 'in_progress' ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white' :
+                                status === 'pending' ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white' :
+                                status === 'approved' ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white' :
+                                status === 'published' ? 'bg-gradient-to-r from-purple-500 to-indigo-500 text-white' :
+                                'bg-gray-500 text-white'
+                              }`}>
+                                {typeof status === 'string'
+                                  ? (status.replace('_', ' ').charAt(0).toUpperCase() + status.replace('_', ' ').slice(1))
+                                  : 'Pending'}
+                              </span>
                             </div>
-                            <span className={`ml-4 px-3 py-1.5 rounded-lg text-xs font-bold flex-shrink-0 shadow-sm ${
-                              status === 'assigned' ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white' :
-                              status === 'in_progress' ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white' :
-                              status === 'pending' ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white' :
-                              status === 'approved' ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white' :
-                              status === 'published' ? 'bg-gradient-to-r from-purple-500 to-indigo-500 text-white' :
-                              'bg-gray-500 text-white'
-                            }`}>
-                              {typeof status === 'string'
-                                ? (status.replace('_', ' ').charAt(0).toUpperCase() + status.replace('_', ' ').slice(1))
-                                : 'Assigned'}
-                            </span>
+                            {/* Customer Name */}
+                            <div className="flex items-center gap-1 mt-1">
+                              <User className="h-3 w-3 text-gray-400 flex-shrink-0" />
+                              <p className="text-xs text-gray-500 truncate">{assignment.customerName || assignment.customer || 'Unknown Customer'}</p>
+                            </div>
+                            {/* Platform Pills */}
+                            {platforms.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-2">
+                                {platforms.map((p, i) => (
+                                  <span key={i} className={`px-2 py-0.5 rounded-full text-xs font-medium ${platformColor(p)}`}>
+                                    {p.charAt(0).toUpperCase() + p.slice(1)}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                            {/* Due Date */}
+                            <div className="flex items-center gap-1.5 mt-2">
+                              <Clock className="h-3 w-3 text-gray-400" />
+                              <p className="text-xs text-gray-500">
+                                Due: {assignment.dueDate ? format(new Date(assignment.dueDate), 'MMM dd, yyyy') : 'N/A'}
+                              </p>
+                            </div>
                           </div>
                         );
                       })}
@@ -427,7 +493,7 @@ function Dashboard() {
       {/* Click outside to close menu */}
       {isUserMenuOpen && (
         <div 
-          className="fixed inset-0 z-40" 
+          className="fixed inset-0 z-[9]" 
           onClick={() => setIsUserMenuOpen(false)}
         ></div>
       )}

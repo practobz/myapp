@@ -70,6 +70,7 @@ import ContentUpload from './content-creators/ContentUpload';
 import Profile from './content-creators/Profile';
 import Settings from './content-creators/Settings';
 import ContentCreatorMediaLibrary from './content-creators/MediaLibrary';
+import ContentDetails from './content-creators/ContentDetails';
 
 import { useAuth } from './admin/contexts/AuthContext';
 import AIImageGenerator from './components/AIImageGenerator';
@@ -598,9 +599,15 @@ function App() {
                   <ContentPortfolio />
                 </ProtectedRoutePortal>
               } />
+
               <Route path="/content-creator/upload/:calendarId/:itemIndex" element={
                 <ProtectedRoutePortal role="content_creator">
                   <ContentUpload />
+                </ProtectedRoutePortal>
+              } />
+               <Route path="/content-creator/content-details/:calendarId/:itemIndex" element={
+                <ProtectedRoutePortal role="content_creator">
+                  <ContentDetails />
                 </ProtectedRoutePortal>
               } />
               <Route path="/content-creator/upload/:assignmentId" element={

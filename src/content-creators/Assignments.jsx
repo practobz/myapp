@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
-import { ArrowLeft, Filter, Search, Upload, MessageSquare, CheckCircle, Clock, AlertCircle, Palette, Play, Eye, Calendar, User, FileText, ChevronDown, ChevronUp, Building2 } from 'lucide-react';
+import { ArrowLeft, Filter, Search, MessageSquare, CheckCircle, Clock, AlertCircle, Palette, Calendar, User, ChevronDown, ChevronUp, Building2 } from 'lucide-react';
 import Footer from '../admin/components/layout/Footer';
 import Logo from '../admin/components/layout/Logo';
 
@@ -27,11 +27,18 @@ function getCreatorEmail() {
 
 function Assignments() {
   const navigate = useNavigate();
-  const [selectedFilter, setSelectedFilter] = useState('all');
+  const [searchParams] = useSearchParams();
+  const [selectedFilter, setSelectedFilter] = useState(() => {
+    const param = searchParams.get('filter') || 'all';
+    // 'assigned' from Dashboard maps to 'pending' in this view (initial state)
+    return param === 'assigned' ? 'pending' : param;
+  });
   const [searchTerm, setSearchTerm] = useState('');
   const [assignments, setAssignments] = useState([]);
   const [customerMap, setCustomerMap] = useState({});
   const [expandedCustomers, setExpandedCustomers] = useState({});
+  const [expandedCalendars, setExpandedCalendars] = useState({});
+  const [selectedCustomerId, setSelectedCustomerId] = useState(null);
   
   // Scheduled posts to check published status
   const [scheduledPosts, setScheduledPosts] = useState([]);
@@ -134,14 +141,39 @@ function Assignments() {
     return assignment.status || 'assigned';
   };
 
+  const getFilterStatus = (assignment) => {
+    const actual = getActualStatus(assignment);
+    if (actual === 'approved' || actual === 'published') return actual;
+    return 'pending';
+  };
+
+  const parsePlatforms = (val) => {
+    if (!val) return [];
+    if (Array.isArray(val)) return val.map(v => String(v).trim()).filter(Boolean);
+    const s = String(val || '');
+    if (s.includes(',')) return s.split(',').map(v => v.trim()).filter(Boolean);
+    if (s.includes(' ')) return s.split(/\s+/).map(v => v.trim()).filter(Boolean);
+    const matches = s.match(/facebook|instagram|youtube|linkedin|twitter|tiktok|pinterest/ig);
+    if (matches) return matches.map(m => m.toLowerCase());
+    return [s];
+  };
+
+  const platformColor = (p) => {
+    switch ((p || '').toLowerCase()) {
+      case 'facebook': return 'bg-blue-100 text-blue-800';
+      case 'instagram': return 'bg-pink-100 text-pink-800';
+      case 'youtube': return 'bg-red-100 text-red-800';
+      case 'linkedin': return 'bg-blue-50 text-blue-800';
+      case 'twitter': return 'bg-sky-100 text-sky-800';
+      case 'tiktok': return 'bg-black text-white';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
   const getStatusColor = (status) => {
     switch (status) {
-      case 'assigned':
-        return 'bg-blue-50 text-blue-700 border-blue-200';
-      case 'in_progress':
+      case 'pending':
         return 'bg-amber-50 text-amber-700 border-amber-200';
-      case 'waiting_input':
-        return 'bg-orange-50 text-orange-700 border-orange-200';
       case 'approved':
         return 'bg-emerald-50 text-emerald-700 border-emerald-200';
       case 'published':
@@ -153,12 +185,8 @@ function Assignments() {
 
   const getStatusIcon = (status) => {
     switch (status) {
-      case 'assigned':
-        return <AlertCircle className="h-4 w-4" />;
-      case 'in_progress':
+      case 'pending':
         return <Clock className="h-4 w-4" />;
-      case 'waiting_input':
-        return <MessageSquare className="h-4 w-4" />;
       case 'approved':
         return <CheckCircle className="h-4 w-4" />;
       case 'published':
@@ -182,58 +210,53 @@ function Assignments() {
   };
 
   const filteredAssignments = assignments.filter(assignment => {
-    const actualStatus = getActualStatus(assignment);
-    const matchesFilter = selectedFilter === 'all' || actualStatus === selectedFilter;
+    const matchesFilter = selectedFilter === 'all' || getFilterStatus(assignment) === selectedFilter;
     const matchesSearch = (assignment.customer || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                          (assignment.title || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                          (assignment.type || '').toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesFilter && matchesSearch;
+    const matchesCustomer = !selectedCustomerId || assignment.customerId === selectedCustomerId;
+    return matchesFilter && matchesSearch && matchesCustomer;
   });
 
-  // Group assignments by customer
-  const groupedAssignments = filteredAssignments.reduce((acc, assignment) => {
-    const customerKey = assignment.customerId || 'unknown';
-    const customerName = assignment.customerName || assignment.customer || 'Unknown Customer';
-    
-    if (!acc[customerKey]) {
-      acc[customerKey] = {
-        customerName,
-        customerId: customerKey,
-        assignments: []
-      };
+  // Group: Customer -> Calendar -> Items
+  const groupedByCustomer = filteredAssignments.reduce((acc, assignment) => {
+    const custKey = assignment.customerId || 'unknown';
+    const custName = assignment.customerName || 'Unknown Customer';
+    if (!acc[custKey]) {
+      acc[custKey] = { customerName: custName, customerId: custKey, calendars: {} };
     }
-    acc[customerKey].assignments.push(assignment);
+    const calKey = assignment.calendarId || 'unknown';
+    const calName = assignment.calendarName || 'Unnamed Calendar';
+    if (!acc[custKey].calendars[calKey]) {
+      acc[custKey].calendars[calKey] = { calendarName: calName, calendarId: calKey, assignments: [] };
+    }
+    acc[custKey].calendars[calKey].assignments.push(assignment);
     return acc;
   }, {});
 
-  // Sort customers alphabetically and expand all by default if not already set
-  const sortedCustomers = Object.values(groupedAssignments).sort((a, b) => 
+  const sortedCustomers = Object.values(groupedByCustomer).sort((a, b) =>
     a.customerName.localeCompare(b.customerName)
   );
 
-  // Initialize expanded state for all customers
-  useEffect(() => {
-    const initialExpandedState = {};
-    sortedCustomers.forEach(customer => {
-      if (expandedCustomers[customer.customerId] === undefined) {
-        initialExpandedState[customer.customerId] = true; // Expand all by default
-      }
-    });
-    if (Object.keys(initialExpandedState).length > 0) {
-      setExpandedCustomers(prev => ({ ...prev, ...initialExpandedState }));
-    }
-  }, [filteredAssignments.length]);
+  // All customers from unfiltered assignments (for sidebar)
+  const allCustomersSorted = Object.values(
+    assignments.reduce((acc, assignment) => {
+      const custKey = assignment.customerId || 'unknown';
+      const custName = assignment.customerName || 'Unknown Customer';
+      if (!acc[custKey]) acc[custKey] = { customerName: custName, customerId: custKey };
+      return acc;
+    }, {})
+  ).sort((a, b) => a.customerName.localeCompare(b.customerName));
 
-  const toggleCustomer = (customerId) => {
-    setExpandedCustomers(prev => ({
-      ...prev,
-      [customerId]: !prev[customerId]
-    }));
-  };
+  // Initialize expanded state for customers and calendars
+  // (no auto-expand — all start collapsed)
+
+  const toggleCustomer = (id) => setExpandedCustomers(prev => ({ ...prev, [id]: !prev[id] }));
+  const toggleCalendar = (id) => setExpandedCalendars(prev => ({ ...prev, [id]: !prev[id] }));
 
   const handleAssignmentClick = (assignment) => {
-    // Navigate to detailed view or portfolio for this specific assignment
-    navigate(`/content-creator/portfolio`, { state: { assignmentId: assignment.id } });
+    const itemIndex = assignment.itemIndex !== undefined ? assignment.itemIndex : 0;
+    navigate(`/content-creator/content-details/${assignment.calendarId}/${itemIndex}`);
   };
 
   const handleStartWork = (assignment) => {
@@ -276,19 +299,40 @@ function Assignments() {
       </header>
 
       {/* Main Content */}
-      <div className="flex-1">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="space-y-8">
-            {/* Page Header */}
-            <div className="text-center">
-              <h1 className="text-4xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
-                My Assignments
-              </h1>
-              <p className="text-gray-600 mt-3 text-lg">Manage and track your content creation tasks</p>
-            </div>
-
+      <div className="flex-1 flex min-h-0">
+        {/* Customer Sidebar */}
+        <aside className="w-52 bg-white border-r border-gray-200/70 flex-shrink-0 sticky top-16 self-start h-[calc(100vh-4rem)] overflow-y-auto">
+          <div className="p-4">
+            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Customers</h3>
+            <ul className="space-y-1">
+              <li>
+                <button
+                  onClick={() => setSelectedCustomerId(null)}
+                  className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-150 ${!selectedCustomerId ? 'bg-purple-100 text-purple-700' : 'text-gray-700 hover:bg-gray-100'}`}
+                >
+                  All Customers
+                </button>
+              </li>
+              {allCustomersSorted.map(cust => (
+                <li key={cust.customerId}>
+                  <button
+                    onClick={() => setSelectedCustomerId(cust.customerId)}
+                    className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors duration-150 truncate ${selectedCustomerId === cust.customerId ? 'bg-purple-100 font-semibold text-purple-700' : 'text-gray-700 hover:bg-gray-100'}`}
+                    title={cust.customerName}
+                  >
+                    {cust.customerName}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </aside>
+        {/* Content Area */}
+        <div className="flex-1 min-w-0">
+        <div className="px-6 py-6">
+          <div className="space-y-5">
             {/* Filters and Search */}
-            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-gray-200/50">
+            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-sm p-4 border border-gray-200/50">
               <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
                 <div className="flex flex-col sm:flex-row sm:items-center space-y-4 sm:space-y-0 sm:space-x-4">
                   <div className="flex items-center">
@@ -299,9 +343,7 @@ function Assignments() {
                       className="bg-white border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent shadow-sm"
                     >
                       <option value="all">All Assignments</option>
-                      <option value="assigned">New Assigned</option>
-                      <option value="in_progress">In Progress</option>
-                      <option value="waiting_input">Waiting Input</option>
+                      <option value="pending">Pending</option>
                       <option value="approved">Approved</option>
                       <option value="published">Published</option>
                     </select>
@@ -323,107 +365,109 @@ function Assignments() {
               </div>
             </div>
 
-            {/* Assignments List - Grouped by Customer */}
-            <div className="space-y-6">
+            {/* Assignments List - Customer > Calendar > Items */}
+            <div className="space-y-4">
               {sortedCustomers.length > 0 ? (
-                sortedCustomers.map((customerGroup) => {
-                  const isExpanded = expandedCustomers[customerGroup.customerId] !== false;
+                sortedCustomers.map((custGroup) => {
+                  const isCustExpanded = expandedCustomers[custGroup.customerId] === true;
+                  const totalItems = Object.values(custGroup.calendars).reduce((sum, cal) => sum + cal.assignments.length, 0);
                   return (
-                    <div
-                      key={customerGroup.customerId}
-                      className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden"
-                    >
+                    <div key={custGroup.customerId} className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden">
                       {/* Customer Header */}
                       <div
-                        onClick={() => toggleCustomer(customerGroup.customerId)}
-                        className="flex items-center justify-between p-6 bg-gradient-to-r from-purple-50 to-indigo-50 cursor-pointer hover:from-purple-100 hover:to-indigo-100 transition-all duration-200"
+                        onClick={() => toggleCustomer(custGroup.customerId)}
+                        className="flex items-center justify-between p-4 bg-gradient-to-r from-purple-50 to-indigo-50 cursor-pointer hover:from-purple-100 hover:to-indigo-100 transition-all duration-150"
                       >
-                        <div className="flex items-center gap-4">
-                          <div className="p-3 bg-gradient-to-r from-purple-500 to-indigo-600 rounded-xl shadow-lg">
-                            <Building2 className="h-6 w-6 text-white" />
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-gradient-to-r from-purple-500 to-indigo-600 rounded-lg shadow">
+                            <Building2 className="h-5 w-5 text-white" />
                           </div>
                           <div>
-                            <h2 className="text-2xl font-bold text-gray-900">
-                              {customerGroup.customerName}
-                            </h2>
-                            <p className="text-sm text-gray-600 mt-1">
-                              {customerGroup.assignments.length} {customerGroup.assignments.length === 1 ? 'Assignment' : 'Assignments'}
+                            <h2 className="text-base font-bold text-gray-900">{custGroup.customerName}</h2>
+                            <p className="text-xs text-gray-500">
+                              {Object.keys(custGroup.calendars).length} {Object.keys(custGroup.calendars).length === 1 ? 'Calendar' : 'Calendars'} &middot; {totalItems} {totalItems === 1 ? 'Item' : 'Items'}
                             </p>
                           </div>
                         </div>
-                        <button className="p-2 hover:bg-white/50 rounded-lg transition-colors duration-200">
-                          {isExpanded ? (
-                            <ChevronUp className="h-6 w-6 text-gray-600" />
-                          ) : (
-                            <ChevronDown className="h-6 w-6 text-gray-600" />
-                          )}
-                        </button>
+                        <div className="p-2 text-gray-400">
+                          {isCustExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                        </div>
                       </div>
 
-                      {/* Assignments for this customer */}
-                      {isExpanded && (
-                        <div className="p-6 space-y-4">
-                          {customerGroup.assignments.map((assignment, idx) => (
-                            <div
-                              key={assignment.id || assignment._id || idx}
-                              className="bg-white rounded-xl border border-gray-200/50 shadow-sm hover:shadow-lg transition-all duration-300 overflow-hidden group"
-                            >
-                              <div className="p-6">
-                                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-                                  {/* Left: Title, Calendar, Status, Priority */}
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                                      <div className="flex items-center gap-2">
-                                        <h3 className="text-xl font-bold text-gray-900">{assignment.title}</h3>
-                                        <span className="px-2 py-1 rounded bg-gray-100 text-xs text-gray-700 font-medium">
-                                          {assignment.calendarName}
-                                        </span>
-                                      </div>
-                                      <div className="flex flex-wrap items-center gap-2 mt-2 sm:mt-0">
-                                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(getActualStatus(assignment))}`}>
-                                          {getStatusIcon(getActualStatus(assignment))}
-                                          <span className="ml-1 capitalize">{getActualStatus(assignment).replace('_', ' ')}</span>
-                                        </span>
-                                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getPriorityColor(assignment.priority)}`}>
-                                          {(assignment.priority || 'Medium').toUpperCase()} PRIORITY
-                                        </span>
-                                      </div>
+                      {/* Calendars under this customer */}
+                      {isCustExpanded && (
+                        <div className="p-4 space-y-4">
+                          {Object.values(custGroup.calendars).sort((a, b) => a.calendarName.localeCompare(b.calendarName)).map((calGroup) => {
+                            const isCalExpanded = expandedCalendars[calGroup.calendarId] === true;
+                            return (
+                              <div key={calGroup.calendarId} className="border border-gray-200 rounded-xl overflow-hidden">
+                                {/* Calendar sub-header */}
+                                <div
+                                  onClick={() => toggleCalendar(calGroup.calendarId)}
+                                  className="flex items-center justify-between px-4 py-2.5 bg-indigo-50/60 cursor-pointer hover:bg-indigo-100/60 transition-colors"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <div className="p-1 bg-indigo-100 rounded">
+                                      <Calendar className="h-3.5 w-3.5 text-indigo-600" />
                                     </div>
-                                    <div className="flex flex-wrap gap-8 mt-4">
-                                      <div>
-                                        <span className="text-xs font-medium text-gray-500">Content Type</span>
-                                        <p className="text-sm text-gray-900">{assignment.type}</p>
-                                      </div>
-                                      <div>
-                                        <span className="text-xs font-medium text-gray-500">Due Date</span>
-                                        <p className="text-sm text-gray-900">{format(new Date(assignment.dueDate), 'MMM dd, yyyy')}</p>
-                                      </div>
-                                    </div>
-                                    <div className="bg-gray-50 rounded-lg p-4 mt-4">
-                                      <p className="text-gray-700 text-sm leading-relaxed">{assignment.description}</p>
-                                    </div>
+                                    <span className="font-semibold text-gray-800 text-sm">{calGroup.calendarName}</span>
+                                    <span className="text-xs text-gray-400">{calGroup.assignments.length} {calGroup.assignments.length === 1 ? 'item' : 'items'}</span>
                                   </div>
-                                  {/* Right: Action Buttons */}
-                                  <div className="flex flex-col gap-3 min-w-[180px]">
-                                    <button
-                                      onClick={() => handleStartWork(assignment)}
-                                      className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-semibold rounded-xl hover:from-purple-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
-                                    >
-                                      <Play className="h-5 w-5 mr-2" />
-                                      Start Work
-                                    </button>
-                                    <button
-                                      onClick={() => handleViewPortfolio(assignment)}
-                                      className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-cyan-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
-                                    >
-                                      <Eye className="h-5 w-5 mr-2" />
-                                      View Portfolio
-                                    </button>
+                                  <div className="p-1 text-gray-400">
+                                    {isCalExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                                   </div>
                                 </div>
+
+                                {/* Assignment rows under this calendar */}
+                                {isCalExpanded && (
+                                  <div className="divide-y divide-gray-100">
+                                    {calGroup.assignments.map((assignment, idx) => (
+                                      <div
+                                        key={assignment.id || assignment._id || idx}
+                                        onClick={() => handleAssignmentClick(assignment)}
+                                        className="px-4 py-3 hover:bg-purple-50/50 cursor-pointer transition-colors"
+                                      >
+                                        {/* Line 1: Item label + title */}
+                                        <div className="flex items-center justify-between gap-2 mb-1.5">
+                                          <div className="flex items-center gap-1.5 min-w-0">
+                                            <span className="text-xs font-semibold text-gray-400 uppercase shrink-0">Item:</span>
+                                            <span className="text-sm font-semibold text-gray-800 truncate">{assignment.title}</span>
+                                          </div>
+                                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border shrink-0 ${getStatusColor(getFilterStatus(assignment))}`}>
+                                            {getStatusIcon(getFilterStatus(assignment))}
+                                            <span className="capitalize">{getFilterStatus(assignment)}</span>
+                                          </span>
+                                        </div>
+                                        {/* Line 2: Platform, Due Date, Priority */}
+                                        <div className="flex items-center gap-4 flex-wrap">
+                                          <div className="flex items-center gap-1">
+                                            <span className="text-xs font-semibold text-gray-400 uppercase">Platform:</span>
+                                            <div className="flex gap-1">
+                                              {parsePlatforms(assignment.platform || assignment.type).map((p, i) => (
+                                                <span key={i} className={`px-1.5 py-0.5 rounded text-xs font-medium ${platformColor(p)}`}>
+                                                  {p.charAt(0).toUpperCase() + p.slice(1)}
+                                                </span>
+                                              ))}
+                                            </div>
+                                          </div>
+                                          <div className="flex items-center gap-1">
+                                            <span className="text-xs font-semibold text-gray-400 uppercase">Due:</span>
+                                            <span className="text-xs text-gray-600">{assignment.dueDate ? format(new Date(assignment.dueDate), 'MMM dd, yyyy') : 'N/A'}</span>
+                                          </div>
+                                          <div className="flex items-center gap-1">
+                                            <span className="text-xs font-semibold text-gray-400 uppercase">Priority:</span>
+                                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${getPriorityColor(assignment.priority)}`}>
+                                              {(assignment.priority || 'Medium').charAt(0).toUpperCase() + (assignment.priority || 'Medium').slice(1).toLowerCase()}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
                     </div>
@@ -442,6 +486,7 @@ function Assignments() {
               )}
             </div>
           </div>
+        </div>
         </div>
       </div>
       <Footer />

@@ -45,9 +45,10 @@ const PlatformIcon = ({ platform }) => {
 };
 
 // Timeline component showing item lifecycle stages with dates
-const ItemTimeline = ({ item, itemStatus, scheduledPosts = [] }) => {
+const ItemTimeline = ({ item, itemStatus, scheduledPosts = [], submissions = [] }) => {
   const isAssigned = !!item.assignedTo || ['assigned', 'in_progress', 'under_review', 'approved', 'published'].includes(itemStatus);
-  const isReviewed = ['under_review', 'approved', 'published'].includes(itemStatus);
+  // Review is completed when the item is approved/published OR any linked submission has been approved
+  const isReviewed = ['approved', 'published'].includes(itemStatus) || submissions.some(s => s.status === 'approved');
   const isPublished = itemStatus === 'published';
   const isDue = isPublished || (item.date && new Date(item.date) <= new Date());
 
@@ -67,27 +68,40 @@ const ItemTimeline = ({ item, itemStatus, scheduledPosts = [] }) => {
     } catch { return null; }
   };
 
+  // Derive review date from the approved submission if not stored on item
+  const approvedSub = submissions.find(s => s.status === 'approved');
+  const reviewedDate = fmtDate(item.reviewedAt || approvedSub?.approvedAt || approvedSub?.updatedAt);
+
+  // Version steps — one node per submission, shown between Due and Reviewed
+  const versionSteps = submissions.map((s, idx) => ({
+    key: `v${idx + 1}`,
+    label: `V${idx + 1}`,
+    done: true,
+    date: fmtDate(s.created_at || s.createdAt),
+  }));
+
+  // Order: Created → Assigned → Due → V1 → V2 → ... → Reviewed → Published
   const steps = [
     { key: 'created',   label: 'Created',   done: true,        date: fmtDate(item.createdAt) },
+    { key: 'assigned',  label: 'Assigned',  done: isAssigned,  date: fmtDate(item.assignedAt) },
     { key: 'due',       label: 'Due',        done: isDue,       date: fmtDate(item.date) },
-    { key: 'assigned',  label: 'Assigned',   done: isAssigned,  date: fmtDate(item.assignedAt) },
-    { key: 'reviewed',  label: 'Reviewed',   done: isReviewed,  date: fmtDate(item.reviewedAt) },
-    { key: 'published', label: 'Published',  done: isPublished, date: fmtDate(matchedPost?.publishedAt || item.publishedAt) },
+    ...versionSteps,
+    { key: 'reviewed',  label: 'Reviewed',  done: isReviewed,  date: reviewedDate },
+    { key: 'published', label: 'Published', done: isPublished, date: fmtDate(matchedPost?.publishedAt || item.publishedAt) },
   ];
+
   return (
-    <div className="flex items-start mt-2">
+    <div className="flex items-start mt-2 overflow-x-auto pb-0.5">
       {steps.map((step, idx) => (
         <React.Fragment key={step.key}>
-          <div className="flex flex-col items-center">
+          <div className="flex flex-col items-center flex-shrink-0">
             <div className={`w-2 h-2 rounded-full flex-shrink-0 ${step.done ? 'bg-emerald-500' : 'bg-gray-200'}`} />
             <span className={`text-[9px] leading-none mt-0.5 whitespace-nowrap ${step.done ? 'text-emerald-600 font-medium' : 'text-gray-400'}`}>
               {step.label}
             </span>
-            {step.date && (
-              <span className={`text-[8px] leading-none mt-0.5 whitespace-nowrap ${step.done ? 'text-emerald-500' : 'text-gray-300'}`}>
-                {step.date}
-              </span>
-            )}
+            <span className={`text-[8px] leading-none mt-0.5 whitespace-nowrap ${step.date ? (step.done ? 'text-emerald-500' : 'text-gray-300') : 'text-transparent select-none'}`}>
+              {step.date || '—'}
+            </span>
           </div>
           {idx < steps.length - 1 && (
             <div
@@ -311,12 +325,15 @@ const CustomerDetails = () => {
   const [itemSortOrder, setItemSortOrder] = useState('desc');
   const [selectedContentDetail, setSelectedContentDetail] = useState(null);
   const [contentDetailLoading, setContentDetailLoading] = useState(false);
+  // All content submissions fetched once — used for version nodes in timeline
+  const [allSubmissions, setAllSubmissions] = useState([]);
 
   useEffect(() => {
     fetchCustomer();
     fetchCalendarItems();
     fetchCreators();
     fetchScheduledPosts();
+    fetchSubmissions();
   }, [id]);
 
   const fetchScheduledPosts = async () => {
@@ -329,6 +346,20 @@ const CustomerDetails = () => {
     } catch (error) {
       console.error('Error fetching scheduled posts:', error);
       setScheduledPosts([]);
+    }
+  };
+
+  const fetchSubmissions = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/content-submissions`);
+      if (response.ok) {
+        const data = await response.json();
+        setAllSubmissions(Array.isArray(data) ? data : []);
+      } else {
+        setAllSubmissions([]);
+      }
+    } catch (err) {
+      setAllSubmissions([]);
     }
   };
 
@@ -702,14 +733,20 @@ const CustomerDetails = () => {
       return;
     }
 
-    const updatedContentItems = [...(calendar.contentItems || []), item];
+    const now = new Date().toISOString();
+    const itemWithTimestamp = {
+      ...item,
+      createdAt: item.createdAt || now,
+      assignedAt: item.assignedAt || (item.assignedTo ? now : undefined),
+    };
+    const updatedContentItems = [...(calendar.contentItems || []), itemWithTimestamp];
     const response = await fetch(`${API_URL}/calendars/${calendarId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         ...calendar,
         contentItems: updatedContentItems,
-        updatedAt: new Date().toISOString()
+        updatedAt: now
       })
     });
 
@@ -749,7 +786,9 @@ const CustomerDetails = () => {
         type,
         status,
         title,
-        postUrl
+        postUrl,
+        assignedTo,
+        assignedToName
       } = updatedItem;
 
       if (!_calendarId || !originalDate || !originalDescription) return;
@@ -777,6 +816,7 @@ const CustomerDetails = () => {
           item.date === originalDate &&
           item.description === originalDescription
         ) {
+          const newAssignedTo = assignedTo !== undefined ? assignedTo : item.assignedTo;
           return {
             ...item,
             date,
@@ -784,7 +824,10 @@ const CustomerDetails = () => {
             type: type !== undefined ? type : item.type,
             status: status !== undefined ? status : item.status,
             title: title !== undefined ? title : item.title,
-            postUrl: postUrl !== undefined ? postUrl : item.postUrl
+            postUrl: postUrl !== undefined ? postUrl : item.postUrl,
+            assignedTo: newAssignedTo,
+            assignedToName: assignedToName !== undefined ? assignedToName : item.assignedToName,
+            assignedAt: item.assignedAt || (newAssignedTo && !item.assignedAt ? new Date().toISOString() : undefined),
           };
         }
         return item;
@@ -1298,6 +1341,15 @@ const CustomerDetails = () => {
                               const publishedLinks = itemStatus === 'published' ? getItemPublishedLinks(item) : [];
                               const creatorId = item.assignedTo || calendar.assignedTo;
                               const creatorName = item.assignedToName || calendar.assignedToName || (creators.find(c => c.email === creatorId)?.name) || creatorId || '';
+                              // Filter submissions for this item (for version nodes + review date in timeline)
+                              const itemTitle = item.title || item.description;
+                              const itemSubmissions = allSubmissions
+                                .filter(s =>
+                                  (s.assignment_id && s.assignment_id === item.id) ||
+                                  (s.item_id && s.item_id === item.id) ||
+                                  (s.item_name && s.item_name === itemTitle)
+                                )
+                                .sort((a, b) => new Date(a.created_at || a.createdAt) - new Date(b.created_at || b.createdAt));
                               return (
                                 <div key={itemKey} className="bg-white rounded-lg border border-gray-100 hover:border-gray-200 transition-colors overflow-hidden">
                                   <div className="flex items-center justify-between p-3">
@@ -1350,7 +1402,7 @@ const CustomerDetails = () => {
                                             </span>
                                           )}
                                         </div>
-                                        <ItemTimeline item={item} itemStatus={itemStatus} scheduledPosts={scheduledPosts} />
+                                        <ItemTimeline item={item} itemStatus={itemStatus} scheduledPosts={scheduledPosts} submissions={itemSubmissions} />
                                         {itemStatus === 'published' && itemTrendData && typeof itemTrendData === 'object' && (
                                           <MiniTrendCharts platformData={itemTrendData} />
                                         )}

@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { MessageSquare, CheckCircle, Edit3, Trash2, Move, ChevronLeft, ChevronRight, Image, Video, AlertCircle, ThumbsUp, Calendar, ChevronDown, ChevronUp } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { MessageSquare, CheckCircle, Edit3, Trash2, Move, ChevronLeft, ChevronRight, Image, Video, AlertCircle, ThumbsUp, Calendar, ChevronDown, ChevronUp, Send, RotateCcw } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 function ContentReview() {
+  const [searchParams] = useSearchParams();
+  const targetItemId = searchParams.get('itemId');
+
     // Scheduled posts state
     const [scheduledPosts, setScheduledPosts] = useState([]);
     const [scheduledPostsLoading, setScheduledPostsLoading] = useState(false);
@@ -219,11 +222,27 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
         });
       });
 
-      setContentItems(contentData);
+      // Filter to specific item if itemId is in the URL
+      // Submissions can reference calendar items via item_id, assignment_id, or id
+      if (targetItemId) {
+        console.log('[ContentReview] Filtering for itemId:', targetItemId);
+        console.log('[ContentReview] Available items:', contentData.map(i => ({
+          id: i.id, item_id: i.item_id, assignment_id: i.assignment_id, item_name: i.item_name
+        })));
+      }
+      const displayData = targetItemId
+        ? contentData.filter(item =>
+            (item.item_id && item.item_id === targetItemId) ||
+            (item.id && item.id === targetItemId) ||
+            (item.assignment_id && item.assignment_id === targetItemId)
+          )
+        : contentData;
+
+      setContentItems(displayData);
       
       // Group content by calendar
       const grouped = {};
-      contentData.forEach(item => {
+      displayData.forEach(item => {
         const calendarKey = item.calendar_name || item.calendar_id || 'Uncategorized';
         if (!grouped[calendarKey]) {
           grouped[calendarKey] = [];
@@ -232,10 +251,10 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
       });
       setGroupedContentItems(grouped);
       
-      // Only set initial selection if nothing is currently selected
-      if (contentData.length > 0 && !selectedContent) {
-        setSelectedContent(contentData[0]);
-        setSelectedVersionIndex(contentData[0].versions.length - 1); // Show latest version by default
+      // Auto-select: always select when filtered by itemId, otherwise only if nothing selected
+      if (displayData.length > 0 && (targetItemId || !selectedContent)) {
+        setSelectedContent(displayData[0]);
+        setSelectedVersionIndex(displayData[0].versions.length - 1); // Show latest version by default
       }
     } catch (err) {
       console.error('Failed to fetch content submissions:', err);
@@ -735,6 +754,93 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
 
   // State for approve loading
   const [approvingContent, setApprovingContent] = useState(false);
+  const [sendingToCreator, setSendingToCreator] = useState(false);
+  const [undoingApprove, setUndoingApprove] = useState(false);
+
+  // Handle send to creator - updates status to 'sent_to_creator'
+  const handleSendToCreator = async () => {
+    if (!selectedContent) return;
+    setSendingToCreator(true);
+    try {
+      const response = await fetch(
+        `${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(selectedContent.id)}/status`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            status: 'sent_to_creator',
+            sentToCreatorAt: new Date().toISOString(),
+            approvalNotes: 'Feedback sent to creator by customer'
+          })
+        }
+      );
+      if (response.ok) {
+        const currentAssignmentId = selectedContent.id;
+        const currentVersionIndex = selectedVersionIndex;
+        const currentMediaIndex = selectedMediaIndex;
+        await fetchContentSubmissions();
+        setContentItems(prevItems => {
+          const itemIndex = prevItems.findIndex(item => item.id === currentAssignmentId);
+          if (itemIndex !== -1) {
+            setSelectedContent(prevItems[itemIndex]);
+            setSelectedContentIndex(itemIndex);
+            setSelectedVersionIndex(currentVersionIndex);
+            setSelectedMediaIndex(currentMediaIndex);
+          }
+          return prevItems;
+        });
+      } else {
+        alert('Failed to send feedback to creator. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error sending to creator:', error);
+      alert('Error sending feedback. Please try again.');
+    } finally {
+      setSendingToCreator(false);
+    }
+  };
+
+  // Handle undo approve - reverts status back to 'under_review'
+  const handleUndoApprove = async () => {
+    if (!selectedContent) return;
+    setUndoingApprove(true);
+    try {
+      const response = await fetch(
+        `${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(selectedContent.id)}/status`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            status: 'under_review',
+            approvalNotes: 'Approval reverted by customer'
+          })
+        }
+      );
+      if (response.ok) {
+        const currentAssignmentId = selectedContent.id;
+        const currentVersionIndex = selectedVersionIndex;
+        const currentMediaIndex = selectedMediaIndex;
+        await fetchContentSubmissions();
+        setContentItems(prevItems => {
+          const itemIndex = prevItems.findIndex(item => item.id === currentAssignmentId);
+          if (itemIndex !== -1) {
+            setSelectedContent(prevItems[itemIndex]);
+            setSelectedContentIndex(itemIndex);
+            setSelectedVersionIndex(currentVersionIndex);
+            setSelectedMediaIndex(currentMediaIndex);
+          }
+          return prevItems;
+        });
+      } else {
+        alert('Failed to undo approval. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error undoing approval:', error);
+      alert('Error undoing approval. Please try again.');
+    } finally {
+      setUndoingApprove(false);
+    }
+  };
 
   // Handle approve content - updates status to 'approved' on backend
   const handleApproveContent = async () => {
@@ -918,6 +1024,8 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
         return 'bg-rose-100 text-rose-800 border-rose-300';
       case 'published':
         return 'bg-blue-100 text-blue-800 border-blue-300';
+      case 'sent_to_creator':
+        return 'bg-violet-100 text-violet-800 border-violet-300';
       default:
         return 'bg-slate-100 text-slate-800 border-slate-300';
     }
@@ -933,6 +1041,8 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
         return 'Rejected';
       case 'published':
         return 'Published';
+      case 'sent_to_creator':
+        return 'Sent to Creator';
       default:
         return 'Pending';
     }
@@ -1005,9 +1115,22 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
       `}</style>
       {/* Main Content */}
       <div className="px-2 sm:px-4 lg:px-8 xl:px-16 py-3 sm:py-6 lg:py-10">
+        {targetItemId && (
+          <div className="mb-3 sm:mb-4">
+            <button
+              onClick={() => navigate('/customer/calendar')}
+              className="inline-flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-800 font-medium transition-colors"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Back to Calendar
+            </button>
+          </div>
+        )}
         <div className="flex flex-col xl:flex-row gap-3 sm:gap-6 lg:gap-8 font-sans">
-          {/* Left Sidebar - Content List */}
+          {/* Left Sidebar */}
           <div className="w-full xl:w-80 flex-shrink-0">
+            {/* Content Items list — hidden when opened for a specific item from Calendar */}
+            {!targetItemId && (
             <div className="bg-white rounded-xl sm:rounded-2xl shadow-md sm:shadow-lg border border-slate-200 overflow-hidden">
               <div className="px-3 sm:px-4 py-3 sm:py-4 border-b border-slate-200 bg-gradient-to-r from-indigo-50 to-blue-50 sticky top-0 z-10">
                 <h3 className="text-base sm:text-lg font-bold text-slate-800 flex items-center gap-2">
@@ -1103,6 +1226,7 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
                 )}
               </div>
             </div>
+            )} {/* end !targetItemId content items */}
 
             {/* Comments Panel */}
             <div className="mt-3 sm:mt-4 lg:mt-6 bg-white rounded-xl sm:rounded-2xl shadow-md sm:shadow-lg border border-slate-200 overflow-hidden">
@@ -1547,9 +1671,33 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
                   </div>
                 )}
 
-                {/* Action Buttons - Approve Content */}
+                {/* Action Buttons */}
                 {getDisplayStatus(selectedContent) !== 'approved' && getDisplayStatus(selectedContent) !== 'published' && (
                   <div className="flex flex-col sm:flex-row justify-center gap-3 sm:gap-4 mt-4 sm:mt-6">
+                    {/* Send to Creator button - visible when comments exist */}
+                    {commentsForCurrentMedia.length > 0 && (
+                      <button
+                        onClick={handleSendToCreator}
+                        disabled={sendingToCreator}
+                        className={`inline-flex items-center justify-center px-6 sm:px-8 py-3 sm:py-4 rounded-xl font-bold text-sm sm:text-base transition-all duration-300 shadow-lg hover:shadow-xl ${
+                          sendingToCreator
+                            ? 'bg-gray-400 cursor-not-allowed'
+                            : 'bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white'
+                        }`}
+                      >
+                        {sendingToCreator ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 sm:h-5 sm:w-5 border-2 border-white border-t-transparent mr-2"></div>
+                            Sending...
+                          </>
+                        ) : (
+                          <>
+                            <Send className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
+                            Send to Creator
+                          </>
+                        )}
+                      </button>
+                    )}
                     <button
                       onClick={handleApproveContent}
                       disabled={approvingContent}
@@ -1574,13 +1722,34 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
                   </div>
                 )}
 
-                {/* Show approved status if already approved */}
+                {/* Show approved status + undo button if already approved */}
                 {getDisplayStatus(selectedContent) === 'approved' && (
-                  <div className="flex justify-center mt-4 sm:mt-6">
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-4 sm:mt-6">
                     <div className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-emerald-100 to-green-100 border-2 border-emerald-300 rounded-xl">
                       <CheckCircle className="h-5 w-5 text-emerald-600 mr-2" />
                       <span className="text-emerald-800 font-bold text-sm sm:text-base">Content Approved</span>
                     </div>
+                    <button
+                      onClick={handleUndoApprove}
+                      disabled={undoingApprove}
+                      className={`inline-flex items-center justify-center px-4 py-3 rounded-xl font-semibold text-sm transition-all duration-300 shadow hover:shadow-md border-2 ${
+                        undoingApprove
+                          ? 'bg-gray-100 border-gray-300 text-gray-400 cursor-not-allowed'
+                          : 'bg-white border-amber-400 text-amber-700 hover:bg-amber-50'
+                      }`}
+                    >
+                      {undoingApprove ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-2 border-amber-400 border-t-transparent mr-2"></div>
+                          Undoing...
+                        </>
+                      ) : (
+                        <>
+                          <RotateCcw className="h-4 w-4 mr-2" />
+                          Undo Approve
+                        </>
+                      )}
+                    </button>
                   </div>
                 )}
               </div>

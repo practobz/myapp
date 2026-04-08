@@ -71,6 +71,8 @@ import Profile from './content-creators/Profile';
 import Settings from './content-creators/Settings';
 import ContentCreatorMediaLibrary from './content-creators/MediaLibrary';
 import ContentDetails from './content-creators/ContentDetails';
+import CustomerFeedback from './content-creators/CustomerFeedback';
+
 
 import { useAuth } from './admin/contexts/AuthContext';
 import AIImageGenerator from './components/AIImageGenerator';
@@ -635,7 +637,11 @@ function App() {
                   <ContentCreatorMediaLibrary />
                 </ProtectedRoutePortal>
               } />
-              
+                 <Route path="/content-creator/customer-feedback" element={
+                <ProtectedRoutePortal role="content_creator">
+                  <CustomerFeedback />
+                </ProtectedRoutePortal>
+              } />
               {/* AI Image Generator route for content creators */}
               <Route path="/content-creator/ai-image-generator" element={
                 <ProtectedRoutePortal role="content_creator">

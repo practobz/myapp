@@ -248,8 +248,23 @@ function Assignments() {
     }, {})
   ).sort((a, b) => a.customerName.localeCompare(b.customerName));
 
-  // Initialize expanded state for customers and calendars
-  // (no auto-expand — all start collapsed)
+  // Auto-expand the customer passed via ?expand=customerId (from Dashboard recent assignment click)
+  const expandCustomerId = searchParams.get('expand');
+  useEffect(() => {
+    if (!expandCustomerId || assignments.length === 0) return;
+    setExpandedCustomers(prev => ({ ...prev, [expandCustomerId]: true }));
+    const calendarIds = [...new Set(
+      assignments
+        .filter(a => a.customerId === expandCustomerId)
+        .map(a => a.calendarId)
+        .filter(Boolean)
+    )];
+    setExpandedCalendars(prev => {
+      const next = { ...prev };
+      calendarIds.forEach(id => { next[id] = true; });
+      return next;
+    });
+  }, [assignments, expandCustomerId]);
 
   const toggleCustomer = (id) => setExpandedCustomers(prev => ({ ...prev, [id]: !prev[id] }));
   const toggleCalendar = (id) => setExpandedCalendars(prev => ({ ...prev, [id]: !prev[id] }));

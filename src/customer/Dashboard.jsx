@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LayoutGrid, Calendar as CalendarIcon, TrendingUp, FileText, MessageSquare, Image as ImageIcon, Send, BarChart3, Activity, ArrowUpRight, Clock } from 'lucide-react';
+import { LayoutGrid, Calendar as CalendarIcon, TrendingUp, FileText, MessageSquare, Image as ImageIcon, Send, BarChart3, Activity, ArrowUpRight, Clock, AlertCircle, Eye } from 'lucide-react';
 import { format } from 'date-fns';
 import { useAuth } from '../admin/contexts/AuthContext';
 
@@ -13,7 +13,9 @@ function Dashboard() {
   const [stats, setStats] = useState({
     totalPosts: 0,
     contentCalendars: 0,
-    publishedContent: 0
+    publishedContent: 0,
+    pendingContent: 0,
+    underReviewContent: 0
   });
   const [recentActivity, setRecentActivity] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -77,11 +79,15 @@ function Dashboard() {
         const contentCalendars = customerCalendars.length;
         // Use scheduled posts logic for publishedContent
         const publishedContent = allItems.filter(i => isItemPublished(i)).length;
+        const pendingContent = allItems.filter(i => !isItemPublished(i) && i.status === 'pending').length;
+        const underReviewContent = allItems.filter(i => !isItemPublished(i) && (!i.status || i.status === 'under_review')).length;
 
         setStats({
           totalPosts,
           contentCalendars,
-          publishedContent
+          publishedContent,
+          pendingContent,
+          underReviewContent
         });
 
         // Recent activity: last 4 items, sorted by date descending
@@ -103,7 +109,9 @@ function Dashboard() {
         setStats({
           totalPosts: 0,
           contentCalendars: 0,
-          publishedContent: 0
+          publishedContent: 0,
+          pendingContent: 0,
+          underReviewContent: 0
         });
         setRecentActivity([]);
       } finally {
@@ -134,7 +142,7 @@ function Dashboard() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       {/* Main Content */}
-      <div className="min-h-screen sm:px-8 lg:px-12 xl:px-16 2xl:px-24">
+      <div className="min-h-screen px-4 sm:px-6">
         <div className="w-full mx-auto py-0">
           <div className="space-y-8">
             {/* Welcome Section - Professional Header */}
@@ -165,7 +173,7 @@ function Dashboard() {
             </div>
 
             {/* Stats Grid - Modern Cards */}
-            <div className="grid grid-cols-3 gap-3 sm:gap-4 md:gap-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4 md:gap-6">
               {/* Total Posts */}
               <div 
                 className="group relative bg-white rounded-xl shadow-md hover:shadow-2xl transition-all duration-300 cursor-pointer overflow-hidden border border-slate-200"
@@ -222,6 +230,44 @@ function Dashboard() {
                   <p className="text-xs text-slate-500">Live posts</p>
                 </div>
               </div>
+
+              {/* Pending Content */}
+              <div 
+                className="group relative bg-white rounded-xl shadow-md hover:shadow-2xl transition-all duration-300 cursor-pointer overflow-hidden border border-slate-200"
+                onClick={() => navigate('/customer/content-review')}
+              >
+                <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-amber-500/10 to-orange-500/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
+                <div className="relative p-6">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="w-14 h-14 bg-gradient-to-br from-amber-500 to-orange-500 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                      <AlertCircle className="h-7 w-7 text-white" />
+                    </div>
+                    <ArrowUpRight className="h-5 w-5 text-slate-400 group-hover:text-amber-600 group-hover:translate-x-1 group-hover:-translate-y-1 transition-all duration-300" />
+                  </div>
+                  <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-1">Pending</p>
+                  <p className="text-4xl font-bold text-slate-800 mb-1">{stats.pendingContent}</p>
+                  <p className="text-xs text-slate-500">Awaiting action</p>
+                </div>
+              </div>
+
+              {/* Under Review Content */}
+              <div 
+                className="group relative bg-white rounded-xl shadow-md hover:shadow-2xl transition-all duration-300 cursor-pointer overflow-hidden border border-slate-200"
+                onClick={() => navigate('/customer/content-review')}
+              >
+                <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-violet-500/10 to-purple-500/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
+                <div className="relative p-6">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="w-14 h-14 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                      <Eye className="h-7 w-7 text-white" />
+                    </div>
+                    <ArrowUpRight className="h-5 w-5 text-slate-400 group-hover:text-violet-600 group-hover:translate-x-1 group-hover:-translate-y-1 transition-all duration-300" />
+                  </div>
+                  <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-1">Under Review</p>
+                  <p className="text-4xl font-bold text-slate-800 mb-1">{stats.underReviewContent}</p>
+                  <p className="text-xs text-slate-500">Being reviewed</p>
+                </div>
+              </div>
             </div>
 
             {/* Bottom Section - Enhanced Layout */}
@@ -248,7 +294,7 @@ function Dashboard() {
                       </div>
                     ) : (
                       recentActivity.map((activity) => (
-                        <div key={activity.id} className="group flex items-center justify-between p-4 bg-gradient-to-r from-slate-50 to-blue-50/50 hover:from-blue-50 hover:to-indigo-50 rounded-xl border border-slate-100 hover:border-indigo-200 transition-all duration-200">
+                        <div key={activity.id} onClick={() => navigate(`/customer/content-review?itemId=${activity.id}`)} className="group flex items-center justify-between p-4 bg-gradient-to-r from-slate-50 to-blue-50/50 hover:from-blue-50 hover:to-indigo-50 rounded-xl border border-slate-100 hover:border-indigo-200 transition-all duration-200 cursor-pointer">
                           <div className="flex items-center gap-3 flex-1">
                             <div className="w-10 h-10 bg-indigo-100 group-hover:bg-indigo-200 rounded-lg flex items-center justify-center transition-colors duration-200">
                               <FileText className="h-5 w-5 text-indigo-600" />

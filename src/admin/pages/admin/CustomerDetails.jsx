@@ -321,10 +321,10 @@ const CustomerDetails = () => {
 
   const fetchScheduledPosts = async () => {
     try {
-      const response = await fetch(`${API_URL}/api/scheduled-posts`);
+      const response = await fetch(`${API_URL}/api/scheduled-posts?customerId=${encodeURIComponent(id)}`);
       if (response.ok) {
         const posts = await response.json();
-        setScheduledPosts(Array.isArray(posts) ? posts : []);
+        setScheduledPosts(Array.isArray(posts) ? posts.filter(p => p.customerId === id) : []);
       }
     } catch (error) {
       console.error('Error fetching scheduled posts:', error);

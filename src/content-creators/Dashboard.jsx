@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { PlusCircle, Clock, MessageSquare, CheckCircle, Globe, User, ChevronDown, Palette, Eye, Image, FolderOpen, Users, ClipboardList } from 'lucide-react';
+import { PlusCircle, Clock, MessageSquare, CheckCircle, Globe, User, ChevronDown, Palette, Eye, Image, FolderOpen, Users, ClipboardList, Send, Bell } from 'lucide-react';
 import { format } from 'date-fns';
 import { useAuth } from "../admin/contexts/AuthContext";
 import Logo from '../admin/components/layout/Logo';
@@ -58,6 +58,7 @@ function Dashboard() {
   
   // Scheduled posts to check published status
   const [scheduledPosts, setScheduledPosts] = useState([]);
+  const [reviewCount, setReviewCount] = useState(0);
 
   const creatorEmail = getCreatorEmail();
 
@@ -73,17 +74,29 @@ function Dashboard() {
     const fetchAssignments = async () => {
       setLoading(true);
       try {
-        const res = await fetch(`${process.env.REACT_APP_API_URL}/calendars`);
-        const calendars = await res.json();
+        const [calRes, custRes] = await Promise.all([
+          fetch(`${process.env.REACT_APP_API_URL}/calendars`),
+          fetch(`${process.env.REACT_APP_API_URL}/api/customers`)
+        ]);
+        const calendars = await calRes.json();
+        const custData = custRes.ok ? await custRes.json() : { customers: [] };
+        const customerMap = {};
+        (custData.customers || []).forEach(c => {
+          customerMap[c._id || c.id] = c.name || '';
+        });
         let allAssignments = [];
         calendars.forEach(calendar => {
           if (Array.isArray(calendar.contentItems)) {
+            const resolvedCustomerName =
+              customerMap[calendar.customerId] ||
+              calendar.customerName ||
+              '';
             calendar.contentItems.forEach(item => {
               allAssignments.push({
                 ...item,
-                customerName: calendar.customerName || calendar.name || calendar.customer || '',
+                customerName: resolvedCustomerName,
                 customerId: calendar.customerId || calendar.customer_id || calendar.customer?._id || '',
-                customer: calendar.customer || calendar.customerName || calendar.name || '',
+                customer: resolvedCustomerName,
                 id: item.id || item._id || item.title || Math.random().toString(36).slice(2)
               });
             });
@@ -114,8 +127,46 @@ function Dashboard() {
       }
     };
     
+    const fetchReviewCount = async () => {
+      try {
+        const [submissionsRes, calendarsRes] = await Promise.all([
+          fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions`),
+          fetch(`${process.env.REACT_APP_API_URL}/calendars`)
+        ]);
+        const submissions = submissionsRes.ok ? await submissionsRes.json() : [];
+        const calendars = calendarsRes.ok ? await calendarsRes.json() : [];
+        const calendarMap = {};
+        if (Array.isArray(calendars)) {
+          calendars.forEach(cal => { calendarMap[cal._id || cal.id] = cal; });
+        }
+        const count = Array.isArray(submissions)
+          ? submissions.filter(sub => {
+              const byThisCreator = (sub.created_by || '').toLowerCase() === creatorEmail;
+              let assignedToCreator = false;
+              if (!byThisCreator && sub.calendar_id) {
+                const cal = calendarMap[sub.calendar_id];
+                if (cal && Array.isArray(cal.contentItems)) {
+                  const item = cal.contentItems.find(
+                    ci => (sub.item_id && ci.id === sub.item_id) ||
+                          (sub.item_name && (ci.title === sub.item_name || ci.description === sub.item_name))
+                  );
+                  if (item && (item.assignedTo || '').toLowerCase() === creatorEmail) {
+                    assignedToCreator = true;
+                  }
+                }
+              }
+              return (byThisCreator || assignedToCreator) && Array.isArray(sub.comments) && sub.comments.length > 0;
+            }).length
+          : 0;
+        setReviewCount(count);
+      } catch (err) {
+        setReviewCount(0);
+      }
+    };
+
     fetchAssignments();
     fetchScheduledPosts();
+    fetchReviewCount();
   }, [creatorEmail]);
 
   // Helper: check if content is published on any platform
@@ -238,7 +289,7 @@ function Dashboard() {
             </div>
 
             {/* Stats Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
               {/* Total Assigned */}
               <div 
                 className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-5 cursor-pointer hover:shadow-md hover:border-indigo-200 transition-all"
@@ -318,6 +369,22 @@ function Dashboard() {
                   </div>
                 </div>
               </div>
+
+              {/* Review Updates */}
+              <div 
+                className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-5 cursor-pointer hover:shadow-md hover:border-rose-200 transition-all"
+                onClick={() => navigate('/content-creator/customer-feedback')}
+              >
+                <div className="flex items-center gap-3 sm:gap-4">
+                  <div className="p-2.5 sm:p-3 bg-rose-50 rounded-xl flex-shrink-0">
+                    <Bell className="h-5 w-5 sm:h-6 sm:w-6 text-rose-600" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs sm:text-sm font-medium text-gray-500 truncate">Review Updates</p>
+                    <h3 className="text-xl sm:text-2xl font-bold text-gray-900">{reviewCount}</h3>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Content Grid - 50/50 Layout */}
@@ -359,7 +426,7 @@ function Dashboard() {
                           <div 
                             key={assignment.id} 
                             className="group p-4 bg-gradient-to-r from-gray-50 to-slate-50 rounded-xl hover:from-purple-50 hover:to-indigo-50 border border-gray-100 hover:border-purple-200 transition-all duration-300 cursor-pointer"
-                            onClick={() => goToAssignments(status)}
+                            onClick={() => navigate(`/content-creator/assignments?filter=${status}${assignment.customerId ? `&expand=${assignment.customerId}` : ''}`)}
                           >
                             {/* Title + Status Badge */}
                             <div className="flex items-start justify-between gap-2">
@@ -480,6 +547,8 @@ function Dashboard() {
                         <p className="text-xs text-gray-500 mt-0.5">Upload and manage your files</p>
                       </div>
                     </button>
+
+
                   </div>
                 </div>
               </div>

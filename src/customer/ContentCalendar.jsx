@@ -763,6 +763,12 @@ function ContentCalendar() {
                             <User className="h-3.5 w-3.5" /><span className="truncate">{item.creator}</span>
                           </div>
                         )}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); navigate(`/customer/content-review?itemId=${item.id}`); }}
+                          className="mt-3 w-full flex items-center justify-center gap-1.5 text-xs text-purple-600 bg-purple-50 hover:bg-purple-100 active:bg-purple-200 px-3 py-2 rounded-lg transition-colors font-medium"
+                        >
+                          <MessageSquare className="h-3.5 w-3.5" /><span>Content Review</span>
+                        </button>
                       </div>
                     </div>
                   ) : (
@@ -798,11 +804,19 @@ function ContentCalendar() {
                                   {format(new Date(item.date), 'MMM dd, yyyy')}
                                 </span>
                               </div>
-                              {item.status === 'published' && (
-                                <div className="flex items-center gap-1 text-xs text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg">
-                                  <ExternalLink className="h-3.5 w-3.5" /><span className="font-medium">View Details</span>
-                                </div>
-                              )}
+                              <div className="flex items-center gap-2">
+                                {item.status === 'published' && (
+                                  <div className="flex items-center gap-1 text-xs text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg">
+                                    <ExternalLink className="h-3.5 w-3.5" /><span className="font-medium">View Details</span>
+                                  </div>
+                                )}
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); navigate(`/customer/content-review?itemId=${item.id}`); }}
+                                  className="flex items-center gap-1 text-xs text-purple-600 bg-purple-50 hover:bg-purple-100 active:bg-purple-200 px-3 py-1.5 rounded-lg transition-colors font-medium"
+                                >
+                                  <MessageSquare className="h-3.5 w-3.5" /><span>Content Review</span>
+                                </button>
+                              </div>
                             </div>
                             <p className="text-gray-800 font-medium mb-3 line-clamp-2">{item.description || 'No description available'}</p>
                             <div className="flex flex-wrap items-center gap-4">

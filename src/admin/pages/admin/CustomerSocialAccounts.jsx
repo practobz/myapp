@@ -83,6 +83,8 @@ function AccountDetailModal({ account, customer, onClose }) {
   const [posts, setPosts] = useState([]);
   const [loadingPosts, setLoadingPosts] = useState(false);
   const [postsError, setPostsError] = useState('');
+  const [postsNextCursor, setPostsNextCursor] = useState(null);
+  const [loadingMorePosts, setLoadingMorePosts] = useState(false);
 
   // Post insights modal state
   const [fbInsightsOpen, setFbInsightsOpen] = useState(false);
@@ -101,6 +103,7 @@ function AccountDetailModal({ account, customer, onClose }) {
     setLoadingPosts(true);
     setPostsError('');
     setPosts([]);
+    setPostsNextCursor(null);
 
     try {
       if (account.platform === 'facebook') {
@@ -207,7 +210,7 @@ function AccountDetailModal({ account, customer, onClose }) {
       return;
     }
 
-    const url = `https://graph.facebook.com/v18.0/${igAccountId}/media?fields=id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count,is_comment_enabled&limit=25&access_token=${token}`;
+    const url = `https://graph.facebook.com/v18.0/${igAccountId}/media?fields=id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count,is_comment_enabled&limit=100&access_token=${token}`;
     const res = await fetch(url);
     const data = await res.json();
     if (data.error) {
@@ -215,6 +218,34 @@ function AccountDetailModal({ account, customer, onClose }) {
       return;
     }
     setPosts(data.data || []);
+    setPostsNextCursor(data.paging?.next ? (data.paging.cursors?.after || null) : null);
+  };
+
+  const loadMoreInstagramPosts = async () => {
+    if (!postsNextCursor || loadingMorePosts) return;
+    const igAccountId = account.platformUserId;
+    let token = null;
+    for (const page of (account.pages || [])) {
+      if (page.instagramBusinessAccount || page.instagram_business_account) {
+        token = page.accessToken || page.access_token;
+        break;
+      }
+    }
+    if (!token) token = account.accessToken;
+    if (!token || !igAccountId) return;
+    setLoadingMorePosts(true);
+    try {
+      const url = `https://graph.facebook.com/v18.0/${igAccountId}/media?fields=id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count,is_comment_enabled&limit=100&after=${postsNextCursor}&access_token=${token}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (data.error) throw new Error(data.error.message || 'Instagram API error');
+      setPosts(prev => [...prev, ...(data.data || [])]);
+      setPostsNextCursor(data.paging?.next ? (data.paging.cursors?.after || null) : null);
+    } catch (err) {
+      setPostsError(err.message);
+    } finally {
+      setLoadingMorePosts(false);
+    }
   };
 
   const fetchLinkedInPosts = async () => {
@@ -523,9 +554,25 @@ function AccountDetailModal({ account, customer, onClose }) {
                 <p className="text-sm text-gray-500">No posts found for this account</p>
               </div>
             ) : (
-              <div className="grid grid-cols-3 gap-1 sm:gap-1.5">
-                {posts.map((post, idx) => renderPostCard(post, idx))}
-              </div>
+              <>
+                <div className="grid grid-cols-3 gap-1 sm:gap-1.5">
+                  {posts.map((post, idx) => renderPostCard(post, idx))}
+                </div>
+                {account.platform === 'instagram' && postsNextCursor && (
+                  <div className="flex items-center justify-center py-4 border-t border-gray-100 mt-2">
+                    <button
+                      onClick={loadMoreInstagramPosts}
+                      disabled={loadingMorePosts}
+                      className="flex items-center gap-2 text-sm font-medium text-pink-600 hover:text-pink-700 transition-colors disabled:opacity-50"
+                    >
+                      {loadingMorePosts
+                        ? <Loader2 className="h-4 w-4 animate-spin" />
+                        : <ChevronDown className="h-4 w-4" />}
+                      {loadingMorePosts ? 'Loading...' : 'Load More Posts'}
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -734,42 +781,24 @@ function CustomerSocialAccounts() {
     async (isRefresh = false) => {
       if (abortControllerRef.current) abortControllerRef.current.abort();
       abortControllerRef.current = new AbortController();
-      const signal = abortControllerRef.current.signal;
 
       if (isRefresh) setIsRefreshing(true);
       else setLoading(true);
       setError('');
 
       try {
-        // Fetch all social accounts and assigned customers in parallel
-        const [socialRes, assignedRes] = await Promise.all([
-          fetch(`${apiUrl}/api/admin/customer-social-links`, { signal }),
-          currentUser?.role === 'admin'
-            ? fetch(`${apiUrl}/admin/assigned-customers?adminId=${currentUser._id || currentUser.id}`, { signal })
-            : Promise.resolve(null),
-        ]);
+        const res = await fetch(`${apiUrl}/api/admin/customer-social-links`, {
+          signal: abortControllerRef.current.signal,
+        });
 
-        if (!socialRes.ok) throw new Error(`HTTP ${socialRes.status}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-        const data = await socialRes.json();
-        if (!data.success) throw new Error(data.error || 'Failed to fetch data');
-
-        let allCustomers = data.data || [];
-
-        // If admin, filter to only show their assigned customers
-        if (currentUser?.role === 'admin' && assignedRes) {
-          if (assignedRes.ok) {
-            const assignedList = await assignedRes.json();
-            const assignedIds = new Set(
-              (Array.isArray(assignedList) ? assignedList : []).map((c) => c._id)
-            );
-            allCustomers = allCustomers.filter((c) => assignedIds.has(c.customerId));
-          } else {
-            allCustomers = [];
-          }
+        const data = await res.json();
+        if (data.success) {
+          setCustomers(data.data || []);
+        } else {
+          throw new Error(data.error || 'Failed to fetch data');
         }
-
-        setCustomers(allCustomers);
       } catch (err) {
         if (err.name === 'AbortError') return;
         setError(err.message || 'Failed to load social accounts');
@@ -778,7 +807,7 @@ function CustomerSocialAccounts() {
         setIsRefreshing(false);
       }
     },
-    [apiUrl, currentUser]
+    [apiUrl]
   );
 
   useEffect(() => {

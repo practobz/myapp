@@ -79,6 +79,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
   // Posts pagination
   const POSTS_PER_PAGE = 9;
   const [visiblePostsCount, setVisiblePostsCount] = useState(POSTS_PER_PAGE);
+  const [loadingMoreMedia, setLoadingMoreMedia] = useState(false);
 
   // Helper function to check if Facebook API is ready
   const isFacebookApiReady = () => {
@@ -230,7 +231,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
             const profileData = await profileResponse.json();
             
             // Fetch media data
-            const mediaUrl = `https://graph.facebook.com/v18.0/${acc.id}/media?fields=id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count,is_comment_enabled&limit=12&access_token=${pageToken}`;
+            const mediaUrl = `https://graph.facebook.com/v18.0/${acc.id}/media?fields=id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count,is_comment_enabled&limit=50&access_token=${pageToken}`;
             console.log(`📡 Fetching media for ${acc.id}...`);
             const mediaResponse = await fetch(mediaUrl);
             const mediaData = await mediaResponse.json();
@@ -335,7 +336,8 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
             return {
               ...acc,
               profile: profileData,
-              media: mediaWithInsights
+              media: mediaWithInsights,
+              mediaNextCursor: mediaData.paging?.next ? (mediaData.paging.cursors?.after || null) : null,
             };
           } catch (error) {
             console.error(`❌ Failed to hydrate account ${acc.id}:`, error);
@@ -935,7 +937,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
       }
 
       // FIXED: Fetch recent media using direct Graph API
-      const mediaUrl = `https://graph.facebook.com/v18.0/${accountData.id}/media?fields=id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count,is_comment_enabled&limit=12&access_token=${accountData.pageAccessToken}`;
+      const mediaUrl = `https://graph.facebook.com/v18.0/${accountData.id}/media?fields=id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count,is_comment_enabled&limit=50&access_token=${accountData.pageAccessToken}`;
       const mediaResponse = await fetch(mediaUrl);
       const mediaData = await mediaResponse.json();
       
@@ -947,6 +949,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
         connected: true,
         profile: profileData,
         media: mediaWithInsights,
+        mediaNextCursor: mediaData.paging?.next ? (mediaData.paging.cursors?.after || null) : null,
         connectedAt: new Date().toISOString(),
         userAccessToken: userAccessToken,
         pageAccessToken: accountData.pageAccessToken,
@@ -1397,7 +1400,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
       }
 
       // Refresh media using direct Graph API
-      const mediaUrl = `https://graph.facebook.com/v18.0/${accountId}/media?fields=id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count,is_comment_enabled&limit=12&access_token=${account.pageAccessToken}`;
+      const mediaUrl = `https://graph.facebook.com/v18.0/${accountId}/media?fields=id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count,is_comment_enabled&limit=50&access_token=${account.pageAccessToken}`;
       const mediaResponse = await fetch(mediaUrl);
       const mediaData = await mediaResponse.json();
       
@@ -1410,6 +1413,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
               ...acc, 
               profile: profileData, 
               media: mediaWithInsights,
+              mediaNextCursor: mediaData.paging?.next ? (mediaData.paging.cursors?.after || null) : null,
               lastRefreshed: new Date().toISOString(),
               lastTokenValidation: new Date().toISOString()
             }
@@ -1457,6 +1461,39 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
     
     setLoadingAnalytics(true);
     generateMediaBasedAnalytics(account);
+  };
+
+  // Load more media from Instagram using cursor pagination
+  const loadMoreMedia = async () => {
+    if (!activeAccount?.mediaNextCursor || loadingMoreMedia) return;
+    setLoadingMoreMedia(true);
+    try {
+      const cursor = activeAccount.mediaNextCursor;
+      const mediaUrl = `https://graph.facebook.com/v18.0/${activeAccount.id}/media?fields=id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count,is_comment_enabled&limit=50&after=${cursor}&access_token=${activeAccount.pageAccessToken}`;
+      const mediaResponse = await fetch(mediaUrl);
+      const mediaData = await mediaResponse.json();
+      if (mediaData.error) throw new Error(mediaData.error.message);
+
+      const newMedia = await fetchMediaInsights(mediaData.data || [], activeAccount.pageAccessToken);
+      const nextCursor = mediaData.paging?.next ? (mediaData.paging.cursors?.after || null) : null;
+
+      const updatedAccount = {
+        ...activeAccount,
+        media: [...(activeAccount.media || []), ...newMedia],
+        mediaNextCursor: nextCursor,
+      };
+      const updatedAccounts = connectedAccounts.map(acc =>
+        acc.id === activeAccount.id ? updatedAccount : acc
+      );
+      setConnectedAccounts(updatedAccounts);
+      setActiveAccount(updatedAccount);
+      saveAccountsToStorage(updatedAccounts);
+      setVisiblePostsCount(prev => prev + newMedia.length);
+    } catch (err) {
+      console.error('Failed to load more media:', err);
+    } finally {
+      setLoadingMoreMedia(false);
+    }
   };
 
   const generateMediaBasedAnalytics = (account) => {
@@ -3678,16 +3715,25 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
             )}
           </div>
 
-          {/* Show More / Show Less */}
-          {activeAccount.media && activeAccount.media.length > POSTS_PER_PAGE && (
+          {/* Show More / Load More / Show Less */}
+          {activeAccount.media && (activeAccount.media.length > POSTS_PER_PAGE || activeAccount.mediaNextCursor) && (
             <div className="flex items-center justify-center py-4 border-t border-gray-100">
               {visiblePostsCount < activeAccount.media.length ? (
                 <button
-                  onClick={() => setVisiblePostsCount(prev => Math.min(prev + POSTS_PER_PAGE, activeAccount.media.length))}
+                  onClick={() => setVisiblePostsCount(prev => prev + POSTS_PER_PAGE)}
                   className="flex items-center gap-2 text-sm font-medium text-pink-600 hover:text-pink-700 transition-colors"
                 >
                   <ChevronDown className="h-4 w-4" />
                   Show More ({activeAccount.media.length - visiblePostsCount} remaining)
+                </button>
+              ) : activeAccount.mediaNextCursor ? (
+                <button
+                  onClick={loadMoreMedia}
+                  disabled={loadingMoreMedia}
+                  className="flex items-center gap-2 text-sm font-medium text-pink-600 hover:text-pink-700 transition-colors disabled:opacity-50"
+                >
+                  {loadingMoreMedia ? <Loader2 className="h-4 w-4 animate-spin" /> : <ChevronDown className="h-4 w-4" />}
+                  {loadingMoreMedia ? 'Loading...' : 'Load More from Instagram'}
                 </button>
               ) : (
                 <button

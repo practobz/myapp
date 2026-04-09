@@ -432,94 +432,254 @@ function InstagramPostInsights({ isOpen, onClose, post, accessToken, accountProf
   };
 
   // ── Download Report ─────────────────────────────────────────────────────────
-  const downloadReport = () => {
+  const downloadReport = async () => {
     if (!insights) return;
-    const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
-    const PAGE_W=210, PAGE_H=297, MARGIN=16, CW=PAGE_W-MARGIN*2;
-    let y=0;
-    const C = { primary:[168,85,247], pink:[236,72,153], teal:[20,184,166], amber:[245,158,11], blue:[59,130,246], dark:[17,24,39], mid:[75,85,99], muted:[107,114,128], white:[255,255,255], darkBg:[18,18,18] };
-    const sf=(a)=>doc.setFillColor(...a), ss=(a)=>doc.setDrawColor(...a), sc=(a)=>doc.setTextColor(...a);
-    const font=(s='normal',sz=10)=>{doc.setFont('helvetica',s);doc.setFontSize(sz);};
-    const drawBg=()=>{sf(C.darkBg);doc.rect(0,0,PAGE_W,PAGE_H,'F');};
-    const newPage=(n=20)=>{if(y+n>PAGE_H-20){doc.addPage();y=MARGIN;drawBg();}};
-    const sectionTitle=(t)=>{newPage(18);sf(C.primary);doc.roundedRect(MARGIN,y,3,10,1,1,'F');font('bold',11);sc(C.white);doc.text(t,MARGIN+7,y+7.5);y+=14;};
-    const metricRow=(label,value,idx)=>{newPage(10);sf(idx%2===0?[25,25,40]:[22,22,36]);ss([45,45,60]);doc.setLineWidth(0.15);doc.roundedRect(MARGIN,y,CW,9,1.5,1.5,'FD');font('normal',8);sc(C.muted);doc.text(label,MARGIN+4,y+6.2);font('bold',8);sc(C.white);doc.text(String(value),PAGE_W-MARGIN-4,y+6.2,{align:'right'});y+=10;};
-    const miniBarRow=(label,pct,color,idx)=>{newPage(10);const bW=55;sf(idx%2===0?[25,25,40]:[22,22,36]);ss([45,45,60]);doc.setLineWidth(0.15);doc.roundedRect(MARGIN,y,CW,9,1.5,1.5,'FD');font('normal',7.5);sc(C.muted);doc.text(label,MARGIN+4,y+6);const bx=PAGE_W-MARGIN-4-bW-14;sf([45,45,60]);doc.roundedRect(bx,y+2.8,bW,3.5,1.5,1.5,'F');if(pct>0){sf(color);doc.roundedRect(bx,y+2.8,bW*(pct/100),3.5,1.5,1.5,'F');}font('bold',7.5);sc(color);doc.text(`${pct.toFixed(1)}%`,PAGE_W-MARGIN-4,y+6,{align:'right'});y+=10;};
 
-    // Hero
-    drawBg();
-    sf(C.primary);doc.rect(0,0,PAGE_W,54,'F');
-    sf([99,91,255]);doc.circle(PAGE_W+5,-5,40,'F');
-    sf(C.pink);doc.roundedRect(MARGIN,10,44,7,3.5,3.5,'F');
-    font('bold',7);sc(C.white);doc.text('INSTAGRAM INSIGHTS',MARGIN+4,15.2);
-    font('bold',22);sc(C.white);doc.text(isReel?'Reel Insights Report':isVideo?'Video Insights Report':'Post Insights Report',MARGIN,34);
-    font('normal',8.5);sc([196,181,253]);doc.text(`@${accountProfile?.username||'account'}   ·   ${new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}`,MARGIN,46);
-    y=63;
+    // Fetch post image first (best-effort; skip gracefully on CORS/network error)
+    const imgUrl = post?.thumbnail_url || post?.media_url;
+    let imgDataUrl = null;
+    if (imgUrl) {
+      try {
+        const resp = await fetch(imgUrl);
+        const blob = await resp.blob();
+        imgDataUrl = await new Promise(resolve => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.readAsDataURL(blob);
+        });
+      } catch { /* image unavailable – continue without it */ }
+    }
 
-    // Cards
-    const cards=[{label:'Views',value:formatNumber(insights.views),color:C.primary},{label:'Reach',value:formatNumber(insights.reach),color:C.pink},{label:'Likes',value:formatNumber(insights.likes),color:C.pink},{label:'Comments',value:formatNumber(insights.comments),color:C.blue},{label:'Saved',value:formatNumber(insights.saved||0),color:C.teal},{label:'Shares',value:formatNumber(insights.shares||0),color:C.amber}];
-    const cW6=(CW-10)/6,cH=26;
-    cards.forEach((c,i)=>{const cx=MARGIN+i*(cW6+2);sf([28,28,44]);ss([50,50,70]);doc.setLineWidth(0.3);doc.roundedRect(cx,y,cW6,cH,3,3,'FD');sf(c.color);doc.roundedRect(cx,y,cW6,3,1.5,1.5,'F');font('bold',13);sc(c.color);doc.text(String(c.value),cx+cW6/2,y+cH/2+2,{align:'center'});font('normal',6.5);sc(C.muted);doc.text(c.label,cx+cW6/2,y+cH-4,{align:'center'});});
-    y+=cH+8;
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const PW = 210, PH = 297, M = 16, CW = PW - M * 2;
+    let y = 0;
 
-    // Eng rate
-    sf([30,20,50]);ss(C.primary);doc.setLineWidth(0.3);doc.roundedRect(MARGIN,y,CW,13,3,3,'FD');
-    font('bold',9);sc(C.primary);doc.text('Engagement Rate',MARGIN+6,y+9);
-    font('bold',12);sc(C.white);doc.text(`${insights.engagementRate?.toFixed(2)||'0.00'}%`,PAGE_W-MARGIN-6,y+9.5,{align:'right'});
-    y+=19;
+    // ── Light-theme palette ──────────────────────────────────────────────────
+    const C = {
+      white:      [255, 255, 255],
+      purple:     [109,  40, 217],
+      purpleSoft: [124,  58, 237],
+      purplePale: [237, 233, 254],
+      indigo:     [ 79,  70, 229],
+      pink:       [219,  39, 119],
+      teal:       [ 13, 148, 136],
+      amber:      [217, 119,   6],
+      blue:       [ 37,  99, 235],
+      dark:       [ 17,  24,  39],
+      gray:       [ 75,  85,  99],
+      muted:      [156, 163, 175],
+      border:     [229, 231, 235],
+      cardBg:     [249, 250, 251],
+    };
 
-    // Trend data note
-    if(isRealData){
-      sf([20,30,20]);ss([40,80,40]);doc.setLineWidth(0.2);doc.roundedRect(MARGIN,y,CW,10,2,2,'FD');
-      font('normal',7.5);sc([120,220,120]);
-      doc.text(`Real trend data · ${trendData.likes.length} daily snapshots collected for this post`,MARGIN+4,y+6.8);
-      y+=14;
+    const sf = a => doc.setFillColor(...a);
+    const ss = a => doc.setDrawColor(...a);
+    const sc = a => doc.setTextColor(...a);
+    const font = (s = 'normal', sz = 10) => { doc.setFont('helvetica', s); doc.setFontSize(sz); };
+
+    const checkY = (n = 20) => { if (y + n > PH - 18) { doc.addPage(); y = M; } };
+
+    const hairline = () => {
+      ss(C.border); doc.setLineWidth(0.2);
+      doc.line(M, y, PW - M, y);
+      y += 7;
+    };
+
+    // Strip characters jsPDF Helvetica can't render (emojis, smart quotes, special dashes)
+    const sanitize = (str) => {
+      if (!str) return '';
+      return str
+        .replace(/[\u2013\u2014]/g, '-')
+        .replace(/[\u2018\u2019]/g, "'")
+        .replace(/[\u201C\u201D]/g, '"')
+        .replace(/\u2026/g, '...')
+        .replace(/[^\x00-\xFF]/g, '')
+        .trim();
+    };
+
+    const sectionHead = (title) => {
+      checkY(18);
+      font('bold', 13); sc(C.dark);
+      doc.text(title, M, y);
+      y += 9;
+    };
+
+    const plainRow = (label, value, idx) => {
+      checkY(11);
+      sf(idx % 2 === 0 ? C.white : C.cardBg); ss(C.border); doc.setLineWidth(0.15);
+      doc.roundedRect(M, y, CW, 10, 1.5, 1.5, 'FD');
+      font('normal', 10); sc(C.gray); doc.text(label, M + 4, y + 7);
+      font('bold', 10); sc(C.dark); doc.text(String(value), PW - M - 4, y + 7, { align: 'right' });
+      y += 11;
+    };
+
+    const barRow = (label, pct, color, idx) => {
+      checkY(11);
+      sf(idx % 2 === 0 ? C.white : C.cardBg); ss(C.border); doc.setLineWidth(0.15);
+      doc.roundedRect(M, y, CW, 10, 1.5, 1.5, 'FD');
+      font('normal', 10); sc(C.gray); doc.text(label, M + 4, y + 7);
+      const bW = 55, bX = PW - M - 4 - bW - 18;
+      sf(C.border); doc.roundedRect(bX, y + 3.5, bW, 3, 1.4, 1.4, 'F');
+      if (pct > 0) { sf(color); doc.roundedRect(bX, y + 3.5, Math.min(bW * (pct / 100), bW), 3, 1.4, 1.4, 'F'); }
+      font('bold', 10); sc(C.dark); doc.text(`${pct.toFixed(1)}%`, PW - M - 4, y + 7, { align: 'right' });
+      y += 11;
+    };
+
+    // ── HEADER ───────────────────────────────────────────────────────────────
+    sf(C.purple); doc.rect(0, 0, PW, 44, 'F');
+    sf([88, 28, 135]); doc.circle(PW - 8, -6, 38, 'F');
+    sf(C.purpleSoft); doc.circle(PW + 10, 52, 26, 'F');
+    sf(C.pink); doc.roundedRect(M, 8, 52, 7, 3.5, 3.5, 'F');
+    font('bold', 8); sc(C.white); doc.text('INSTAGRAM INSIGHTS', M + 4, 13.2);
+    font('bold', 22); sc(C.white);
+    doc.text(isReel ? 'Reel Insights' : isVideo ? 'Video Insights' : 'Post Insights', M, 31);
+    font('normal', 10); sc([196, 181, 253]);
+    doc.text(`@${accountProfile?.username || 'account'}   ·   ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`, M, 40);
+    y = 52;
+
+    // ── POST PREVIEW ─────────────────────────────────────────────────────────
+    const iW = 44, iH = 54;
+    if (imgDataUrl) {
+      try {
+        const imgFmt = imgDataUrl.startsWith('data:image/png') ? 'PNG' : 'JPEG';
+        doc.addImage(imgDataUrl, imgFmt, M, y, iW, iH);
+      } catch { /* image render failed */ }
+      ss(C.border); doc.setLineWidth(0.3); doc.rect(M, y, iW, iH, 'S');
+      const tX = M + iW + 8, tW = CW - iW - 8;
+      font('bold', 11); sc(C.dark);
+      doc.text(isReel ? 'Reel' : isVideo ? 'Video' : 'Photo Post', tX, y + 8);
+      if (post?.caption) {
+        font('normal', 9.5); sc(C.gray);
+        doc.text(doc.splitTextToSize(sanitize(post.caption), tW).slice(0, 5), tX, y + 16);
+      }
+      font('normal', 9); sc(C.muted);
+      doc.text(new Date(post.timestamp).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }), tX, y + iH - 4);
+      y += iH + 10;
     } else {
-      sf([30,25,20]);ss([80,60,30]);doc.setLineWidth(0.2);doc.roundedRect(MARGIN,y,CW,10,2,2,'FD');
-      font('normal',7.5);sc([220,180,100]);
-      doc.text('Trend data pending — charts will populate after the daily analytics job runs',MARGIN+4,y+6.8);
-      y+=14;
+      sf(C.cardBg); ss(C.border); doc.setLineWidth(0.3);
+      doc.roundedRect(M, y, CW, 28, 3, 3, 'FD');
+      font('bold', 11); sc(C.dark); doc.text(isReel ? 'Reel' : isVideo ? 'Video' : 'Post', M + 6, y + 9);
+      if (post?.caption) {
+        font('normal', 9.5); sc(C.gray);
+        doc.text(doc.splitTextToSize(sanitize(post.caption), CW - 12).slice(0, 2), M + 6, y + 17);
+      }
+      font('normal', 9); sc(C.muted);
+      doc.text(new Date(post.timestamp).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }), M + 6, y + 25);
+      y += 34;
     }
 
-    // Interactions
-    sectionTitle('Interactions');
-    const ti=insights.totalInteractions||(insights.likes+insights.comments+(insights.saved||0)+(insights.shares||0));
-    metricRow('Total Interactions',formatNumber(ti),0);
-    metricRow('Likes',formatNumber(insights.likes),1);
-    metricRow('Comments',formatNumber(insights.comments),2);
-    metricRow('Saved',formatNumber(insights.saved||0),3);
-    metricRow('Shares',formatNumber(insights.shares||0),4);
-    y+=6;
-    if(ti>0){
-      miniBarRow('Likes',(insights.likes/ti)*100,C.pink,0);
-      miniBarRow('Comments',(insights.comments/ti)*100,C.blue,1);
-      miniBarRow('Saved',((insights.saved||0)/ti)*100,C.teal,2);
-      miniBarRow('Shares',((insights.shares||0)/ti)*100,C.amber,3);
+    hairline();
+
+    // ── KEY METRICS (3-column cards) ─────────────────────────────────────────
+    sectionHead('Key Metrics');
+    const metricCards = [
+      { label: 'Views',    value: formatNumber(insights.views),       color: C.purple },
+      { label: 'Reach',    value: formatNumber(insights.reach),       color: C.indigo },
+      { label: 'Likes',    value: formatNumber(insights.likes),       color: C.pink   },
+      { label: 'Comments', value: formatNumber(insights.comments),    color: C.blue   },
+      { label: 'Saved',    value: formatNumber(insights.saved || 0),  color: C.teal   },
+      { label: 'Shares',   value: formatNumber(insights.shares || 0), color: C.amber  },
+    ];
+    const mW = (CW - 6) / 3, mH = 24;
+    checkY(2 * (mH + 4) + 8);
+    metricCards.forEach((m, i) => {
+      const cx = M + (i % 3) * (mW + 3);
+      const cy = y + Math.floor(i / 3) * (mH + 4);
+      sf(C.cardBg); ss(C.border); doc.setLineWidth(0.3);
+      doc.roundedRect(cx, cy, mW, mH, 2.5, 2.5, 'FD');
+      sf(m.color); doc.roundedRect(cx, cy, mW, 3, 1.5, 0, 'F');
+      font('bold', 14); sc(m.color); doc.text(m.value, cx + mW / 2, cy + 15, { align: 'center' });
+      font('normal', 8); sc(C.muted); doc.text(m.label, cx + mW / 2, cy + 21, { align: 'center' });
+    });
+    y += 2 * (mH + 4) + 4;
+
+    // Engagement rate pill
+    checkY(16);
+    sf(C.purplePale); ss([196, 181, 253]); doc.setLineWidth(0.3);
+    doc.roundedRect(M, y, CW, 13, 2.5, 2.5, 'FD');
+    font('normal', 10); sc(C.gray); doc.text('Engagement Rate', M + 6, y + 9);
+    font('bold', 13); sc(C.purple); doc.text(`${insights.engagementRate?.toFixed(2) || '0.00'}%`, PW - M - 6, y + 9, { align: 'right' });
+    y += 19;
+
+    hairline();
+
+    // ── INTERACTIONS ─────────────────────────────────────────────────────────
+    sectionHead('Interactions');
+    const ti = insights.totalInteractions || (insights.likes + insights.comments + (insights.saved || 0) + (insights.shares || 0));
+    [
+      { label: 'Likes',    value: insights.likes,        color: C.pink  },
+      { label: 'Comments', value: insights.comments,     color: C.blue  },
+      { label: 'Saved',    value: insights.saved || 0,   color: C.teal  },
+      { label: 'Shares',   value: insights.shares || 0,  color: C.amber },
+    ].forEach((item, i) => {
+      const pct = ti > 0 ? (item.value / ti) * 100 : 0;
+      checkY(10);
+      sf(i % 2 === 0 ? C.white : C.cardBg); ss(C.border); doc.setLineWidth(0.15);
+      doc.roundedRect(M, y, CW, 9, 1.5, 1.5, 'FD');
+      font('normal', 8.5); sc(C.gray); doc.text(item.label, M + 4, y + 6.3);
+      const bW = 55, bX = PW - M - 4 - bW - 18;
+      sf(C.border); doc.roundedRect(bX, y + 3.2, bW, 2.8, 1.4, 1.4, 'F');
+      if (pct > 0) { sf(item.color); doc.roundedRect(bX, y + 3.2, Math.min(bW * (pct / 100), bW), 2.8, 1.4, 1.4, 'F'); }
+      font('bold', 8.5); sc(C.dark); doc.text(formatNumber(item.value), PW - M - 4, y + 6.3, { align: 'right' });
+      y += 10;
+    });
+    y += 6;
+
+    hairline();
+
+    // ── PROFILE ACTIVITY ─────────────────────────────────────────────────────
+    sectionHead('Profile Activity');
+    plainRow('Profile Visits', formatNumber(insights.profileVisits || 0), 0);
+    plainRow('New Follows',    formatNumber(insights.follows || 0),        1);
+    y += 6;
+
+    hairline();
+
+    // ── AUDIENCE ─────────────────────────────────────────────────────────────
+    sectionHead('Audience');
+    font('bold', 10); sc(C.gray); checkY(7); doc.text('Gender', M, y); y += 7;
+    barRow('Women', insights.audienceGender?.female || 60.5, C.pink, 0);
+    barRow('Men',   insights.audienceGender?.male   || 38.5, C.blue, 1);
+    y += 6;
+
+    // ── VIDEO / REEL SPECIFIC ─────────────────────────────────────────────────
+    if (isReel || isVideo) {
+      hairline();
+      sectionHead('Video Performance');
+      plainRow('Total Watch Time',   formatWatchTime(insights.totalWatchTime), 0);
+      plainRow('Average Watch Time', formatWatchTime(insights.avgWatchTime),   1);
+      plainRow('Accounts Reached',   formatNumber(insights.accountsReached),   2);
+      if (insights.skipRate) plainRow('Skip Rate', `${insights.skipRate.toFixed(0)}%`, 3);
+      y += 4;
+      if (insights.topSources?.length > 0) {
+        font('bold', 10); sc(C.gray); checkY(7); doc.text('Top Sources of Views', M, y); y += 7;
+        insights.topSources.forEach((s, i) => barRow(s.name, s.percentage, C.purple, i));
+      }
+      y += 6;
     }
-    y+=8;
 
-    // Profile activity
-    sectionTitle('Profile Activity');
-    metricRow('Profile Visits',formatNumber(insights.profileVisits||0),0);
-    metricRow('New Follows',formatNumber(insights.follows||0),1);
-    y+=8;
+    // ── TREND DATA NOTE ───────────────────────────────────────────────────────
+    if (isRealData) {
+      checkY(14);
+      sf([240, 253, 244]); ss([134, 239, 172]); doc.setLineWidth(0.3);
+      doc.roundedRect(M, y, CW, 11, 2, 2, 'FD');
+      font('normal', 9); sc([21, 128, 61]);
+      doc.text(`Trend data: ${trendData.likes.length} daily snapshots collected for this post`, M + 4, y + 7.5);
+      y += 17;
+    }
 
-    // Audience
-    sectionTitle('Audience Demographics');
-    font('bold',8.5);sc([180,160,220]);doc.text('Gender',MARGIN,y);y+=6;
-    miniBarRow('Women',insights.audienceGender?.female||60.5,C.pink,0);
-    miniBarRow('Men',insights.audienceGender?.male||38.5,C.blue,1);
-    y+=6;font('bold',8.5);sc([180,160,220]);doc.text('Age Groups',MARGIN,y);y+=6;
-    [['18–24',35.2],['25–34',42.8],['35–44',15.3],['45+',6.7]].forEach(([l,p],i)=>miniBarRow(l,p,C.primary,i));
-    y+=6;font('bold',8.5);sc([180,160,220]);doc.text('Top Countries',MARGIN,y);y+=6;
-    [['India',45.2],['United States',18.3],['United Kingdom',8.7]].forEach(([l,p],i)=>miniBarRow(l,p,C.primary,i));
-    y+=8;
+    // ── FOOTER ───────────────────────────────────────────────────────────────
+    const tp = doc.internal.getNumberOfPages();
+    for (let p = 1; p <= tp; p++) {
+      doc.setPage(p);
+      ss(C.border); doc.setLineWidth(0.3);
+      doc.line(M, PH - 14, PW - M, PH - 14);
+      font('normal', 8.5); sc(C.muted);
+      doc.text('Instagram Post Insights  ·  Confidential', M, PH - 7);
+      sc(C.purple); doc.text(`Page ${p} of ${tp}`, PW - M, PH - 7, { align: 'right' });
+    }
 
-    // Footer
-    const tp=doc.internal.getNumberOfPages();
-    for(let p=1;p<=tp;p++){doc.setPage(p);sf([20,15,35]);doc.rect(0,PAGE_H-14,PAGE_W,14,'F');font('normal',7);sc(C.muted);doc.text('Instagram Post Insights  ·  Confidential',MARGIN,PAGE_H-5);sc(C.primary);doc.text(`Page ${p} of ${tp}`,PAGE_W-MARGIN,PAGE_H-5,{align:'right'});}
-
-    doc.save(`instagram-insights-${(accountProfile?.username||'account').replace(/[^a-z0-9]/gi,'_')}-${new Date().toISOString().slice(0,10)}.pdf`);
+    doc.save(`instagram-insights-${(accountProfile?.username || 'account').replace(/[^a-z0-9]/gi, '_')}-${new Date().toISOString().slice(0, 10)}.pdf`);
   };
 
   if (!isOpen) return null;

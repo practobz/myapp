@@ -23,6 +23,20 @@ function getCreatorEmail() {
   return email;
 }
 
+// Helper to get creator display name from localStorage
+function getCreatorName() {
+  try {
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      const userObj = JSON.parse(userStr);
+      if (userObj.name) return userObj.name;
+      if (userObj.displayName) return userObj.displayName;
+      if (userObj.email) return userObj.email;
+    }
+  } catch (e) {}
+  return localStorage.getItem('userEmail') || 'Creator';
+}
+
 function ContentDetails() {
   const navigate = useNavigate();
   const { calendarId, itemIndex } = useParams();
@@ -58,6 +72,11 @@ function ContentDetails() {
   const [activeComment, setActiveComment] = useState(null);
   const [hoveredComment, setHoveredComment] = useState(null);
   const [imgDimensions, setImgDimensions] = useState(null);
+
+  // Reply state
+  const [replyingToComment, setReplyingToComment] = useState(null);
+  const [replyText, setReplyText] = useState('');
+  const [replySubmitting, setReplySubmitting] = useState(false);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -490,6 +509,36 @@ function ContentDetails() {
       setCommentsForVersion(commentsForVersion.map(c => c.id === id ? { ...c, done: newDone } : c));
       setCommentsForCurrentMedia(commentsForCurrentMedia.map(c => c.id === id ? { ...c, done: newDone } : c));
       if (newDone) setActiveComment(null);
+    }
+  };
+
+  const handleReplySubmit = async (commentId) => {
+    if (!replyText.trim() || !assignment) return;
+    const comment = commentsForCurrentMedia.find(c => c.id === commentId);
+    if (!comment) return;
+    setReplySubmitting(true);
+    const replyPayload = {
+      reply: {
+        text: replyText.trim(),
+        creatorName: getCreatorName(),
+        creatorEmail: creatorEmail,
+        timestamp: new Date().toISOString(),
+      }
+    };
+    try {
+      await fetch(
+        `${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(assignment.id)}/comments/${commentId}`,
+        { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(replyPayload) }
+      );
+      const updated = { ...comment, ...replyPayload };
+      setCommentsForVersion(commentsForVersion.map(c => c.id === commentId ? updated : c));
+      setCommentsForCurrentMedia(commentsForCurrentMedia.map(c => c.id === commentId ? updated : c));
+      setReplyingToComment(null);
+      setReplyText('');
+    } catch (err) {
+      console.error('Failed to save reply:', err);
+    } finally {
+      setReplySubmitting(false);
     }
   };
 
@@ -1077,6 +1126,14 @@ function ContentDetails() {
                                                     {comment.timestamp ? new Date(comment.timestamp).toLocaleString() : ''}
                                                   </p>
                                                 </div>
+                                                {comment.reply && (
+                                                  <div className="mt-2 p-2 bg-indigo-50 border border-indigo-200 rounded-lg">
+                                                    <p className="text-[10px] font-bold text-indigo-700 mb-0.5">
+                                                      Reply by {comment.reply.creatorName || 'Creator'}
+                                                    </p>
+                                                    <p className="text-xs text-gray-800 break-words">{comment.reply.text}</p>
+                                                  </div>
+                                                )}
                                                 <button
                                                   onClick={() => handleToggleDone(comment.id)}
                                                   className={`w-full px-3 py-1.5 text-xs rounded-lg font-medium transition-all flex items-center justify-center ${
@@ -1247,7 +1304,7 @@ function ContentDetails() {
                           </span>
                         </div>
                       </div>
-                      <div className="max-h-72 overflow-y-auto p-4">
+                      <div className="max-h-96 overflow-y-auto p-4">
                         {commentsForCurrentMedia.length === 0 ? (
                           <div className="text-center py-10">
                             <div className="bg-gray-100 rounded-full w-14 h-14 flex items-center justify-center mx-auto mb-3">
@@ -1261,46 +1318,126 @@ function ContentDetails() {
                             {commentsForCurrentMedia.map((comment, idx) => (
                               <div
                                 key={comment.id || idx}
-                                className={`p-3 rounded-xl border cursor-pointer transition-all duration-200 ${
+                                className={`rounded-xl border transition-all duration-200 overflow-hidden ${
                                   activeComment === comment.id
                                     ? 'bg-purple-50 border-purple-200 shadow-sm'
-                                    : 'bg-gray-50 hover:bg-gray-100 border-gray-100 hover:border-gray-200'
+                                    : 'bg-gray-50 border-gray-100 hover:border-gray-200'
                                 }`}
-                                onClick={() => handleCommentListClick(comment.id)}
                               >
-                                <div className="flex items-start gap-3">
-                                  <span className="font-bold text-white bg-purple-500 rounded-full w-6 h-6 flex items-center justify-center text-xs flex-shrink-0">
-                                    {idx + 1}
-                                  </span>
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-sm text-gray-800 break-words leading-relaxed">
-                                      {comment.message || comment.comment}
-                                    </p>
-                                    <div className="flex items-center gap-3 mt-2">
-                                      <p className="text-xs text-gray-400">
-                                        {comment.timestamp ? new Date(comment.timestamp).toLocaleString() : ''}
+                                <div
+                                  className="p-3 cursor-pointer"
+                                  onClick={() => handleCommentListClick(comment.id)}
+                                >
+                                  <div className="flex items-start gap-3">
+                                    <span className="font-bold text-white bg-purple-500 rounded-full w-6 h-6 flex items-center justify-center text-xs flex-shrink-0">
+                                      {idx + 1}
+                                    </span>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm text-gray-800 break-words leading-relaxed">
+                                        {comment.message || comment.comment}
                                       </p>
-                                      {comment.done ? (
+                                      <div className="flex items-center gap-3 mt-2 flex-wrap">
+                                        <p className="text-xs text-gray-400">
+                                          {comment.timestamp ? new Date(comment.timestamp).toLocaleString() : ''}
+                                        </p>
+                                        {comment.done ? (
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); handleToggleDone(comment.id); }}
+                                            className="flex items-center gap-1 text-xs bg-emerald-50 hover:bg-gray-100 px-1.5 py-0.5 rounded transition-colors"
+                                          >
+                                            <CheckCircle className="h-3 w-3 text-emerald-600" />
+                                            <span className="text-emerald-600 font-semibold">Done</span>
+                                            <span className="text-gray-400">· Undo</span>
+                                          </button>
+                                        ) : (
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); handleToggleDone(comment.id); }}
+                                            className="flex items-center gap-1 text-xs text-gray-400 hover:text-green-600 bg-gray-50 hover:bg-green-50 px-1.5 py-0.5 rounded transition-colors"
+                                          >
+                                            <CheckCircle className="h-3 w-3" />
+                                            Mark Done
+                                          </button>
+                                        )}
+                                        {/* Reply button */}
                                         <button
-                                          onClick={(e) => { e.stopPropagation(); handleToggleDone(comment.id); }}
-                                          className="flex items-center gap-1 text-xs bg-emerald-50 hover:bg-gray-100 px-1.5 py-0.5 rounded transition-colors"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (replyingToComment === comment.id) {
+                                              setReplyingToComment(null);
+                                              setReplyText('');
+                                            } else {
+                                              setReplyingToComment(comment.id);
+                                              setReplyText('');
+                                            }
+                                          }}
+                                          className="flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-1.5 py-0.5 rounded transition-colors"
                                         >
-                                          <CheckCircle className="h-3 w-3 text-emerald-600" />
-                                          <span className="text-emerald-600 font-semibold">Done</span>
-                                          <span className="text-gray-400">· Undo</span>
+                                          <MessageSquare className="h-3 w-3" />
+                                          {comment.reply ? 'Edit Reply' : 'Reply'}
                                         </button>
-                                      ) : (
-                                        <button
-                                          onClick={(e) => { e.stopPropagation(); handleToggleDone(comment.id); }}
-                                          className="flex items-center gap-1 text-xs text-gray-400 hover:text-green-600 bg-gray-50 hover:bg-green-50 px-1.5 py-0.5 rounded transition-colors"
-                                        >
-                                          <CheckCircle className="h-3 w-3" />
-                                          Mark Done
-                                        </button>
-                                      )}
+                                      </div>
                                     </div>
                                   </div>
                                 </div>
+
+                                {/* Existing reply display */}
+                                {comment.reply && replyingToComment !== comment.id && (
+                                  <div className="mx-3 mb-3 p-2.5 bg-indigo-50 border border-indigo-200 rounded-lg">
+                                    <div className="flex items-center gap-1.5 mb-1">
+                                      <span className="text-[10px] font-bold text-indigo-700 uppercase tracking-wide">
+                                        Reply
+                                      </span>
+                                      <span className="text-[10px] font-semibold text-indigo-600 bg-indigo-100 px-1.5 py-0.5 rounded-full">
+                                        {comment.reply.creatorName || 'Creator'}
+                                      </span>
+                                      <span className="text-[10px] text-gray-400 ml-auto">
+                                        {comment.reply.timestamp ? new Date(comment.reply.timestamp).toLocaleString() : ''}
+                                      </span>
+                                    </div>
+                                    <p className="text-xs text-gray-800 break-words leading-relaxed">
+                                      {comment.reply.text}
+                                    </p>
+                                  </div>
+                                )}
+
+                                {/* Reply input box */}
+                                {replyingToComment === comment.id && (
+                                  <div className="mx-3 mb-3 p-2.5 bg-indigo-50 border border-indigo-200 rounded-lg"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    {comment.reply && (
+                                      <p className="text-[10px] text-indigo-500 mb-1.5 font-medium">Editing your existing reply…</p>
+                                    )}
+                                    <textarea
+                                      value={replyText}
+                                      onChange={(e) => setReplyText(e.target.value)}
+                                      placeholder="Write your reply…"
+                                      rows={2}
+                                      autoFocus
+                                      className="w-full border border-indigo-300 rounded-lg px-2.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none bg-white"
+                                    />
+                                    <div className="flex gap-2 mt-2">
+                                      <button
+                                        onClick={() => handleReplySubmit(comment.id)}
+                                        disabled={replySubmitting || !replyText.trim()}
+                                        className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white text-xs font-medium rounded-lg transition-colors"
+                                      >
+                                        {replySubmitting ? (
+                                          <div className="animate-spin rounded-full h-3 w-3 border-b border-white" />
+                                        ) : (
+                                          <Send className="h-3 w-3" />
+                                        )}
+                                        Send
+                                      </button>
+                                      <button
+                                        onClick={() => { setReplyingToComment(null); setReplyText(''); }}
+                                        className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 text-xs font-medium rounded-lg transition-colors"
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             ))}
                           </div>

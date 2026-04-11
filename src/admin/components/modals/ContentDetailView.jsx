@@ -65,6 +65,14 @@ const CommentMarker = memo(({ comment, index, onToggle, active, hovered, onHover
           <p className="text-[10px] text-gray-500 mt-1">
             {comment.timestamp ? new Date(comment.timestamp).toLocaleString() : ''}
           </p>
+          {comment.reply && (
+            <div className="mt-2 p-2 bg-indigo-50 border border-indigo-200 rounded-md">
+              <p className="text-[10px] font-bold text-indigo-700 mb-0.5">
+                ↩ {comment.reply.creatorName || 'Creator'}
+              </p>
+              <p className="text-xs text-gray-800 break-words">{comment.reply.text}</p>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -532,14 +540,14 @@ function ContentDetailView({
                   {commentsForCurrentMedia.map((comment, idx) => (
                     <div 
                       key={comment.id || idx} 
-                      className={`p-2 rounded-lg border cursor-pointer transition-colors ${
+                      className={`rounded-lg border cursor-pointer transition-colors overflow-hidden ${
                         activeComment === comment.id
                           ? 'bg-blue-50 border-blue-200'
                           : 'bg-gray-50 hover:bg-blue-50/50 border-gray-200 hover:border-blue-200/50'
                       }`} 
                       onClick={() => setActiveComment(activeComment === comment.id ? null : comment.id)}
                     >
-                      <div className="flex items-start gap-2">
+                      <div className="p-2 flex items-start gap-2">
                         <span className="font-bold text-blue-600 bg-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] flex-shrink-0 border border-gray-200">
                           {idx + 1}
                         </span>
@@ -555,6 +563,14 @@ function ContentDetailView({
                           </p>
                         </div>
                       </div>
+                      {comment.reply && (
+                        <div className="mx-2 mb-2 p-1.5 bg-indigo-50 border border-indigo-200 rounded-md">
+                          <p className="text-[10px] font-bold text-indigo-700 mb-0.5">
+                            ↩ {comment.reply.creatorName || 'Creator'}
+                          </p>
+                          <p className="text-[10px] text-gray-700 break-words">{comment.reply.text}</p>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

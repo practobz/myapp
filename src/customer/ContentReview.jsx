@@ -1257,14 +1257,14 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
                     {commentsForCurrentMedia.map((comment, index) => (
                       <div
                         key={`list-${comment.id}`}
-                        className={`p-2 sm:p-2.5 rounded-lg cursor-pointer transition-all duration-200 border ${
+                        className={`rounded-lg cursor-pointer transition-all duration-200 border overflow-hidden ${
                           activeComment === comment.id
                             ? 'bg-blue-50 border-blue-200 shadow-sm'
                             : 'bg-gray-50/50 hover:bg-gray-100/50 border-gray-200/50'
                         }`}
                         onClick={() => handleCommentListClick(comment.id)}
                       >
-                        <div className="flex items-start space-x-2">
+                        <div className="p-2 sm:p-2.5 flex items-start space-x-2">
                           <span className="font-bold text-blue-600 bg-blue-100 rounded-full w-5 h-5 flex items-center justify-center text-[10px] flex-shrink-0">
                             {index + 1}
                           </span>
@@ -1277,6 +1277,14 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
                             </p>
                           </div>
                         </div>
+                        {comment.reply && (
+                          <div className="mx-2 mb-2 p-1.5 bg-indigo-50 border border-indigo-200 rounded-md">
+                            <p className="text-[10px] font-bold text-indigo-700 mb-0.5">
+                              ↩ {comment.reply.creatorName || 'Creator'}
+                            </p>
+                            <p className="text-[10px] text-gray-700 break-words line-clamp-2">{comment.reply.text}</p>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -1534,6 +1542,14 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
                                         {comment.done && <span className="text-green-600 ml-1 text-[10px]">✓</span>}
                                       </p>
                                     </div>
+                                    {comment.reply && (
+                                      <div className="mb-2 p-1.5 bg-indigo-50 border border-indigo-200 rounded-md">
+                                        <p className="text-[10px] font-bold text-indigo-700 mb-0.5">
+                                          ↩ {comment.reply.creatorName || 'Creator'}
+                                        </p>
+                                        <p className="text-[10px] text-gray-700 break-words">{comment.reply.text}</p>
+                                      </div>
+                                    )}
                                     <div className="grid grid-cols-2 gap-1">
                                       {!comment.done && (
                                         <Button

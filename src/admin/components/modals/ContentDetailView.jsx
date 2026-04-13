@@ -275,7 +275,7 @@ function ContentDetailView({
           <div className="bg-white rounded-xl shadow-sm border border-gray-200/50 overflow-hidden">
             {/* Header */}
             <div className="px-3 py-2 sm:px-4 sm:py-3 border-b border-gray-200/50 bg-blue-50/50">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between flex-wrap gap-2">
                 <h3 className="text-sm sm:text-base font-bold text-gray-900 flex items-center">
                   <Image className="h-4 w-4 text-blue-600 mr-1.5" />
                   Version {currentVersion?.versionNumber}
@@ -283,32 +283,21 @@ function ContentDetailView({
                     / {selectedContent.totalVersions}
                   </span>
                 </h3>
-                
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => {
-                      if (selectedVersionIndex > 0) {
-                        setSelectedVersionIndex(selectedVersionIndex - 1);
-                        setSelectedMediaIndex(0);
-                      }
-                    }}
-                    disabled={selectedVersionIndex === 0}
-                    className="p-1.5 rounded-lg bg-white border border-gray-200 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    <ChevronLeft className="h-3.5 w-3.5 text-blue-600" />
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (selectedVersionIndex < selectedContent.versions.length - 1) {
-                        setSelectedVersionIndex(selectedVersionIndex + 1);
-                        setSelectedMediaIndex(0);
-                      }
-                    }}
-                    disabled={selectedVersionIndex === selectedContent.versions.length - 1}
-                    className="p-1.5 rounded-lg bg-white border border-gray-200 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    <ChevronRight className="h-3.5 w-3.5 text-blue-600" />
-                  </button>
+
+                <div className="flex items-center gap-1 flex-wrap">
+                  {selectedContent.versions.map((v, idx) => (
+                    <button
+                      key={v.id || idx}
+                      onClick={() => { setSelectedVersionIndex(idx); setSelectedMediaIndex(0); }}
+                      className={`px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors ${
+                        selectedVersionIndex === idx
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : 'bg-white text-blue-600 border-blue-200 hover:bg-blue-50'
+                      }`}
+                    >
+                      V{v.versionNumber}
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>
@@ -476,11 +465,6 @@ function ContentDetailView({
                         <span className="font-semibold text-gray-900 text-xs">
                           V{version.versionNumber}
                         </span>
-                        {selectedVersionIndex === index && (
-                          <span className="text-[10px] font-medium text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded">
-                            Current
-                          </span>
-                        )}
                       </div>
                       <div className="flex items-center text-[10px] text-gray-500 gap-2 mt-0.5">
                         <span className="flex items-center">

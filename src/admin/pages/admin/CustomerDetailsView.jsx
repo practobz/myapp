@@ -689,10 +689,10 @@ function CustomerDetailsView() {
 
   const fetchScheduledPosts = async () => {
     try {
-      const response = await fetch(`${API_URL}/api/scheduled-posts`);
+      const response = await fetch(`${API_URL}/api/scheduled-posts?customerId=${encodeURIComponent(id)}`);
       if (response.ok) {
         const data = await response.json();
-        setScheduledPosts(Array.isArray(data) ? data : []);
+        setScheduledPosts(Array.isArray(data) ? data.filter(p => p.customerId === id) : []);
       }
     } catch (error) {
       console.error('Error fetching scheduled posts:', error);
@@ -1502,7 +1502,7 @@ function CustomerDetailsView() {
           <div className="p-4 sm:p-5">
             {calendars.length > 0 ? (
               <div className="space-y-3">
-                {calendars.map((calendar) => {
+                {[...calendars].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)).map((calendar) => {
                   const calStats = getCalendarStats(calendar);
                   return (
                     <div key={calendar._id} className="bg-gray-50 rounded-xl border border-gray-100 overflow-hidden">

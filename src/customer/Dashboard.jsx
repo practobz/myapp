@@ -231,7 +231,7 @@ function Dashboard() {
               {/* Published Content */}
               <div 
                 className="group relative bg-white rounded-xl shadow-md hover:shadow-2xl transition-all duration-300 cursor-pointer overflow-hidden border border-slate-200"
-                onClick={() => navigate('')}
+                onClick={() => navigate('/customer/calendar')}
               >
                 <div className="absolute top-0 right-0 w-24 h-24 sm:w-32 sm:h-32 bg-gradient-to-br from-emerald-500/10 to-teal-500/10 rounded-full -mr-12 -mt-12 sm:-mr-16 sm:-mt-16 group-hover:scale-150 transition-transform duration-500"></div>
                 <div className="relative p-3 sm:p-5">
@@ -247,7 +247,7 @@ function Dashboard() {
                 </div>
               </div>
 
-              {/* Pending Content — navigates to calendar (pending items are pre-submission calendar items) */}
+              {/* Pending Content */}
               <div 
                 className="group relative bg-white rounded-xl shadow-md hover:shadow-2xl transition-all duration-300 cursor-pointer overflow-hidden border border-slate-200"
                 onClick={() => navigate('/customer/calendar')}
@@ -269,7 +269,7 @@ function Dashboard() {
               {/* Under Review Content */}
               <div 
                 className="group relative bg-white rounded-xl shadow-md hover:shadow-2xl transition-all duration-300 cursor-pointer overflow-hidden border border-slate-200"
-                onClick={() => navigate('/customer/content-review')}
+                onClick={() => navigate('/customer/content-review?filter=under_review')}
               >
                 <div className="absolute top-0 right-0 w-24 h-24 sm:w-32 sm:h-32 bg-gradient-to-br from-violet-500/10 to-purple-500/10 rounded-full -mr-12 -mt-12 sm:-mr-16 sm:-mt-16 group-hover:scale-150 transition-transform duration-500"></div>
                 <div className="relative p-3 sm:p-5">

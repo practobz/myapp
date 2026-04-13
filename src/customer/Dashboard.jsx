@@ -52,35 +52,51 @@ function Dashboard() {
           }
         });
 
-        // --- Fetch scheduled posts for this customer ---
-        const postsRes = await fetch(`${process.env.REACT_APP_API_URL}/api/scheduled-posts`);
+        // --- Fetch scheduled posts and submissions for this customer ---
+        const [postsRes, submissionsRes] = await Promise.all([
+          fetch(`${process.env.REACT_APP_API_URL}/api/scheduled-posts`),
+          fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions`),
+        ]);
         let postsData = await postsRes.json();
         if (!Array.isArray(postsData)) postsData = [];
-        // Only posts for this customer
+        let submissionsData = await submissionsRes.json();
+        if (!Array.isArray(submissionsData)) submissionsData = [];
+
+        // Only posts for this customer (published)
         const customerPosts = postsData.filter(p =>
           (p.customerId === currentUser._id || p.customerId === currentUser.id) &&
           p.status === 'published'
         );
+        // Submissions for this customer
+        const customerSubmissions = submissionsData.filter(s =>
+          s.customer_id === (currentUser._id || currentUser.id) ||
+          s.customer_email === currentUser.email
+        );
+
         // Helper: check if item is published (via scheduled posts OR manual publish)
         const isItemPublished = (item) => {
-          // Check manual publish flag first
           if (item.published === true) return true;
-          // Check scheduled posts
           return customerPosts.some(post =>
             (post.item_id && post.item_id === item.id) ||
             (post.contentId && post.contentId === item.id) ||
             (post.item_name && post.item_name === item.title)
           );
         };
+        // Helper: check if item has a submission (content uploaded for review)
+        const hasContentSubmitted = (item) =>
+          customerSubmissions.some(sub =>
+            (sub.item_id && sub.item_id === item.id) ||
+            (sub.assignment_id && sub.assignment_id === item.id) ||
+            (sub.item_name && sub.item_name === item.title)
+          );
         // --- End ---
 
         // Stats calculation
         const totalPosts = allItems.length;
         const contentCalendars = customerCalendars.length;
-        // Use scheduled posts logic for publishedContent
         const publishedContent = allItems.filter(i => isItemPublished(i)).length;
-        const pendingContent = allItems.filter(i => !isItemPublished(i) && i.status === 'pending').length;
-        const underReviewContent = allItems.filter(i => !isItemPublished(i) && (!i.status || i.status === 'under_review')).length;
+        const underReviewContent = allItems.filter(i => !isItemPublished(i) && (i.status === 'under_review' || hasContentSubmitted(i))).length;
+        const pendingContent = allItems.filter(i => !isItemPublished(i) && !hasContentSubmitted(i) && (!i.status || i.status === 'pending')).length;
 
         setStats({
           totalPosts,
@@ -173,23 +189,23 @@ function Dashboard() {
             </div>
 
             {/* Stats Grid - Modern Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4 md:gap-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4">
               {/* Total Posts */}
               <div 
                 className="group relative bg-white rounded-xl shadow-md hover:shadow-2xl transition-all duration-300 cursor-pointer overflow-hidden border border-slate-200"
                 onClick={() => navigate('')}
               >
-                <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-indigo-500/10 to-blue-500/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
-                <div className="relative p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="w-14 h-14 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
-                      <LayoutGrid className="h-7 w-7 text-white" />
+                <div className="absolute top-0 right-0 w-24 h-24 sm:w-32 sm:h-32 bg-gradient-to-br from-indigo-500/10 to-blue-500/10 rounded-full -mr-12 -mt-12 sm:-mr-16 sm:-mt-16 group-hover:scale-150 transition-transform duration-500"></div>
+                <div className="relative p-3 sm:p-5">
+                  <div className="flex items-start justify-between mb-2 sm:mb-3">
+                    <div className="w-9 h-9 sm:w-12 sm:h-12 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-lg sm:rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform duration-300 flex-shrink-0">
+                      <LayoutGrid className="h-4 w-4 sm:h-6 sm:w-6 text-white" />
                     </div>
-                    <ArrowUpRight className="h-5 w-5 text-slate-400 group-hover:text-indigo-600 group-hover:translate-x-1 group-hover:-translate-y-1 transition-all duration-300" />
+                    <ArrowUpRight className="h-4 w-4 text-slate-400 group-hover:text-indigo-600 group-hover:translate-x-1 group-hover:-translate-y-1 transition-all duration-300" />
                   </div>
-                  <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-1">Total Posts</p>
-                  <p className="text-4xl font-bold text-slate-800 mb-1">{stats.totalPosts}</p>
-                  <p className="text-xs text-slate-500">All content items</p>
+                  <p className="text-[9px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wider mb-0.5 truncate">Total Posts</p>
+                  <p className="text-xl sm:text-3xl font-bold text-slate-800 leading-none mb-0.5">{stats.totalPosts}</p>
+                  <p className="text-[9px] sm:text-xs text-slate-400 hidden sm:block">All content items</p>
                 </div>
               </div>
 
@@ -198,17 +214,17 @@ function Dashboard() {
                 className="group relative bg-white rounded-xl shadow-md hover:shadow-2xl transition-all duration-300 cursor-pointer overflow-hidden border border-slate-200"
                 onClick={() => navigate('/customer/calendar')}
               >
-                <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-blue-500/10 to-cyan-500/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
-                <div className="relative p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
-                      <CalendarIcon className="h-7 w-7 text-white" />
+                <div className="absolute top-0 right-0 w-24 h-24 sm:w-32 sm:h-32 bg-gradient-to-br from-blue-500/10 to-cyan-500/10 rounded-full -mr-12 -mt-12 sm:-mr-16 sm:-mt-16 group-hover:scale-150 transition-transform duration-500"></div>
+                <div className="relative p-3 sm:p-5">
+                  <div className="flex items-start justify-between mb-2 sm:mb-3">
+                    <div className="w-9 h-9 sm:w-12 sm:h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg sm:rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform duration-300 flex-shrink-0">
+                      <CalendarIcon className="h-4 w-4 sm:h-6 sm:w-6 text-white" />
                     </div>
-                    <ArrowUpRight className="h-5 w-5 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-1 group-hover:-translate-y-1 transition-all duration-300" />
+                    <ArrowUpRight className="h-4 w-4 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-1 group-hover:-translate-y-1 transition-all duration-300" />
                   </div>
-                  <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-1">Content Calendars</p>
-                  <p className="text-4xl font-bold text-slate-800 mb-1">{stats.contentCalendars}</p>
-                  <p className="text-xs text-slate-500">Active calendars</p>
+                  <p className="text-[9px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wider mb-0.5 truncate">Calendars</p>
+                  <p className="text-xl sm:text-3xl font-bold text-slate-800 leading-none mb-0.5">{stats.contentCalendars}</p>
+                  <p className="text-[9px] sm:text-xs text-slate-400 hidden sm:block">Active calendars</p>
                 </div>
               </div>
 
@@ -217,36 +233,36 @@ function Dashboard() {
                 className="group relative bg-white rounded-xl shadow-md hover:shadow-2xl transition-all duration-300 cursor-pointer overflow-hidden border border-slate-200"
                 onClick={() => navigate('')}
               >
-                <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-emerald-500/10 to-teal-500/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
-                <div className="relative p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="w-14 h-14 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
-                      <Send className="h-7 w-7 text-white" />
+                <div className="absolute top-0 right-0 w-24 h-24 sm:w-32 sm:h-32 bg-gradient-to-br from-emerald-500/10 to-teal-500/10 rounded-full -mr-12 -mt-12 sm:-mr-16 sm:-mt-16 group-hover:scale-150 transition-transform duration-500"></div>
+                <div className="relative p-3 sm:p-5">
+                  <div className="flex items-start justify-between mb-2 sm:mb-3">
+                    <div className="w-9 h-9 sm:w-12 sm:h-12 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-lg sm:rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform duration-300 flex-shrink-0">
+                      <Send className="h-4 w-4 sm:h-6 sm:w-6 text-white" />
                     </div>
-                    <ArrowUpRight className="h-5 w-5 text-slate-400 group-hover:text-emerald-600 group-hover:translate-x-1 group-hover:-translate-y-1 transition-all duration-300" />
+                    <ArrowUpRight className="h-4 w-4 text-slate-400 group-hover:text-emerald-600 group-hover:translate-x-1 group-hover:-translate-y-1 transition-all duration-300" />
                   </div>
-                  <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-1">Published Content</p>
-                  <p className="text-4xl font-bold text-slate-800 mb-1">{stats.publishedContent}</p>
-                  <p className="text-xs text-slate-500">Live posts</p>
+                  <p className="text-[9px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wider mb-0.5 truncate">Published</p>
+                  <p className="text-xl sm:text-3xl font-bold text-slate-800 leading-none mb-0.5">{stats.publishedContent}</p>
+                  <p className="text-[9px] sm:text-xs text-slate-400 hidden sm:block">Live posts</p>
                 </div>
               </div>
 
-              {/* Pending Content */}
+              {/* Pending Content — navigates to calendar (pending items are pre-submission calendar items) */}
               <div 
                 className="group relative bg-white rounded-xl shadow-md hover:shadow-2xl transition-all duration-300 cursor-pointer overflow-hidden border border-slate-200"
-                onClick={() => navigate('/customer/content-review')}
+                onClick={() => navigate('/customer/calendar')}
               >
-                <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-amber-500/10 to-orange-500/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
-                <div className="relative p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="w-14 h-14 bg-gradient-to-br from-amber-500 to-orange-500 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
-                      <AlertCircle className="h-7 w-7 text-white" />
+                <div className="absolute top-0 right-0 w-24 h-24 sm:w-32 sm:h-32 bg-gradient-to-br from-amber-500/10 to-orange-500/10 rounded-full -mr-12 -mt-12 sm:-mr-16 sm:-mt-16 group-hover:scale-150 transition-transform duration-500"></div>
+                <div className="relative p-3 sm:p-5">
+                  <div className="flex items-start justify-between mb-2 sm:mb-3">
+                    <div className="w-9 h-9 sm:w-12 sm:h-12 bg-gradient-to-br from-amber-500 to-orange-500 rounded-lg sm:rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform duration-300 flex-shrink-0">
+                      <AlertCircle className="h-4 w-4 sm:h-6 sm:w-6 text-white" />
                     </div>
-                    <ArrowUpRight className="h-5 w-5 text-slate-400 group-hover:text-amber-600 group-hover:translate-x-1 group-hover:-translate-y-1 transition-all duration-300" />
+                    <ArrowUpRight className="h-4 w-4 text-slate-400 group-hover:text-amber-600 group-hover:translate-x-1 group-hover:-translate-y-1 transition-all duration-300" />
                   </div>
-                  <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-1">Pending</p>
-                  <p className="text-4xl font-bold text-slate-800 mb-1">{stats.pendingContent}</p>
-                  <p className="text-xs text-slate-500">Awaiting action</p>
+                  <p className="text-[9px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wider mb-0.5 truncate">Pending</p>
+                  <p className="text-xl sm:text-3xl font-bold text-slate-800 leading-none mb-0.5">{stats.pendingContent}</p>
+                  <p className="text-[9px] sm:text-xs text-slate-400 hidden sm:block">Awaiting submission</p>
                 </div>
               </div>
 
@@ -255,17 +271,17 @@ function Dashboard() {
                 className="group relative bg-white rounded-xl shadow-md hover:shadow-2xl transition-all duration-300 cursor-pointer overflow-hidden border border-slate-200"
                 onClick={() => navigate('/customer/content-review')}
               >
-                <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-violet-500/10 to-purple-500/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
-                <div className="relative p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="w-14 h-14 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
-                      <Eye className="h-7 w-7 text-white" />
+                <div className="absolute top-0 right-0 w-24 h-24 sm:w-32 sm:h-32 bg-gradient-to-br from-violet-500/10 to-purple-500/10 rounded-full -mr-12 -mt-12 sm:-mr-16 sm:-mt-16 group-hover:scale-150 transition-transform duration-500"></div>
+                <div className="relative p-3 sm:p-5">
+                  <div className="flex items-start justify-between mb-2 sm:mb-3">
+                    <div className="w-9 h-9 sm:w-12 sm:h-12 bg-gradient-to-br from-violet-500 to-purple-600 rounded-lg sm:rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform duration-300 flex-shrink-0">
+                      <Eye className="h-4 w-4 sm:h-6 sm:w-6 text-white" />
                     </div>
-                    <ArrowUpRight className="h-5 w-5 text-slate-400 group-hover:text-violet-600 group-hover:translate-x-1 group-hover:-translate-y-1 transition-all duration-300" />
+                    <ArrowUpRight className="h-4 w-4 text-slate-400 group-hover:text-violet-600 group-hover:translate-x-1 group-hover:-translate-y-1 transition-all duration-300" />
                   </div>
-                  <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-1">Under Review</p>
-                  <p className="text-4xl font-bold text-slate-800 mb-1">{stats.underReviewContent}</p>
-                  <p className="text-xs text-slate-500">Being reviewed</p>
+                  <p className="text-[9px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wider mb-0.5 truncate">Under Review</p>
+                  <p className="text-xl sm:text-3xl font-bold text-slate-800 leading-none mb-0.5">{stats.underReviewContent}</p>
+                  <p className="text-[9px] sm:text-xs text-slate-400 hidden sm:block">Being reviewed</p>
                 </div>
               </div>
             </div>

@@ -91,12 +91,14 @@ function Dashboard() {
               customerMap[calendar.customerId] ||
               calendar.customerName ||
               '';
-            calendar.contentItems.forEach(item => {
+            calendar.contentItems.forEach((item, index) => {
               allAssignments.push({
                 ...item,
                 customerName: resolvedCustomerName,
                 customerId: calendar.customerId || calendar.customer_id || calendar.customer?._id || '',
                 customer: resolvedCustomerName,
+                calendarId: calendar._id || calendar.id,
+                itemIndex: index,
                 id: item.id || item._id || item.title || Math.random().toString(36).slice(2)
               });
             });
@@ -426,7 +428,7 @@ function Dashboard() {
                           <div 
                             key={assignment.id} 
                             className="group p-4 bg-gradient-to-r from-gray-50 to-slate-50 rounded-xl hover:from-purple-50 hover:to-indigo-50 border border-gray-100 hover:border-purple-200 transition-all duration-300 cursor-pointer"
-                            onClick={() => navigate(`/content-creator/assignments?filter=${status}${assignment.customerId ? `&expand=${assignment.customerId}` : ''}`)}
+                            onClick={() => navigate(`/content-creator/content-details/${assignment.calendarId}/${assignment.itemIndex}`)}
                           >
                             {/* Title + Status Badge */}
                             <div className="flex items-start justify-between gap-2">

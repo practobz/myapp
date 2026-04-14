@@ -345,11 +345,7 @@ const PlatformIcon = ({ platform }) => {
 
 // Timeline component showing item lifecycle stages with dates
 const ItemTimeline = ({ item, itemStatus, scheduledPosts = [], submissions = [] }) => {
-  const isAssigned = !!item.assignedTo || ['assigned', 'in_progress', 'under_review', 'approved', 'published'].includes(itemStatus);
-  // Review is completed when the item is approved/published OR any linked submission has been approved
-  const isReviewed = ['approved', 'published'].includes(itemStatus) || submissions.some(s => s.status === 'approved');
-  const isPublished = itemStatus === 'published';
-  const isDue = isPublished || (item.date && new Date(item.date) <= new Date());
+  const nowTs = Date.now();
 
   const matchedPost = scheduledPosts.find(post =>
     ((post.item_id && post.item_id === item.id) ||
@@ -367,44 +363,87 @@ const ItemTimeline = ({ item, itemStatus, scheduledPosts = [], submissions = [] 
     } catch { return null; }
   };
 
+  const hasReachedDate = (d) => {
+    if (!d) return false;
+    const dt = new Date(d);
+    if (isNaN(dt.getTime())) return false;
+    return dt.getTime() <= nowTs;
+  };
+
   // Version steps — one node per submission, shown between Due and Reviewed
   const versionSteps = submissions.map((s, idx) => ({
     key: `v${idx + 1}`,
     label: `V${idx + 1}`,
-    done: true,
+    done: hasReachedDate(s.created_at || s.createdAt),
     date: fmtDate(s.created_at || s.createdAt),
+    tone: 'blue',
   }));
 
   // Derive review date from the approved submission if not stored on item
   const approvedSub = submissions.find(s => s.status === 'approved');
-  const reviewedDate = fmtDate(item.reviewedAt || approvedSub?.approvedAt || approvedSub?.updatedAt);
+  const reviewedAt = item.reviewedAt || approvedSub?.approvedAt || approvedSub?.updatedAt;
+  const reviewedDate = fmtDate(reviewedAt);
+  const publishedAt = matchedPost?.publishedAt || item.publishedAt;
 
   // Order: Created → Assigned → Due → V1 → V2 → ... → Reviewed → Published
   const steps = [
-    { key: 'created',   label: 'Created',   done: true,        date: fmtDate(item.createdAt) },
-    { key: 'assigned',  label: 'Assigned',   done: isAssigned,  date: fmtDate(item.assignedAt) },
-    { key: 'due',       label: 'Due',        done: isDue,       date: fmtDate(item.date) },
+    { key: 'created',   label: 'Created',   done: hasReachedDate(item.createdAt),   date: fmtDate(item.createdAt),   tone: 'blue' },
+    { key: 'assigned',  label: 'Assigned',  done: hasReachedDate(item.assignedAt),  date: fmtDate(item.assignedAt),  tone: 'blue' },
+    { key: 'due',       label: 'Due',       done: hasReachedDate(item.date),        date: fmtDate(item.date),        tone: 'orange' },
     ...versionSteps,
-    { key: 'reviewed',  label: 'Reviewed',   done: isReviewed,  date: reviewedDate },
-    { key: 'published', label: 'Published',  done: isPublished, date: fmtDate(matchedPost?.publishedAt || item.publishedAt) },
+    { key: 'reviewed',  label: 'Reviewed',  done: hasReachedDate(reviewedAt),        date: reviewedDate,              tone: 'blue' },
+    { key: 'published', label: 'Published', done: hasReachedDate(publishedAt),       date: fmtDate(publishedAt),      tone: 'green' },
   ];
+
+  const toneClasses = {
+    blue: {
+      dotDone: 'bg-blue-500',
+      dotTodo: 'bg-blue-100',
+      labelDone: 'text-blue-700 font-medium',
+      labelTodo: 'text-blue-300',
+      dateDone: 'text-blue-500',
+      dateTodo: 'text-blue-200',
+      lineDone: 'bg-blue-400',
+      lineTodo: 'bg-blue-100',
+    },
+    orange: {
+      dotDone: 'bg-amber-500',
+      dotTodo: 'bg-amber-100',
+      labelDone: 'text-amber-700 font-medium',
+      labelTodo: 'text-amber-300',
+      dateDone: 'text-amber-500',
+      dateTodo: 'text-amber-200',
+      lineDone: 'bg-amber-400',
+      lineTodo: 'bg-amber-100',
+    },
+    green: {
+      dotDone: 'bg-emerald-500',
+      dotTodo: 'bg-emerald-100',
+      labelDone: 'text-emerald-700 font-medium',
+      labelTodo: 'text-emerald-300',
+      dateDone: 'text-emerald-500',
+      dateTodo: 'text-emerald-200',
+      lineDone: 'bg-emerald-400',
+      lineTodo: 'bg-emerald-100',
+    },
+  };
 
   return (
     <div className="flex items-start mt-2 overflow-x-auto pb-0.5">
       {steps.map((step, idx) => (
         <React.Fragment key={step.key}>
           <div className="flex flex-col items-center flex-shrink-0">
-            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${step.done ? 'bg-emerald-500' : 'bg-gray-200'}`} />
-            <span className={`text-[9px] leading-none mt-0.5 whitespace-nowrap ${step.done ? 'text-emerald-600 font-medium' : 'text-gray-400'}`}>
+            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${step.done ? (toneClasses[step.tone || 'blue']?.dotDone || 'bg-blue-500') : (toneClasses[step.tone || 'blue']?.dotTodo || 'bg-blue-100')}`} />
+            <span className={`text-[9px] leading-none mt-0.5 whitespace-nowrap ${step.done ? (toneClasses[step.tone || 'blue']?.labelDone || 'text-blue-700 font-medium') : (toneClasses[step.tone || 'blue']?.labelTodo || 'text-blue-300')}`}>
               {step.label}
             </span>
-            <span className={`text-[8px] leading-none mt-0.5 whitespace-nowrap ${step.date ? (step.done ? 'text-emerald-500' : 'text-gray-300') : 'text-transparent select-none'}`}>
+            <span className={`text-[8px] leading-none mt-0.5 whitespace-nowrap ${step.date ? (step.done ? (toneClasses[step.tone || 'blue']?.dateDone || 'text-blue-500') : (toneClasses[step.tone || 'blue']?.dateTodo || 'text-blue-200')) : 'text-transparent select-none'}`}>
               {step.date || '—'}
             </span>
           </div>
           {idx < steps.length - 1 && (
             <div
-              className={`flex-1 h-px mt-1 mx-0.5 ${step.done && steps[idx + 1].done ? 'bg-emerald-400' : 'bg-gray-200'}`}
+              className={`flex-1 h-px mt-1 mx-0.5 ${step.done && steps[idx + 1].done ? (toneClasses[steps[idx + 1].tone || 'blue']?.lineDone || 'bg-blue-400') : (toneClasses[steps[idx + 1].tone || 'blue']?.lineTodo || 'bg-blue-100')}`}
               style={{ minWidth: '8px' }}
             />
           )}

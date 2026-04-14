@@ -5,6 +5,7 @@ import {
   Palette, Send, Tag, MessageSquare, Play, Video, ChevronDown,
   ChevronUp, ChevronLeft, ChevronRight, Clock, User, History, MapPin
 } from 'lucide-react';
+import { Facebook, Instagram, Linkedin, Youtube, Twitter } from 'lucide-react';
 import Footer from '../admin/components/layout/Footer';
 
 // Helper to get creator email from localStorage
@@ -655,7 +656,24 @@ function ContentDetails() {
               </div>
               <div>
                 <p className="text-xs text-gray-500 font-medium">Platform</p>
-                <p className="text-sm font-semibold text-gray-900">{assignment.platform || '—'}</p>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  {assignment.platform
+                    ? (() => {
+                        const platforms = Array.isArray(assignment.platform)
+                          ? assignment.platform
+                          : String(assignment.platform).split(/[,\s]+/).map(p => p.trim()).filter(Boolean);
+                        return platforms.map((p, i) => {
+                          const key = p.toLowerCase();
+                          if (key === 'facebook')  return <Facebook  key={i} className="h-5 w-5 text-blue-600" />;
+                          if (key === 'instagram') return <Instagram key={i} className="h-5 w-5 text-pink-600" />;
+                          if (key === 'linkedin')  return <Linkedin  key={i} className="h-5 w-5 text-blue-700" />;
+                          if (key === 'youtube')   return <Youtube   key={i} className="h-5 w-5 text-red-600"  />;
+                          if (key === 'twitter' || key === 'x') return <Twitter key={i} className="h-5 w-5 text-sky-500" />;
+                          return <span key={i} className="text-sm font-semibold text-gray-900">{p}</span>;
+                        });
+                      })()
+                    : <span className="text-sm font-semibold text-gray-900">—</span>}
+                </div>
               </div>
             </div>
 

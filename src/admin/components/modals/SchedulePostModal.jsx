@@ -455,6 +455,7 @@ function SchedulePostModal({
   onRefreshScheduledPosts
 }) {
   const fileInputRef = useRef(null);
+  const thumbnailFileInputRef = useRef(null);
   const isPostingRef = useRef(false); // Prevent duplicate posts immediately
   const isSchedulingRef = useRef(false); // Prevent duplicate scheduling
   const lastSubmissionIdRef = useRef(null); // Track last submission to prevent duplicates
@@ -511,6 +512,7 @@ function SchedulePostModal({
     scheduledTime: '',
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     postType: 'feed', // added: 'feed' | 'story' | 'reel'
+    reelThumbnailUrl: null, // cover_url for Instagram Reels
     location: null // { id, name, location: { city, country, latitude, longitude } }
   });
   const [submitting, setSubmitting] = useState(false);
@@ -528,6 +530,7 @@ function SchedulePostModal({
   // Drag and drop state for carousel reordering
   const [draggedIndex, setDraggedIndex] = useState(null);
   const [uploadingCarousel, setUploadingCarousel] = useState(false);
+  const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
   
   // Media library browser state
   const [showMediaLibrary, setShowMediaLibrary] = useState(false);
@@ -537,9 +540,6 @@ function SchedulePostModal({
 
   useEffect(() => {
     if (selectedContent) {
-      // Initialize localAccounts from props
-      setLocalAccounts(getCustomerSocialAccounts(selectedContent.customerId));
-      
       const latestVersion = selectedContent.versions[selectedContent.versions.length - 1];
       
       // Get all media from the latest version
@@ -562,8 +562,16 @@ function SchedulePostModal({
         scheduledDate: '',
         scheduledTime: '',
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        postType: 'feed' // initialize
+        postType: 'feed', // initialize
+        reelThumbnailUrl: null
       });
+    }
+  }, [selectedContent]); // Only reset form when content changes, not on every parent render
+
+  // Sync local accounts separately so it never triggers a form reset
+  useEffect(() => {
+    if (selectedContent) {
+      setLocalAccounts(getCustomerSocialAccounts(selectedContent.customerId));
     }
   }, [selectedContent, getCustomerSocialAccounts]);
 
@@ -1126,6 +1134,7 @@ function SchedulePostModal({
         item_id: selectedContent.item_id || selectedContent.itemId || selectedContent.id || '',
         item_name: selectedContent.item_name || selectedContent.itemName || selectedContent.title || '',
         postType: scheduleFormData.postType,
+        reelThumbnailUrl: scheduleFormData.reelThumbnailUrl || null,
         location: scheduleFormData.location // Add location data
       };
 
@@ -1535,6 +1544,50 @@ function SchedulePostModal({
     } catch (error) {
       console.error('File upload failed:', error);
       alert('File upload failed. Please try again.');
+    }
+  };
+
+  // Upload reel thumbnail (cover_url)
+  const handleThumbnailUpload = async (file) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file for the thumbnail.');
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      alert('Thumbnail too large. Max 8MB (JPEG recommended).');
+      return;
+    }
+    setUploadingThumbnail(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const base64Data = e.target.result.split(',')[1];
+          const response = await fetch(`${process.env.REACT_APP_API_URL}/api/gcs/upload-base64`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              filename: `thumbnail_${Date.now()}_${file.name.replace(/[^\w.-]/g, '_')}`,
+              contentType: file.type,
+              base64Data
+            })
+          });
+          if (!response.ok) throw new Error(`Upload failed: ${response.status}`);
+          const result = await response.json();
+          setScheduleFormData(prev => ({ ...prev, reelThumbnailUrl: result.publicUrl }));
+        } catch (error) {
+          console.error('Thumbnail upload failed:', error);
+          alert('Thumbnail upload failed. Please try again.');
+        } finally {
+          setUploadingThumbnail(false);
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (error) {
+      console.error('Thumbnail upload failed:', error);
+      alert('Thumbnail upload failed. Please try again.');
+      setUploadingThumbnail(false);
     }
   };
 
@@ -2382,6 +2435,59 @@ function SchedulePostModal({
                           )}
                         </div>
                       )}
+
+                      {/* Reel Thumbnail Upload */}
+                      {scheduleFormData.postType === 'reel' && scheduleFormData.platforms.includes('instagram') && (
+                        <div className="mb-3 p-2 bg-purple-50 border border-purple-200 rounded-lg text-left">
+                          <input
+                            ref={thumbnailFileInputRef}
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => e.target.files?.[0] && handleThumbnailUpload(e.target.files[0])}
+                            className="hidden"
+                          />
+                          <p className="text-[10px] font-semibold text-purple-800 mb-1.5 flex items-center gap-1">
+                            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                            Reel Cover Thumbnail (Optional)
+                          </p>
+                          {scheduleFormData.reelThumbnailUrl ? (
+                            <div className="flex items-center gap-2">
+                              <img
+                                src={scheduleFormData.reelThumbnailUrl}
+                                alt="Reel thumbnail"
+                                className="w-10 h-14 object-cover rounded border border-purple-300"
+                              />
+                              <div className="flex flex-col gap-1">
+                                <span className="text-[10px] text-green-700 font-medium flex items-center gap-0.5">
+                                  <Check className="h-3 w-3" /> Thumbnail set
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setScheduleFormData(prev => ({ ...prev, reelThumbnailUrl: null }))}
+                                  className="text-[10px] text-red-500 hover:text-red-700"
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            </div>
+                          ) : uploadingThumbnail ? (
+                            <div className="flex items-center gap-1.5">
+                              <Loader2 className="h-3.5 w-3.5 text-purple-600 animate-spin" />
+                              <span className="text-[10px] text-purple-700">Uploading thumbnail...</span>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => thumbnailFileInputRef.current?.click()}
+                              className="text-[10px] text-purple-700 hover:text-purple-900 font-medium flex items-center gap-1 border border-purple-300 rounded px-2 py-1 hover:bg-purple-100"
+                            >
+                              <Upload className="h-3 w-3" />
+                              Upload thumbnail (JPEG, max 8MB, 9:16 recommended)
+                            </button>
+                          )}
+                        </div>
+                      )}
+
                       <Upload className="h-5 w-5 mx-auto mb-1 text-gray-400" />
                       <div className="flex items-center justify-center gap-3">
                         <button

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Bell, Search, ChevronDown, Settings, LogOut } from 'lucide-react';
+import { Bell, Search, ChevronDown, Settings, LogOut, ArrowLeft } from 'lucide-react';
 import Footer from './Footer';
 import Logo from './Logo';
 import { useAuth } from '../../contexts/AuthContext';
@@ -19,6 +19,15 @@ function AdminLayout({ children, title }) {
   const isDashboard =
     location.pathname === '/admin/dashboard' || location.pathname === '/admin';
 
+  // Prefer going back in history when possible (so e.g. viewing a customer detail returns to the list first)
+  const handleBack = () => {
+    if (window.history.length > 2) {
+      navigate(-1);
+    } else {
+      navigate('/admin/dashboard');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#F4F9FF] flex flex-col">
       {/* Header */}
@@ -26,12 +35,22 @@ function AdminLayout({ children, title }) {
         <div className="px-3 sm:px-4 lg:px-6">
           <div className="flex items-center justify-between h-14">
             <div className="flex items-center">
+              {!isDashboard && (
+                <button
+                  onClick={handleBack}
+                  className="mr-3 text-[#475569] hover:text-[#0F172A] p-2 hover:bg-[#F4F9FF] rounded-lg"
+                  title="Back"
+                >
+                  <ArrowLeft className="h-5 w-5" />
+                </button>
+              )}
+
               <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-shrink">
                 <div
                   onClick={() => navigate('/admin/dashboard')}
                   className="cursor-pointer flex-shrink-0"
                 >
-                  <Logo size="medium" />
+                  <Logo size="small" />
                 </div>
                 <div className="ml-2 sm:ml-6 min-w-0">
                   <h1 className="text-base sm:text-lg font-bold text-[#0F172A] truncate max-w-[120px] xs:max-w-[160px] sm:max-w-none">{title}</h1>

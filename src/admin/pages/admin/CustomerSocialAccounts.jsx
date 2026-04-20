@@ -9,7 +9,7 @@ import {
   Facebook, Instagram, Linkedin, Youtube, Globe, CheckCircle,
   AlertCircle, Building2, User, Calendar, Eye, X, ArrowLeft,
   Filter, SlidersHorizontal, Heart, MessageSquare, Share2, Loader2,
-  BarChart3, Image as ImageIcon, Play
+  BarChart3, Image as ImageIcon, Play, Pencil, Trash2
 } from 'lucide-react';
 
 // Platform config for colors and icons
@@ -91,6 +91,14 @@ function AccountDetailModal({ account, customer, onClose }) {
   const [fbInsightsPost, setFbInsightsPost] = useState(null);
   const [igInsightsOpen, setIgInsightsOpen] = useState(false);
   const [igInsightsPost, setIgInsightsPost] = useState(null);
+
+  // Post edit / delete state
+  const [deletingPost, setDeletingPost] = useState(null);
+  const [deletePostError, setDeletePostError] = useState(null);
+  const [isDeletingPost, setIsDeletingPost] = useState(false);
+  const [editingPost, setEditingPost] = useState(null);
+  const [editPostMessage, setEditPostMessage] = useState('');
+  const [isUpdatingPost, setIsUpdatingPost] = useState(false);
 
   const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 
@@ -315,6 +323,89 @@ function AccountDetailModal({ account, customer, onClose }) {
     return account.accessToken;
   };
 
+  // Resolve platform token for a given post
+  const getPostToken = (post) => {
+    if (account.platform === 'facebook') {
+      const page = getFbPageForPost(post);
+      return page?.accessToken || page?.access_token;
+    }
+    if (account.platform === 'instagram') return getIgAccessToken();
+    return account.accessToken;
+  };
+
+  // Delete a post via the platform API
+  const handleDeletePost = async (post) => {
+    const token = getPostToken(post);
+    setIsDeletingPost(true);
+    setDeletePostError(null);
+    try {
+      if (account.platform === 'facebook') {
+        const res = await fetch(
+          `https://graph.facebook.com/v25.0/${post.id}?access_token=${token}`,
+          { method: 'DELETE' }
+        );
+        const data = await res.json();
+        if (data?.success === true) {
+          setPosts(prev => prev.filter(p => p.id !== post.id));
+          setDeletingPost(null);
+        } else {
+          setDeletePostError(data?.error?.message || 'Meta restricts API deletion. Open the post directly to delete it.');
+        }
+      } else if (account.platform === 'instagram') {
+        const res = await fetch(
+          `https://graph.facebook.com/v18.0/${post.id}?access_token=${token}`,
+          { method: 'DELETE' }
+        );
+        const data = await res.json();
+        if (data?.success === true) {
+          setPosts(prev => prev.filter(p => p.id !== post.id));
+          setDeletingPost(null);
+        } else {
+          setDeletePostError(data?.error?.message || 'Unable to delete via API. Open the post to delete it.');
+        }
+      } else {
+        // LinkedIn — open the post URL for manual deletion
+        const postUrl = post.url || post.permalink || 'https://www.linkedin.com/feed/';
+        window.open(postUrl, '_blank', 'noopener,noreferrer');
+        setDeletingPost(null);
+      }
+    } catch {
+      setDeletePostError('Network error. Please try again.');
+    } finally {
+      setIsDeletingPost(false);
+    }
+  };
+
+  // Update a post's message/caption via the platform API
+  const handleUpdatePost = async () => {
+    if (!editingPost || !editPostMessage.trim()) return;
+    const token = getPostToken(editingPost);
+    setIsUpdatingPost(true);
+    try {
+      if (account.platform === 'facebook') {
+        const body = new URLSearchParams({ message: editPostMessage, access_token: token });
+        const res = await fetch(`https://graph.facebook.com/v25.0/${editingPost.id}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: body.toString(),
+        });
+        const data = await res.json();
+        if (!res.ok || data.error) {
+          alert(`Failed to update: ${data.error?.message || 'Unknown error'}`);
+          return;
+        }
+        setPosts(prev => prev.map(p => p.id === editingPost.id ? { ...p, message: editPostMessage } : p));
+        setEditingPost(null);
+      } else {
+        alert('Caption editing is not supported by this platform\'s API.');
+      }
+    } catch {
+      alert('Network error while updating post.');
+    } finally {
+      setIsUpdatingPost(false);
+    }
+  };
+
   // Render a single post card
   const renderPostCard = (post, index) => {
     if (account.platform === 'facebook') {
@@ -341,15 +432,33 @@ function AccountDetailModal({ account, customer, onClose }) {
               <Play className="w-4 h-4 text-white drop-shadow-lg" fill="white" />
             </div>
           )}
-          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4 text-white text-sm font-semibold">
-            <span className="flex items-center gap-1">
-              <Heart className="h-4 w-4" fill="white" />
-              {post.likes?.summary?.total_count || 0}
-            </span>
-            <span className="flex items-center gap-1">
-              <MessageSquare className="h-4 w-4" fill="white" />
-              {post.comments?.summary?.total_count || 0}
-            </span>
+          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-1.5">
+            <div className="flex justify-end gap-1">
+              <button
+                onClick={(e) => { e.stopPropagation(); setEditPostMessage(post.message || ''); setEditingPost(post); }}
+                className="p-1 bg-white/20 hover:bg-white/40 rounded-md transition-colors"
+                title="Edit post"
+              >
+                <Pencil className="h-3 w-3 text-white" />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); setDeletePostError(null); setDeletingPost(post); }}
+                className="p-1 bg-white/20 hover:bg-red-500/60 rounded-md transition-colors"
+                title="Delete post"
+              >
+                <Trash2 className="h-3 w-3 text-white" />
+              </button>
+            </div>
+            <div className="flex items-center justify-center gap-4 text-white text-sm font-semibold">
+              <span className="flex items-center gap-1">
+                <Heart className="h-4 w-4" fill="white" />
+                {post.likes?.summary?.total_count || 0}
+              </span>
+              <span className="flex items-center gap-1">
+                <MessageSquare className="h-4 w-4" fill="white" />
+                {post.comments?.summary?.total_count || 0}
+              </span>
+            </div>
           </div>
         </div>
       );
@@ -379,15 +488,26 @@ function AccountDetailModal({ account, customer, onClose }) {
               </svg>
             </div>
           )}
-          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4 text-white text-sm font-semibold">
-            <span className="flex items-center gap-1">
-              <Heart className="h-4 w-4" fill="white" />
-              {post.like_count || 0}
-            </span>
-            <span className="flex items-center gap-1">
-              <MessageSquare className="h-4 w-4" fill="white" />
-              {post.comments_count || 0}
-            </span>
+          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-1.5">
+            <div className="flex justify-end gap-1">
+              <button
+                onClick={(e) => { e.stopPropagation(); setDeletePostError(null); setDeletingPost(post); }}
+                className="p-1 bg-white/20 hover:bg-red-500/60 rounded-md transition-colors"
+                title="Delete post"
+              >
+                <Trash2 className="h-3 w-3 text-white" />
+              </button>
+            </div>
+            <div className="flex items-center justify-center gap-4 text-white text-sm font-semibold">
+              <span className="flex items-center gap-1">
+                <Heart className="h-4 w-4" fill="white" />
+                {post.like_count || 0}
+              </span>
+              <span className="flex items-center gap-1">
+                <MessageSquare className="h-4 w-4" fill="white" />
+                {post.comments_count || 0}
+              </span>
+            </div>
           </div>
         </div>
       );
@@ -416,17 +536,35 @@ function AccountDetailModal({ account, customer, onClose }) {
               )}
             </div>
           )}
-          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3 text-white text-xs font-semibold">
-            {post.likeCount != null && (
-              <span className="flex items-center gap-1">
-                <Heart className="h-3 w-3" fill="white" /> {post.likeCount}
-              </span>
-            )}
-            {post.commentCount != null && (
-              <span className="flex items-center gap-1">
-                <MessageSquare className="h-3 w-3" fill="white" /> {post.commentCount}
-              </span>
-            )}
+          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-1.5">
+            <div className="flex justify-end gap-1">
+              <button
+                onClick={(e) => { e.stopPropagation(); setEditPostMessage(post.text || ''); setEditingPost(post); }}
+                className="p-1 bg-white/20 hover:bg-white/40 rounded-md transition-colors"
+                title="Edit post"
+              >
+                <Pencil className="h-3 w-3 text-white" />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); setDeletePostError(null); setDeletingPost(post); }}
+                className="p-1 bg-white/20 hover:bg-red-500/60 rounded-md transition-colors"
+                title="Delete post"
+              >
+                <Trash2 className="h-3 w-3 text-white" />
+              </button>
+            </div>
+            <div className="flex items-center justify-center gap-3 text-white text-xs font-semibold">
+              {post.likeCount != null && (
+                <span className="flex items-center gap-1">
+                  <Heart className="h-3 w-3" fill="white" /> {post.likeCount}
+                </span>
+              )}
+              {post.commentCount != null && (
+                <span className="flex items-center gap-1">
+                  <MessageSquare className="h-3 w-3" fill="white" /> {post.commentCount}
+                </span>
+              )}
+            </div>
           </div>
         </div>
       );
@@ -589,6 +727,8 @@ function AccountDetailModal({ account, customer, onClose }) {
             pageAccessToken={page?.accessToken || page?.access_token}
             pageName={page?.name || account.name}
             pageProfilePic={page?.picture?.data?.url || account.profilePicture}
+            onDeletePost={(postId) => setPosts(prev => prev.filter(p => p.id !== postId))}
+            onUpdatePost={(postId, newMsg) => setPosts(prev => prev.map(p => p.id === postId ? { ...p, message: newMsg } : p))}
           />
         );
       })()}
@@ -605,7 +745,119 @@ function AccountDetailModal({ account, customer, onClose }) {
             username: account.name,
             profile_picture_url: account.profilePicture,
           }}
+          onDeletePost={(postId) => setPosts(prev => prev.filter(p => p.id !== postId))}
         />
+      )}
+
+      {/* Delete confirm modal */}
+      {deletingPost && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60" onClick={() => { setDeletingPost(null); setDeletePostError(null); }} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6">
+            <h3 className="text-sm font-bold text-gray-900 mb-1">Delete post?</h3>
+            {!deletePostError ? (
+              <p className="text-xs text-gray-500 mb-4">This will permanently delete the post. This action cannot be undone.</p>
+            ) : (
+              <>
+                <p className="text-xs text-red-600 mb-2">{deletePostError}</p>
+                <p className="text-xs text-gray-500 mb-4">
+                  Open the post on {account.platform === 'facebook' ? 'Facebook' : account.platform === 'instagram' ? 'Instagram' : 'the platform'} and delete it directly.
+                </p>
+              </>
+            )}
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setDeletingPost(null); setDeletePostError(null); }}
+                disabled={isDeletingPost}
+                className="flex-1 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              {!deletePostError ? (
+                <button
+                  onClick={() => handleDeletePost(deletingPost)}
+                  disabled={isDeletingPost}
+                  className="flex-1 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-1.5"
+                >
+                  {isDeletingPost ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                  {isDeletingPost ? 'Deleting…' : 'Delete'}
+                </button>
+              ) : (
+                <button
+                  onClick={() => {
+                    const url = deletingPost.permalink_url || deletingPost.permalink || deletingPost.url
+                      || (account.platform === 'facebook' ? `https://www.facebook.com/${deletingPost.id}` : `https://www.instagram.com/p/${deletingPost.shortcode || ''}`);
+                    window.open(url, '_blank', 'noopener,noreferrer');
+                    setDeletingPost(null);
+                    setDeletePostError(null);
+                  }}
+                  className="flex-1 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors flex items-center justify-center gap-1"
+                >
+                  Open post ↗
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit post modal */}
+      {editingPost && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60" onClick={() => !isUpdatingPost && setEditingPost(null)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6">
+            <h3 className="text-sm font-bold text-gray-900 mb-1">Edit post</h3>
+            <p className="text-xs text-gray-500 mb-3">
+              {account.platform === 'instagram'
+                ? 'Instagram does not allow caption editing via API. Open the post on Instagram to edit it.'
+                : 'Note: updates only work if the post was created by the same app.'}
+            </p>
+            {account.platform !== 'instagram' ? (
+              <>
+                <textarea
+                  value={editPostMessage}
+                  onChange={e => setEditPostMessage(e.target.value)}
+                  rows={4}
+                  placeholder="Write something…"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-800 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <div className="flex gap-2 mt-4">
+                  <button
+                    onClick={() => setEditingPost(null)}
+                    disabled={isUpdatingPost}
+                    className="flex-1 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleUpdatePost}
+                    disabled={isUpdatingPost || !editPostMessage.trim()}
+                    className="flex-1 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-1.5"
+                  >
+                    {isUpdatingPost ? <Loader2 className="w-4 h-4 animate-spin" /> : <Pencil className="w-4 h-4" />}
+                    {isUpdatingPost ? 'Saving…' : 'Save changes'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="flex gap-2 mt-2">
+                <button onClick={() => setEditingPost(null)} className="flex-1 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+                  Close
+                </button>
+                <button
+                  onClick={() => {
+                    const url = editingPost.permalink || editingPost.url || `https://www.instagram.com/p/${editingPost.shortcode || ''}`;
+                    window.open(url, '_blank', 'noopener,noreferrer');
+                    setEditingPost(null);
+                  }}
+                  className="flex-1 py-2 rounded-lg bg-pink-600 text-white text-sm font-medium hover:bg-pink-700 transition-colors flex items-center justify-center gap-1"
+                >
+                  Open on Instagram ↗
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </>
   );
@@ -787,18 +1039,35 @@ function CustomerSocialAccounts() {
       setError('');
 
       try {
-        const res = await fetch(`${apiUrl}/api/admin/customer-social-links`, {
-          signal: abortControllerRef.current.signal,
-        });
+        const adminId = currentUser?._id || currentUser?.id;
+        if (!adminId) throw new Error('Admin authentication required');
 
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        // Fetch assigned customers + all social links in parallel
+        const [assignedRes, socialRes] = await Promise.all([
+          fetch(`${apiUrl}/admin/assigned-customers?adminId=${adminId}`, {
+            signal: abortControllerRef.current.signal,
+          }),
+          fetch(`${apiUrl}/api/admin/customer-social-links`, {
+            signal: abortControllerRef.current.signal,
+          }),
+        ]);
 
-        const data = await res.json();
-        if (data.success) {
-          setCustomers(data.data || []);
-        } else {
-          throw new Error(data.error || 'Failed to fetch data');
-        }
+        if (!assignedRes.ok) throw new Error(`Failed to fetch assigned customers: ${assignedRes.status}`);
+        if (!socialRes.ok) throw new Error(`HTTP ${socialRes.status}`);
+
+        const [assignedCustomers, socialData] = await Promise.all([
+          assignedRes.json(),
+          socialRes.json(),
+        ]);
+
+        if (!socialData.success) throw new Error(socialData.error || 'Failed to fetch data');
+
+        // Build a Set of assigned customer IDs for fast lookup
+        const assignedIds = new Set((assignedCustomers || []).map(c => c._id || c.id));
+
+        // Filter social accounts to only assigned customers
+        const filtered = (socialData.data || []).filter(c => assignedIds.has(c.customerId));
+        setCustomers(filtered);
       } catch (err) {
         if (err.name === 'AbortError') return;
         setError(err.message || 'Failed to load social accounts');
@@ -807,7 +1076,7 @@ function CustomerSocialAccounts() {
         setIsRefreshing(false);
       }
     },
-    [apiUrl]
+    [apiUrl, currentUser]
   );
 
   useEffect(() => {

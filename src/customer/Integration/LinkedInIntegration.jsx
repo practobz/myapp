@@ -25,6 +25,9 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
   const [postSuccess, setPostSuccess] = useState('');
   const [postError, setPostError] = useState('');
 
+  // Post delete state
+  const [deletingPostId, setDeletingPostId] = useState(null);
+
   // Historical charts state
   const [showHistoricalCharts, setShowHistoricalCharts] = useState(false);
 
@@ -389,7 +392,7 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
       
       // Store each new account in backend
       for (const account of newAccounts) {
-        await storeCustomerSocialAccount(account);
+        await storeCustomerSocialAccount(account, orgsData);
       }
 
       const orgCount = newAccounts.filter(a => a.accountType === 'organization').length;
@@ -417,7 +420,7 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
   };
 
   // Store customer social account for admin access
-  const storeCustomerSocialAccount = async (account) => {
+  const storeCustomerSocialAccount = async (account, orgsData = null) => {
     try {
       // 🔥 CRITICAL FIX: Use the correct customer ID detection
       const customerId = getCustomerId();
@@ -445,6 +448,15 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
         profilePicture: account.profile.picture,
         accessToken: account.token,
         pages: [], // LinkedIn doesn't have pages like Facebook
+        // Only store organizations with the personal account
+        organizations: (account.accountType === 'personal' && orgsData && orgsData.organizations) ? 
+          orgsData.organizations.map(org => ({
+            id: org.organizationId || org.id,
+            name: org.name,
+            vanityName: org.vanityName,
+            logo: org.picture,
+            type: 'organization'
+          })) : [],
         connectedAt: account.connectedAt
       };
 
@@ -968,6 +980,32 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
       console.error('Error deleting comment:', error);
       setError('Unable to delete comment. Please try again.');
       setTimeout(() => setError(''), 5000);
+    }
+  };
+
+  // Delete a post
+  const deletePost = async (postId) => {
+    if (!selectedAccount) return;
+    if (!window.confirm('Are you sure you want to delete this post? This action cannot be undone.')) return;
+    setDeletingPostId(postId);
+    try {
+      const res = await axios.delete(`${process.env.REACT_APP_API_URL}/linkedin/post`, {
+        data: { token: selectedAccount.token, postId }
+      });
+      if (res.data.success) {
+        setPosts(prev => prev.filter(p => p.id !== postId));
+        const storageKey = `linkedin_posts_${selectedAccount.id}`;
+        const localPosts = JSON.parse(localStorage.getItem(storageKey) || '[]');
+        localStorage.setItem(storageKey, JSON.stringify(localPosts.filter(p => p.id !== postId)));
+        setSuccess('Post deleted successfully!');
+        setTimeout(() => setSuccess(''), 3000);
+      }
+    } catch (error) {
+      console.error('Error deleting post:', error);
+      setError(error.response?.data?.error || 'Failed to delete post. Please try again.');
+      setTimeout(() => setError(''), 5000);
+    } finally {
+      setDeletingPostId(null);
     }
   };
 
@@ -2038,6 +2076,20 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
                     {post.lifecycleState === 'PUBLISHED' && (
                       <div className="absolute top-1 left-1 w-2 h-2 bg-green-500 rounded-full"></div>
                     )}
+
+                    {/* Mobile action buttons */}
+                    <div className="absolute bottom-2 right-2 z-10 flex gap-1">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); deletePost(post.id); }}
+                        disabled={deletingPostId === post.id}
+                        className="w-7 h-7 bg-white/80 rounded-full flex items-center justify-center hover:bg-red-100 transition-colors shadow"
+                        title="Delete post"
+                      >
+                        {deletingPostId === post.id
+                          ? <Loader2 className="h-3 w-3 animate-spin text-red-600" />
+                          : <Trash2 className="h-3 w-3 text-red-600" />}
+                      </button>
+                    </div>
                   </div>
 
                   {/* Desktop: Detailed card */}
@@ -2073,6 +2125,19 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
                       }`}>
                         {post.lifecycleState === 'PUBLISHED' ? '✓' : '•'}
                       </span>
+                      {/* Desktop action buttons */}
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); deletePost(post.id); }}
+                          disabled={deletingPostId === post.id}
+                          className="p-1.5 rounded hover:bg-red-100 hover:text-red-700 text-gray-400 transition-colors disabled:opacity-50"
+                          title="Delete post"
+                        >
+                          {deletingPostId === post.id
+                            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            : <Trash2 className="h-3.5 w-3.5" />}
+                        </button>
+                      </div>
                     </div>
                   </div>
 

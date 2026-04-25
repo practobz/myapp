@@ -2436,12 +2436,8 @@ function SchedulePostModal({
                         </div>
                       )}
 
-                      {/* Video / Reel Thumbnail Upload */}
-                      {(
-                        (scheduleFormData.postType === 'reel' && scheduleFormData.platforms.includes('instagram')) ||
-                        (scheduleFormData.platforms.includes('facebook') && scheduleFormData.selectedImages.some(m => isVideoUrl(m.url))) ||
-                        (scheduleFormData.platforms.includes('linkedin') && scheduleFormData.selectedImages.some(m => isVideoUrl(m.url)))
-                      ) && (
+                      {/* Reel Thumbnail Upload */}
+                      {scheduleFormData.postType === 'reel' && scheduleFormData.platforms.includes('instagram') && (
                         <div className="mb-3 p-2 bg-purple-50 border border-purple-200 rounded-lg text-left">
                           <input
                             ref={thumbnailFileInputRef}
@@ -2452,7 +2448,7 @@ function SchedulePostModal({
                           />
                           <p className="text-[10px] font-semibold text-purple-800 mb-1.5 flex items-center gap-1">
                             <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                            {scheduleFormData.postType === 'reel' && scheduleFormData.platforms.includes('instagram') ? 'Reel Cover Thumbnail (Optional)' : 'Video Cover Thumbnail (Optional)'}
+                            Reel Cover Thumbnail (Optional)
                           </p>
                           {scheduleFormData.reelThumbnailUrl ? (
                             <div className="flex items-center gap-2">
@@ -2714,6 +2710,7 @@ function SchedulePostModal({
                           const isSelected = scheduleFormData.selectedImages.some(item => item.url === image.publicUrl);
                           const isVideoFile = isVideoUrl(image.publicUrl);
                           const fileExtension = image.name.split('.').pop().toLowerCase();
+                          const isSubmission = image.source === 'content_submissions';
                           
                           return (
                             <div
@@ -2731,10 +2728,23 @@ function SchedulePostModal({
                                 <div className="w-full aspect-square sm:h-32 bg-gradient-to-br from-purple-900 to-indigo-900 flex flex-col items-center justify-center relative">
                                   <Video className="h-8 w-8 text-white mb-1" />
                                   <span className="text-xs text-white font-medium">Video</span>
+                                  {image.size && (
+                                    <span className="text-[10px] text-purple-200 mt-0.5">
+                                      {image.size >= 1024 * 1024
+                                        ? `${(image.size / (1024 * 1024)).toFixed(1)} MB`
+                                        : `${(image.size / 1024).toFixed(0)} KB`}
+                                    </span>
+                                  )}
                                   {/* Video badge */}
                                   <div className="absolute top-1 left-1 bg-purple-600 text-white px-1.5 py-0.5 rounded text-[9px] font-bold">
                                     VIDEO
                                   </div>
+                                  {/* Submission badge */}
+                                  {isSubmission && (
+                                    <div className="absolute bottom-1 left-1 bg-orange-500 text-white px-1.5 py-0.5 rounded text-[9px] font-bold">
+                                      SUBMISSION
+                                    </div>
+                                  )}
                                 </div>
                               ) : (
                                 <div className="relative">
@@ -2748,6 +2758,12 @@ function SchedulePostModal({
                                   <div className="absolute top-1 left-1 bg-green-600 text-white px-1.5 py-0.5 rounded text-[9px] font-bold">
                                     IMAGE
                                   </div>
+                                  {/* Submission badge */}
+                                  {isSubmission && (
+                                    <div className="absolute bottom-1 left-1 bg-orange-500 text-white px-1.5 py-0.5 rounded text-[9px] font-bold">
+                                      SUBMISSION
+                                    </div>
+                                  )}
                                 </div>
                               )}
                               
@@ -2764,13 +2780,24 @@ function SchedulePostModal({
                                 </p>
                                 <div className="flex items-center justify-between mt-0.5">
                                   <p className="text-xs text-gray-500">
-                                    {new Date(image.updated).toLocaleDateString()}
+                                    {image.size
+                                      ? image.size >= 1024 * 1024
+                                        ? `${(image.size / (1024 * 1024)).toFixed(1)} MB`
+                                        : `${(image.size / 1024).toFixed(0)} KB`
+                                      : new Date(image.updated).toLocaleDateString()}
                                   </p>
-                                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
-                                    isVideoFile ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'
-                                  }`}>
-                                    {fileExtension.toUpperCase()}
-                                  </span>
+                                  <div className="flex items-center gap-1">
+                                    {isSubmission && (
+                                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-orange-100 text-orange-700">
+                                        SUB
+                                      </span>
+                                    )}
+                                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                                      isVideoFile ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'
+                                    }`}>
+                                      {fileExtension.toUpperCase()}
+                                    </span>
+                                  </div>
                                 </div>
                               </div>
                             </div>

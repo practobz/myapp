@@ -363,11 +363,19 @@ function AccountDetailModal({ account, customer, onClose }) {
         } else {
           setDeletePostError(data?.error?.message || 'Unable to delete via API. Open the post to delete it.');
         }
-      } else {
-        // LinkedIn — open the post URL for manual deletion
-        const postUrl = post.url || post.permalink || 'https://www.linkedin.com/feed/';
-        window.open(postUrl, '_blank', 'noopener,noreferrer');
-        setDeletingPost(null);
+      } else if (account.platform === 'linkedin') {
+        const res = await fetch(`${apiUrl}/linkedin/post`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, postId: post.id }),
+        });
+        const data = await res.json();
+        if (data?.success) {
+          setPosts(prev => prev.filter(p => p.id !== post.id));
+          setDeletingPost(null);
+        } else {
+          setDeletePostError(data?.error || 'Failed to delete via API. Open the post on LinkedIn to delete it manually.');
+        }
       }
     } catch {
       setDeletePostError('Network error. Please try again.');
@@ -538,13 +546,6 @@ function AccountDetailModal({ account, customer, onClose }) {
           )}
           <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-1.5">
             <div className="flex justify-end gap-1">
-              <button
-                onClick={(e) => { e.stopPropagation(); setEditPostMessage(post.text || ''); setEditingPost(post); }}
-                className="p-1 bg-white/20 hover:bg-white/40 rounded-md transition-colors"
-                title="Edit post"
-              >
-                <Pencil className="h-3 w-3 text-white" />
-              </button>
               <button
                 onClick={(e) => { e.stopPropagation(); setDeletePostError(null); setDeletingPost(post); }}
                 className="p-1 bg-white/20 hover:bg-red-500/60 rounded-md transition-colors"
@@ -812,7 +813,7 @@ function AccountDetailModal({ account, customer, onClose }) {
                 ? 'Instagram does not allow caption editing via API. Open the post on Instagram to edit it.'
                 : 'Note: updates only work if the post was created by the same app.'}
             </p>
-            {account.platform !== 'instagram' ? (
+            {account.platform === 'facebook' ? (
               <>
                 <textarea
                   value={editPostMessage}

@@ -23,6 +23,7 @@ import AdminQrGenerator from './admin/pages/admin/AdminQrGenerator';
 import PublishManager from './admin/pages/admin/PublishManager';
 import MultiCustomerAnalytics from './admin/pages/admin/MultiCustomerAnalytics';
 import CustomerSocialAccounts from './admin/pages/admin/CustomerSocialAccounts';
+import CreatorSubmissionsReview from './admin/pages/admin/CreatorSubmissionsReview';
 
 
 // Super Admin imports
@@ -366,7 +367,11 @@ function App() {
                   <CustomerSocialAccounts />
                 </ProtectedRoutePortal>
               } />
-              
+                 <Route path="/admin/creator-submissions" element={
+                <ProtectedRoutePortal role="admin">
+                  <CreatorSubmissionsReview />
+                </ProtectedRoutePortal>
+              } />
               {/* Admin Social Manager Route */}
               <Route path="/admin/customer-social-manager" element={
                 <ProtectedRoutePortal role="admin">
@@ -601,7 +606,11 @@ function App() {
                   <ContentPortfolio />
                 </ProtectedRoutePortal>
               } />
-
+ <Route path="/content-creator/content-upload/:calendarId/:itemIndex" element={
+                <ProtectedRoutePortal role="content_creator">
+                  <ContentUpload />
+                </ProtectedRoutePortal>
+              } />
               <Route path="/content-creator/upload/:calendarId/:itemIndex" element={
                 <ProtectedRoutePortal role="content_creator">
                   <ContentUpload />

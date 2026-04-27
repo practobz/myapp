@@ -30,9 +30,10 @@ function ContentApproval() {
       
       const submissions = await response.json();
       
-      // Find submissions for this assignment ID
+      // Find submissions for this assignment ID (exclude admin_review stage)
       const assignmentSubmissions = submissions.filter(sub => 
-        (sub.assignment_id || sub.assignmentId) === id
+        (sub.assignment_id || sub.assignmentId) === id &&
+        sub.submission_stage !== 'admin_review'
       );
       
       if (assignmentSubmissions.length === 0) {

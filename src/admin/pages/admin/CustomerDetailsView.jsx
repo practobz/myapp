@@ -371,13 +371,32 @@ const ItemTimeline = ({ item, itemStatus, scheduledPosts = [], submissions = [] 
   };
 
   // Version steps — one node per submission, shown between Due and Reviewed
-  const versionSteps = submissions.map((s, idx) => ({
-    key: `v${idx + 1}`,
-    label: `V${idx + 1}`,
-    done: hasReachedDate(s.created_at || s.createdAt),
-    date: fmtDate(s.created_at || s.createdAt),
-    tone: 'blue',
-  }));
+  // Each version also gets a "→ Admin" step if admins were notified
+  const versionSteps = [];
+  submissions.forEach((s, idx) => {
+    // The upload/version node
+    versionSteps.push({
+      key: `v${idx + 1}`,
+      label: `V${idx + 1}`,
+      done: hasReachedDate(s.created_at || s.createdAt),
+      date: fmtDate(s.created_at || s.createdAt),
+      tone: 'blue',
+    });
+    // If admins were notified, add a "Sent" node right after
+    const notifiedAdmins = Array.isArray(s.notify_admins) ? s.notify_admins : [];
+    if (notifiedAdmins.length > 0) {
+      const adminLabel = notifiedAdmins.length === 1
+        ? notifiedAdmins[0].name || 'Admin'
+        : `${notifiedAdmins.length} Admins`;
+      versionSteps.push({
+        key: `v${idx + 1}_admin`,
+        label: `→ ${adminLabel}`,
+        done: hasReachedDate(s.sent_to_admin_at || s.created_at || s.createdAt),
+        date: fmtDate(s.sent_to_admin_at || s.created_at || s.createdAt),
+        tone: 'purple',
+      });
+    }
+  });
 
   // Derive review date from the approved submission if not stored on item
   const approvedSub = submissions.find(s => s.status === 'approved');
@@ -425,6 +444,16 @@ const ItemTimeline = ({ item, itemStatus, scheduledPosts = [], submissions = [] 
       dateTodo: 'text-emerald-200',
       lineDone: 'bg-emerald-400',
       lineTodo: 'bg-emerald-100',
+    },
+    purple: {
+      dotDone: 'bg-purple-500',
+      dotTodo: 'bg-purple-100',
+      labelDone: 'text-purple-700 font-medium',
+      labelTodo: 'text-purple-300',
+      dateDone: 'text-purple-500',
+      dateTodo: 'text-purple-200',
+      lineDone: 'bg-purple-400',
+      lineTodo: 'bg-purple-100',
     },
   };
 

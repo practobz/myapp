@@ -101,7 +101,10 @@ function ContentCalendar() {
         const submissionsRes = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions`);
         let submissionsData  = await submissionsRes.json();
         if (!Array.isArray(submissionsData)) submissionsData = [];
-        setSubmissions(submissionsData.filter(s => s.customer_id === customerId || s.customer_email === user?.email));
+        setSubmissions(submissionsData.filter(s =>
+          (s.customer_id === customerId || s.customer_email === user?.email) &&
+          s.submission_stage !== 'admin_review'
+        ));
       } catch {
         setCustomer(null);
         setCalendars([]);
@@ -184,12 +187,12 @@ function ContentCalendar() {
   });
 
   const stats = useMemo(() => ({
-    total:       sortedItems.length,
-    published:   sortedItems.filter(i => i.status === 'published').length,
-    underReview: sortedItems.filter(i => i.status === 'under_review').length,
-    scheduled:   sortedItems.filter(i => i.status === 'scheduled').length,
-    pending:     sortedItems.filter(i => !i.status || i.status === 'pending').length,
-  }), [sortedItems]);
+    total:       allItems.length,
+    published:   allItems.filter(i => i.status === 'published').length,
+    underReview: allItems.filter(i => i.status === 'under_review').length,
+    scheduled:   allItems.filter(i => i.status === 'scheduled').length,
+    pending:     allItems.filter(i => !i.status || i.status === 'pending').length,
+  }), [calendars, scheduledPosts, submissions, selectedCalendarId]);
 
   const displayedItems = useMemo(() => {
     if (!searchTerm.trim()) return sortedItems;

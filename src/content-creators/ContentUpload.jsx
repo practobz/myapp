@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Upload, Image, X, Check, FileText, Calendar, Clock, Palette, Send, MapPin, Tag, MessageSquare, Play, Video } from 'lucide-react';
+import { ArrowLeft, Upload, Image, X, Check, FileText, Calendar, Clock, Palette, Send, MapPin, Tag, MessageSquare, Play, Video, Bell, ChevronDown, ChevronUp, User, ShieldCheck, AlertCircle } from 'lucide-react';
 
 // Helper to get creator email from localStorage
 function getCreatorEmail() {
@@ -44,6 +44,12 @@ function ContentUpload() {
   const [previousSubmissionLoaded, setPreviousSubmissionLoaded] = useState(false);
   const [selectedMedia, setSelectedMedia] = useState(null);
 
+  // Admin notification state
+  const [adminsList, setAdminsList] = useState([]);
+  const [selectedAdmins, setSelectedAdmins] = useState([]);
+  const [adminsDropdownOpen, setAdminsDropdownOpen] = useState(false);
+  const [adminsLoading, setAdminsLoading] = useState(false);
+
   const creatorEmail = getCreatorEmail();
 
   // Redirect to login if not authenticated
@@ -52,6 +58,38 @@ function ContentUpload() {
       navigate('/content-creator/login');
     }
   }, [creatorEmail, navigate]);
+
+  // Fetch list of admins for notification selector
+  useEffect(() => {
+    const fetchAdmins = async () => {
+      setAdminsLoading(true);
+      try {
+        const res = await fetch(`${process.env.REACT_APP_API_URL}/users?role=admin`);
+        if (res.ok) {
+          const data = await res.json();
+          const admins = Array.isArray(data) ? data : [];
+          setAdminsList(admins.map(a => ({
+            id: a._id || a.id,
+            name: a.name || a.email || 'Admin',
+            email: a.email || ''
+          })).filter(a => a.email));
+        }
+      } catch (err) {
+        console.error('❌ Failed to fetch admins:', err);
+      } finally {
+        setAdminsLoading(false);
+      }
+    };
+    fetchAdmins();
+  }, []);
+
+  const toggleAdminSelection = (admin) => {
+    setSelectedAdmins(prev => {
+      const exists = prev.find(a => a.id === admin.id);
+      if (exists) return prev.filter(a => a.id !== admin.id);
+      return [...prev, admin];
+    });
+  };
 
   // Fetch real assignment data based on calendarId and itemIndex
   useEffect(() => {
@@ -491,6 +529,7 @@ function ContentUpload() {
         geo_location: (geoLocation.latitude && geoLocation.longitude) ? geoLocation : undefined,
         address: address || undefined,
         contact_info: contactInfo || undefined,
+        notify_admins: selectedAdmins,
       };
 
       // FINAL VALIDATION - Ensure all critical fields are present
@@ -537,7 +576,11 @@ function ContentUpload() {
       const result = await response.json();
       console.log('✅ Content submission successful:', result);
 
-      alert('Content submitted successfully! The customer will review your work.');
+      const adminNames = selectedAdmins.map(a => a.name).join(', ');
+      const adminMsg = selectedAdmins.length > 0
+        ? `\n\nNotified admin(s): ${adminNames}`
+        : '';
+      alert(`Content submitted for admin review!${adminMsg}\n\nThe admin will review your submission and notify you with feedback or approval.`);
       navigate('/content-creator/assignments');
     } catch (err) {
       console.error('❌ Upload error:', err);
@@ -604,7 +647,10 @@ function ContentUpload() {
                 <div className="p-2 bg-purple-100 rounded-lg">
                   <Palette className="h-5 w-5 text-purple-600" />
                 </div>
-                <span className="ml-3 text-xl font-bold text-gray-900">Content Upload</span>
+                <div className="ml-3">
+                  <span className="text-xl font-bold text-gray-900">Submit for Admin Review</span>
+                  <p className="text-xs text-gray-400 leading-none mt-0.5">Admin must approve before content goes to customer</p>
+                </div>
               </div>
             </div>
 
@@ -648,6 +694,22 @@ function ContentUpload() {
           {assignment.description && (
             <p className="text-sm text-gray-600 mt-2">{assignment.description}</p>
           )}
+        </div>
+
+        {/* Workflow Banner */}
+        <div className="bg-white border border-purple-100 rounded-xl shadow-sm px-5 py-4 mb-6 flex flex-col sm:flex-row sm:items-center gap-3">
+          <ShieldCheck className="h-6 w-6 text-purple-500 flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-gray-800">Admin Review Required</p>
+            <p className="text-xs text-gray-500 mt-0.5">Your upload goes to the selected admin first. Once approved, the admin or you can submit the content to the customer's content calendar.</p>
+          </div>
+          <div className="hidden sm:flex items-center gap-1 text-xs text-gray-400 flex-shrink-0">
+            <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full font-medium">1 Upload</span>
+            <span>→</span>
+            <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded-full font-medium">2 Admin Review</span>
+            <span>→</span>
+            <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full font-medium">3 Customer</span>
+          </div>
         </div>
 
         {/* Main Grid Layout */}
@@ -808,6 +870,98 @@ function ContentUpload() {
 
           {/* Right Column - Content Details & Assignment Info */}
           <div className="space-y-6">
+            {/* Notify Admin Section — FIRST, most important */}
+            <div className="bg-white rounded-lg shadow-sm p-6 border-2 border-purple-100">
+              <h2 className="text-lg font-semibold mb-1 flex items-center">
+                <Bell className="h-5 w-5 mr-2 text-purple-600" />
+                Send to Admin
+                <span className="ml-2 text-xs font-medium text-red-500">*</span>
+              </h2>
+              <p className="text-xs text-gray-500 mb-3">
+                Select which admin(s) should review this content. They'll receive an email notification with your submission.
+              </p>
+
+              {adminsLoading ? (
+                <div className="flex items-center text-sm text-gray-500">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-500 mr-2"></div>
+                  Loading admins…
+                </div>
+              ) : adminsList.length === 0 ? (
+                <p className="text-sm text-gray-400 italic">No admins available.</p>
+              ) : (
+                <div className="border border-gray-200 rounded-md overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setAdminsDropdownOpen(prev => !prev)}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 transition-colors text-sm ${
+                      selectedAdmins.length === 0 ? 'bg-red-50 hover:bg-red-100' : 'bg-gray-50 hover:bg-gray-100'
+                    }`}
+                  >
+                    <span className={selectedAdmins.length === 0 ? 'text-red-400' : 'text-gray-700'}>
+                      {selectedAdmins.length === 0
+                        ? 'Select at least one admin…'
+                        : `${selectedAdmins.length} admin${selectedAdmins.length > 1 ? 's' : ''} selected`}
+                    </span>
+                    {adminsDropdownOpen
+                      ? <ChevronUp className="h-4 w-4 text-gray-400" />
+                      : <ChevronDown className="h-4 w-4 text-gray-400" />}
+                  </button>
+
+                  {adminsDropdownOpen && (
+                    <div className="divide-y divide-gray-100 max-h-48 overflow-y-auto">
+                      {adminsList.map(admin => {
+                        const isSelected = selectedAdmins.some(a => a.id === admin.id);
+                        return (
+                          <label
+                            key={admin.id}
+                            className={`flex items-center px-3 py-2.5 cursor-pointer hover:bg-purple-50 transition-colors ${isSelected ? 'bg-purple-50' : 'bg-white'}`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleAdminSelection(admin)}
+                              className="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500 mr-3 flex-shrink-0"
+                            />
+                            <User className="h-4 w-4 text-gray-400 mr-2 flex-shrink-0" />
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-gray-900 truncate">{admin.name}</p>
+                              <p className="text-xs text-gray-500 truncate">{admin.email}</p>
+                            </div>
+                            {isSelected && <Check className="h-4 w-4 text-purple-600 ml-auto flex-shrink-0" />}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {selectedAdmins.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5 mt-3">
+                  {selectedAdmins.map(admin => (
+                    <span
+                      key={admin.id}
+                      className="inline-flex items-center px-2.5 py-1 rounded-full text-xs bg-purple-100 text-purple-700 font-medium"
+                    >
+                      {admin.name}
+                      <button
+                        type="button"
+                        onClick={() => toggleAdminSelection(admin)}
+                        className="ml-1 hover:text-purple-900"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex items-start gap-2 mt-3 p-2.5 bg-amber-50 border border-amber-100 rounded-md">
+                  <AlertCircle className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-amber-700">Please select at least one admin so they can review and approve your content before it reaches the customer.</p>
+                </div>
+              )}
+            </div>
+
             {/* Assignment Details - Desktop */}
             <div className="bg-white rounded-lg shadow-sm p-6 hidden md:block">
               <h2 className="text-lg font-semibold mb-4 flex items-center">
@@ -864,7 +1018,7 @@ function ContentUpload() {
                     onChange={(e) => setCaption(e.target.value)}
                     rows={3}
                     className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    placeholder="Write an engaging caption..."
+                    placeholder="Draft caption for the post (admin will review before it goes to customer)…"
                   />
                 </div>
 
@@ -884,29 +1038,39 @@ function ContentUpload() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Notes for Client
+                    Notes for Admin
                   </label>
                   <textarea
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
                     rows={2}
                     className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    placeholder="Additional notes..."
+                    placeholder="Any specific instructions or context for the admin reviewing this content…"
                   />
                 </div>
               </div>
             </div>
 
+            {/* Notify Admin section moved to top of right column above — removed from here */}
+
             {/* Submit Button */}
             <div className="bg-white rounded-lg shadow-sm p-6">
               <div className="text-center">
-                <h3 className="font-semibold text-gray-900 mb-2">Ready to Submit?</h3>
-                <p className="text-sm text-gray-600 mb-4">
-                  Your content will be sent to {assignment.customerName} for review
-                </p>
+                <h3 className="font-semibold text-gray-900 mb-1">Submit for Admin Review</h3>
+                {selectedAdmins.length > 0 ? (
+                  <p className="text-sm text-gray-600 mb-4">
+                    Will be sent to <span className="font-medium text-purple-700">{selectedAdmins.map(a => a.name).join(', ')}</span> for review.
+                    Content only reaches the customer after admin approval.
+                  </p>
+                ) : (
+                  <p className="text-sm text-amber-600 mb-4 flex items-center justify-center gap-1">
+                    <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                    Select an admin above before submitting
+                  </p>
+                )}
                 <button
                   onClick={handleSubmit}
-                  disabled={submitting || uploadedFiles.length === 0 || uploadedFiles.some(f => f.uploading)}
+                  disabled={submitting || uploadedFiles.length === 0 || uploadedFiles.some(f => f.uploading) || selectedAdmins.length === 0}
                   className="w-full inline-flex items-center justify-center px-6 py-3 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
                 >
                   {submitting ? (
@@ -917,7 +1081,7 @@ function ContentUpload() {
                   ) : (
                     <>
                       <Send className="h-4 w-4 mr-2" />
-                      Submit Content
+                      Submit to Admin for Review
                     </>
                   )}
                 </button>
@@ -925,6 +1089,9 @@ function ContentUpload() {
                   <p className="text-xs text-gray-500 mt-2">
                     Please wait for all uploads to complete
                   </p>
+                )}
+                {selectedAdmins.length === 0 && !adminsLoading && adminsList.length > 0 && (
+                  <p className="text-xs text-amber-600 mt-2">Select an admin above to enable submit</p>
                 )}
               </div>
             </div>

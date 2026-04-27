@@ -316,7 +316,11 @@ function AdminContentPortfolio() {
     try {
       const submissionsRes = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions`);
       const submissionsData = await submissionsRes.json();
-      setSubmissions(Array.isArray(submissionsData) ? submissionsData : []);
+      // Exclude creator→admin review submissions (they have their own page)
+      const portfolioSubmissions = Array.isArray(submissionsData)
+        ? submissionsData.filter(s => s.submission_stage !== 'admin_review')
+        : [];
+      setSubmissions(portfolioSubmissions);
     } catch {
       setSubmissions([]);
     }

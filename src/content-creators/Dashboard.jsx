@@ -463,12 +463,24 @@ function Dashboard() {
                                 ))}
                               </div>
                             )}
-                            {/* Due Date */}
-                            <div className="flex items-center gap-1.5 mt-2">
-                              <Clock className="h-3 w-3 text-gray-400" />
-                              <p className="text-xs text-gray-500">
-                                Due: {assignment.dueDate ? format(new Date(assignment.dueDate), 'MMM dd, yyyy') : 'N/A'}
-                              </p>
+                            {/* Due Date + Upload Button row */}
+                            <div className="flex items-center justify-between gap-2 mt-2">
+                              <div className="flex items-center gap-1.5">
+                                <Clock className="h-3 w-3 text-gray-400" />
+                                <p className="text-xs text-gray-500">
+                                  Due: {assignment.dueDate ? format(new Date(assignment.dueDate), 'MMM dd, yyyy') : 'N/A'}
+                                </p>
+                              </div>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigate(`/content-creator/content-upload/${assignment.calendarId}/${assignment.itemIndex}`);
+                                }}
+                                className="flex items-center gap-1 px-2.5 py-1 bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold rounded-lg transition-colors flex-shrink-0"
+                              >
+                                <Send className="h-3 w-3" />
+                                Upload
+                              </button>
                             </div>
                           </div>
                         );
@@ -550,6 +562,18 @@ function Dashboard() {
                       </div>
                     </button>
 
+                    <button 
+                      onClick={() => goToAssignments('pending')}
+                      className="w-full flex items-center gap-4 p-4 rounded-xl bg-gradient-to-r from-rose-50 to-pink-50 hover:from-rose-100 hover:to-pink-100 border border-rose-100 hover:border-rose-200 transition-all duration-300 group"
+                    >
+                      <div className="p-3 bg-gradient-to-br from-rose-500 to-pink-600 rounded-xl shadow-lg group-hover:shadow-rose-200 transition-shadow">
+                        <Send className="h-5 w-5 text-white" />
+                      </div>
+                      <div className="text-left">
+                        <span className="text-sm font-bold text-gray-900 group-hover:text-rose-900">Upload Content</span>
+                        <p className="text-xs text-gray-500 mt-0.5">Submit media for admin review</p>
+                      </div>
+                    </button>
 
                   </div>
                 </div>

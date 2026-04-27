@@ -456,6 +456,8 @@ function SchedulePostModal({
 }) {
   const fileInputRef = useRef(null);
   const thumbnailFileInputRef = useRef(null);
+  const facebookThumbnailFileInputRef = useRef(null);
+  const linkedinThumbnailFileInputRef = useRef(null);
   const isPostingRef = useRef(false); // Prevent duplicate posts immediately
   const isSchedulingRef = useRef(false); // Prevent duplicate scheduling
   const lastSubmissionIdRef = useRef(null); // Track last submission to prevent duplicates
@@ -513,6 +515,8 @@ function SchedulePostModal({
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     postType: 'feed', // added: 'feed' | 'story' | 'reel'
     reelThumbnailUrl: null, // cover_url for Instagram Reels
+    facebookThumbnailUrl: null, // thumbnail for Facebook video posts
+    linkedinThumbnailUrl: null, // thumbnail for LinkedIn video posts
     location: null // { id, name, location: { city, country, latitude, longitude } }
   });
   const [submitting, setSubmitting] = useState(false);
@@ -563,7 +567,9 @@ function SchedulePostModal({
         scheduledTime: '',
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         postType: 'feed', // initialize
-        reelThumbnailUrl: null
+        reelThumbnailUrl: null,
+        facebookThumbnailUrl: null,
+        linkedinThumbnailUrl: null
       });
     }
   }, [selectedContent]); // Only reset form when content changes, not on every parent render
@@ -1167,6 +1173,7 @@ function SchedulePostModal({
           instagramId: platform === 'instagram' 
             ? selectedPage.instagramBusinessAccount?.id
             : null,
+          thumbnailUrl: platform === 'facebook' ? (scheduleFormData.facebookThumbnailUrl || null) : null,
         });
         
         // Mark as carousel if multiple images
@@ -1229,7 +1236,8 @@ function SchedulePostModal({
           linkedinAccessToken: selectedAccount.accessToken,
           accountType: isOrgAccount ? 'organization' : 'personal',
           organizationId: organizationId,
-          mediaUrls: scheduleFormData.selectedImages.map(item => item.url)
+          mediaUrls: scheduleFormData.selectedImages.map(item => item.url),
+          thumbnailUrl: scheduleFormData.linkedinThumbnailUrl || null,
         });
       }
 
@@ -1547,8 +1555,8 @@ function SchedulePostModal({
     }
   };
 
-  // Upload reel thumbnail (cover_url)
-  const handleThumbnailUpload = async (file) => {
+  // Upload thumbnail (cover_url) - supports reelThumbnailUrl, facebookThumbnailUrl, linkedinThumbnailUrl
+  const handleThumbnailUpload = async (file, fieldName = 'reelThumbnailUrl') => {
     if (!file) return;
     if (!file.type.startsWith('image/')) {
       alert('Please select an image file for the thumbnail.');
@@ -1575,7 +1583,7 @@ function SchedulePostModal({
           });
           if (!response.ok) throw new Error(`Upload failed: ${response.status}`);
           const result = await response.json();
-          setScheduleFormData(prev => ({ ...prev, reelThumbnailUrl: result.publicUrl }));
+          setScheduleFormData(prev => ({ ...prev, [fieldName]: result.publicUrl }));
         } catch (error) {
           console.error('Thumbnail upload failed:', error);
           alert('Thumbnail upload failed. Please try again.');
@@ -2443,7 +2451,7 @@ function SchedulePostModal({
                             ref={thumbnailFileInputRef}
                             type="file"
                             accept="image/*"
-                            onChange={(e) => e.target.files?.[0] && handleThumbnailUpload(e.target.files[0])}
+                            onChange={(e) => e.target.files?.[0] && handleThumbnailUpload(e.target.files[0], 'reelThumbnailUrl')}
                             className="hidden"
                           />
                           <p className="text-[10px] font-semibold text-purple-800 mb-1.5 flex items-center gap-1">
@@ -2483,6 +2491,110 @@ function SchedulePostModal({
                             >
                               <Upload className="h-3 w-3" />
                               Upload thumbnail (JPEG, max 8MB, 9:16 recommended)
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Facebook Video Thumbnail Upload */}
+                      {scheduleFormData.platforms.includes('facebook') && scheduleFormData.selectedImages.some(m => isVideoUrl(m.url)) && (
+                        <div className="mb-3 p-2 bg-blue-50 border border-blue-200 rounded-lg text-left">
+                          <input
+                            ref={facebookThumbnailFileInputRef}
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => e.target.files?.[0] && handleThumbnailUpload(e.target.files[0], 'facebookThumbnailUrl')}
+                            className="hidden"
+                          />
+                          <p className="text-[10px] font-semibold text-blue-800 mb-1.5 flex items-center gap-1">
+                            <Facebook className="h-3 w-3" />
+                            Facebook Video Thumbnail (Optional)
+                          </p>
+                          {scheduleFormData.facebookThumbnailUrl ? (
+                            <div className="flex items-center gap-2">
+                              <img
+                                src={scheduleFormData.facebookThumbnailUrl}
+                                alt="Facebook thumbnail"
+                                className="w-10 h-14 object-cover rounded border border-blue-300"
+                              />
+                              <div className="flex flex-col gap-1">
+                                <span className="text-[10px] text-green-700 font-medium flex items-center gap-0.5">
+                                  <Check className="h-3 w-3" /> Thumbnail set
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setScheduleFormData(prev => ({ ...prev, facebookThumbnailUrl: null }))}
+                                  className="text-[10px] text-red-500 hover:text-red-700"
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            </div>
+                          ) : uploadingThumbnail ? (
+                            <div className="flex items-center gap-1.5">
+                              <Loader2 className="h-3.5 w-3.5 text-blue-600 animate-spin" />
+                              <span className="text-[10px] text-blue-700">Uploading thumbnail...</span>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => facebookThumbnailFileInputRef.current?.click()}
+                              className="text-[10px] text-blue-700 hover:text-blue-900 font-medium flex items-center gap-1 border border-blue-300 rounded px-2 py-1 hover:bg-blue-100"
+                            >
+                              <Upload className="h-3 w-3" />
+                              Upload thumbnail (JPEG, max 8MB)
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      {/* LinkedIn Video Thumbnail Upload */}
+                      {scheduleFormData.platforms.includes('linkedin') && scheduleFormData.selectedImages.some(m => isVideoUrl(m.url)) && (
+                        <div className="mb-3 p-2 bg-sky-50 border border-sky-200 rounded-lg text-left">
+                          <input
+                            ref={linkedinThumbnailFileInputRef}
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => e.target.files?.[0] && handleThumbnailUpload(e.target.files[0], 'linkedinThumbnailUrl')}
+                            className="hidden"
+                          />
+                          <p className="text-[10px] font-semibold text-sky-800 mb-1.5 flex items-center gap-1">
+                            <Linkedin className="h-3 w-3" />
+                            LinkedIn Video Thumbnail (Optional)
+                          </p>
+                          {scheduleFormData.linkedinThumbnailUrl ? (
+                            <div className="flex items-center gap-2">
+                              <img
+                                src={scheduleFormData.linkedinThumbnailUrl}
+                                alt="LinkedIn thumbnail"
+                                className="w-10 h-14 object-cover rounded border border-sky-300"
+                              />
+                              <div className="flex flex-col gap-1">
+                                <span className="text-[10px] text-green-700 font-medium flex items-center gap-0.5">
+                                  <Check className="h-3 w-3" /> Thumbnail set
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setScheduleFormData(prev => ({ ...prev, linkedinThumbnailUrl: null }))}
+                                  className="text-[10px] text-red-500 hover:text-red-700"
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            </div>
+                          ) : uploadingThumbnail ? (
+                            <div className="flex items-center gap-1.5">
+                              <Loader2 className="h-3.5 w-3.5 text-sky-600 animate-spin" />
+                              <span className="text-[10px] text-sky-700">Uploading thumbnail...</span>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => linkedinThumbnailFileInputRef.current?.click()}
+                              className="text-[10px] text-sky-700 hover:text-sky-900 font-medium flex items-center gap-1 border border-sky-300 rounded px-2 py-1 hover:bg-sky-100"
+                            >
+                              <Upload className="h-3 w-3" />
+                              Upload thumbnail (JPEG, max 8MB)
                             </button>
                           )}
                         </div>

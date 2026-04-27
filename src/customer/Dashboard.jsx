@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../admin/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import AdminLayout from '../../components/layout/AdminLayout';
 import { Users, Calendar, TrendingUp, BarChart3, Activity, Zap, Award, UserCheck, Send, Palette, CheckCircle2, RefreshCw } from 'lucide-react';

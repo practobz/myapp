@@ -228,7 +228,8 @@ function Dashboard() {
     qrGenerator: () => navigate('/admin/qr-generator'),
     publishManager: () => navigate('/admin/publish-manager'),
     customerAnalytics: () => navigate('/admin/customer-analytics'),
-    socialAccounts: () => navigate('/admin/social-accounts')
+    socialAccounts: () => navigate('/admin/social-accounts'),
+    creatorSubmissions: () => navigate('/admin/creator-submissions')
   }), [navigate]);
 
   // Loading state with skeleton UI
@@ -264,7 +265,7 @@ function Dashboard() {
           {/* Quick Actions Skeleton */}
           <div className="bg-white/70 backdrop-blur-sm rounded-xl sm:rounded-2xl shadow-lg border border-gray-200/50 p-4 sm:p-6 lg:p-8 animate-pulse">
             <div className="h-6 bg-gray-200 rounded w-32 mb-4 sm:mb-6" />
-            <div className="grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-9 gap-2 sm:gap-3 lg:gap-4">
+            <div className="grid grid-cols-5 sm:grid-cols-10 gap-2 sm:gap-3 lg:gap-4">
               {[...Array(9)].map((_, i) => (
                 <div key={i} className="bg-gray-200 rounded-xl min-h-[80px] sm:min-h-[100px]" />
               ))}
@@ -413,7 +414,7 @@ function Dashboard() {
             <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900">Quick Actions</h2>
             <span className="text-xs sm:text-sm text-gray-500">Click to navigate</span>
           </div>
-          <div className="grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-9 gap-2 sm:gap-3 lg:gap-4">
+          <div className="grid grid-cols-5 sm:grid-cols-10 gap-2 sm:gap-3 lg:gap-4">
             <QuickActionButton 
               icon={Users}
               label="Customers"
@@ -467,6 +468,12 @@ function Dashboard() {
               label="Social Accounts"
               gradientClass="bg-gradient-to-br from-teal-600 to-cyan-600 hover:from-teal-700 hover:to-cyan-700 focus:ring-teal-500"
               onClick={navigationHandlers.socialAccounts}
+            />
+            <QuickActionButton 
+              icon={Send}
+              label="Creator Inbox"
+              gradientClass="bg-gradient-to-br from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700 focus:ring-purple-500"
+              onClick={navigationHandlers.creatorSubmissions}
             />
           </div>
         </div>

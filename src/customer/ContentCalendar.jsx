@@ -103,7 +103,7 @@ function ContentCalendar() {
         if (!Array.isArray(submissionsData)) submissionsData = [];
         setSubmissions(submissionsData.filter(s =>
           (s.customer_id === customerId || s.customer_email === user?.email) &&
-          s.submission_stage !== 'admin_review'
+          s.submission_stage === 'customer'
         ));
       } catch {
         setCustomer(null);

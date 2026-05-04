@@ -163,6 +163,8 @@ function ContentUpload() {
     };
     if (calendarId && itemIndex !== undefined) {
       fetchAssignment();
+    } else {
+      setLoading(false);
     }
   }, [calendarId, itemIndex]);
 

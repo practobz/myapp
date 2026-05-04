@@ -91,6 +91,58 @@ function ContentUpload() {
     });
   };
 
+  // Assignment picker state (used when no params provided)
+  const [pickerAssignments, setPickerAssignments] = useState([]);
+  const [pickerLoading, setPickerLoading] = useState(false);
+
+  // When no params, fetch assignments for the picker
+  useEffect(() => {
+    if (calendarId && itemIndex !== undefined) return;
+    const fetchPicker = async () => {
+      setPickerLoading(true);
+      try {
+        const [custRes, calRes] = await Promise.all([
+          fetch(`${process.env.REACT_APP_API_URL}/api/customers`),
+          fetch(`${process.env.REACT_APP_API_URL}/calendars`),
+        ]);
+        const custData = await custRes.json();
+        const calendars = await calRes.json();
+        const customerMap = {};
+        if (Array.isArray(custData.customers)) {
+          custData.customers.forEach(c => {
+            customerMap[c._id || c.id] = c.name || c.customerName || c.email || '';
+          });
+        }
+        const all = [];
+        calendars.forEach(calendar => {
+          if (Array.isArray(calendar.contentItems)) {
+            calendar.contentItems.forEach((item, index) => {
+              if ((item.assignedTo || '').toLowerCase() === creatorEmail) {
+                const custId = calendar.customerId || calendar.customer_id || calendar.customer?._id || '';
+                all.push({
+                  ...item,
+                  calendarId: calendar._id || calendar.id,
+                  calendarName: calendar.name || calendar.customerName || calendar.customer || '',
+                  customerName: customerMap[custId] || calendar.customerName || calendar.name || '',
+                  itemIndex: index,
+                  id: item.id || item._id || item.title,
+                  platform: item.platform || 'Instagram',
+                  dueDate: item.dueDate || item.due_date || item.date,
+                });
+              }
+            });
+          }
+        });
+        setPickerAssignments(all);
+      } catch (err) {
+        setPickerAssignments([]);
+      } finally {
+        setPickerLoading(false);
+      }
+    };
+    if (creatorEmail) fetchPicker();
+  }, [calendarId, itemIndex, creatorEmail]);
+
   // Fetch real assignment data based on calendarId and itemIndex
   useEffect(() => {
     const fetchAssignment = async () => {
@@ -163,8 +215,6 @@ function ContentUpload() {
     };
     if (calendarId && itemIndex !== undefined) {
       fetchAssignment();
-    } else {
-      setLoading(false);
     }
   }, [calendarId, itemIndex]);
 
@@ -604,6 +654,82 @@ function ContentUpload() {
       console.error('Retry failed:', error);
     }
   };
+
+  // No params — show assignment picker
+  if (!calendarId || itemIndex === undefined) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-indigo-100">
+        <header className="bg-white shadow-sm border-b sticky top-0 z-10">
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center h-16">
+              <button onClick={() => navigate('/content-creator')} className="mr-4 text-gray-600 hover:text-gray-900 transition-colors">
+                <ArrowLeft className="h-5 w-5" />
+              </button>
+              <div className="flex items-center">
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <Palette className="h-5 w-5 text-purple-600" />
+                </div>
+                <div className="ml-3">
+                  <span className="text-xl font-bold text-gray-900">Upload Content</span>
+                  <p className="text-xs text-gray-400 mt-0.5">Select an assignment to upload media for</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </header>
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {pickerLoading ? (
+            <div className="flex items-center justify-center py-20">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-600 mx-auto mb-3"></div>
+                <span className="text-gray-600">Loading your assignments…</span>
+              </div>
+            </div>
+          ) : pickerAssignments.length === 0 ? (
+            <div className="bg-white rounded-xl shadow-sm p-10 text-center">
+              <FileText className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+              <p className="text-gray-500 font-medium">No assignments found</p>
+              <p className="text-sm text-gray-400 mt-1">You have no active assignments to upload content for.</p>
+              <button onClick={() => navigate('/content-creator')} className="mt-4 px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors text-sm">
+                Back to Dashboard
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm text-gray-500 mb-4">Choose an assignment to upload media for:</p>
+              {pickerAssignments.map((a, i) => (
+                <button
+                  key={`${a.calendarId}-${a.itemIndex}-${i}`}
+                  onClick={() => navigate(`/content-creator/upload/${a.calendarId}/${a.itemIndex}`)}
+                  className="w-full bg-white rounded-xl shadow-sm p-4 text-left hover:shadow-md hover:border-purple-200 border border-transparent transition-all group"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-gray-900 group-hover:text-purple-700 truncate">{a.title || 'Untitled Assignment'}</p>
+                      <p className="text-sm text-gray-500 truncate">for {a.customerName || a.calendarName || 'Unknown'}</p>
+                    </div>
+                    <div className="flex items-center gap-2 ml-3 flex-shrink-0">
+                      {a.dueDate && (
+                        <span className="text-xs text-gray-400 flex items-center gap-1">
+                          <Calendar className="h-3 w-3" />
+                          {new Date(a.dueDate).toLocaleDateString()}
+                        </span>
+                      )}
+                      <span className="px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-700 font-medium">{a.platform}</span>
+                      <Send className="h-4 w-4 text-purple-400 group-hover:text-purple-600" />
+                    </div>
+                  </div>
+                  {a.description && (
+                    <p className="text-xs text-gray-400 mt-1 truncate">{a.description}</p>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (

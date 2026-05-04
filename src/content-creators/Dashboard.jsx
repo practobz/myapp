@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { PlusCircle, Clock, MessageSquare, CheckCircle, Globe, User, ChevronDown, Palette, Eye, Image, FolderOpen, Users, ClipboardList, Send, Bell } from 'lucide-react';
+import { PlusCircle, Clock, MessageSquare, CheckCircle, Globe, User, ChevronDown, Palette, Eye, Image, FolderOpen, Users, ClipboardList, Send, Bell, ShieldCheck } from 'lucide-react';
 import { format } from 'date-fns';
 import { useAuth } from "../admin/contexts/AuthContext";
 import Logo from '../admin/components/layout/Logo';
@@ -59,6 +59,7 @@ function Dashboard() {
   // Scheduled posts to check published status
   const [scheduledPosts, setScheduledPosts] = useState([]);
   const [reviewCount, setReviewCount] = useState(0);
+  const [adminApprovedCount, setAdminApprovedCount] = useState(0);
 
   const creatorEmail = getCreatorEmail();
 
@@ -141,28 +142,34 @@ function Dashboard() {
         if (Array.isArray(calendars)) {
           calendars.forEach(cal => { calendarMap[cal._id || cal.id] = cal; });
         }
-        const count = Array.isArray(submissions)
+        const creatorSubs = Array.isArray(submissions)
           ? submissions.filter(sub => {
               const byThisCreator = (sub.created_by || '').toLowerCase() === creatorEmail;
-              let assignedToCreator = false;
-              if (!byThisCreator && sub.calendar_id) {
+              if (byThisCreator) return true;
+              if (sub.calendar_id) {
                 const cal = calendarMap[sub.calendar_id];
                 if (cal && Array.isArray(cal.contentItems)) {
                   const item = cal.contentItems.find(
                     ci => (sub.item_id && ci.id === sub.item_id) ||
                           (sub.item_name && (ci.title === sub.item_name || ci.description === sub.item_name))
                   );
-                  if (item && (item.assignedTo || '').toLowerCase() === creatorEmail) {
-                    assignedToCreator = true;
-                  }
+                  if (item && (item.assignedTo || '').toLowerCase() === creatorEmail) return true;
                 }
               }
-              return (byThisCreator || assignedToCreator) && Array.isArray(sub.comments) && sub.comments.length > 0;
-            }).length
-          : 0;
+              return false;
+            })
+          : [];
+
+        const count = creatorSubs.filter(sub =>
+          Array.isArray(sub.comments) && sub.comments.length > 0
+        ).length;
         setReviewCount(count);
+
+        const approvedCount = creatorSubs.filter(sub => sub.status === 'approved').length;
+        setAdminApprovedCount(approvedCount);
       } catch (err) {
         setReviewCount(0);
+        setAdminApprovedCount(0);
       }
     };
 
@@ -291,7 +298,7 @@ function Dashboard() {
             </div>
 
             {/* Stats Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-4">
               {/* Total Assigned */}
               <div 
                 className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-5 cursor-pointer hover:shadow-md hover:border-indigo-200 transition-all"
@@ -350,7 +357,7 @@ function Dashboard() {
                     <CheckCircle className="h-5 w-5 sm:h-6 sm:w-6 text-green-600" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-xs sm:text-sm font-medium text-gray-500 truncate">Approved</p>
+                    <p className="text-xs sm:text-sm font-medium text-gray-500 truncate">Customer Approved</p>
                     <h3 className="text-xl sm:text-2xl font-bold text-gray-900">{stats.contentApproved}</h3>
                   </div>
                 </div>
@@ -368,6 +375,22 @@ function Dashboard() {
                   <div className="min-w-0">
                     <p className="text-xs sm:text-sm font-medium text-gray-500 truncate">Published</p>
                     <h3 className="text-xl sm:text-2xl font-bold text-gray-900">{stats.contentPublished}</h3>
+                  </div>
+                </div>
+              </div>
+
+              {/* Admin Approved */}
+              <div
+                className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-5 cursor-pointer hover:shadow-md hover:border-emerald-200 transition-all"
+                onClick={() => navigate('/content-creator/assignments')}
+              >
+                <div className="flex items-center gap-3 sm:gap-4">
+                  <div className="p-2.5 sm:p-3 bg-emerald-50 rounded-xl flex-shrink-0">
+                    <ShieldCheck className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-600" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs sm:text-sm font-medium text-gray-500 truncate">Admin Approved</p>
+                    <h3 className="text-xl sm:text-2xl font-bold text-gray-900">{adminApprovedCount}</h3>
                   </div>
                 </div>
               </div>
@@ -474,7 +497,7 @@ function Dashboard() {
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  navigate(`/content-creator/content-upload/${assignment.calendarId}/${assignment.itemIndex}`);
+                                  navigate(`/content-creator/upload/${assignment.calendarId}/${assignment.itemIndex}`);
                                 }}
                                 className="flex items-center gap-1 px-2.5 py-1 bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold rounded-lg transition-colors flex-shrink-0"
                               >
@@ -563,7 +586,7 @@ function Dashboard() {
                     </button>
 
                     <button 
-                      onClick={() => goToAssignments('pending')}
+                      onClick={() => navigate('/content-creator/upload')}
                       className="w-full flex items-center gap-4 p-4 rounded-xl bg-gradient-to-r from-rose-50 to-pink-50 hover:from-rose-100 hover:to-pink-100 border border-rose-100 hover:border-rose-200 transition-all duration-300 group"
                     >
                       <div className="p-3 bg-gradient-to-br from-rose-500 to-pink-600 rounded-xl shadow-lg group-hover:shadow-rose-200 transition-shadow">
@@ -571,7 +594,7 @@ function Dashboard() {
                       </div>
                       <div className="text-left">
                         <span className="text-sm font-bold text-gray-900 group-hover:text-rose-900">Upload Content</span>
-                        <p className="text-xs text-gray-500 mt-0.5">Submit media for admin review</p>
+                        <p className="text-xs text-gray-500 mt-0.5">Pick an assignment to submit media</p>
                       </div>
                     </button>
 

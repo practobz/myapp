@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { MessageSquare, CheckCircle, Edit3, Trash2, Move, ChevronLeft, ChevronRight, Image, Video, AlertCircle, ThumbsUp, Calendar, ChevronDown, ChevronUp, Send, RotateCcw, Search, FileText, Bell } from 'lucide-react';
+import { MessageSquare, CheckCircle, Edit3, Trash2, Move, ChevronLeft, ChevronRight, Image, Video, AlertCircle, ThumbsUp, Calendar, ChevronDown, ChevronUp, Send, RotateCcw, Search, FileText, Bell, UserCog, User } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 function ContentReview() {
@@ -68,7 +68,7 @@ function ContentReview() {
   
   // Ref for image container to properly position comments
   const imageContainerRef = useRef(null);
-  const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0, offsetLeft: 0, offsetTop: 0 });
+  const [imageDimensions, setImageDimensions] = useState({ contentW: 0, contentH: 0, offsetX: 0, offsetY: 0 });
 
   // Get logged-in customer info from localStorage (like in ContentCalendar)
   let user = null;
@@ -358,8 +358,13 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
 
   const handleImageClick = (e) => {
     const rect = e.target.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const nw = e.target.naturalWidth || e.target.videoWidth || rect.width;
+    const nh = e.target.naturalHeight || e.target.videoHeight || rect.height;
+    const scale = Math.min(rect.width / nw, rect.height / nh);
+    const contentW = nw * scale, contentH = nh * scale;
+    const ox = (rect.width - contentW) / 2, oy = (rect.height - contentH) / 2;
+    const x = Math.max(0, Math.min(1, (e.clientX - rect.left - ox) / contentW));
+    const y = Math.max(0, Math.min(1, (e.clientY - rect.top  - oy) / contentH));
     if (commentsForCurrentMedia.some((c) => c.editing)) return;
     
     const newComment = {
@@ -374,6 +379,7 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
       versionId: selectedContent.versions[selectedVersionIndex]?.id,
       versionNumber: selectedContent.versions[selectedVersionIndex]?.versionNumber || 1,
       mediaIndex: selectedMediaIndex, // Associate comment with current media item
+      reviewType: 'external',
       timestamp: new Date().toISOString()
     };
     setComments([...comments, newComment]);
@@ -424,6 +430,7 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
             x: comment.x,
             y: comment.y,
             mediaIndex: selectedMediaIndex,
+            reviewType: 'external',
             timestamp: comment.timestamp || new Date().toISOString(),
             status: 'active'
           };
@@ -554,18 +561,13 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
 
   // Handle image load to get dimensions for proper comment positioning
   const handleImageLoad = (e) => {
-    const img = e.target;
-    const container = imageContainerRef.current;
-    if (img && container) {
-      const containerRect = container.getBoundingClientRect();
-      const imgRect = img.getBoundingClientRect();
-      setImageDimensions({
-        width: img.offsetWidth,
-        height: img.offsetHeight,
-        offsetLeft: imgRect.left - containerRect.left,
-        offsetTop: imgRect.top - containerRect.top
-      });
-    }
+    const el = e.target;
+    const ew = el.clientWidth, eh = el.clientHeight;
+    const nw = el.naturalWidth || el.videoWidth || ew;
+    const nh = el.naturalHeight || el.videoHeight || eh;
+    const scale = Math.min(ew / nw, eh / nh);
+    const contentW = nw * scale, contentH = nh * scale;
+    setImageDimensions({ contentW, contentH, offsetX: (ew - contentW) / 2, offsetY: (eh - contentH) / 2 });
   };
 
   const handleMarkDone = async (id) => {
@@ -620,8 +622,13 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
     const repositioningComment = commentsForCurrentMedia.find((c) => c.repositioning);
     if (repositioningComment) {
       const rect = e.target.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
+      const nw = e.target.naturalWidth || e.target.videoWidth || rect.width;
+      const nh = e.target.naturalHeight || e.target.videoHeight || rect.height;
+      const scale = Math.min(rect.width / nw, rect.height / nh);
+      const contentW = nw * scale, contentH = nh * scale;
+      const ox = (rect.width - contentW) / 2, oy = (rect.height - contentH) / 2;
+      const x = Math.max(0, Math.min(1, (e.clientX - rect.left - ox) / contentW));
+      const y = Math.max(0, Math.min(1, (e.clientY - rect.top  - oy) / contentH));
       
       // Update local state first for immediate UI feedback
       setComments(
@@ -784,6 +791,7 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
   const [sidebarSearch, setSidebarSearch] = useState('');
   const [expandedCalendars, setExpandedCalendars] = useState({});
   const [sortOrder, setSortOrder] = useState('latest'); // 'latest' | 'oldest'
+  const [panelActiveComment, setPanelActiveComment] = useState(null);
 
   // Handle send to creator - updates status to 'sent_to_creator'
   const handleSendToCreator = async () => {
@@ -1150,6 +1158,13 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
 
   const totalComments = comments.length;
 
+  // All comments across every version of the selected item (for the right panel)
+  const allVersionComments = selectedContent
+    ? selectedContent.versions.flatMap((v, i) =>
+        (v.comments || []).map(c => ({ ...c, _versionNumber: i + 1 }))
+      )
+    : [];
+
   return (
     <div className="min-h-screen bg-slate-50" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
       <style>{`
@@ -1376,6 +1391,13 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
                                 {comment.comment}
                                 {comment.done && <span className="ml-1 text-green-600 text-[10px]">✓</span>}
                               </p>
+                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full inline-block mt-0.5 ${
+                                comment.reviewType === 'internal'
+                                  ? 'bg-purple-100 text-purple-700'
+                                  : 'bg-blue-100 text-blue-700'
+                              }`}>
+                                {comment.reviewType === 'internal' ? 'Internal' : 'External'}
+                              </span>
                               {comment.reply && (
                                 <div className="mt-1.5 p-1.5 bg-indigo-50 border border-indigo-100 rounded-lg">
                                   <p className="text-[10px] font-bold text-indigo-700">↩ {comment.reply.creatorName || 'Creator'}</p>
@@ -1565,11 +1587,15 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
                     {/* Comment Markers */}
                     {currentMedia && currentMedia.url && (
                       commentsForCurrentMedia.map((comment, index) => {
-                        const commentX = comment.x || comment.position?.x || 0;
-                        const commentY = comment.y || comment.position?.y || 0;
+                        const commentX = comment.x ?? comment.position?.x ?? 0;
+                        const commentY = comment.y ?? comment.position?.y ?? 0;
+                        const isFrac = commentX <= 1 && commentY <= 1;
+                        const { contentW: imgW = 0, contentH: imgH = 0, offsetX: imgOX = 0, offsetY: imgOY = 0 } = imageDimensions;
+                        const px = isFrac && imgW > 0 ? commentX * imgW + imgOX : commentX;
+                        const py = isFrac && imgH > 0 ? commentY * imgH + imgOY : commentY;
                         let boxLeft = 30;
                         let boxRight = "auto";
-                        if (commentX > 150) {
+                        if (commentX > 0.5) {
                           boxLeft = "auto";
                           boxRight = 30;
                         }
@@ -1578,8 +1604,8 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
                             key={`marker-${comment.id}`}
                             style={{
                               position: "absolute",
-                              top: commentY - 12,
-                              left: commentX - 12,
+                              top: py - 12,
+                              left: px - 12,
                               width: 24,
                               height: 24,
                               background: comment.done ? "#10b981" : comment.repositioning ? "#8b5cf6" : comment.editing ? "#3b82f6" : "#ef4444",
@@ -1648,6 +1674,13 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
                                         {comment.comment}
                                         {comment.done && <span className="text-green-600 ml-1 text-[10px]">✓</span>}
                                       </p>
+                                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full inline-block mt-1 ${
+                                        comment.reviewType === 'internal'
+                                          ? 'bg-purple-100 text-purple-700'
+                                          : 'bg-blue-100 text-blue-700'
+                                      }`}>
+                                        {comment.reviewType === 'internal' ? 'Internal Review' : 'External Review'}
+                                      </span>
                                     </div>
                                     {comment.reply && (
                                       <div className="mb-2 p-1.5 bg-indigo-50 border border-indigo-200 rounded-md">
@@ -1801,6 +1834,163 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
             })()} {/* end selectedContent conditional */}
           </div>
         </main>
+
+        {/* ── RIGHT COMMENTS PANEL (opened from Calendar) ── */}
+        {targetItemId && selectedContent && (
+          <aside className="w-80 flex-shrink-0 bg-white border-l border-slate-200 flex flex-col h-full overflow-hidden">
+
+            {/* Panel Header */}
+            <div className="px-4 py-4 border-b border-slate-100 bg-gradient-to-r from-purple-50 to-indigo-50 flex-shrink-0">
+              <h3 className="text-sm font-bold text-slate-800">Review Comments</h3>
+              <p className="text-[10px] text-slate-500 mt-0.5">
+                All versions
+                {allVersionComments.length > 0 && (
+                  <> · <span className="font-semibold text-slate-700">{allVersionComments.length}</span> comment{allVersionComments.length !== 1 ? 's' : ''}</>
+                )}
+              </p>
+              {/* Legend */}
+              <div className="flex items-center gap-4 mt-2.5">
+                <div className="flex items-center gap-1">
+                  <div className="w-2 h-2 rounded-full bg-purple-500" />
+                  <span className="text-[10px] text-slate-500">Internal Review</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-2 h-2 rounded-full bg-blue-500" />
+                  <span className="text-[10px] text-slate-500">External Review</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Comments Body */}
+            <div className="flex-1 overflow-y-auto p-3">
+              {allVersionComments.length === 0 ? (
+                <div className="text-center py-6">
+                  <div className="bg-gray-50 rounded-full w-10 h-10 flex items-center justify-center mx-auto mb-2">
+                    <MessageSquare className="h-5 w-5 text-gray-400" />
+                  </div>
+                  <p className="text-gray-500 text-xs">No comments yet</p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">Click on the image to add a comment</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {(() => {
+                    const byVersion = {};
+                    allVersionComments.forEach(c => {
+                      const key = c._versionNumber || 1;
+                      if (!byVersion[key]) byVersion[key] = [];
+                      byVersion[key].push(c);
+                    });
+                    return Object.keys(byVersion).sort((a, b) => Number(a) - Number(b)).map(vn => (
+                      <div key={vn}>
+                        {/* Version heading */}
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Version {vn}</span>
+                          <div className="flex-1 h-px bg-gray-100" />
+                          <span className="text-[10px] text-gray-400">{byVersion[vn].length}</span>
+                        </div>
+                        <div className="space-y-2">
+                          {byVersion[vn].map((comment, idx) => {
+                            const isAdminComment = comment.authorRole === 'admin' || comment.author === 'Admin';
+                            const isInternal = isAdminComment || comment.reviewType === 'internal';
+                            const isDone = comment.done || comment.status === 'completed';
+                            const isActive = panelActiveComment === comment.id;
+                            return (
+                              <div
+                                key={comment.id || `${vn}-${idx}`}
+                                className={`rounded-lg border transition-colors overflow-hidden cursor-pointer ${
+                                  isActive
+                                    ? isAdminComment ? 'bg-purple-50 border-purple-200' : 'bg-blue-50 border-blue-200'
+                                    : isAdminComment ? 'bg-white border-purple-100 hover:bg-purple-50/40' : 'bg-gray-50 border-gray-200 hover:bg-blue-50/40'
+                                }`}
+                                onClick={() => setPanelActiveComment(isActive ? null : comment.id)}
+                              >
+                                <div className="p-2 flex items-start gap-2">
+                                  {/* Index badge */}
+                                  <span className={`font-bold rounded-full w-5 h-5 flex items-center justify-center text-[10px] flex-shrink-0 border ${
+                                    isAdminComment ? 'text-purple-700 bg-purple-100 border-purple-200' : 'text-blue-700 bg-blue-100 border-blue-200'
+                                  }`}>{idx + 1}</span>
+                                  <div className="flex-1 min-w-0">
+                                    {/* Author row */}
+                                    <div className="flex items-center gap-1 mb-0.5 flex-wrap">
+                                      <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold ${
+                                        isAdminComment ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                                      }`}>
+                                        {isAdminComment ? <UserCog className="h-2 w-2" /> : <User className="h-2 w-2" />}
+                                        {isAdminComment ? 'Admin' : 'Customer'}
+                                      </span>
+                                      {(comment.authorEmail || comment.authorName || comment.author) && (
+                                        <span className="text-[9px] text-gray-400 truncate max-w-[110px]">
+                                          {comment.authorEmail || comment.authorName || comment.author}
+                                        </span>
+                                      )}
+                                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ml-auto ${
+                                        isInternal ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                                      }`}>
+                                        {isInternal ? 'Internal' : 'External'}
+                                      </span>
+                                    </div>
+                                    {/* Comment text */}
+                                    <p className="text-xs font-medium text-gray-900 break-words">
+                                      {comment.message || comment.comment}
+                                      {isDone && <span className="ml-1.5 text-green-600 text-[10px]">✓</span>}
+                                    </p>
+                                    {/* Timestamp */}
+                                    <p className="text-[9px] text-gray-400 mt-0.5">
+                                      {comment.timestamp ? new Date(comment.timestamp).toLocaleString() : ''}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                {/* Admin reply */}
+                                {comment.adminReply && (
+                                  <div className="mx-2 mb-2 p-1.5 bg-purple-50 border border-purple-200 rounded-md">
+                                    <div className="flex items-center gap-1 mb-0.5">
+                                      <UserCog className="h-2.5 w-2.5 text-purple-600" />
+                                      <span className="text-[10px] font-bold text-purple-700">{comment.adminReply.adminName || 'Admin'}</span>
+                                      {comment.adminReply.adminEmail && (
+                                        <span className="text-[9px] text-gray-400 truncate max-w-[90px]">{comment.adminReply.adminEmail}</span>
+                                      )}
+                                    </div>
+                                    <p className="text-[10px] text-gray-700 break-words">{comment.adminReply.text}</p>
+                                  </div>
+                                )}
+
+                                {/* Creator reply */}
+                                {comment.reply && (
+                                  <div className="mx-2 mb-2 p-1.5 bg-indigo-50 border border-indigo-200 rounded-md">
+                                    <div className="flex items-center gap-1 mb-0.5">
+                                      <User className="h-2.5 w-2.5 text-indigo-600" />
+                                      <span className="text-[10px] font-bold text-indigo-700">{comment.reply.creatorName || 'Creator'}</span>
+                                    </div>
+                                    <p className="text-[10px] text-gray-700 break-words">{comment.reply.text}</p>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ));
+                  })()}
+                </div>
+              )}
+            </div>
+
+            {/* Panel Footer — resolved count */}
+            {allVersionComments.length > 0 && (
+              <div className="px-4 py-3 border-t border-slate-100 bg-slate-50 flex-shrink-0">
+                <div className="flex items-center justify-between text-xs text-slate-500">
+                  <span>
+                    <span className="font-semibold text-slate-700">{allVersionComments.filter(c => c.done || c.status === 'completed').length}</span> resolved
+                  </span>
+                  <span>
+                    <span className="font-semibold text-slate-700">{allVersionComments.filter(c => !c.done && c.status !== 'completed').length}</span> open
+                  </span>
+                </div>
+              </div>
+            )}
+          </aside>
+        )}
       </div>
 
       {isUserMenuOpen && (

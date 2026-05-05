@@ -199,6 +199,7 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
     createdBy: baseItem.created_by || 'Unknown',
     createdAt: baseItem.created_at || '',
     status: currentStatus,  // Now uses latest version status
+    approvalNotes: latestVersion.approvalNotes || baseItem.approvalNotes || '',
     platform: baseItem.platform || 'Instagram',
     type: baseItem.type || 'Post',
     customer_id: baseItem.customer_id,
@@ -217,6 +218,8 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
       caption: version.caption || '',
       notes: version.notes || '',
       createdAt: version.created_at,
+      status: version.status || 'under_review',
+      approvalNotes: version.approvalNotes || '',
       comments: version.comments || []
     })),
     totalVersions: versions.length
@@ -792,6 +795,8 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
   const [expandedCalendars, setExpandedCalendars] = useState({});
   const [sortOrder, setSortOrder] = useState('latest'); // 'latest' | 'oldest'
   const [panelActiveComment, setPanelActiveComment] = useState(null);
+  const [mobileView, setMobileView] = useState('content'); // 'content' | 'comments' — mobile tab toggle for targetItemId
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false); // mobile drawer for non-targetItemId sidebar
 
   // Handle send to creator - updates status to 'sent_to_creator'
   const handleSendToCreator = async () => {
@@ -1045,9 +1050,19 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
     // If not published, show latest version's status if available
     if (Array.isArray(content.versions) && content.versions.length > 0) {
       const latestVersion = content.versions[content.versions.length - 1];
-      return latestVersion.status || content.status || 'under_review';
+      const status = latestVersion.status || content.status || 'under_review';
+      if (status === 'approved') {
+        const notes = (latestVersion.approvalNotes || content.approvalNotes || '').toLowerCase();
+        return notes.includes('customer') ? 'approved_by_customer' : 'approved_by_admin';
+      }
+      return status;
     }
-    return content.status || 'under_review';
+    const status = content.status || 'under_review';
+    if (status === 'approved') {
+      const notes = (content.approvalNotes || '').toLowerCase();
+      return notes.includes('customer') ? 'approved_by_customer' : 'approved_by_admin';
+    }
+    return status;
   };
 
   const getStatusColor = (status) => {
@@ -1055,7 +1070,10 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
       case 'under_review':
         return 'bg-amber-100 text-amber-800 border-amber-300';
       case 'approved':
+      case 'approved_by_customer':
         return 'bg-emerald-100 text-emerald-800 border-emerald-300';
+      case 'approved_by_admin':
+        return 'bg-orange-100 text-orange-800 border-orange-300';
       case 'rejected':
         return 'bg-rose-100 text-rose-800 border-rose-300';
       case 'published':
@@ -1072,7 +1090,10 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
       case 'under_review':
         return 'Under Review';
       case 'approved':
-        return 'Approved';
+      case 'approved_by_customer':
+        return 'Approved by Customer';
+      case 'approved_by_admin':
+        return 'Approved by Admin';
       case 'rejected':
         return 'Rejected';
       case 'published':
@@ -1174,16 +1195,29 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
         }
       `}</style>
 
+      {/* Mobile overlay for left sidebar */}
+      {!targetItemId && mobileSidebarOpen && (
+        <div className="md:hidden fixed inset-0 bg-black/40 z-40" onClick={() => setMobileSidebarOpen(false)} />
+      )}
+
       {/* Main Layout */}
-      <div className="flex h-screen overflow-hidden">
+      <div className="flex h-[100dvh] overflow-hidden">
 
         {/* ── LEFT SIDEBAR ── */}
         {!targetItemId && (
-          <aside className="w-72 flex-shrink-0 bg-white border-r border-slate-200 flex flex-col h-full">
+          <aside className={`fixed md:relative inset-y-0 left-0 z-50 md:z-auto w-72 flex-shrink-0 bg-white border-r border-slate-200 flex flex-col h-full transition-transform duration-300 ease-in-out ${mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
 
             {/* Sidebar Header */}
             <div className="px-4 pt-4 pb-3 border-b border-slate-100">
-              <h2 className="text-base font-bold text-slate-800 mb-3">Content Review</h2>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-base font-bold text-slate-800">Content Review</h2>
+                <button
+                  className="md:hidden p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                  onClick={() => setMobileSidebarOpen(false)}
+                >
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
 
               {/* Search Bar */}
               <div className="relative mb-2">
@@ -1422,8 +1456,52 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
         )}
 
         {/* ── MAIN CONTENT ── */}
-        <main className="flex-1 overflow-y-auto bg-slate-50">
+        <main className={`flex-1 overflow-y-auto bg-slate-50 ${targetItemId && selectedContent && mobileView === 'comments' ? 'hidden md:block' : ''}`}>
+          {/* Mobile Tab Bar — only when coming from Calendar */}
+          {targetItemId && selectedContent && (
+            <div className="md:hidden sticky top-0 z-10 flex border-b border-slate-200 bg-white shadow-sm flex-shrink-0">
+              <button
+                onClick={() => setMobileView('content')}
+                className={`flex-1 py-3 text-sm font-semibold transition-colors ${
+                  mobileView === 'content'
+                    ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/60'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                Content
+              </button>
+              <button
+                onClick={() => setMobileView('comments')}
+                className={`flex-1 py-3 text-sm font-semibold transition-colors relative ${
+                  mobileView === 'comments'
+                    ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/60'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                Comments
+                {allVersionComments.length > 0 && (
+                  <span className="ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold rounded-full bg-indigo-600 text-white">
+                    {allVersionComments.length}
+                  </span>
+                )}
+              </button>
+            </div>
+          )}
+
           <div className="px-4 py-4 max-w-full">
+            {/* Mobile hamburger to open sidebar (non-targetItemId) */}
+            {!targetItemId && (
+              <div className="md:hidden flex items-center gap-3 mb-4">
+                <button
+                  onClick={() => setMobileSidebarOpen(true)}
+                  className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 shadow-sm"
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
+                  All Items
+                </button>
+              </div>
+            )}
+
             {targetItemId && (
               <div className="mb-4">
                 <button
@@ -1438,7 +1516,7 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
 
             {/* No item selected placeholder */}
             {!selectedContent ? (
-              <div className="flex flex-col items-center justify-center h-[calc(100vh-8rem)] text-center">
+              <div className="flex flex-col items-center justify-center h-[calc(100dvh-8rem)] text-center">
                 <div className="bg-gradient-to-br from-indigo-100 to-blue-100 rounded-2xl w-20 h-20 flex items-center justify-center mx-auto mb-4">
                   <FileText className="h-10 w-10 text-indigo-400" />
                 </div>
@@ -1633,7 +1711,13 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
                             }}
                           >
                             {index + 1}
-                            {(comment.editing || activeComment === comment.id || hoveredComment === comment.id) && !comment.repositioning && (
+                            {(comment.editing || activeComment === comment.id || hoveredComment === comment.id) && !comment.repositioning && (() => {
+                              const isAdminComment = comment.authorRole === 'admin';
+                              const borderColor = isAdminComment ? '#7c3aed' : '#3b82f6';
+                              const boxShadow = isAdminComment
+                                ? '0 6px 24px rgba(124,58,237,0.18)'
+                                : '0 4px 20px rgba(59,130,246,0.15)';
+                              return (
                               <div
                                 style={{
                                   position: "absolute",
@@ -1642,72 +1726,126 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
                                   top: "50%",
                                   transform: "translateY(-50%)",
                                   background: "#fff",
-                                  border: "1px solid #3b82f6",
-                                  borderRadius: "8px",
-                                  padding: "10px",
-                                  minWidth: "180px",
-                                  maxWidth: "220px",
+                                  border: `2px solid ${borderColor}`,
+                                  borderRadius: "10px",
+                                  padding: "12px",
+                                  minWidth: "230px",
+                                  maxWidth: "270px",
                                   zIndex: 20,
-                                  boxShadow: "0 4px 20px rgba(59,130,246,0.15)",
+                                  boxShadow,
                                 }}
                                 onClick={(e) => e.stopPropagation()}
                               >
                                 {comment.editing ? (
                                   <>
+                                    {/* Author badge in editing mode */}
+                                    <div className="flex items-center gap-1.5 mb-2">
+                                      <div className="w-4 h-4 rounded-full bg-blue-500 flex items-center justify-center">
+                                        <User className="h-2.5 w-2.5 text-white" />
+                                      </div>
+                                      <span className="text-[10px] font-semibold text-blue-700">Customer</span>
+                                    </div>
                                     <textarea
                                       value={comment.comment}
                                       onChange={(e) => handleCommentChange(comment.id, e.target.value)}
-                                      placeholder="Add comment..."
-                                      className="w-full p-2 border border-gray-200 rounded-md resize-none text-xs text-gray-900 bg-white focus:border-blue-500 focus:outline-none"
-                                      rows={2}
+                                      placeholder="Add comment… (Ctrl+Enter to save)"
+                                      className="w-full p-2 border border-blue-200 bg-blue-50 rounded-lg resize-none text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                                      rows={3}
                                       autoFocus
+                                      onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleCommentSubmit(comment.id); }}
                                     />
                                     <div className="flex gap-1.5 mt-2">
-                                      <Button onClick={() => handleCommentSubmit(comment.id)} variant="success" size="sm">Save</Button>
-                                      <Button onClick={() => handleCommentCancel(comment.id)} variant="danger" size="sm">Cancel</Button>
+                                      <button
+                                        className="flex-1 py-1 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-semibold"
+                                        onClick={(e) => { e.stopPropagation(); handleCommentSubmit(comment.id); }}
+                                      >
+                                        <CheckCircle className="h-2.5 w-2.5 inline mr-0.5" />Save
+                                      </button>
+                                      <button
+                                        className="flex-1 py-1 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-600 text-[10px] font-semibold"
+                                        onClick={(e) => { e.stopPropagation(); handleCommentCancel(comment.id); }}
+                                      >
+                                        Cancel
+                                      </button>
                                     </div>
                                   </>
                                 ) : (
                                   <>
-                                    <div className="mb-2">
-                                      <p className="font-medium text-gray-900 text-xs leading-relaxed break-words">
-                                        {comment.comment}
-                                        {comment.done && <span className="text-green-600 ml-1 text-[10px]">✓</span>}
-                                      </p>
-                                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full inline-block mt-1 ${
-                                        comment.reviewType === 'internal'
-                                          ? 'bg-purple-100 text-purple-700'
-                                          : 'bg-blue-100 text-blue-700'
+                                    {/* Author badge */}
+                                    <div className="flex items-center gap-1 mb-1.5 flex-wrap">
+                                      <div className={`w-3.5 h-3.5 rounded-full flex items-center justify-center flex-shrink-0 ${isAdminComment ? 'bg-purple-600' : 'bg-blue-500'}`}>
+                                        {isAdminComment ? <UserCog className="h-2 w-2 text-white" /> : <User className="h-2 w-2 text-white" />}
+                                      </div>
+                                      <span className={`text-[10px] font-semibold ${isAdminComment ? 'text-purple-700' : 'text-blue-700'}`}>
+                                        {isAdminComment ? 'Admin' : 'Customer'}
+                                      </span>
+                                      {(comment.authorEmail || comment.authorName) && (
+                                        <span className="text-[9px] text-gray-400 truncate max-w-[100px]">
+                                          {comment.authorEmail || comment.authorName}
+                                        </span>
+                                      )}
+                                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ml-auto ${
+                                        (isAdminComment || comment.reviewType === 'internal') ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
                                       }`}>
-                                        {comment.reviewType === 'internal' ? 'Internal Review' : 'External Review'}
+                                        {(isAdminComment || comment.reviewType === 'internal') ? 'Internal' : 'External'}
                                       </span>
                                     </div>
-                                    {comment.reply && (
-                                      <div className="mb-2 p-1.5 bg-indigo-50 border border-indigo-200 rounded-md">
-                                        <p className="text-[10px] font-bold text-indigo-700 mb-0.5">↩ {comment.reply.creatorName || 'Creator'}</p>
-                                        <p className="text-[10px] text-gray-700 break-words">{comment.reply.text}</p>
+                                    {/* Comment text */}
+                                    <p className="text-xs font-medium text-gray-900 leading-relaxed break-words">
+                                      {comment.comment}
+                                      {comment.done && <span className="ml-1.5 text-green-600 text-[10px]">✓</span>}
+                                    </p>
+                                    <p className="text-[9px] text-gray-400 mt-0.5">
+                                      {comment.timestamp ? new Date(comment.timestamp).toLocaleString() : ''}
+                                    </p>
+                                    {/* Reply block */}
+                                    {(comment.adminReply || comment.reply) && (
+                                      <div className="mt-1.5 p-1.5 bg-purple-50 border border-purple-200 rounded-md">
+                                        <div className="flex items-center gap-1 mb-0.5">
+                                          <UserCog className="h-2.5 w-2.5 text-purple-600" />
+                                          <span className="text-[10px] font-bold text-purple-700">
+                                            {comment.adminReply?.adminName || comment.reply?.creatorName || 'Creator'}
+                                          </span>
+                                        </div>
+                                        <p className="text-[10px] text-gray-700 break-words">
+                                          {comment.adminReply?.text || comment.reply?.text}
+                                        </p>
                                       </div>
                                     )}
-                                    <div className="grid grid-cols-2 gap-1">
+                                    {/* Action buttons */}
+                                    <div className="flex items-center gap-1 mt-2 pt-1.5 border-t border-gray-100 flex-wrap">
                                       {!comment.done && (
-                                        <Button onClick={(e) => { e.stopPropagation(); handleMarkDone(comment.id); }} variant="success" size="sm">
-                                          <CheckCircle className="h-2.5 w-2.5 mr-0.5" />Done
-                                        </Button>
+                                        <button
+                                          className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] bg-green-50 text-green-700 rounded-md hover:bg-green-100"
+                                          onClick={(e) => { e.stopPropagation(); handleMarkDone(comment.id); }}
+                                        >
+                                          <CheckCircle className="h-2.5 w-2.5" />Done
+                                        </button>
                                       )}
-                                      <Button onClick={(e) => { e.stopPropagation(); handleEditComment(comment.id); }} variant="warning" size="sm">
-                                        <Edit3 className="h-2.5 w-2.5 mr-0.5" />Edit
-                                      </Button>
-                                      <Button onClick={(e) => { e.stopPropagation(); handleDeleteComment(comment.id); }} variant="danger" size="sm">
-                                        <Trash2 className="h-2.5 w-2.5 mr-0.5" />Del
-                                      </Button>
-                                      <Button onClick={(e) => { e.stopPropagation(); handleRepositionStart(comment.id); }} variant="info" size="sm">
-                                        <Move className="h-2.5 w-2.5 mr-0.5" />Move
-                                      </Button>
+                                      <button
+                                        className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] bg-amber-50 text-amber-700 rounded-md hover:bg-amber-100"
+                                        onClick={(e) => { e.stopPropagation(); handleEditComment(comment.id); }}
+                                      >
+                                        <Edit3 className="h-2.5 w-2.5" />Edit
+                                      </button>
+                                      <button
+                                        className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] bg-cyan-50 text-cyan-700 rounded-md hover:bg-cyan-100"
+                                        onClick={(e) => { e.stopPropagation(); handleRepositionStart(comment.id); }}
+                                      >
+                                        <Move className="h-2.5 w-2.5" />Move
+                                      </button>
+                                      <button
+                                        className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] bg-red-50 text-red-500 rounded-md hover:bg-red-100 ml-auto"
+                                        onClick={(e) => { e.stopPropagation(); handleDeleteComment(comment.id); }}
+                                      >
+                                        <Trash2 className="h-2.5 w-2.5" />
+                                      </button>
                                     </div>
                                   </>
                                 )}
                               </div>
-                            )}
+                              );
+                            })()}
                             {comment.repositioning && (
                               <div style={{
                                 position: "absolute", left: 30, top: "50%", transform: "translateY(-50%)",
@@ -1772,8 +1910,8 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
                   </div>
                 )}
 
-                {/* Action Buttons */}
-                {getDisplayStatus(selectedContent) !== 'approved' && getDisplayStatus(selectedContent) !== 'published' && (
+                {/* Action Buttons — shown when not yet customer-approved or published */}
+                {!['approved', 'approved_by_customer', 'published'].includes(getDisplayStatus(selectedContent)) && (
                   <div className="flex flex-col sm:flex-row justify-center gap-3 mt-4">
                     {commentsForCurrentMedia.length > 0 && (
                       <button
@@ -1806,12 +1944,22 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
                   </div>
                 )}
 
-                {/* Approved state */}
-                {getDisplayStatus(selectedContent) === 'approved' && (
+                {/* Approved by Admin banner — customer can still give their own approval */}
+                {getDisplayStatus(selectedContent) === 'approved_by_admin' && (
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-4">
+                    <div className="inline-flex items-center px-6 py-3 bg-orange-50 border-2 border-orange-300 rounded-xl">
+                      <CheckCircle className="h-5 w-5 text-orange-600 mr-2" />
+                      <span className="text-orange-800 font-bold text-sm">Approved by Admin</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Approved by Customer banner + Undo */}
+                {['approved', 'approved_by_customer'].includes(getDisplayStatus(selectedContent)) && (
                   <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-4">
                     <div className="inline-flex items-center px-6 py-3 bg-emerald-50 border-2 border-emerald-200 rounded-xl">
                       <CheckCircle className="h-5 w-5 text-emerald-600 mr-2" />
-                      <span className="text-emerald-800 font-bold text-sm">Content Approved</span>
+                      <span className="text-emerald-800 font-bold text-sm">Approved by Customer</span>
                     </div>
                     <button
                       onClick={handleUndoApprove}
@@ -1837,7 +1985,7 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
 
         {/* ── RIGHT COMMENTS PANEL (opened from Calendar) ── */}
         {targetItemId && selectedContent && (
-          <aside className="w-80 flex-shrink-0 bg-white border-l border-slate-200 flex flex-col h-full overflow-hidden">
+          <aside className={`w-full md:w-80 flex-shrink-0 bg-white border-l border-slate-200 flex-col h-full overflow-hidden ${mobileView === 'comments' ? 'flex' : 'hidden md:flex'}`}>
 
             {/* Panel Header */}
             <div className="px-4 py-4 border-b border-slate-100 bg-gradient-to-r from-purple-50 to-indigo-50 flex-shrink-0">

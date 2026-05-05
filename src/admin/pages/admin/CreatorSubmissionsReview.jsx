@@ -17,7 +17,7 @@ const STATUS_CONFIG = {
 };
 
 const getStatusConfig = (status) =>
-  STATUS_CONFIG[status] || { label: status || 'Unknown', color: 'bg-gray-100 text-gray-700 border-gray-200' };
+  STATUS_CONFIG[status] || STATUS_CONFIG['submitted'];
 
 const isVideoUrl = (url) => /\.(mp4|mov|webm|avi|mkv)(\?|$)/i.test(url || '');
 
@@ -209,6 +209,8 @@ function ReviewPanel({ submission, onClose, onStatusUpdated }) {
   const [localStatus, setLocalStatus] = useState(submission.status);
   const [toast, setToast]             = useState(null);
   const [sidebarTab, setSidebarTab]   = useState('comments');
+  const [sentToCustomer, setSentToCustomer]       = useState(submission.submission_stage === 'customer');
+  const [sendingToCustomer, setSendingToCustomer] = useState(false);
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -228,6 +230,8 @@ function ReviewPanel({ submission, onClose, onStatusUpdated }) {
       id: uuidv4(),
       x: e.clientX - rect.left,
       y: e.clientY - rect.top,
+      renderedWidth: rect.width,
+      renderedHeight: rect.height,
       comment: '',
       editing: true,
       done: false,
@@ -248,11 +252,13 @@ function ReviewPanel({ submission, onClose, onStatusUpdated }) {
       const rect = e.target.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
-      setComments(prev => prev.map(c => c.id === repositioning.id ? { ...c, x, y, repositioning: false } : c));
+      const renderedWidth = rect.width;
+      const renderedHeight = rect.height;
+      setComments(prev => prev.map(c => c.id === repositioning.id ? { ...c, x, y, renderedWidth, renderedHeight, repositioning: false } : c));
       try {
         await fetch(
           `${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(submission.assignment_id)}/comments/${repositioning.id}`,
-          { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ x, y, position: { x, y } }) }
+          { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ x, y, renderedWidth, renderedHeight, position: { x, y } }) }
         );
       } catch {}
       return;
@@ -281,6 +287,8 @@ function ReviewPanel({ submission, onClose, onStatusUpdated }) {
               comment: {
                 id: comment.id,
                 x: comment.x, y: comment.y,
+                renderedWidth: comment.renderedWidth,
+                renderedHeight: comment.renderedHeight,
                 position: { x: comment.x, y: comment.y },
                 comment: comment.comment.trim(),
                 mediaIndex: comment.mediaIndex ?? 0,
@@ -353,6 +361,24 @@ function ReviewPanel({ submission, onClose, onStatusUpdated }) {
   };
 
   const handleActivate = (id) => setActiveComment(prev => prev === id ? null : id);
+
+  // ── Send to customer ──
+  const handleSendToCustomer = async () => {
+    setSendingToCustomer(true);
+    try {
+      const res = await fetch(
+        `${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(submission._id)}/send-to-customer`,
+        { method: 'PATCH', headers: { 'Content-Type': 'application/json' } }
+      );
+      if (!res.ok) throw new Error();
+      setSentToCustomer(true);
+      showToast('Content sent to customer for review.');
+    } catch {
+      showToast('Failed to send to customer. Please try again.', 'error');
+    } finally {
+      setSendingToCustomer(false);
+    }
+  };
 
   // ── Status actions ──
   const handleApprove = async () => {
@@ -566,7 +592,7 @@ function ReviewPanel({ submission, onClose, onStatusUpdated }) {
 
             {/* Action area */}
             <div className="p-4 border-b border-gray-100 space-y-2 flex-shrink-0">
-              {localStatus === 'submitted' && !showRevisionInput && (
+              {!['approved', 'revision_requested', 'rejected'].includes(localStatus) && !showRevisionInput && (
                 <div className="flex gap-2">
                   <button onClick={handleApprove} disabled={approving}
                     className="flex-1 py-2.5 bg-green-500 text-white rounded-xl text-sm font-semibold hover:bg-green-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
@@ -581,7 +607,7 @@ function ReviewPanel({ submission, onClose, onStatusUpdated }) {
                 </div>
               )}
 
-              {localStatus === 'submitted' && showRevisionInput && (
+              {!['approved', 'revision_requested', 'rejected'].includes(localStatus) && showRevisionInput && (
                 <div className="space-y-2">
                   <p className="text-xs font-medium text-gray-700">Describe the revisions needed:</p>
                   <textarea
@@ -604,22 +630,51 @@ function ReviewPanel({ submission, onClose, onStatusUpdated }) {
               )}
 
               {localStatus === 'approved' && (
-                <div className="flex items-center gap-2 p-3 bg-green-50 rounded-xl border border-green-200">
-                  <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
-                  <div>
-                    <p className="text-sm font-semibold text-green-800">Approved</p>
-                    <p className="text-xs text-green-600">Creator has been notified</p>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 p-3 bg-green-50 rounded-xl border border-green-200">
+                    <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
+                    <div>
+                      <p className="text-sm font-semibold text-green-800">Approved</p>
+                      <p className="text-xs text-green-600">Creator has been notified</p>
+                    </div>
                   </div>
+                  {sentToCustomer ? (
+                    <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-xl border border-blue-200">
+                      <Send className="h-5 w-5 text-blue-600 flex-shrink-0" />
+                      <div>
+                        <p className="text-sm font-semibold text-blue-800">Sent to Customer</p>
+                        <p className="text-xs text-blue-600">Customer can now review this content</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={handleSendToCustomer}
+                      disabled={sendingToCustomer}
+                      className="w-full py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+                    >
+                      {sendingToCustomer
+                        ? <><div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Sending...</>
+                        : <><Send className="h-4 w-4" />Send to Customer</>}
+                    </button>
+                  )}
                 </div>
               )}
 
               {localStatus === 'revision_requested' && (
-                <div className="flex items-center gap-2 p-3 bg-orange-50 rounded-xl border border-orange-200">
-                  <AlertCircle className="h-5 w-5 text-orange-600 flex-shrink-0" />
-                  <div>
-                    <p className="text-sm font-semibold text-orange-800">Revision Requested</p>
-                    <p className="text-xs text-orange-600">Creator has been notified</p>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 p-3 bg-orange-50 rounded-xl border border-orange-200">
+                    <AlertCircle className="h-5 w-5 text-orange-600 flex-shrink-0" />
+                    <div>
+                      <p className="text-sm font-semibold text-orange-800">Revision Requested</p>
+                      <p className="text-xs text-orange-600">Creator has been notified</p>
+                    </div>
                   </div>
+                  <button onClick={handleApprove} disabled={approving}
+                    className="w-full py-2.5 bg-green-500 text-white rounded-xl text-sm font-semibold hover:bg-green-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
+                    {approving
+                      ? <><div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Approving...</>
+                      : <><CheckCircle className="h-4 w-4" />Approve Anyway</>}
+                  </button>
                 </div>
               )}
             </div>
@@ -915,7 +970,7 @@ export default function CreatorSubmissionsReview() {
       const res  = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions`);
       const data = await res.json();
       const adminReview = Array.isArray(data)
-        ? data.filter(s => s.submission_stage === 'admin_review')
+        ? data.filter(s => Array.isArray(s.notify_admins) && s.notify_admins.length > 0)
         : [];
       adminReview.sort((a, b) =>
         new Date(b.sent_to_admin_at || b.created_at) - new Date(a.sent_to_admin_at || a.created_at)

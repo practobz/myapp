@@ -359,15 +359,22 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
     }));
   };
 
+  // Normalise clientX/clientY from either a mouse or touch event
+  const getEventCoords = (e) => ({
+    clientX: e.clientX ?? e.changedTouches?.[0]?.clientX ?? e.touches?.[0]?.clientX ?? 0,
+    clientY: e.clientY ?? e.changedTouches?.[0]?.clientY ?? e.touches?.[0]?.clientY ?? 0,
+  });
+
   const handleImageClick = (e) => {
     const rect = e.target.getBoundingClientRect();
+    const { clientX, clientY } = getEventCoords(e);
     const nw = e.target.naturalWidth || e.target.videoWidth || rect.width;
     const nh = e.target.naturalHeight || e.target.videoHeight || rect.height;
     const scale = Math.min(rect.width / nw, rect.height / nh);
     const contentW = nw * scale, contentH = nh * scale;
     const ox = (rect.width - contentW) / 2, oy = (rect.height - contentH) / 2;
-    const x = Math.max(0, Math.min(1, (e.clientX - rect.left - ox) / contentW));
-    const y = Math.max(0, Math.min(1, (e.clientY - rect.top  - oy) / contentH));
+    const x = Math.max(0, Math.min(1, (clientX - rect.left - ox) / contentW));
+    const y = Math.max(0, Math.min(1, (clientY - rect.top  - oy) / contentH));
     if (commentsForCurrentMedia.some((c) => c.editing)) return;
     
     const newComment = {
@@ -621,17 +628,45 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
     setActiveComment(null); // Close the popup when starting repositioning
   };
 
+  // Tap-to-place comment on video (mobile): called from the transparent overlay
+  const handleVideoOverlayTap = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const container = imageContainerRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const { clientX, clientY } = getEventCoords(e);
+    const { contentW = rect.width, contentH = rect.height, offsetX = 0, offsetY = 0 } = imageDimensions;
+    const x = Math.max(0, Math.min(1, (clientX - rect.left - offsetX) / contentW));
+    const y = Math.max(0, Math.min(1, (clientY - rect.top  - offsetY) / contentH));
+    setVideoCommentMode(false);
+    if (commentsForCurrentMedia.some((c) => c.editing)) return;
+    const newComment = {
+      id: uuidv4(), x, y,
+      comment: '', editing: true, done: false, repositioning: false, isNew: true,
+      versionId: selectedContent.versions[selectedVersionIndex]?.id,
+      versionNumber: selectedContent.versions[selectedVersionIndex]?.versionNumber || 1,
+      mediaIndex: selectedMediaIndex,
+      reviewType: 'external',
+      timestamp: new Date().toISOString(),
+    };
+    setComments(prev => [...prev, newComment]);
+    setCommentsForCurrentMedia(prev => [...prev, newComment]);
+    setActiveComment(newComment.id);
+  };
+
   const handleImageClickWithReposition = async (e) => {
     const repositioningComment = commentsForCurrentMedia.find((c) => c.repositioning);
     if (repositioningComment) {
       const rect = e.target.getBoundingClientRect();
+      const { clientX, clientY } = getEventCoords(e);
       const nw = e.target.naturalWidth || e.target.videoWidth || rect.width;
       const nh = e.target.naturalHeight || e.target.videoHeight || rect.height;
       const scale = Math.min(rect.width / nw, rect.height / nh);
       const contentW = nw * scale, contentH = nh * scale;
       const ox = (rect.width - contentW) / 2, oy = (rect.height - contentH) / 2;
-      const x = Math.max(0, Math.min(1, (e.clientX - rect.left - ox) / contentW));
-      const y = Math.max(0, Math.min(1, (e.clientY - rect.top  - oy) / contentH));
+      const x = Math.max(0, Math.min(1, (clientX - rect.left - ox) / contentW));
+      const y = Math.max(0, Math.min(1, (clientY - rect.top  - oy) / contentH));
       
       // Update local state first for immediate UI feedback
       setComments(
@@ -778,7 +813,7 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
   const handleMediaChange = (direction) => {
     const currentVersion = selectedContent.versions[selectedVersionIndex];
     const mediaLength = currentVersion.media.length;
-    
+    setVideoCommentMode(false);
     if (direction === 'prev' && selectedMediaIndex > 0) {
       setSelectedMediaIndex(selectedMediaIndex - 1);
     } else if (direction === 'next' && selectedMediaIndex < mediaLength - 1) {
@@ -797,6 +832,7 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
   const [panelActiveComment, setPanelActiveComment] = useState(null);
   const [mobileView, setMobileView] = useState('content'); // 'content' | 'comments' — mobile tab toggle for targetItemId
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false); // mobile drawer for non-targetItemId sidebar
+  const [videoCommentMode, setVideoCommentMode] = useState(false); // mobile: tap-to-place comment overlay on video
 
   // Handle send to creator - updates status to 'sent_to_creator'
   const handleSendToCreator = async () => {
@@ -1633,17 +1669,34 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
                             }}
                           />
                         ) : (
-                          <video
-                            src={currentMedia.url}
-                            controls
-                            className="max-w-full h-auto max-h-[65vh] rounded-xl shadow-lg border border-slate-200 object-contain cursor-crosshair"
-                            onClick={handleImageClickWithReposition}
-                            onLoadedMetadata={handleImageLoad}
-                            onError={(e) => {
-                              e.target.style.display = 'none';
-                              if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex';
-                            }}
-                          />
+                          <>
+                            <video
+                              src={currentMedia.url}
+                              controls
+                              className="max-w-full h-auto max-h-[65vh] rounded-xl shadow-lg border border-slate-200 object-contain cursor-crosshair"
+                              onClick={handleImageClickWithReposition}
+                              onLoadedMetadata={handleImageLoad}
+                              onError={(e) => {
+                                e.target.style.display = 'none';
+                                if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex';
+                              }}
+                            />
+                            {/* Mobile comment overlay — activates when user taps "Add Comment" button */}
+                            {videoCommentMode && (
+                              <div
+                                className="absolute inset-0 z-20 rounded-xl flex flex-col items-center justify-center"
+                                style={{ background: 'rgba(0,0,0,0.25)', touchAction: 'none' }}
+                                onClick={handleVideoOverlayTap}
+                                onTouchEnd={handleVideoOverlayTap}
+                              >
+                                <div className="bg-black/60 text-white text-sm font-semibold px-4 py-2 rounded-full flex items-center gap-2 pointer-events-none">
+                                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" strokeWidth="2"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 2v2m0 16v2M2 12h2m16 0h2"/></svg>
+                                  Tap to place comment
+                                </div>
+                                <p className="text-white/70 text-xs mt-1 pointer-events-none">Tap Cancel below to go back</p>
+                              </div>
+                            )}
+                          </>
                         )
                       ) : (
                         <div className="w-96 h-72 bg-slate-100 rounded-xl flex items-center justify-center border border-slate-200">
@@ -1862,6 +1915,29 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
                     )}
                   </div>
                 </div>
+
+                {/* Mobile: Add Comment button for video — desktop users click directly on the video */}
+                {currentMedia?.type === 'video' && (
+                  <div className="md:hidden flex justify-center mt-3 mb-2">
+                    {videoCommentMode ? (
+                      <button
+                        onClick={() => setVideoCommentMode(false)}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-200 text-slate-700 text-sm font-semibold"
+                      >
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
+                        Cancel
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setVideoCommentMode(true)}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold shadow"
+                      >
+                        <MessageSquare className="h-4 w-4" />
+                        Add Comment on Video
+                      </button>
+                    )}
+                  </div>
+                )}
 
                 {/* Media Thumbnails */}
                 {currentVersion?.media && currentVersion.media.length > 1 && (

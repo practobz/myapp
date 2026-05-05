@@ -193,10 +193,14 @@ function CommentPin({ comment, index, onActivate, activeId, hoveredId, setHovere
 
 // ─── Full-screen Review Panel ──────────────────────────────────────────────────
 function ReviewPanel({ submission, onClose, onStatusUpdated }) {
-  const mediaItems = normalizeMedia(submission.images);
+  const allVersions = submission.allVersions || [submission];
+  const [activeVersionIdx, setActiveVersionIdx] = useState(allVersions.length - 1);
+  const activeVersion = allVersions[activeVersionIdx];
+
+  const mediaItems = normalizeMedia(activeVersion.images);
   const [activeMediaIdx, setActiveMediaIdx] = useState(0);
 
-  const [comments, setComments] = useState(() => normalizeComments(submission.comments));
+  const [comments, setComments] = useState(() => normalizeComments(activeVersion.comments));
   const [commentsForMedia, setCommentsForMedia] = useState([]);
   const [activeComment, setActiveComment] = useState(null);
   const [hoveredComment, setHoveredComment] = useState(null);
@@ -206,16 +210,28 @@ function ReviewPanel({ submission, onClose, onStatusUpdated }) {
   const [revisionNotes, setRevisionNotes]  = useState('');
   const [showRevisionInput, setShowRevisionInput] = useState(false);
 
-  const [localStatus, setLocalStatus] = useState(submission.status);
+  const [localStatus, setLocalStatus] = useState(activeVersion.status);
   const [toast, setToast]             = useState(null);
   const [sidebarTab, setSidebarTab]   = useState('comments');
-  const [sentToCustomer, setSentToCustomer]       = useState(submission.submission_stage === 'customer');
+  const [sentToCustomer, setSentToCustomer]       = useState(activeVersion.submission_stage === 'customer');
   const [sendingToCustomer, setSendingToCustomer] = useState(false);
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 4000);
   };
+
+  // Re-initialize version-specific state when the active version changes
+  useEffect(() => {
+    setActiveMediaIdx(0);
+    setComments(normalizeComments(allVersions[activeVersionIdx].comments));
+    setActiveComment(null);
+    setHoveredComment(null);
+    setLocalStatus(allVersions[activeVersionIdx].status);
+    setSentToCustomer(allVersions[activeVersionIdx].submission_stage === 'customer');
+    setShowRevisionInput(false);
+    setRevisionNotes('');
+  }, [activeVersionIdx]); // eslint-disable-line
 
   // Sync commentsForMedia
   useEffect(() => {
@@ -230,8 +246,6 @@ function ReviewPanel({ submission, onClose, onStatusUpdated }) {
       id: uuidv4(),
       x: e.clientX - rect.left,
       y: e.clientY - rect.top,
-      renderedWidth: rect.width,
-      renderedHeight: rect.height,
       comment: '',
       editing: true,
       done: false,
@@ -252,13 +266,11 @@ function ReviewPanel({ submission, onClose, onStatusUpdated }) {
       const rect = e.target.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
-      const renderedWidth = rect.width;
-      const renderedHeight = rect.height;
-      setComments(prev => prev.map(c => c.id === repositioning.id ? { ...c, x, y, renderedWidth, renderedHeight, repositioning: false } : c));
+      setComments(prev => prev.map(c => c.id === repositioning.id ? { ...c, x, y, repositioning: false } : c));
       try {
         await fetch(
           `${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(submission.assignment_id)}/comments/${repositioning.id}`,
-          { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ x, y, renderedWidth, renderedHeight, position: { x, y } }) }
+          { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ x, y, position: { x, y } }) }
         );
       } catch {}
       return;
@@ -283,12 +295,10 @@ function ReviewPanel({ submission, onClose, onStatusUpdated }) {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              versionId: submission._id,
+              versionId: activeVersion._id,
               comment: {
                 id: comment.id,
                 x: comment.x, y: comment.y,
-                renderedWidth: comment.renderedWidth,
-                renderedHeight: comment.renderedHeight,
                 position: { x: comment.x, y: comment.y },
                 comment: comment.comment.trim(),
                 mediaIndex: comment.mediaIndex ?? 0,
@@ -367,7 +377,7 @@ function ReviewPanel({ submission, onClose, onStatusUpdated }) {
     setSendingToCustomer(true);
     try {
       const res = await fetch(
-        `${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(submission._id)}/send-to-customer`,
+        `${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(activeVersion._id)}/send-to-customer`,
         { method: 'PATCH', headers: { 'Content-Type': 'application/json' } }
       );
       if (!res.ok) throw new Error();
@@ -385,17 +395,17 @@ function ReviewPanel({ submission, onClose, onStatusUpdated }) {
     setApproving(true);
     try {
       const res = await fetch(
-        `${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(submission._id)}/status`,
+        `${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(activeVersion._id)}/status`,
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ versionId: submission._id, status: 'approved' }),
+          body: JSON.stringify({ versionId: activeVersion._id, status: 'approved' }),
         }
       );
       if (!res.ok) throw new Error();
       setLocalStatus('approved');
       showToast('Submission approved. Creator notified by email.');
-      onStatusUpdated(submission._id, 'approved');
+      onStatusUpdated(activeVersion._id, 'approved');
     } catch {
       showToast('Failed to approve. Please try again.', 'error');
     } finally { setApproving(false); }
@@ -406,11 +416,11 @@ function ReviewPanel({ submission, onClose, onStatusUpdated }) {
     setRevising(true);
     try {
       const res = await fetch(
-        `${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(submission._id)}/status`,
+        `${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(activeVersion._id)}/status`,
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ versionId: submission._id, status: 'revision_requested', rejectionReason: revisionNotes.trim() }),
+          body: JSON.stringify({ versionId: activeVersion._id, status: 'revision_requested', rejectionReason: revisionNotes.trim() }),
         }
       );
       if (!res.ok) throw new Error();
@@ -418,7 +428,7 @@ function ReviewPanel({ submission, onClose, onStatusUpdated }) {
       setShowRevisionInput(false);
       setRevisionNotes('');
       showToast('Revision requested. Creator notified by email.');
-      onStatusUpdated(submission._id, 'revision_requested');
+      onStatusUpdated(activeVersion._id, 'revision_requested');
     } catch {
       showToast('Failed to send revision request.', 'error');
     } finally { setRevising(false); }
@@ -478,6 +488,36 @@ function ReviewPanel({ submission, onClose, onStatusUpdated }) {
 
           {/* ── LEFT: Media area ── */}
           <div className="flex-1 flex flex-col overflow-y-auto bg-slate-50 p-4 gap-4 items-center">
+
+            {/* Version selector — only shown when there are multiple versions */}
+            {allVersions.length > 1 && (
+              <div className="w-full max-w-2xl">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Version History</p>
+                <div className="flex gap-2 flex-wrap">
+                  {allVersions.map((v, i) => {
+                    const vCfg = getStatusConfig(v.status);
+                    return (
+                      <button
+                        key={v._id || i}
+                        onClick={() => setActiveVersionIdx(i)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                          i === activeVersionIdx
+                            ? 'bg-blue-600 text-white border-blue-600 shadow'
+                            : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:bg-blue-50'
+                        }`}
+                      >
+                        v{i + 1}
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                          i === activeVersionIdx ? 'bg-white/20 text-white' : vCfg.color
+                        }`}>
+                          {vCfg.label}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Media nav */}
             {mediaItems.length > 1 && (
@@ -569,18 +609,18 @@ function ReviewPanel({ submission, onClose, onStatusUpdated }) {
             )}
 
             {/* Caption / Notes */}
-            {(submission.caption || submission.notes) && (
+            {(activeVersion.caption || activeVersion.notes) && (
               <div className="w-full max-w-2xl grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {submission.caption && (
+                {activeVersion.caption && (
                   <div>
                     <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1">Caption</p>
-                    <div className="bg-white rounded-xl p-3 border border-gray-200 text-sm text-gray-700 leading-relaxed">{submission.caption}</div>
+                    <div className="bg-white rounded-xl p-3 border border-gray-200 text-sm text-gray-700 leading-relaxed">{activeVersion.caption}</div>
                   </div>
                 )}
-                {submission.notes && (
+                {activeVersion.notes && (
                   <div>
                     <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1">Notes for Admin</p>
-                    <div className="bg-white rounded-xl p-3 border border-gray-200 text-sm text-gray-700 leading-relaxed">{submission.notes}</div>
+                    <div className="bg-white rounded-xl p-3 border border-gray-200 text-sm text-gray-700 leading-relaxed">{activeVersion.notes}</div>
                   </div>
                 )}
               </div>
@@ -816,22 +856,22 @@ function ReviewPanel({ submission, onClose, onStatusUpdated }) {
                     <SidebarRow icon={User} label="Notified Admins"
                       value={submission.notify_admins.map(a => a.name || a.email).join(', ')} />
                   )}
-                  {submission.hashtags && (
+                  {activeVersion.hashtags && (
                     <div>
                       <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Hashtags</p>
-                      <p className="text-xs text-blue-500 break-all">{submission.hashtags}</p>
+                      <p className="text-xs text-blue-500 break-all">{activeVersion.hashtags}</p>
                     </div>
                   )}
-                  {submission.approvalNotes && (
+                  {activeVersion.approvalNotes && (
                     <div>
                       <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Approval Notes</p>
-                      <p className="text-xs text-gray-700 bg-green-50 rounded-lg p-2 border border-green-100">{submission.approvalNotes}</p>
+                      <p className="text-xs text-gray-700 bg-green-50 rounded-lg p-2 border border-green-100">{activeVersion.approvalNotes}</p>
                     </div>
                   )}
-                  {submission.rejectionReason && (
+                  {activeVersion.rejectionReason && (
                     <div>
                       <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Revision Notes</p>
-                      <p className="text-xs text-gray-700 bg-orange-50 rounded-lg p-2 border border-orange-100">{submission.rejectionReason}</p>
+                      <p className="text-xs text-gray-700 bg-orange-50 rounded-lg p-2 border border-orange-100">{activeVersion.rejectionReason}</p>
                     </div>
                   )}
                 </div>
@@ -893,21 +933,34 @@ function MediaPreview({ images }) {
 function SubmissionCard({ submission, onView }) {
   const statusCfg    = getStatusConfig(submission.status);
   const commentCount = Array.isArray(submission.comments) ? submission.comments.length : 0;
+  const versionCount = submission.allVersions?.length || 1;
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200/50 overflow-hidden hover:shadow-md transition-shadow flex flex-col">
-      <MediaPreview images={submission.images} />
+      <div className="relative">
+        <MediaPreview images={submission.images} />
+        {versionCount > 1 && (
+          <span className="absolute top-2 left-2 bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow">
+            v{versionCount}
+          </span>
+        )}
+      </div>
 
       <div className="p-3 flex-1 flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${statusCfg.color}`}>
             {statusCfg.label}
           </span>
-          {commentCount > 0 && (
-            <span className="flex items-center gap-0.5 text-xs text-gray-400">
-              <MessageSquare className="h-3 w-3" />{commentCount}
-            </span>
-          )}
+          <div className="flex items-center gap-1.5">
+            {versionCount > 1 && (
+              <span className="text-[10px] text-blue-500 font-medium">{versionCount} versions</span>
+            )}
+            {commentCount > 0 && (
+              <span className="flex items-center gap-0.5 text-xs text-gray-400">
+                <MessageSquare className="h-3 w-3" />{commentCount}
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center gap-1.5 text-xs text-gray-500">
@@ -972,10 +1025,28 @@ export default function CreatorSubmissionsReview() {
       const adminReview = Array.isArray(data)
         ? data.filter(s => Array.isArray(s.notify_admins) && s.notify_admins.length > 0)
         : [];
-      adminReview.sort((a, b) =>
+
+      // Group by assignment_id so multiple versions appear as one card
+      const grouped = {};
+      adminReview.forEach(s => {
+        const key = s.assignment_id || s._id;
+        if (!grouped[key]) grouped[key] = [];
+        grouped[key].push(s);
+      });
+
+      const cards = Object.values(grouped).map(versions => {
+        // Sort oldest → newest
+        versions.sort((a, b) =>
+          new Date(a.sent_to_admin_at || a.created_at) - new Date(b.sent_to_admin_at || b.created_at)
+        );
+        const latest = versions[versions.length - 1];
+        return { ...latest, allVersions: versions };
+      });
+
+      cards.sort((a, b) =>
         new Date(b.sent_to_admin_at || b.created_at) - new Date(a.sent_to_admin_at || a.created_at)
       );
-      setSubmissions(adminReview);
+      setSubmissions(cards);
     } catch {
       setSubmissions([]);
     } finally {
@@ -987,8 +1058,28 @@ export default function CreatorSubmissionsReview() {
   useEffect(() => { fetchSubmissions(); }, [fetchSubmissions]);
 
   const handleStatusUpdated = (submissionId, newStatus) => {
-    setSubmissions(prev => prev.map(s => s._id === submissionId ? { ...s, status: newStatus } : s));
-    setReviewSubmission(prev => prev?._id === submissionId ? { ...prev, status: newStatus } : prev);
+    setSubmissions(prev => prev.map(s => {
+      if (s._id === submissionId) return { ...s, status: newStatus };
+      if (s.allVersions?.some(v => v._id === submissionId)) {
+        const updatedVersions = s.allVersions.map(v =>
+          v._id === submissionId ? { ...v, status: newStatus } : v
+        );
+        const latestStatus = updatedVersions[updatedVersions.length - 1].status;
+        return { ...s, status: latestStatus, allVersions: updatedVersions };
+      }
+      return s;
+    }));
+    setReviewSubmission(prev => {
+      if (!prev) return prev;
+      if (prev._id === submissionId) return { ...prev, status: newStatus };
+      if (prev.allVersions?.some(v => v._id === submissionId)) {
+        const updatedVersions = prev.allVersions.map(v =>
+          v._id === submissionId ? { ...v, status: newStatus } : v
+        );
+        return { ...prev, allVersions: updatedVersions };
+      }
+      return prev;
+    });
   };
 
   const filtered = filterStatus === 'all'

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef, memo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import {
   Send, Image, FileText, MessageSquare, Calendar, ChevronLeft, ChevronRight,
@@ -10,8 +10,9 @@ const API_URL = process.env.REACT_APP_API_URL;
 // ── Author badge ──────────────────────────────────────────────────────────────
 const AuthorBadge = ({ comment }) => {
   const isAdmin = comment.authorRole === 'admin';
+  const isInternal = isAdmin || comment.reviewType === 'internal';
   return (
-    <div className="flex items-center gap-1 mb-1">
+    <div className="flex items-center gap-1 mb-1 flex-wrap">
       <div className={`w-3.5 h-3.5 rounded-full flex items-center justify-center flex-shrink-0 ${isAdmin ? 'bg-purple-600' : 'bg-blue-500'}`}>
         {isAdmin ? <UserCog className="h-2 w-2 text-white" /> : <User className="h-2 w-2 text-white" />}
       </div>
@@ -23,6 +24,9 @@ const AuthorBadge = ({ comment }) => {
           {comment.authorEmail || comment.authorName}
         </span>
       )}
+      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ml-auto ${isInternal ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
+        {isInternal ? 'Internal' : 'External'}
+      </span>
     </div>
   );
 };
@@ -291,6 +295,29 @@ function ContentDetailView({
   const removeCommentLocally = useCallback((id) => {
     setCommentsForVersion(prev => prev.filter(c => c.id !== id));
   }, []);
+
+  // ── Tracked image size (for converting normalized 0-1 coords → pixels) ──
+  const imgRef = useRef(null);
+  const [imgDisplaySize, setImgDisplaySize] = useState({ w: 0, h: 0 });
+
+  const handleImgLoad = useCallback((e) => {
+    setImgDisplaySize({ w: e.target.offsetWidth, h: e.target.offsetHeight });
+  }, []);
+
+  // Customer (ContentReview.jsx) saves coords as normalized 0-1 fractions.
+  // Admin (ContentDetailView.jsx) saves coords as absolute pixels.
+  // Detect which and convert to pixels for display.
+  const resolveCoords = useCallback((comment) => {
+    const cx = comment.x ?? comment.position?.x ?? 0;
+    const cy = comment.y ?? comment.position?.y ?? 0;
+    const isNormalized =
+      comment.reviewType === 'external' ||
+      (cx >= 0 && cx <= 1 && cy >= 0 && cy <= 1 && comment.authorRole !== 'admin');
+    if (isNormalized && imgDisplaySize.w > 0 && imgDisplaySize.h > 0) {
+      return { ...comment, x: cx * imgDisplaySize.w, y: cy * imgDisplaySize.h };
+    }
+    return comment;
+  }, [imgDisplaySize]);
 
   // ── Image click → place new marker ──────────────────────────────────────
   const handleImageClick = useCallback((e) => {
@@ -629,12 +656,14 @@ function ContentDetailView({
                             ) : (
                               <img
                                 data-cdv-media
+                                ref={imgRef}
                                 src={currentMedia.url}
                                 alt={`V${currentVersion.versionNumber} M${selectedMediaIndex + 1}`}
                                 className={`max-w-full h-auto max-h-[50vh] sm:max-h-[60vh] lg:max-h-[70vh] rounded-lg shadow border border-gray-200 object-contain transition-all ${
                                   addingComment ? 'cursor-crosshair ring-2 ring-purple-400 ring-offset-1' : ''
                                 }`}
                                 loading="lazy"
+                                onLoad={handleImgLoad}
                                 onClick={handleImageClick}
                               />
                             )
@@ -651,7 +680,7 @@ function ContentDetailView({
                           {commentsForCurrentMedia.map((comment, index) => (
                             <CommentMarker
                               key={comment.id || index}
-                              comment={comment}
+                              comment={resolveCoords(comment)}
                               index={index}
                               active={activeComment === comment.id}
                               hovered={hoveredComment === comment.id}
@@ -785,11 +814,11 @@ function ContentDetailView({
               <div className="flex items-center gap-2">
                 <div className="flex items-center gap-0.5">
                   <div className="w-2 h-2 rounded-full bg-purple-600" />
-                  <span className="text-[9px] text-gray-500">Admin</span>
+                  <span className="text-[9px] text-gray-500">Internal</span>
                 </div>
                 <div className="flex items-center gap-0.5">
                   <div className="w-2 h-2 rounded-full bg-blue-500" />
-                  <span className="text-[9px] text-gray-500">Customer</span>
+                  <span className="text-[9px] text-gray-500">External</span>
                 </div>
               </div>
             </div>
@@ -836,6 +865,11 @@ function ContentDetailView({
                               {comment.authorEmail && (
                                 <span className="text-[9px] text-gray-400 truncate max-w-[110px]">{comment.authorEmail}</span>
                               )}
+                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ml-auto ${
+                                (isAdminComment || comment.reviewType === 'internal') ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                              }`}>
+                                {(isAdminComment || comment.reviewType === 'internal') ? 'Internal' : 'External'}
+                              </span>
                             </div>
                             <p className="text-xs font-medium text-gray-900 break-words">
                               {comment.message || comment.comment}

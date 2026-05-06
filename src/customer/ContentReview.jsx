@@ -121,6 +121,11 @@ function ContentReview() {
     setSelectedMediaIndex(0); // Reset media index when version changes
   }, [selectedContent, selectedVersionIndex]);
 
+  // Reset video comment mode when media, version, or content changes
+  useEffect(() => {
+    setIsVideoCommentMode(false);
+  }, [selectedMediaIndex, selectedVersionIndex, selectedContent]);
+
   // Add new useEffect to filter comments by media index
   useEffect(() => {
     // Filter comments for the currently selected media item
@@ -372,6 +377,12 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
     const y = Math.max(0, Math.min(1, (e.clientY - rect.top  - oy) / contentH));
     if (commentsForCurrentMedia.some((c) => c.editing)) return;
     
+    // Capture video timestamp if this is a video
+    const mediaType = selectedContent?.versions?.[selectedVersionIndex]?.media?.[selectedMediaIndex]?.type;
+    const videoTimestamp = (mediaType === 'video' && videoRef.current && !isNaN(videoRef.current.currentTime))
+      ? videoRef.current.currentTime
+      : null;
+
     const newComment = {
       id: uuidv4(),
       x,
@@ -385,11 +396,14 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
       versionNumber: selectedContent.versions[selectedVersionIndex]?.versionNumber || 1,
       mediaIndex: selectedMediaIndex, // Associate comment with current media item
       reviewType: 'external',
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      ...(videoTimestamp != null && { videoTimestamp })
     };
     setComments([...comments, newComment]);
     setCommentsForCurrentMedia([...commentsForCurrentMedia, newComment]);
     setActiveComment(newComment.id);
+    // Record viewport rect so the fixed popup positions correctly
+    setActiveMarkerRect({ top: e.clientY - 12, left: e.clientX - 12, right: e.clientX + 12, bottom: e.clientY + 12 });
   };
 
   const handleCommentChange = (id, text) => {
@@ -437,7 +451,8 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
             mediaIndex: selectedMediaIndex,
             reviewType: 'external',
             timestamp: comment.timestamp || new Date().toISOString(),
-            status: 'active'
+            status: 'active',
+            ...(comment.videoTimestamp != null && { videoTimestamp: comment.videoTimestamp })
           };
           
           response = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(assignmentId)}/comment`, {
@@ -792,6 +807,8 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
   const [approvingContent, setApprovingContent] = useState(false);
   const [sendingToCreator, setSendingToCreator] = useState(false);
   const [undoingApprove, setUndoingApprove] = useState(false);
+  const [isVideoCommentMode, setIsVideoCommentMode] = useState(false);
+  const [activeMarkerRect, setActiveMarkerRect] = useState(null); // viewport rect of the active marker
   const [sidebarTab, setSidebarTab] = useState('content'); // 'content' | 'calendars' | 'comments'
   const [sidebarSearch, setSidebarSearch] = useState('');
   const [expandedCalendars, setExpandedCalendars] = useState({});
@@ -960,6 +977,13 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
     }
     // Fall back to created_by (content creator's email)
     return item.createdBy || 'Unknown';
+  };
+
+  const formatVideoTime = (seconds) => {
+    if (seconds == null || isNaN(seconds)) return null;
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
   const formatDate = (dateString) => {
@@ -1427,13 +1451,20 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
                                 {comment.comment}
                                 {comment.done && <span className="ml-1 text-green-600 text-[10px]">✓</span>}
                               </p>
-                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full inline-block mt-0.5 ${
+                              <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                              {comment.videoTimestamp != null && (
+                                <span className="inline-flex items-center gap-0.5 bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full text-[9px] font-bold">
+                                  ▶ {formatVideoTime(comment.videoTimestamp)}
+                                </span>
+                              )}
+                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
                                 comment.reviewType === 'internal'
                                   ? 'bg-purple-100 text-purple-700'
                                   : 'bg-blue-100 text-blue-700'
                               }`}>
                                 {comment.reviewType === 'internal' ? 'Internal' : 'External'}
                               </span>
+                              </div>
                               {comment.reply && (
                                 <div className="mt-1.5 p-1.5 bg-indigo-50 border border-indigo-100 rounded-lg">
                                   <p className="text-[10px] font-bold text-indigo-700">↩ {comment.reply.creatorName || 'Creator'}</p>
@@ -1590,6 +1621,23 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
 
               {/* Media + Comments */}
               <div className="p-6">
+                {/* Video comment mode toggle */}
+                {currentMedia?.type === 'video' && (
+                  <div className="flex justify-center mb-4">
+                    <button
+                      onClick={() => setIsVideoCommentMode(v => !v)}
+                      className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold transition-all border ${
+                        isVideoCommentMode
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-md ring-2 ring-blue-300'
+                          : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200'
+                      }`}
+                    >
+                      <MessageSquare className="h-3.5 w-3.5" />
+                      {isVideoCommentMode ? '✓ Comment Mode ON — click video to pin comment' : 'Add Comment at Timestamp'}
+                    </button>
+                  </div>
+                )}
+
                 {/* Multi-media navigation */}
                 {currentVersion?.media && currentVersion.media.length > 1 && (
                   <div className="flex items-center justify-center gap-3 mb-4">
@@ -1647,7 +1695,7 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
                                 e.target.style.display = 'none';
                               }}
                             />
-                            {/* Transparent overlay to capture tap-to-comment on mobile (native video controls intercept onClick) */}
+                            {/* Overlay — only active in comment mode to avoid blocking native video controls */}
                             <div
                               style={{
                                 position: 'absolute',
@@ -1655,21 +1703,32 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
                                 left: 0,
                                 right: 0,
                                 bottom: 44,
-                                cursor: 'crosshair',
-                                zIndex: 5,
+                                cursor: isVideoCommentMode ? 'crosshair' : 'default',
+                                zIndex: isVideoCommentMode ? 5 : -1,
+                                pointerEvents: isVideoCommentMode ? 'auto' : 'none',
                                 WebkitTapHighlightColor: 'transparent',
+                                background: isVideoCommentMode ? 'rgba(59,130,246,0.04)' : 'transparent',
                               }}
                               onClick={(e) => {
+                                if (!isVideoCommentMode) return;
                                 if (touchFiredRef.current) { touchFiredRef.current = false; return; }
                                 handleImageClickWithReposition(e);
                               }}
                               onTouchEnd={(e) => {
+                                if (!isVideoCommentMode) return;
                                 const touch = e.changedTouches[0];
                                 if (!touch || !videoRef.current) return;
                                 touchFiredRef.current = true;
                                 handleImageClickWithReposition({ target: videoRef.current, clientX: touch.clientX, clientY: touch.clientY });
                               }}
                             />
+                            {/* Comment mode indicator badge */}
+                            {isVideoCommentMode && (
+                              <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', zIndex: 10, pointerEvents: 'none' }}
+                                className="bg-blue-600 text-white text-[10px] font-bold px-3 py-1 rounded-full shadow-md flex items-center gap-1">
+                                <MessageSquare className="h-3 w-3" /> Click anywhere on video to add comment
+                              </div>
+                            )}
                           </>
                         )
                       ) : (
@@ -1728,151 +1787,22 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
                               transition: "all 0.2s",
                               animation: comment.repositioning ? "pulse 1.5s ease-in-out infinite" : "none",
                             }}
-                            onMouseEnter={() => setHoveredComment(comment.id)}
+                            onMouseEnter={(e) => {
+                              const r = e.currentTarget.getBoundingClientRect();
+                              setActiveMarkerRect({ top: r.top, left: r.left, right: r.right, bottom: r.bottom });
+                              setHoveredComment(comment.id);
+                            }}
                             onMouseLeave={() => setHoveredComment(null)}
                             onClick={(e) => {
                               e.stopPropagation();
                               if (!comment.repositioning) {
+                                const r = e.currentTarget.getBoundingClientRect();
+                                setActiveMarkerRect({ top: r.top, left: r.left, right: r.right, bottom: r.bottom });
                                 handleCommentListClick(comment.id);
                               }
                             }}
                           >
                             {index + 1}
-                            {(comment.editing || activeComment === comment.id || hoveredComment === comment.id) && !comment.repositioning && (() => {
-                              const isAdminComment = comment.authorRole === 'admin';
-                              const borderColor = isAdminComment ? '#7c3aed' : '#3b82f6';
-                              const boxShadow = isAdminComment
-                                ? '0 6px 24px rgba(124,58,237,0.18)'
-                                : '0 4px 20px rgba(59,130,246,0.15)';
-                              return (
-                              <div
-                                style={{
-                                  position: "absolute",
-                                  left: boxLeft,
-                                  right: boxRight,
-                                  top: "50%",
-                                  transform: "translateY(-50%)",
-                                  background: "#fff",
-                                  border: `2px solid ${borderColor}`,
-                                  borderRadius: "10px",
-                                  padding: "12px",
-                                  minWidth: "230px",
-                                  maxWidth: "270px",
-                                  zIndex: 20,
-                                  boxShadow,
-                                }}
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                {comment.editing ? (
-                                  <>
-                                    {/* Author badge in editing mode */}
-                                    <div className="flex items-center gap-1.5 mb-2">
-                                      <div className="w-4 h-4 rounded-full bg-blue-500 flex items-center justify-center">
-                                        <User className="h-2.5 w-2.5 text-white" />
-                                      </div>
-                                      <span className="text-[10px] font-semibold text-blue-700">Customer</span>
-                                    </div>
-                                    <textarea
-                                      value={comment.comment}
-                                      onChange={(e) => handleCommentChange(comment.id, e.target.value)}
-                                      placeholder="Add comment… (Ctrl+Enter to save)"
-                                      className="w-full p-2 border border-blue-200 bg-blue-50 rounded-lg resize-none text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-300"
-                                      rows={3}
-                                      autoFocus
-                                      onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleCommentSubmit(comment.id); }}
-                                    />
-                                    <div className="flex gap-1.5 mt-2">
-                                      <button
-                                        className="flex-1 py-1 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-semibold"
-                                        onClick={(e) => { e.stopPropagation(); handleCommentSubmit(comment.id); }}
-                                      >
-                                        <CheckCircle className="h-2.5 w-2.5 inline mr-0.5" />Save
-                                      </button>
-                                      <button
-                                        className="flex-1 py-1 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-600 text-[10px] font-semibold"
-                                        onClick={(e) => { e.stopPropagation(); handleCommentCancel(comment.id); }}
-                                      >
-                                        Cancel
-                                      </button>
-                                    </div>
-                                  </>
-                                ) : (
-                                  <>
-                                    {/* Author badge */}
-                                    <div className="flex items-center gap-1 mb-1.5 flex-wrap">
-                                      <div className={`w-3.5 h-3.5 rounded-full flex items-center justify-center flex-shrink-0 ${isAdminComment ? 'bg-purple-600' : 'bg-blue-500'}`}>
-                                        {isAdminComment ? <UserCog className="h-2 w-2 text-white" /> : <User className="h-2 w-2 text-white" />}
-                                      </div>
-                                      <span className={`text-[10px] font-semibold ${isAdminComment ? 'text-purple-700' : 'text-blue-700'}`}>
-                                        {isAdminComment ? 'Admin' : 'Customer'}
-                                      </span>
-                                      {(comment.authorEmail || comment.authorName) && (
-                                        <span className="text-[9px] text-gray-400 truncate max-w-[100px]">
-                                          {comment.authorEmail || comment.authorName}
-                                        </span>
-                                      )}
-                                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ml-auto ${
-                                        (isAdminComment || comment.reviewType === 'internal') ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
-                                      }`}>
-                                        {(isAdminComment || comment.reviewType === 'internal') ? 'Internal' : 'External'}
-                                      </span>
-                                    </div>
-                                    {/* Comment text */}
-                                    <p className="text-xs font-medium text-gray-900 leading-relaxed break-words">
-                                      {comment.comment}
-                                      {comment.done && <span className="ml-1.5 text-green-600 text-[10px]">✓</span>}
-                                    </p>
-                                    <p className="text-[9px] text-gray-400 mt-0.5">
-                                      {comment.timestamp ? new Date(comment.timestamp).toLocaleString() : ''}
-                                    </p>
-                                    {/* Reply block */}
-                                    {(comment.adminReply || comment.reply) && (
-                                      <div className="mt-1.5 p-1.5 bg-purple-50 border border-purple-200 rounded-md">
-                                        <div className="flex items-center gap-1 mb-0.5">
-                                          <UserCog className="h-2.5 w-2.5 text-purple-600" />
-                                          <span className="text-[10px] font-bold text-purple-700">
-                                            {comment.adminReply?.adminName || comment.reply?.creatorName || 'Creator'}
-                                          </span>
-                                        </div>
-                                        <p className="text-[10px] text-gray-700 break-words">
-                                          {comment.adminReply?.text || comment.reply?.text}
-                                        </p>
-                                      </div>
-                                    )}
-                                    {/* Action buttons */}
-                                    <div className="flex items-center gap-1 mt-2 pt-1.5 border-t border-gray-100 flex-wrap">
-                                      {!comment.done && (
-                                        <button
-                                          className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] bg-green-50 text-green-700 rounded-md hover:bg-green-100"
-                                          onClick={(e) => { e.stopPropagation(); handleMarkDone(comment.id); }}
-                                        >
-                                          <CheckCircle className="h-2.5 w-2.5" />Done
-                                        </button>
-                                      )}
-                                      <button
-                                        className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] bg-amber-50 text-amber-700 rounded-md hover:bg-amber-100"
-                                        onClick={(e) => { e.stopPropagation(); handleEditComment(comment.id); }}
-                                      >
-                                        <Edit3 className="h-2.5 w-2.5" />Edit
-                                      </button>
-                                      <button
-                                        className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] bg-cyan-50 text-cyan-700 rounded-md hover:bg-cyan-100"
-                                        onClick={(e) => { e.stopPropagation(); handleRepositionStart(comment.id); }}
-                                      >
-                                        <Move className="h-2.5 w-2.5" />Move
-                                      </button>
-                                      <button
-                                        className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] bg-red-50 text-red-500 rounded-md hover:bg-red-100 ml-auto"
-                                        onClick={(e) => { e.stopPropagation(); handleDeleteComment(comment.id); }}
-                                      >
-                                        <Trash2 className="h-2.5 w-2.5" />
-                                      </button>
-                                    </div>
-                                  </>
-                                )}
-                              </div>
-                              );
-                            })()}
                             {comment.repositioning && (
                               <div style={{
                                 position: "absolute", left: 30, top: "50%", transform: "translateY(-50%)",
@@ -2109,10 +2039,26 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
                                       {comment.message || comment.comment}
                                       {isDone && <span className="ml-1.5 text-green-600 text-[10px]">✓</span>}
                                     </p>
-                                    {/* Timestamp */}
-                                    <p className="text-[9px] text-gray-400 mt-0.5">
-                                      {comment.timestamp ? new Date(comment.timestamp).toLocaleString() : ''}
-                                    </p>
+                                    {/* Timestamp row */}
+                                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                      <span className="text-[9px] text-gray-400">
+                                        {comment.timestamp ? new Date(comment.timestamp).toLocaleString() : ''}
+                                      </span>
+                                      {comment.videoTimestamp != null && (
+                                        <button
+                                          className="inline-flex items-center gap-0.5 bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full text-[9px] font-bold hover:bg-orange-200 transition"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (videoRef.current) {
+                                              videoRef.current.currentTime = comment.videoTimestamp;
+                                              videoRef.current.pause();
+                                            }
+                                          }}
+                                        >
+                                          ▶ {formatVideoTime(comment.videoTimestamp)}
+                                        </button>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
 
@@ -2171,6 +2117,160 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
       {isUserMenuOpen && (
         <div className="fixed inset-0 z-40" onClick={() => setIsUserMenuOpen(false)}></div>
       )}
+
+      {/* ── FIXED VIEWPORT-SAFE COMMENT POPUP ── */}
+      {(() => {
+        const popupCommentId = activeComment || hoveredComment;
+        if (!popupCommentId || !activeMarkerRect) return null;
+        const comment = commentsForCurrentMedia.find(c => c.id === popupCommentId);
+        if (!comment || comment.repositioning) return null;
+        const isAdminComment = comment.authorRole === 'admin';
+        const borderColor = isAdminComment ? '#7c3aed' : '#3b82f6';
+        const boxShadow = isAdminComment ? '0 6px 24px rgba(124,58,237,0.18)' : '0 4px 20px rgba(59,130,246,0.15)';
+        const POPUP_W = Math.min(270, window.innerWidth - 16);
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        // Prefer right of marker, fall back to left
+        let left = activeMarkerRect.right + 12;
+        if (left + POPUP_W > vw - 8) left = activeMarkerRect.left - POPUP_W - 12;
+        left = Math.max(8, Math.min(vw - POPUP_W - 8, left));
+        // Vertically center on marker, clamp
+        let top = (activeMarkerRect.top + activeMarkerRect.bottom) / 2 - 100;
+        top = Math.max(8, Math.min(vh - 340, top));
+        return (
+          <div
+            style={{
+              position: 'fixed', top, left, width: POPUP_W,
+              background: '#fff', border: `2px solid ${borderColor}`,
+              borderRadius: '10px', padding: '12px', zIndex: 9999, boxShadow,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {comment.editing ? (
+              <>
+                <div className="flex items-center gap-1.5 mb-2">
+                  <div className="w-4 h-4 rounded-full bg-blue-500 flex items-center justify-center">
+                    <User className="h-2.5 w-2.5 text-white" />
+                  </div>
+                  <span className="text-[10px] font-semibold text-blue-700">Customer</span>
+                </div>
+                <textarea
+                  value={comment.comment}
+                  onChange={(e) => handleCommentChange(comment.id, e.target.value)}
+                  placeholder="Add comment… (Ctrl+Enter to save)"
+                  className="w-full p-2 border border-blue-200 bg-blue-50 rounded-lg resize-none text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                  rows={3}
+                  autoFocus
+                  onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleCommentSubmit(comment.id); }}
+                />
+                <div className="flex gap-1.5 mt-2">
+                  <button
+                    className="flex-1 py-1 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-semibold"
+                    onClick={(e) => { e.stopPropagation(); handleCommentSubmit(comment.id); }}
+                  >
+                    <CheckCircle className="h-2.5 w-2.5 inline mr-0.5" />Save
+                  </button>
+                  <button
+                    className="flex-1 py-1 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-600 text-[10px] font-semibold"
+                    onClick={(e) => { e.stopPropagation(); handleCommentCancel(comment.id); }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Author badge */}
+                <div className="flex items-center gap-1 mb-1.5 flex-wrap">
+                  <div className={`w-3.5 h-3.5 rounded-full flex items-center justify-center flex-shrink-0 ${isAdminComment ? 'bg-purple-600' : 'bg-blue-500'}`}>
+                    {isAdminComment ? <UserCog className="h-2 w-2 text-white" /> : <User className="h-2 w-2 text-white" />}
+                  </div>
+                  <span className={`text-[10px] font-semibold ${isAdminComment ? 'text-purple-700' : 'text-blue-700'}`}>
+                    {isAdminComment ? 'Admin' : 'Customer'}
+                  </span>
+                  {(comment.authorEmail || comment.authorName) && (
+                    <span className="text-[9px] text-gray-400 truncate max-w-[100px]">
+                      {comment.authorEmail || comment.authorName}
+                    </span>
+                  )}
+                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ml-auto ${
+                    (isAdminComment || comment.reviewType === 'internal') ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                  }`}>
+                    {(isAdminComment || comment.reviewType === 'internal') ? 'Internal' : 'External'}
+                  </span>
+                </div>
+                {/* Comment text */}
+                <p className="text-xs font-medium text-gray-900 leading-relaxed break-words">
+                  {comment.comment}
+                  {comment.done && <span className="ml-1.5 text-green-600 text-[10px]">✓</span>}
+                </p>
+                <p className="text-[9px] text-gray-400 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                  {comment.timestamp ? new Date(comment.timestamp).toLocaleString() : ''}
+                  {comment.videoTimestamp != null && (
+                    <span className="inline-flex items-center gap-0.5 bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full font-bold text-[9px]">
+                      ▶ {formatVideoTime(comment.videoTimestamp)}
+                    </span>
+                  )}
+                </p>
+                {/* Reply block */}
+                {(comment.adminReply || comment.reply) && (
+                  <div className="mt-1.5 p-1.5 bg-purple-50 border border-purple-200 rounded-md">
+                    <div className="flex items-center gap-1 mb-0.5">
+                      <UserCog className="h-2.5 w-2.5 text-purple-600" />
+                      <span className="text-[10px] font-bold text-purple-700">
+                        {comment.adminReply?.adminName || comment.reply?.creatorName || 'Creator'}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-gray-700 break-words">
+                      {comment.adminReply?.text || comment.reply?.text}
+                    </p>
+                  </div>
+                )}
+                {/* Action buttons */}
+                <div className="flex items-center gap-1 mt-2 pt-1.5 border-t border-gray-100 flex-wrap">
+                  {comment.videoTimestamp != null && (
+                    <button
+                      className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] bg-orange-50 text-orange-700 rounded-md hover:bg-orange-100 font-semibold"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (videoRef.current) { videoRef.current.currentTime = comment.videoTimestamp; videoRef.current.pause(); }
+                      }}
+                    >
+                      ▶ {formatVideoTime(comment.videoTimestamp)}
+                    </button>
+                  )}
+                  {!comment.done && (
+                    <button
+                      className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] bg-green-50 text-green-700 rounded-md hover:bg-green-100"
+                      onClick={(e) => { e.stopPropagation(); handleMarkDone(comment.id); }}
+                    >
+                      <CheckCircle className="h-2.5 w-2.5" />Done
+                    </button>
+                  )}
+                  <button
+                    className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] bg-amber-50 text-amber-700 rounded-md hover:bg-amber-100"
+                    onClick={(e) => { e.stopPropagation(); handleEditComment(comment.id); }}
+                  >
+                    <Edit3 className="h-2.5 w-2.5" />Edit
+                  </button>
+                  <button
+                    className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] bg-cyan-50 text-cyan-700 rounded-md hover:bg-cyan-100"
+                    onClick={(e) => { e.stopPropagation(); handleRepositionStart(comment.id); }}
+                  >
+                    <Move className="h-2.5 w-2.5" />Move
+                  </button>
+                  <button
+                    className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] bg-red-50 text-red-500 rounded-md hover:bg-red-100 ml-auto"
+                    onClick={(e) => { e.stopPropagation(); handleDeleteComment(comment.id); }}
+                  >
+                    <Trash2 className="h-2.5 w-2.5" />
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }

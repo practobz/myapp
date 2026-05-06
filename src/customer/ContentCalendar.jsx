@@ -108,9 +108,9 @@ function ContentCalendar() {
         let submissionsData  = await submissionsRes.json();
         if (!Array.isArray(submissionsData)) submissionsData = [];
         setSubmissions(submissionsData.filter(s =>
-          (s.customer_id === customerId || s.customer_email === user?.email) &&
-          s.submission_stage !== 'admin_review' &&
-          (!s.submission_stage || s.submission_stage === 'customer')
+          s.customer_id === customerId ||
+          s.customer_email === user?.email ||
+          (s.created_by && user?.email && s.created_by === user.email && !s.customer_id && !s.customer_email)
         ));
       } catch {
         setCustomer(null);

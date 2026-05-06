@@ -1058,8 +1058,13 @@ export default function CreatorSubmissionsReview() {
   useEffect(() => { fetchSubmissions(); }, [fetchSubmissions]);
 
   const handleStatusUpdated = (submissionId, newStatus) => {
-    setSubmissions(prev => prev.map(s => {
-      if (s._id === submissionId) return { ...s, status: newStatus };
+    const applyUpdate = (s) => {
+      if (s._id === submissionId) {
+        const updatedVersions = s.allVersions?.map(v =>
+          v._id === submissionId ? { ...v, status: newStatus } : v
+        );
+        return { ...s, status: newStatus, ...(updatedVersions ? { allVersions: updatedVersions } : {}) };
+      }
       if (s.allVersions?.some(v => v._id === submissionId)) {
         const updatedVersions = s.allVersions.map(v =>
           v._id === submissionId ? { ...v, status: newStatus } : v
@@ -1068,18 +1073,9 @@ export default function CreatorSubmissionsReview() {
         return { ...s, status: latestStatus, allVersions: updatedVersions };
       }
       return s;
-    }));
-    setReviewSubmission(prev => {
-      if (!prev) return prev;
-      if (prev._id === submissionId) return { ...prev, status: newStatus };
-      if (prev.allVersions?.some(v => v._id === submissionId)) {
-        const updatedVersions = prev.allVersions.map(v =>
-          v._id === submissionId ? { ...v, status: newStatus } : v
-        );
-        return { ...prev, allVersions: updatedVersions };
-      }
-      return prev;
-    });
+    };
+    setSubmissions(prev => prev.map(applyUpdate));
+    setReviewSubmission(prev => prev ? applyUpdate(prev) : prev);
   };
 
   const filtered = filterStatus === 'all'

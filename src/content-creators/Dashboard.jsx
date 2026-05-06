@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PlusCircle, Clock, MessageSquare, CheckCircle, Globe, User, ChevronDown, Palette, Eye, Image, FolderOpen, Users, ClipboardList, Send, Bell, ShieldCheck } from 'lucide-react';
 import { format } from 'date-fns';
@@ -58,8 +58,7 @@ function Dashboard() {
   
   // Scheduled posts to check published status
   const [scheduledPosts, setScheduledPosts] = useState([]);
-  const [reviewCount, setReviewCount] = useState(0);
-  const [adminApprovedCount, setAdminApprovedCount] = useState(0);
+  const [submissions, setSubmissions] = useState([]);
 
   const creatorEmail = getCreatorEmail();
 
@@ -130,53 +129,59 @@ function Dashboard() {
       }
     };
     
-    const fetchReviewCount = async () => {
+    const fetchSubmissions = async () => {
       try {
-        const [submissionsRes, calendarsRes] = await Promise.all([
-          fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions`),
-          fetch(`${process.env.REACT_APP_API_URL}/calendars`)
-        ]);
-        const submissions = submissionsRes.ok ? await submissionsRes.json() : [];
-        const calendars = calendarsRes.ok ? await calendarsRes.json() : [];
-        const calendarMap = {};
-        if (Array.isArray(calendars)) {
-          calendars.forEach(cal => { calendarMap[cal._id || cal.id] = cal; });
-        }
-        const creatorSubs = Array.isArray(submissions)
-          ? submissions.filter(sub => {
-              const byThisCreator = (sub.created_by || '').toLowerCase() === creatorEmail;
-              if (byThisCreator) return true;
-              if (sub.calendar_id) {
-                const cal = calendarMap[sub.calendar_id];
-                if (cal && Array.isArray(cal.contentItems)) {
-                  const item = cal.contentItems.find(
-                    ci => (sub.item_id && ci.id === sub.item_id) ||
-                          (sub.item_name && (ci.title === sub.item_name || ci.description === sub.item_name))
-                  );
-                  if (item && (item.assignedTo || '').toLowerCase() === creatorEmail) return true;
-                }
-              }
-              return false;
-            })
+        const res = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions`);
+        const data = res.ok ? await res.json() : [];
+        const creatorSubs = Array.isArray(data)
+          ? data.filter(sub => (sub.created_by || '').toLowerCase() === creatorEmail)
           : [];
-
-        const count = creatorSubs.filter(sub =>
-          Array.isArray(sub.comments) && sub.comments.length > 0
-        ).length;
-        setReviewCount(count);
-
-        const approvedCount = creatorSubs.filter(sub => sub.status === 'approved').length;
-        setAdminApprovedCount(approvedCount);
+        setSubmissions(creatorSubs);
       } catch (err) {
-        setReviewCount(0);
-        setAdminApprovedCount(0);
+        setSubmissions([]);
       }
     };
 
     fetchAssignments();
     fetchScheduledPosts();
-    fetchReviewCount();
+    fetchSubmissions();
   }, [creatorEmail]);
+
+  // Precomputed Sets for reliable submission-based filtering (same logic as Assignments.jsx)
+  const submissionFilterSets = useMemo(() => {
+    const adminApprovedKeys = new Set();
+    const customerApprovedKeys = new Set();
+    const reviewKeys = new Set();
+    submissions.forEach(s => {
+      const keys = [];
+      if (s.assignment_id) keys.push(String(s.assignment_id));
+      if (s.item_id && String(s.item_id) !== String(s.assignment_id)) keys.push(String(s.item_id));
+      if (s.calendar_id && s.item_index !== undefined && s.item_index !== null) {
+        keys.push(`${s.calendar_id}::${Number(s.item_index)}`);
+      }
+      const stage = s.submission_stage || s.submissionStage || '';
+      if (s.status === 'approved' && stage !== 'customer') {
+        keys.forEach(k => adminApprovedKeys.add(k));
+      }
+      if (s.status === 'approved' && stage === 'customer') {
+        keys.forEach(k => customerApprovedKeys.add(k));
+      }
+      if (stage === 'customer' && Array.isArray(s.comments) && s.comments.length > 0) {
+        keys.forEach(k => reviewKeys.add(k));
+      }
+    });
+    return { adminApprovedKeys, customerApprovedKeys, reviewKeys };
+  }, [submissions]);
+
+  const assignmentMatchesSet = (assignment, set) => {
+    if (!set.size) return false;
+    const id = String(assignment.id || assignment._id || '');
+    if (id && set.has(id)) return true;
+    if (assignment.calendarId && assignment.itemIndex !== undefined) {
+      if (set.has(`${assignment.calendarId}::${Number(assignment.itemIndex)}`)) return true;
+    }
+    return false;
+  };
 
   // Helper: check if content is published on any platform
   const isContentPublished = (assignmentId) => {
@@ -199,18 +204,23 @@ function Dashboard() {
   const oneWeekAgo = new Date();
   oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
 
-  const stats = {
-    // New Assigned this week: use assignedAt/createdAt if available, else count all pending (initial state)
-    newContentAssigned: assignments.filter(a => {
-      const refDate = a.assignedAt || a.createdAt;
-      if (refDate) return new Date(refDate) >= oneWeekAgo;
-      return getActualStatus(a) === 'pending';
-    }).length,
-    contentWaitingInputs: assignments.filter(a => getActualStatus(a) === 'pending').length,
-    contentApproved: assignments.filter(a => getActualStatus(a) === 'approved').length,
-    contentPublished: assignments.filter(a => getActualStatus(a) === 'published').length,
-    totalAssigned: assignments.length
-  };
+  const { stats, adminApprovedCount, customerApprovedCount, reviewCount } = useMemo(() => {
+    return {
+      adminApprovedCount:  assignments.filter(a => assignmentMatchesSet(a, submissionFilterSets.adminApprovedKeys)).length,
+      customerApprovedCount: assignments.filter(a => assignmentMatchesSet(a, submissionFilterSets.customerApprovedKeys)).length,
+      reviewCount: assignments.filter(a => assignmentMatchesSet(a, submissionFilterSets.reviewKeys)).length,
+      stats: {
+        newContentAssigned: assignments.filter(a => {
+          const refDate = a.assignedAt || a.createdAt;
+          if (refDate) return new Date(refDate) >= oneWeekAgo;
+          return getActualStatus(a) === 'pending';
+        }).length,
+        contentWaitingInputs: assignments.filter(a => getActualStatus(a) === 'pending').length,
+        contentPublished: assignments.filter(a => getActualStatus(a) === 'published').length,
+        totalAssigned: assignments.length
+      }
+    };
+  }, [assignments, scheduledPosts, submissions, submissionFilterSets]);
 
   // Recent assignments: show pending (newly assigned) items sorted by soonest due date
   const pendingRecentAssignments = assignments.filter(a => getActualStatus(a) === 'pending');
@@ -309,7 +319,7 @@ function Dashboard() {
                     <Users className="h-5 w-5 sm:h-6 sm:w-6 text-indigo-600" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-xs sm:text-sm font-medium text-gray-500 truncate">Total Assigned</p>
+                    <p className="text-xs sm:text-sm font-medium text-gray-500 leading-tight">Total Assigned</p>
                     <h3 className="text-xl sm:text-2xl font-bold text-gray-900">{stats.totalAssigned}</h3>
                   </div>
                 </div>
@@ -325,7 +335,7 @@ function Dashboard() {
                     <PlusCircle className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-xs sm:text-sm font-medium text-gray-500 truncate">New This Week</p>
+                    <p className="text-xs sm:text-sm font-medium text-gray-500 leading-tight">New This Week</p>
                     <h3 className="text-xl sm:text-2xl font-bold text-gray-900">{stats.newContentAssigned}</h3>
                   </div>
                 </div>
@@ -341,7 +351,7 @@ function Dashboard() {
                     <MessageSquare className="h-5 w-5 sm:h-6 sm:w-6 text-orange-600" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-xs sm:text-sm font-medium text-gray-500 truncate">Pending</p>
+                    <p className="text-xs sm:text-sm font-medium text-gray-500 leading-tight">Pending</p>
                     <h3 className="text-xl sm:text-2xl font-bold text-gray-900">{stats.contentWaitingInputs}</h3>
                   </div>
                 </div>
@@ -357,8 +367,8 @@ function Dashboard() {
                     <CheckCircle className="h-5 w-5 sm:h-6 sm:w-6 text-green-600" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-xs sm:text-sm font-medium text-gray-500 truncate">Customer Approved</p>
-                    <h3 className="text-xl sm:text-2xl font-bold text-gray-900">{stats.contentApproved}</h3>
+                    <p className="text-xs sm:text-sm font-medium text-gray-500 leading-tight">Customer Approved</p>
+                    <h3 className="text-xl sm:text-2xl font-bold text-gray-900">{customerApprovedCount}</h3>
                   </div>
                 </div>
               </div>
@@ -373,7 +383,7 @@ function Dashboard() {
                     <Globe className="h-5 w-5 sm:h-6 sm:w-6 text-purple-600" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-xs sm:text-sm font-medium text-gray-500 truncate">Published</p>
+                    <p className="text-xs sm:text-sm font-medium text-gray-500 leading-tight">Published</p>
                     <h3 className="text-xl sm:text-2xl font-bold text-gray-900">{stats.contentPublished}</h3>
                   </div>
                 </div>
@@ -389,7 +399,7 @@ function Dashboard() {
                     <ShieldCheck className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-600" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-xs sm:text-sm font-medium text-gray-500 truncate">Admin Approved</p>
+                    <p className="text-xs sm:text-sm font-medium text-gray-500 leading-tight">Admin Approved</p>
                     <h3 className="text-xl sm:text-2xl font-bold text-gray-900">{adminApprovedCount}</h3>
                   </div>
                 </div>
@@ -405,7 +415,7 @@ function Dashboard() {
                     <Bell className="h-5 w-5 sm:h-6 sm:w-6 text-rose-600" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-xs sm:text-sm font-medium text-gray-500 truncate">Review Updates</p>
+                    <p className="text-xs sm:text-sm font-medium text-gray-500 leading-tight">Review Updates</p>
                     <h3 className="text-xl sm:text-2xl font-bold text-gray-900">{reviewCount}</h3>
                   </div>
                 </div>
@@ -511,7 +521,7 @@ function Dashboard() {
                       
                       {/* View All Button */}
                       <button 
-                        onClick={() => goToAssignments('all')}
+                        onClick={() => navigate('/content-creator/assignments')}
                         className="w-full mt-2 py-3 text-sm font-semibold text-purple-600 hover:text-purple-700 hover:bg-purple-50 rounded-xl transition-colors"
                       >
                         View All Assignments →
@@ -534,7 +544,7 @@ function Dashboard() {
                 <div className="p-5">
                   <div className="space-y-3">
                     <button 
-                      onClick={() => goToAssignments('all')}
+                      onClick={() => navigate('/content-creator/assignments')}
                       className="w-full flex items-center gap-4 p-4 rounded-xl bg-gradient-to-r from-purple-50 to-indigo-50 hover:from-purple-100 hover:to-indigo-100 border border-purple-100 hover:border-purple-200 transition-all duration-300 group"
                     >
                       <div className="p-3 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl shadow-lg group-hover:shadow-purple-200 transition-shadow">
@@ -543,19 +553,6 @@ function Dashboard() {
                       <div className="text-left">
                         <span className="text-sm font-bold text-gray-900 group-hover:text-purple-900">View All Assignments</span>
                         <p className="text-xs text-gray-500 mt-0.5">Browse and manage your tasks</p>
-                      </div>
-                    </button>
-                    
-                    <button 
-                      onClick={() => navigate('/content-creator/portfolio')}
-                      className="w-full flex items-center gap-4 p-4 rounded-xl bg-gradient-to-r from-blue-50 to-cyan-50 hover:from-blue-100 hover:to-cyan-100 border border-blue-100 hover:border-blue-200 transition-all duration-300 group"
-                    >
-                      <div className="p-3 bg-gradient-to-br from-blue-500 to-cyan-600 rounded-xl shadow-lg group-hover:shadow-blue-200 transition-shadow">
-                        <Eye className="h-5 w-5 text-white" />
-                      </div>
-                      <div className="text-left">
-                        <span className="text-sm font-bold text-gray-900 group-hover:text-blue-900">View My Portfolio</span>
-                        <p className="text-xs text-gray-500 mt-0.5">See your completed work</p>
                       </div>
                     </button>
                     

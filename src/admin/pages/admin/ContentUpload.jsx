@@ -554,6 +554,8 @@ function ContentUpload() {
         assignment_description: assignment.description,
         due_date: assignment.dueDate,
         status: 'submitted',
+        submission_stage: 'customer',
+        item_index: itemIndex !== undefined ? parseInt(itemIndex, 10) : null,
         created_at: new Date().toISOString(),
         type: 'submission',
         geo_location: (geoLocation.latitude && geoLocation.longitude) ? geoLocation : undefined,

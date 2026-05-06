@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
-import { ArrowLeft, Filter, Search, MessageSquare, CheckCircle, Clock, AlertCircle, Palette, Calendar, User, ChevronDown, ChevronUp, Building2 } from 'lucide-react';
+import { ArrowLeft, Filter, Search, MessageSquare, CheckCircle, Clock, AlertCircle, Palette, Calendar, User, ChevronDown, ChevronUp, Building2, Users, Globe, ShieldCheck, Bell, Send } from 'lucide-react';
 import Footer from '../admin/components/layout/Footer';
 import Logo from '../admin/components/layout/Logo';
 
@@ -42,6 +42,11 @@ function Assignments() {
   
   // Scheduled posts to check published status
   const [scheduledPosts, setScheduledPosts] = useState([]);
+  // Submissions to show per-assignment review status
+  const [submissions, setSubmissions] = useState([]);
+  // Counts for stat cards
+  const [adminApprovedCount, setAdminApprovedCount] = useState(0);
+  const [reviewCount, setReviewCount] = useState(0);
 
   // Get current creator's email or id
   const creatorEmail = getCreatorEmail();
@@ -114,19 +119,116 @@ function Assignments() {
         setScheduledPosts(data);
       } catch (err) {
         console.error('Failed to fetch scheduled posts:', err);
-        setScheduledPosts([]); // Ensure scheduledPosts is an empty array on error
+        setScheduledPosts([]);
+      }
+    };
+
+    const fetchSubmissions = async () => {
+      try {
+        const res = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const creatorSubs = Array.isArray(data)
+          ? data.filter(s => (s.created_by || '').toLowerCase() === creatorEmail.toLowerCase())
+          : [];
+        setSubmissions(creatorSubs);
+        // Admin approved count (internal stage only)
+        setAdminApprovedCount(creatorSubs.filter(s =>
+          s.status === 'approved' &&
+          (s.submission_stage || s.submissionStage || 'internal') !== 'customer'
+        ).length);
+        // Review updates: customer-stage submissions with comments
+        setReviewCount(creatorSubs.filter(s =>
+          (s.submission_stage || s.submissionStage || '') === 'customer' &&
+          Array.isArray(s.comments) && s.comments.length > 0
+        ).length);
+      } catch (err) {
+        console.error('Failed to fetch submissions:', err);
+        setSubmissions([]);
       }
     };
     
     if (creatorEmail && creatorEmail.length > 0 && Object.keys(customerMap).length > 0) {
       fetchAssignments();
       fetchScheduledPosts();
+      fetchSubmissions();
     }
   }, [creatorEmail, customerMap]);
 
   // Helper: check if content is published on any platform
   const isContentPublished = (assignmentId) => {
     return scheduledPosts.some(post => post.contentId === assignmentId && post.status === 'published');
+  };
+
+  // Helper: get latest submission for an assignment (used for inline status badges)
+  // Accepts either an assignment object or a plain id string for backward compat
+  const getLatestSubmission = (assignmentOrId) => {
+    const id = assignmentOrId && typeof assignmentOrId === 'object'
+      ? (assignmentOrId.id || assignmentOrId._id)
+      : assignmentOrId;
+    const calId = assignmentOrId && typeof assignmentOrId === 'object' ? assignmentOrId.calendarId : undefined;
+    const idx   = assignmentOrId && typeof assignmentOrId === 'object' ? assignmentOrId.itemIndex  : undefined;
+    const subs = submissions.filter(s => {
+      const sid = String(s.assignment_id || s.assignmentId || '');
+      const iid = String(s.item_id || '');
+      const strId = String(id || '');
+      if (strId && (sid === strId || iid === strId)) return true;
+      if (calId && s.calendar_id === calId && idx !== undefined && s.item_index !== undefined && Number(s.item_index) === Number(idx)) return true;
+      return false;
+    });
+    if (subs.length === 0) return null;
+    return [...subs].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))[0];
+  };
+
+  // Precomputed Sets for reliable submission-based filtering.
+  // Built from submissions (which have the definitive data), avoiding fragile per-assignment ID lookups.
+  const submissionFilterSets = useMemo(() => {
+    const adminApprovedKeys = new Set();
+    const customerApprovedKeys = new Set();
+    submissions.forEach(s => {
+      const keys = [];
+      if (s.assignment_id) keys.push(String(s.assignment_id));
+      if (s.item_id && String(s.item_id) !== String(s.assignment_id)) keys.push(String(s.item_id));
+      // composite key: calendarId::itemIndex
+      if (s.calendar_id && s.item_index !== undefined && s.item_index !== null) {
+        keys.push(`${s.calendar_id}::${Number(s.item_index)}`);
+      }
+      const stage = s.submission_stage || s.submissionStage || '';
+      if (s.status === 'approved' && stage !== 'customer') {
+        keys.forEach(k => adminApprovedKeys.add(k));
+      }
+      if (s.status === 'approved' && stage === 'customer') {
+        keys.forEach(k => customerApprovedKeys.add(k));
+      }
+    });
+    return { adminApprovedKeys, customerApprovedKeys };
+  }, [submissions]);
+
+  // Check if an assignment matches any key in a submission filter set
+  const assignmentMatchesSet = (assignment, set) => {
+    if (!set.size) return false;
+    const id = String(assignment.id || assignment._id || '');
+    if (id && set.has(id)) return true;
+    if (assignment.calendarId && assignment.itemIndex !== undefined) {
+      if (set.has(`${assignment.calendarId}::${Number(assignment.itemIndex)}`)) return true;
+    }
+    return false;
+  };
+
+  // Helper: get submission review status info for display
+  const getSubmissionStatusInfo = (assignmentId) => {
+    const sub = getLatestSubmission(assignmentId);
+    if (!sub) return null;
+    if (sub.submission_stage === 'customer') {
+      return { label: 'Sent to Customer', color: 'bg-blue-100 text-blue-700 border-blue-200', canReupload: false, revisionNotes: '' };
+    }
+    if (sub.status === 'revision_requested') {
+      return { label: 'Revision Requested', color: 'bg-orange-100 text-orange-700 border-orange-200', canReupload: true, revisionNotes: sub.rejectionReason || '' };
+    }
+    if (sub.status === 'approved') {
+      return { label: 'Admin Approved', color: 'bg-orange-100 text-orange-700 border-orange-200', canReupload: false, revisionNotes: '' };
+    }
+    return { label: 'Under Admin Review', color: 'bg-amber-100 text-amber-700 border-amber-200', canReupload: false, revisionNotes: '' };
   };
   
   // Helper: get actual status considering published posts and item.published field
@@ -143,7 +245,9 @@ function Assignments() {
 
   const getFilterStatus = (assignment) => {
     const actual = getActualStatus(assignment);
-    if (actual === 'approved' || actual === 'published') return actual;
+    if (actual === 'published') return 'published';
+    if (assignmentMatchesSet(assignment, submissionFilterSets.customerApprovedKeys)) return 'approved';
+    if (!submissionFilterSets.customerApprovedKeys.size && actual === 'approved') return 'approved';
     return 'pending';
   };
 
@@ -209,8 +313,29 @@ function Assignments() {
     }
   };
 
+  const stats = useMemo(() => {
+    return {
+      total:        assignments.length,
+      pending:      assignments.filter(a => getFilterStatus(a) === 'pending').length,
+      approved:     assignments.filter(a => getFilterStatus(a) === 'approved').length,
+      published:    assignments.filter(a => getFilterStatus(a) === 'published').length,
+      adminApproved:  assignments.filter(a => assignmentMatchesSet(a, submissionFilterSets.adminApprovedKeys)).length,
+      reviewUpdates: assignments.filter(a => {
+        const sub = getLatestSubmission(a);
+        return sub &&
+          (sub.submission_stage || sub.submissionStage || '') === 'customer' &&
+          Array.isArray(sub.comments) && sub.comments.length > 0;
+      }).length,
+    };
+  }, [assignments, scheduledPosts, submissions, submissionFilterSets]);
+
   const filteredAssignments = assignments.filter(assignment => {
-    const matchesFilter = selectedFilter === 'all' || getFilterStatus(assignment) === selectedFilter;
+    let matchesFilter = true;
+    if (selectedFilter === 'admin_approved') {
+      matchesFilter = assignmentMatchesSet(assignment, submissionFilterSets.adminApprovedKeys);
+    } else {
+      matchesFilter = selectedFilter === 'all' || getFilterStatus(assignment) === selectedFilter;
+    }
     const matchesSearch = (assignment.customer || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                          (assignment.title || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                          (assignment.type || '').toLowerCase().includes(searchTerm.toLowerCase());
@@ -346,36 +471,95 @@ function Assignments() {
         <div className="flex-1 min-w-0">
         <div className="px-6 py-6">
           <div className="space-y-5">
-            {/* Filters and Search */}
-            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-sm p-4 border border-gray-200/50">
-              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
-                <div className="flex flex-col sm:flex-row sm:items-center space-y-4 sm:space-y-0 sm:space-x-4">
-                  <div className="flex items-center">
-                    <Filter className="h-5 w-5 text-gray-400 mr-2" />
-                    <select
-                      value={selectedFilter}
-                      onChange={(e) => setSelectedFilter(e.target.value)}
-                      className="bg-white border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent shadow-sm"
-                    >
-                      <option value="all">All Assignments</option>
-                      <option value="pending">Pending</option>
-                      <option value="approved">Approved</option>
-                      <option value="published">Published</option>
-                    </select>
+
+            {/* Stats Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              {[
+                { key: 'all',      label: 'Total Assigned',   value: stats.total,         icon: <Users className="h-5 w-5 text-indigo-600" />,    bg: 'bg-indigo-50',   text: 'text-indigo-700'   },
+                { key: 'pending',  label: 'Pending',          value: stats.pending,        icon: <MessageSquare className="h-5 w-5 text-orange-600" />, bg: 'bg-orange-50', text: 'text-orange-700'  },
+                { key: 'approved', label: 'Customer Approved',value: stats.approved,       icon: <CheckCircle className="h-5 w-5 text-green-600" />,  bg: 'bg-green-50',  text: 'text-green-700'   },
+                { key: 'published',label: 'Published',        value: stats.published,      icon: <Globe className="h-5 w-5 text-purple-600" />,        bg: 'bg-purple-50', text: 'text-purple-700'  },
+                { key: 'admin_approved', label: 'Admin Approved', value: adminApprovedCount, icon: <ShieldCheck className="h-5 w-5 text-emerald-600" />, bg: 'bg-emerald-50', text: 'text-emerald-700' },
+              ].map(s => (
+                <div
+                  key={s.key}
+                  onClick={() => setSelectedFilter(s.key)}
+                  className={`bg-white rounded-xl p-4 border shadow-sm transition-all cursor-pointer hover:shadow-md ${
+                    selectedFilter === s.key ? 'border-purple-300 ring-2 ring-purple-200' : 'border-gray-100'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className={`text-2xl font-bold ${s.text}`}>{s.value}</p>
+                      <p className="text-xs text-gray-500 mt-1 leading-tight">{s.label}</p>
+                    </div>
+                    <div className={`h-10 w-10 rounded-lg ${s.bg} flex items-center justify-center flex-shrink-0`}>
+                      {s.icon}
+                    </div>
                   </div>
                 </div>
-
-                <div className="flex items-center">
-                  <div className="relative">
-                    <Search className="h-5 w-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
-                    <input
-                      type="text"
-                      placeholder="Search assignments..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent shadow-sm w-64"
-                    />
+              ))}
+              {/* Review Updates — navigates to CustomerFeedback */}
+              <div
+                onClick={() => navigate('/content-creator/customer-feedback')}
+                className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm transition-all cursor-pointer hover:shadow-md hover:border-rose-300"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-2xl font-bold text-rose-700">{reviewCount}</p>
+                    <p className="text-xs text-gray-500 mt-1 leading-tight">Review Updates</p>
                   </div>
+                  <div className="h-10 w-10 rounded-lg bg-rose-50 flex items-center justify-center flex-shrink-0">
+                    <Bell className="h-5 w-5 text-rose-600" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Filter Tabs + Search */}
+            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-sm p-4 border border-gray-200/50">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { key: 'all',           label: 'All',            count: stats.total         },
+                    { key: 'pending',       label: 'Pending',        count: stats.pending       },
+                    { key: 'approved',      label: 'Approved',       count: stats.approved      },
+                    { key: 'published',     label: 'Published',      count: stats.published     },
+                    { key: 'admin_approved',label: 'Admin Approved', count: adminApprovedCount },
+                  ].map(opt => (
+                    <button
+                      key={opt.key}
+                      onClick={() => setSelectedFilter(opt.key)}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                        selectedFilter === opt.key
+                          ? 'bg-purple-600 text-white shadow-sm'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      {opt.label}
+                      <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${
+                        selectedFilter === opt.key ? 'bg-white/20 text-white' : 'bg-white text-gray-600'
+                      }`}>{opt.count}</span>
+                    </button>
+                  ))}
+                  {/* Review Updates tab — navigates to CustomerFeedback */}
+                  <button
+                    onClick={() => navigate('/content-creator/customer-feedback')}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all bg-gray-100 text-gray-600 hover:bg-rose-100 hover:text-rose-700"
+                  >
+                    Review Updates
+                    <span className="text-xs px-1.5 py-0.5 rounded-full font-semibold bg-white text-gray-600">{reviewCount}</span>
+                  </button>
+                </div>
+                <div className="relative flex-shrink-0">
+                  <Search className="h-4 w-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Search assignments..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-9 pr-4 py-2 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent shadow-sm w-56"
+                  />
                 </div>
               </div>
             </div>
@@ -476,6 +660,41 @@ function Assignments() {
                                             </span>
                                           </div>
                                         </div>
+                                        {/* Line 3: Submission Review Status */}
+                                        {(() => {
+                                          const statusInfo = getSubmissionStatusInfo(assignment.id);
+                                          if (!statusInfo) return null;
+                                          const isApproved = statusInfo.label === 'Admin Approved';
+                                          return (
+                                            <div
+                                              className={`flex items-center gap-2 mt-2 pt-2 border-t flex-wrap ${isApproved ? 'border-orange-200 bg-orange-50 -mx-4 px-4 pb-2 rounded-b-xl' : 'border-gray-100'}`}
+                                              onClick={e => e.stopPropagation()}
+                                            >
+                                              {isApproved && (
+                                                <CheckCircle className="h-4 w-4 text-orange-600 flex-shrink-0" />
+                                              )}
+                                              <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border ${statusInfo.color}`}>
+                                                {statusInfo.label}
+                                              </span>
+                                              {isApproved && (
+                                                <span className="text-xs text-orange-700 font-medium">Your content was approved by admin!</span>
+                                              )}
+                                              {statusInfo.canReupload && (
+                                                <button
+                                                  onClick={(e) => { e.stopPropagation(); handleStartWork(assignment); }}
+                                                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-orange-600 text-white hover:bg-orange-700 transition-colors"
+                                                >
+                                                  Re-upload
+                                                </button>
+                                              )}
+                                              {statusInfo.revisionNotes && (
+                                                <span className="text-xs text-orange-600 italic truncate max-w-xs" title={statusInfo.revisionNotes}>
+                                                  "{statusInfo.revisionNotes}"
+                                                </span>
+                                              )}
+                                            </div>
+                                          );
+                                        })()}
                                       </div>
                                     ))}
                                   </div>

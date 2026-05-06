@@ -147,11 +147,30 @@ function ContentDetails() {
       if (!response.ok) return;
       const data = await response.json();
       const submissions = Array.isArray(data) ? data : (data.submissions || []);
+
+      // Filter by calendar_id + item_index (primary), fallback to assignment_id
       const filtered = submissions.filter(sub => {
-        const subId = sub.assignment_id || sub.assignmentId || sub.assignmentID;
-        return String(subId) === String(assignmentId);
+        const subCalendarId = sub.calendar_id || sub.calendarId;
+        const subItemIndex  = (sub.item_index !== undefined && sub.item_index !== null)
+          ? String(sub.item_index)
+          : undefined;
+        const subAssignmentId = sub.assignment_id || sub.assignmentId || sub.assignmentID;
+
+        // Primary: calendar_id + item_index (most reliable)
+        if (subCalendarId && subItemIndex !== undefined) {
+          return subCalendarId === calendarId && subItemIndex === String(itemIndex);
+        }
+        // Secondary: calendar_id + assignment_id (covers submissions saved without item_index)
+        if (subCalendarId && subAssignmentId && assignmentId) {
+          return subCalendarId === calendarId &&
+            String(subAssignmentId) === String(assignmentId) &&
+            String(subAssignmentId) !== 'undefined';
+        }
+        // Final fallback: assignment_id only (legacy)
+        return subAssignmentId && String(subAssignmentId) === String(assignmentId) && String(subAssignmentId) !== 'undefined';
       });
-      filtered.sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));
+
+      filtered.sort((a, b) => new Date(a.created_at || a.createdAt || 0) - new Date(b.created_at || b.createdAt || 0));
 
       // Normalize to the same shape as ContentPortfolio's selectedContent.versions
       const normMedia = (media) => {
@@ -177,6 +196,7 @@ function ContentDetails() {
         notes: version.notes || '',
         createdAt: version.created_at,
         status: version.status || 'submitted',
+        submissionStage: version.submission_stage || version.submissionStage || 'internal',
         comments: version.comments || [],
         customer_name: version.customer_name || '',
         customer_id: version.customer_id || '',
@@ -200,9 +220,16 @@ function ContentDetails() {
   }, [assignment]);
 
   // Sync commentsForVersion when version selection changes
+  // Only show customer comments — hide any internal/admin-review comments
   useEffect(() => {
     if (versions.length > 0 && versions[selectedVersionIndex]) {
-      setCommentsForVersion(versions[selectedVersionIndex].comments || []);
+      const allComments = versions[selectedVersionIndex].comments || [];
+      const customerComments = allComments.filter(c =>
+        c.reviewType !== 'internal' &&
+        c.authorRole !== 'admin' &&
+        c.author !== 'Admin'
+      );
+      setCommentsForVersion(customerComments);
     } else {
       setCommentsForVersion([]);
     }
@@ -373,6 +400,8 @@ function ContentDetails() {
         assignment_description: assignment.description,
         due_date: assignment.dueDate,
         status: 'submitted',
+        submission_stage: 'customer',
+        item_index: parseInt(itemIndex, 10),
         created_at: new Date().toISOString(),
         type: 'submission',
       };
@@ -545,20 +574,25 @@ function ContentDetails() {
 
   const handleImgLoad = (e) => {
     const el = e.target;
-    if (el.naturalWidth && el.naturalHeight) {
-      setImgDimensions({ nw: el.naturalWidth, nh: el.naturalHeight, rw: el.clientWidth, rh: el.clientHeight });
-    }
+    const ew = el.clientWidth, eh = el.clientHeight;
+    const nw = el.naturalWidth || ew;
+    const nh = el.naturalHeight || eh;
+    const scale = Math.min(ew / nw, eh / nh);
+    const contentW = nw * scale, contentH = nh * scale;
+    setImgDimensions({ contentW, contentH, offsetX: (ew - contentW) / 2, offsetY: (eh - contentH) / 2 });
   };
 
   const getScaledMarkerPos = (commentX, commentY) => {
-    if (!imgDimensions || !imgDimensions.nw) return { x: commentX, y: commentY };
-    const { nw, nh, rw, rh } = imgDimensions;
-    // Comment.jsx records positions at maxWidth:680, maxHeight:440
-    const cs = Math.min(1, 680 / nw, 440 / nh);
-    return {
-      x: commentX * (rw / (nw * cs)),
-      y: commentY * (rh / (nh * cs)),
-    };
+    const { contentW = 0, contentH = 0, offsetX = 0, offsetY = 0 } = imgDimensions || {};
+    if (commentX <= 1 && commentY <= 1 && contentW > 0) {
+      return { x: commentX * contentW + offsetX, y: commentY * contentH + offsetY };
+    }
+    // Legacy raw pixels: scale proportionally from ~680px reference
+    if (contentW > 0) {
+      const s = contentW / 680;
+      return { x: commentX * s + offsetX, y: commentY * s + offsetY };
+    }
+    return { x: commentX, y: commentY };
   };
 
   // ── Loading / Not found states ───────────────────────────────────────────────
@@ -1253,51 +1287,62 @@ function ContentDetails() {
                       </div>
                       <div className="max-h-80 overflow-y-auto">
                         <div className="divide-y divide-gray-100">
-                          {Object.entries(groupVersionsByDate(versions)).map(([group, items]) => (
-                            <div key={group}>
-                              <div className="px-5 pt-3 pb-2 text-xs font-semibold text-gray-400 uppercase tracking-wider bg-gray-50/50">
-                                {group}
-                              </div>
-                              {items.map((version) => {
-                                const { date, time } = formatVersionDate(version.createdAt);
-                                return (
-                                  <button
-                                    key={version.id}
-                                    onClick={() => handleVersionSelect(version.idx)}
-                                    className={`w-full text-left px-5 py-3 flex flex-col border-l-4 transition-all duration-200 hover:bg-gray-50 ${
-                                      selectedVersionIndex === version.idx
-                                        ? 'bg-purple-50 border-l-purple-500'
-                                        : 'bg-white border-l-transparent'
-                                    }`}
-                                  >
-                                    <div className="flex items-center justify-between">
-                                      <span className="font-medium text-gray-900 text-sm">{date}, {time}</span>
-                                    </div>
-                                    <div className="flex items-center mt-1.5 text-xs text-gray-500 gap-3">
-                                      <span className="flex items-center">
-                                        <span className={`h-1.5 w-1.5 rounded-full mr-1.5 ${
-                                          selectedVersionIndex === version.idx ? 'bg-purple-500' : 'bg-gray-300'
-                                        }`} />
-                                        Version {version.versionNumber}
-                                      </span>
-                                      {version.media?.length > 0 && (
-                                        <span className="flex items-center">
-                                          <Image className="h-3 w-3 mr-1" />
-                                          {version.media.length}
-                                        </span>
-                                      )}
-                                    </div>
-                                    {version.customer_id && (
-                                      <div className="mt-1 text-xs text-gray-400">Customer ID: {version.customer_id}</div>
-                                    )}
-                                    {version.customer_email && (
-                                      <div className="mt-1 text-xs text-gray-400">Email: {version.customer_email}</div>
-                                    )}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          ))}
+                          {(() => {
+                            const internalVersions = versions
+                              .map((v, i) => ({ ...v, idx: i }))
+                              .filter(v => v.submissionStage !== 'customer');
+                            const customerVersions = versions
+                              .map((v, i) => ({ ...v, idx: i }))
+                              .filter(v => v.submissionStage === 'customer');
+                            const renderSection = (sectionVersions, label, accentClass, activeBg, activeBorder) =>
+                              sectionVersions.length > 0 && (
+                                <div key={label}>
+                                  <div className={`px-5 pt-3 pb-2 text-xs font-bold uppercase tracking-wider ${accentClass}`}>
+                                    {label}
+                                  </div>
+                                  {sectionVersions.map((version, ci) => {
+                                    const { date, time } = formatVersionDate(version.createdAt);
+                                    return (
+                                      <button
+                                        key={version.id || version.idx}
+                                        onClick={() => handleVersionSelect(version.idx)}
+                                        className={`w-full text-left px-5 py-3 flex flex-col border-l-4 transition-all duration-200 hover:bg-gray-50 ${
+                                          selectedVersionIndex === version.idx
+                                            ? `${activeBg} ${activeBorder}`
+                                            : 'bg-white border-l-transparent'
+                                        }`}
+                                      >
+                                        <div className="flex items-center justify-between">
+                                          <span className="font-medium text-gray-900 text-sm">{date}, {time}</span>
+                                        </div>
+                                        <div className="flex items-center mt-1.5 text-xs text-gray-500 gap-3">
+                                          <span className="flex items-center">
+                                            <span className={`h-1.5 w-1.5 rounded-full mr-1.5 ${
+                                              selectedVersionIndex === version.idx
+                                                ? (label === 'Internal Review' ? 'bg-purple-500' : 'bg-amber-500')
+                                                : 'bg-gray-300'
+                                            }`} />
+                                            V{ci + 1}
+                                          </span>
+                                          {version.media?.length > 0 && (
+                                            <span className="flex items-center">
+                                              <Image className="h-3 w-3 mr-1" />
+                                              {version.media.length}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              );
+                            return (
+                              <>
+                                {renderSection(internalVersions, 'Internal Review', 'text-purple-500 bg-purple-50/60', 'bg-purple-50', 'border-l-purple-500')}
+                                {renderSection(customerVersions, 'Customer Review', 'text-amber-600 bg-amber-50/60', 'bg-amber-50', 'border-l-amber-500')}
+                              </>
+                            );
+                          })()}
                         </div>
                       </div>
                     </div>
@@ -1354,6 +1399,13 @@ function ContentDetails() {
                                       <p className="text-sm text-gray-800 break-words leading-relaxed">
                                         {comment.message || comment.comment}
                                       </p>
+                                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full inline-block mt-1 mb-1 ${
+                                        (comment.reviewType === 'internal' || comment.authorRole === 'admin' || comment.author === 'Admin')
+                                          ? 'bg-purple-100 text-purple-700'
+                                          : 'bg-blue-100 text-blue-700'
+                                      }`}>
+                                        {(comment.reviewType === 'internal' || comment.authorRole === 'admin' || comment.author === 'Admin') ? 'Internal Review' : 'External Review'}
+                                      </span>
                                       <div className="flex items-center gap-3 mt-2 flex-wrap">
                                         <p className="text-xs text-gray-400">
                                           {comment.timestamp ? new Date(comment.timestamp).toLocaleString() : ''}

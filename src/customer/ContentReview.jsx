@@ -70,6 +70,7 @@ function ContentReview() {
   const imageContainerRef = useRef(null);
   const videoRef = useRef(null);
   const touchFiredRef = useRef(false);
+  const videoPausedAtRef = useRef(null); // stores currentTime when video is paused for commenting
   const [imageDimensions, setImageDimensions] = useState({ contentW: 0, contentH: 0, offsetX: 0, offsetY: 0 });
 
   // Get logged-in customer info from localStorage (like in ContentCalendar)
@@ -377,11 +378,15 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
     const y = Math.max(0, Math.min(1, (e.clientY - rect.top  - oy) / contentH));
     if (commentsForCurrentMedia.some((c) => c.editing)) return;
     
-    // Capture video timestamp if this is a video
+    // Capture video timestamp if this is a video and pause it while the user types
     const mediaType = selectedContent?.versions?.[selectedVersionIndex]?.media?.[selectedMediaIndex]?.type;
     const videoTimestamp = (mediaType === 'video' && videoRef.current && !isNaN(videoRef.current.currentTime))
       ? videoRef.current.currentTime
       : null;
+    if (mediaType === 'video' && videoRef.current) {
+      videoPausedAtRef.current = videoRef.current.currentTime;
+      videoRef.current.pause();
+    }
 
     const newComment = {
       id: uuidv4(),
@@ -470,6 +475,15 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
         if (response.ok) {
           const result = await response.json();
           
+          // Resume video from the exact point it was paused
+          if (videoRef.current && videoRef.current.paused) {
+            if (videoPausedAtRef.current != null) {
+              videoRef.current.currentTime = videoPausedAtRef.current;
+              videoPausedAtRef.current = null;
+            }
+            videoRef.current.play().catch(() => {});
+          }
+
           // Update the local state to reflect the saved comment
           setComments(comments.map((c) => (c.id === id ? { ...c, editing: false } : c)));
           setCommentsForCurrentMedia(commentsForCurrentMedia.map((c) => (c.id === id ? { ...c, editing: false } : c)));
@@ -526,6 +540,14 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
       setCommentsForCurrentMedia(commentsForCurrentMedia.filter((c) => c.id !== id));
     }
     setActiveComment(null);
+    // Resume video from the exact point it was paused when comment is cancelled
+    if (videoRef.current && videoRef.current.paused) {
+      if (videoPausedAtRef.current != null) {
+        videoRef.current.currentTime = videoPausedAtRef.current;
+        videoPausedAtRef.current = null;
+      }
+      videoRef.current.play().catch(() => {});
+    }
   };
 
   // Handle delete comment - removes from backend and local state

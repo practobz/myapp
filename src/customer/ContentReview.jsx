@@ -68,6 +68,8 @@ function ContentReview() {
   
   // Ref for image container to properly position comments
   const imageContainerRef = useRef(null);
+  const videoRef = useRef(null);
+  const touchFiredRef = useRef(false);
   const [imageDimensions, setImageDimensions] = useState({ contentW: 0, contentH: 0, offsetX: 0, offsetY: 0 });
 
   // Get logged-in customer info from localStorage (like in ContentCalendar)
@@ -1633,17 +1635,42 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
                             }}
                           />
                         ) : (
-                          <video
-                            src={currentMedia.url}
-                            controls
-                            className="max-w-full h-auto max-h-[65vh] rounded-xl shadow-lg border border-slate-200 object-contain cursor-crosshair"
-                            onClick={handleImageClickWithReposition}
-                            onLoadedMetadata={handleImageLoad}
-                            onError={(e) => {
-                              e.target.style.display = 'none';
-                              if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex';
-                            }}
-                          />
+                          <>
+                            <video
+                              ref={videoRef}
+                              src={currentMedia.url}
+                              controls
+                              playsInline
+                              className="max-w-full h-auto max-h-[65vh] rounded-xl shadow-lg border border-slate-200 object-contain"
+                              onLoadedMetadata={handleImageLoad}
+                              onError={(e) => {
+                                e.target.style.display = 'none';
+                              }}
+                            />
+                            {/* Transparent overlay to capture tap-to-comment on mobile (native video controls intercept onClick) */}
+                            <div
+                              style={{
+                                position: 'absolute',
+                                top: 0,
+                                left: 0,
+                                right: 0,
+                                bottom: 44,
+                                cursor: 'crosshair',
+                                zIndex: 5,
+                                WebkitTapHighlightColor: 'transparent',
+                              }}
+                              onClick={(e) => {
+                                if (touchFiredRef.current) { touchFiredRef.current = false; return; }
+                                handleImageClickWithReposition(e);
+                              }}
+                              onTouchEnd={(e) => {
+                                const touch = e.changedTouches[0];
+                                if (!touch || !videoRef.current) return;
+                                touchFiredRef.current = true;
+                                handleImageClickWithReposition({ target: videoRef.current, clientX: touch.clientX, clientY: touch.clientY });
+                              }}
+                            />
+                          </>
                         )
                       ) : (
                         <div className="w-96 h-72 bg-slate-100 rounded-xl flex items-center justify-center border border-slate-200">

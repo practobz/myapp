@@ -192,10 +192,10 @@ function CommentPin({ comment, index, onActivate, activeId, hoveredId, setHovere
 }
 
 // ─── Full-screen Review Panel ──────────────────────────────────────────────────
-function ReviewPanel({ submission, onClose, onStatusUpdated }) {
-  const allVersions = submission.allVersions || [submission];
-  const [activeVersionIdx, setActiveVersionIdx] = useState(allVersions.length - 1);
-  const activeVersion = allVersions[activeVersionIdx];
+function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
+  const [localVersions, setLocalVersions] = useState(submission.allVersions || [submission]);
+  const [activeVersionIdx, setActiveVersionIdx] = useState((submission.allVersions || [submission]).length - 1);
+  const activeVersion = localVersions[activeVersionIdx];
 
   const mediaItems = normalizeMedia(activeVersion.images);
   const [activeMediaIdx, setActiveMediaIdx] = useState(0);
@@ -215,6 +215,8 @@ function ReviewPanel({ submission, onClose, onStatusUpdated }) {
   const [sidebarTab, setSidebarTab]   = useState('comments');
   const [sentToCustomer, setSentToCustomer]       = useState(activeVersion.submission_stage === 'customer');
   const [sendingToCustomer, setSendingToCustomer] = useState(false);
+  const [deleteConfirm, setDeleteConfirm]         = useState(null); // null | 'version' | 'all'
+  const [deleting, setDeleting]                   = useState(false);
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -224,13 +226,14 @@ function ReviewPanel({ submission, onClose, onStatusUpdated }) {
   // Re-initialize version-specific state when the active version changes
   useEffect(() => {
     setActiveMediaIdx(0);
-    setComments(normalizeComments(allVersions[activeVersionIdx].comments));
+    setComments(normalizeComments(localVersions[activeVersionIdx].comments));
     setActiveComment(null);
     setHoveredComment(null);
-    setLocalStatus(allVersions[activeVersionIdx].status);
-    setSentToCustomer(allVersions[activeVersionIdx].submission_stage === 'customer');
+    setLocalStatus(localVersions[activeVersionIdx].status);
+    setSentToCustomer(localVersions[activeVersionIdx].submission_stage === 'customer');
     setShowRevisionInput(false);
     setRevisionNotes('');
+    setDeleteConfirm(null);
   }, [activeVersionIdx]); // eslint-disable-line
 
   // Sync commentsForMedia
@@ -390,6 +393,52 @@ function ReviewPanel({ submission, onClose, onStatusUpdated }) {
     }
   };
 
+  // ── Delete handlers ──
+  const handleDeleteVersion = async () => {
+    if (deleting) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(
+        `${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(activeVersion._id)}`,
+        { method: 'DELETE' }
+      );
+      if (!res.ok) throw new Error();
+      const newVersions = localVersions.filter((_, i) => i !== activeVersionIdx);
+      if (newVersions.length === 0) {
+        showToast('Submission deleted.');
+        setTimeout(() => onDeleted(submission.assignment_id || submission._id), 1200);
+      } else {
+        setLocalVersions(newVersions);
+        setActiveVersionIdx(Math.min(activeVersionIdx, newVersions.length - 1));
+        showToast('Version deleted.');
+        setDeleteConfirm(null);
+      }
+    } catch {
+      showToast('Failed to delete version.', 'error');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleDeleteSubmission = async () => {
+    if (deleting) return;
+    setDeleting(true);
+    try {
+      const assignmentId = submission.assignment_id || submission._id;
+      const res = await fetch(
+        `${process.env.REACT_APP_API_URL}/api/content-submissions/assignment/${encodeURIComponent(assignmentId)}`,
+        { method: 'DELETE' }
+      );
+      if (!res.ok) throw new Error();
+      showToast('Submission deleted.');
+      setTimeout(() => onDeleted(assignmentId), 1200);
+    } catch {
+      showToast('Failed to delete submission.', 'error');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   // ── Status actions ──
   const handleApprove = async () => {
     setApproving(true);
@@ -490,29 +539,41 @@ function ReviewPanel({ submission, onClose, onStatusUpdated }) {
           <div className="flex-1 flex flex-col overflow-y-auto bg-slate-50 p-4 gap-4 items-center">
 
             {/* Version selector — only shown when there are multiple versions */}
-            {allVersions.length > 1 && (
+            {localVersions.length > 1 && (
               <div className="w-full max-w-2xl">
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Version History</p>
                 <div className="flex gap-2 flex-wrap">
-                  {allVersions.map((v, i) => {
+                  {localVersions.map((v, i) => {
                     const vCfg = getStatusConfig(v.status);
                     return (
-                      <button
-                        key={v._id || i}
-                        onClick={() => setActiveVersionIdx(i)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                          i === activeVersionIdx
-                            ? 'bg-blue-600 text-white border-blue-600 shadow'
-                            : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:bg-blue-50'
-                        }`}
-                      >
-                        v{i + 1}
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
-                          i === activeVersionIdx ? 'bg-white/20 text-white' : vCfg.color
-                        }`}>
-                          {vCfg.label}
-                        </span>
-                      </button>
+                      <div key={v._id || i} className="flex items-center">
+                        <button
+                          onClick={() => setActiveVersionIdx(i)}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-l-lg text-xs font-semibold border-y border-l transition-all ${
+                            i === activeVersionIdx
+                              ? 'bg-blue-600 text-white border-blue-600 shadow'
+                              : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:bg-blue-50'
+                          }`}
+                        >
+                          v{i + 1}
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                            i === activeVersionIdx ? 'bg-white/20 text-white' : vCfg.color
+                          }`}>
+                            {vCfg.label}
+                          </span>
+                        </button>
+                        <button
+                          onClick={() => { setActiveVersionIdx(i); setDeleteConfirm('version'); }}
+                          title={`Delete v${i + 1}`}
+                          className={`p-1.5 border-y border-r rounded-r-lg transition-all ${
+                            i === activeVersionIdx
+                              ? 'bg-blue-700 border-blue-600 text-white/70 hover:text-white hover:bg-blue-800'
+                              : 'bg-white border-gray-200 text-gray-300 hover:text-red-500 hover:border-red-300 hover:bg-red-50'
+                          }`}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
                     );
                   })}
                 </div>
@@ -715,6 +776,63 @@ function ReviewPanel({ submission, onClose, onStatusUpdated }) {
                       ? <><div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Approving...</>
                       : <><CheckCircle className="h-4 w-4" />Approve Anyway</>}
                   </button>
+                </div>
+              )}
+
+              {/* ── Delete section ── */}
+              <div className="border-t border-gray-100 pt-2 space-y-1.5">
+                {localVersions.length > 1 && (
+                  <button
+                    onClick={() => setDeleteConfirm('version')}
+                    className="w-full py-2 text-red-500 border border-red-200 rounded-xl text-xs font-semibold hover:bg-red-50 transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />Delete Version v{activeVersionIdx + 1}
+                  </button>
+                )}
+                <button
+                  onClick={() => setDeleteConfirm('all')}
+                  className="w-full py-2 text-red-600 border border-red-300 bg-red-50/50 rounded-xl text-xs font-semibold hover:bg-red-100 transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />Delete Entire Submission
+                </button>
+              </div>
+
+              {/* ── Delete confirmation ── */}
+              {deleteConfirm && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-xl space-y-2">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-semibold text-red-800">
+                        {deleteConfirm === 'version'
+                          ? `Delete version v${activeVersionIdx + 1}?`
+                          : `Delete entire submission?`}
+                      </p>
+                      <p className="text-[10px] text-red-600 mt-0.5">
+                        {deleteConfirm === 'version'
+                          ? 'This version will be permanently removed.'
+                          : `All ${localVersions.length} version(s) will be permanently removed.`}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={deleteConfirm === 'version' ? handleDeleteVersion : handleDeleteSubmission}
+                      disabled={deleting}
+                      className="flex-1 py-1.5 bg-red-600 text-white rounded-lg text-xs font-semibold hover:bg-red-700 disabled:opacity-50 flex items-center justify-center gap-1"
+                    >
+                      {deleting
+                        ? <><div className="h-3 w-3 border-2 border-white border-t-transparent rounded-full animate-spin" />Deleting...</>
+                        : 'Yes, Delete'}
+                    </button>
+                    <button
+                      onClick={() => setDeleteConfirm(null)}
+                      disabled={deleting}
+                      className="flex-1 py-1.5 border border-gray-200 rounded-lg text-xs hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -930,10 +1048,11 @@ function MediaPreview({ images }) {
 }
 
 // ─── Submission Card ───────────────────────────────────────────────────────────
-function SubmissionCard({ submission, onView }) {
+function SubmissionCard({ submission, onView, onDelete }) {
   const statusCfg    = getStatusConfig(submission.status);
   const commentCount = Array.isArray(submission.comments) ? submission.comments.length : 0;
   const versionCount = submission.allVersions?.length || 1;
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200/50 overflow-hidden hover:shadow-md transition-shadow flex flex-col">
@@ -944,6 +1063,13 @@ function SubmissionCard({ submission, onView }) {
             v{versionCount}
           </span>
         )}
+        <button
+          onClick={(e) => { e.stopPropagation(); setConfirmDelete(true); }}
+          className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-red-600 text-white rounded-lg transition-colors"
+          title="Delete submission"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
       </div>
 
       <div className="p-3 flex-1 flex flex-col gap-2">
@@ -1004,6 +1130,25 @@ function SubmissionCard({ submission, onView }) {
         >
           <Eye className="h-3.5 w-3.5" /> Review &amp; Comment
         </button>
+        {confirmDelete && (
+          <div className="mt-1 p-2.5 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-xs font-medium text-red-700 mb-2">Delete this submission?</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { onDelete(submission); setConfirmDelete(false); }}
+                className="flex-1 py-1.5 bg-red-600 text-white rounded-lg text-xs font-semibold hover:bg-red-700"
+              >
+                Delete
+              </button>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                className="flex-1 py-1.5 border border-gray-200 rounded-lg text-xs hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1056,6 +1201,17 @@ export default function CreatorSubmissionsReview() {
   }, []);
 
   useEffect(() => { fetchSubmissions(); }, [fetchSubmissions]);
+
+  const handleDeleteSubmission = useCallback(async (submission) => {
+    const assignmentId = submission.assignment_id || submission._id;
+    setSubmissions(prev => prev.filter(s => (s.assignment_id || s._id) !== assignmentId));
+    try {
+      await fetch(
+        `${process.env.REACT_APP_API_URL}/api/content-submissions/assignment/${encodeURIComponent(assignmentId)}`,
+        { method: 'DELETE' }
+      );
+    } catch {}
+  }, []);
 
   const handleStatusUpdated = (submissionId, newStatus) => {
     const applyUpdate = (s) => {
@@ -1174,6 +1330,7 @@ export default function CreatorSubmissionsReview() {
                 key={submission._id}
                 submission={submission}
                 onView={() => setReviewSubmission(submission)}
+                onDelete={handleDeleteSubmission}
               />
             ))}
           </div>
@@ -1186,6 +1343,10 @@ export default function CreatorSubmissionsReview() {
           submission={reviewSubmission}
           onClose={() => setReviewSubmission(null)}
           onStatusUpdated={handleStatusUpdated}
+          onDeleted={(assignmentId) => {
+            setSubmissions(prev => prev.filter(s => (s.assignment_id || s._id) !== assignmentId));
+            setReviewSubmission(null);
+          }}
         />
       )}
     </AdminLayout>

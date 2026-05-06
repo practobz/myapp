@@ -6,7 +6,8 @@ import {
   MessageSquare, CalendarIcon, Instagram, Facebook, Linkedin, Youtube, 
   AlertCircle, Eye, CheckCircle, Video, ExternalLink, Clock, Filter,
   LayoutGrid, List, Search, X, ChevronRight, FileText, TrendingUp,
-  Send, Image, Play, Calendar, User, Sparkles, BarChart3, Download
+  Send, Image, Play, Calendar, User, Sparkles, BarChart3, Download,
+  UserCog, ChevronLeft, Shield
 } from 'lucide-react';
 
 // Helper to get default post URL if missing
@@ -73,6 +74,11 @@ function ContentCalendar() {
   const [searchTerm, setSearchTerm]             = useState('');
   const [viewMode, setViewMode]                 = useState('list');
 
+  // ── Review comments panel ────────────────────────────────────
+  const [reviewPanel, setReviewPanel]             = useState(null);  // item | null
+  const [reviewPanelComments, setReviewPanelComments] = useState([]);
+  const [reviewPanelLoading, setReviewPanelLoading]   = useState(false);
+
   let user = null;
   try { user = JSON.parse(localStorage.getItem('user')); } catch { user = null; }
   const customerId   = user?.id || user?._id;
@@ -103,7 +109,8 @@ function ContentCalendar() {
         if (!Array.isArray(submissionsData)) submissionsData = [];
         setSubmissions(submissionsData.filter(s =>
           (s.customer_id === customerId || s.customer_email === user?.email) &&
-          s.submission_stage === 'customer'
+          s.submission_stage !== 'admin_review' &&
+          (!s.submission_stage || s.submission_stage === 'customer')
         ));
       } catch {
         setCustomer(null);
@@ -534,6 +541,42 @@ function ContentCalendar() {
     return { imageUrl: null, imageUrls: [] };
   };
 
+  const handleOpenReviewPanel = async (item, e) => {
+    e.stopPropagation();
+    setReviewPanel(item);
+    setReviewPanelLoading(true);
+    setReviewPanelComments([]);
+    try {
+      const res = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions`);
+      if (!res.ok) throw new Error();
+      const all = await res.json();
+      const matching = Array.isArray(all)
+        ? all.filter(sub =>
+            (sub.item_id && sub.item_id === item.id) ||
+            (sub.assignment_id && sub.assignment_id === item.id) ||
+            (sub.item_name && sub.item_name === item.title)
+          )
+        : [];
+      // Sort submissions oldest → newest (version order)
+      matching.sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));
+      const allComments = [];
+      matching.forEach((sub, si) => {
+        (sub.comments || []).forEach(c => {
+          allComments.push({
+            ...c,
+            _versionNumber: si + 1,
+            _submissionId:  sub._id,
+          });
+        });
+      });
+      setReviewPanelComments(allComments);
+    } catch {
+      setReviewPanelComments([]);
+    } finally {
+      setReviewPanelLoading(false);
+    }
+  };
+
   const handleContentClick = (item) => {
     const scheduledPublishedPosts = scheduledPosts.filter(post =>
       (post.item_id && post.item_id === item.id) ||
@@ -767,7 +810,7 @@ function ContentCalendar() {
                           </div>
                         )}
                         <button
-                          onClick={(e) => { e.stopPropagation(); navigate(`/customer/content-review?itemId=${item.id}`); }}
+                          onClick={(e) => handleOpenReviewPanel(item, e)}
                           className="mt-3 w-full flex items-center justify-center gap-1.5 text-xs text-purple-600 bg-purple-50 hover:bg-purple-100 active:bg-purple-200 px-3 py-2 rounded-lg transition-colors font-medium"
                         >
                           <MessageSquare className="h-3.5 w-3.5" /><span>Content Review</span>
@@ -814,7 +857,7 @@ function ContentCalendar() {
                                   </div>
                                 )}
                                 <button
-                                  onClick={(e) => { e.stopPropagation(); navigate(`/customer/content-review?itemId=${item.id}`); }}
+                                  onClick={(e) => handleOpenReviewPanel(item, e)}
                                   className="flex items-center gap-1 text-xs text-purple-600 bg-purple-50 hover:bg-purple-100 active:bg-purple-200 px-3 py-1.5 rounded-lg transition-colors font-medium"
                                 >
                                   <MessageSquare className="h-3.5 w-3.5" /><span>Content Review</span>
@@ -1024,6 +1067,201 @@ function ContentCalendar() {
             </div>
           </div>
         </div>
+      )}
+      {/* ── Review Comments Panel ── */}
+      {reviewPanel && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50"
+            onClick={() => setReviewPanel(null)}
+          />
+          {/* Side Panel */}
+          <div className="fixed right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl z-50 flex flex-col">
+
+            {/* Panel Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-purple-50 to-indigo-50 flex-shrink-0">
+              <div className="min-w-0 flex-1">
+                <h3 className="text-base font-bold text-gray-900 truncate">{reviewPanel.title || reviewPanel.description || 'Content Review'}</h3>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                    reviewPanel.status === 'published'    ? 'bg-emerald-100 text-emerald-700' :
+                    reviewPanel.status === 'under_review' ? 'bg-amber-100 text-amber-700'     :
+                    reviewPanel.status === 'scheduled'    ? 'bg-blue-100 text-blue-700'       : 'bg-gray-100 text-gray-600'
+                  }`}>{getStatusLabel(reviewPanel.status)}</span>
+                  {reviewPanel.platform && <span className="text-[10px] text-gray-400 capitalize">{reviewPanel.platform}</span>}
+                </div>
+              </div>
+              <button
+                onClick={() => setReviewPanel(null)}
+                className="ml-3 p-2 rounded-lg hover:bg-white/60 transition-colors flex-shrink-0"
+              >
+                <X className="h-4 w-4 text-gray-500" />
+              </button>
+            </div>
+
+            {/* Legend */}
+            <div className="flex items-center gap-4 px-5 py-2.5 bg-gray-50 border-b border-gray-100 flex-shrink-0">
+              <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">Legend:</span>
+              <div className="flex items-center gap-1">
+                <div className="w-2 h-2 rounded-full bg-purple-500" />
+                <span className="text-[10px] text-gray-500">Internal Review</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-2 h-2 rounded-full bg-blue-500" />
+                <span className="text-[10px] text-gray-500">External Review</span>
+              </div>
+            </div>
+
+            {/* Comments body */}
+            <div className="flex-1 overflow-y-auto p-4">
+              {reviewPanelLoading ? (
+                <div className="flex flex-col items-center justify-center h-48">
+                  <div className="animate-spin rounded-full h-8 w-8 border-2 border-purple-200 border-t-purple-600 mb-3" />
+                  <p className="text-sm text-gray-400">Loading comments…</p>
+                </div>
+              ) : reviewPanelComments.filter(c => c.reviewType !== 'internal' && c.authorRole !== 'admin' && c.author !== 'Admin').length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-48 text-center">
+                  <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-3">
+                    <MessageSquare className="h-6 w-6 text-gray-300" />
+                  </div>
+                  <p className="text-sm font-medium text-gray-500">No comments yet</p>
+                  <p className="text-xs text-gray-400 mt-1">Comments added during review will appear here</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {(() => {
+                    const byVersion = {};
+                    reviewPanelComments
+                      .filter(c => c.reviewType !== 'internal' && c.authorRole !== 'admin' && c.author !== 'Admin')
+                      .forEach(c => {
+                      const key = c._versionNumber || 1;
+                      if (!byVersion[key]) byVersion[key] = [];
+                      byVersion[key].push(c);
+                    });
+                    return Object.keys(byVersion).sort((a, b) => Number(a) - Number(b)).map(vn => (
+                      <div key={vn}>
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Version {vn}</span>
+                          <div className="flex-1 h-px bg-gray-100" />
+                          <span className="text-[10px] text-gray-400">{byVersion[vn].length} comment{byVersion[vn].length !== 1 ? 's' : ''}</span>
+                        </div>
+                        <div className="space-y-2">
+                          {byVersion[vn].map((comment, idx) => {
+                            const isInternal = comment.reviewType === 'internal' || comment.authorRole === 'admin' || comment.author === 'Admin';
+                            const isDone     = comment.done || comment.status === 'completed';
+                            return (
+                              <div
+                                key={comment.id || `${vn}-${idx}`}
+                                className={`rounded-xl border overflow-hidden ${
+                                  isDone     ? 'bg-emerald-50/60 border-emerald-100' :
+                                  isInternal ? 'bg-purple-50/60 border-purple-100'  :
+                                               'bg-blue-50/60   border-blue-100'
+                                }`}
+                              >
+                                <div className="p-3">
+                                  {/* Header row */}
+                                  <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                                    <span
+                                      className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 text-white"
+                                      style={{ background: isInternal ? '#7c3aed' : '#3b82f6' }}
+                                    >
+                                      {idx + 1}
+                                    </span>
+                                    <span className={`inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                                      isInternal ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                                    }`}>
+                                      {isInternal
+                                        ? <><UserCog className="h-2 w-2" />&nbsp;Internal Review</>
+                                        : <><User    className="h-2 w-2" />&nbsp;External Review</>
+                                      }
+                                    </span>
+                                    {isDone && (
+                                      <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 ml-auto">
+                                        <CheckCircle className="h-2 w-2" />&nbsp;Done
+                                      </span>
+                                    )}
+                                    {(comment.mediaIndex !== undefined && comment.mediaIndex > 0) && (
+                                      <span className="text-[9px] text-gray-400 ml-auto">Media {comment.mediaIndex + 1}</span>
+                                    )}
+                                  </div>
+                                  {/* Comment text */}
+                                  <p className="text-xs text-gray-800 leading-relaxed break-words">
+                                    {comment.message || comment.comment}
+                                  </p>
+                                  {/* Author + timestamp */}
+                                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                                    {(comment.author || comment.authorName || comment.authorEmail) && (
+                                      <span className="text-[9px] text-gray-400 truncate">
+                                        — {comment.authorName || comment.author || comment.authorEmail}
+                                      </span>
+                                    )}
+                                    {comment.timestamp && (
+                                      <span className="text-[9px] text-gray-400 ml-auto">
+                                        {new Date(comment.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {/* Admin reply */}
+                                  {comment.adminReply && (
+                                    <div className="mt-2 p-2 bg-purple-50 border border-purple-200 rounded-lg">
+                                      <div className="flex items-center gap-1 mb-0.5">
+                                        <UserCog className="h-2.5 w-2.5 text-purple-600" />
+                                        <span className="text-[10px] font-bold text-purple-700">{comment.adminReply.adminName || 'Admin'}</span>
+                                      </div>
+                                      <p className="text-[10px] text-gray-700 break-words">{comment.adminReply.text}</p>
+                                    </div>
+                                  )}
+                                  {/* Creator reply */}
+                                  {comment.reply && (
+                                    <div className="mt-2 p-2 bg-indigo-50 border border-indigo-200 rounded-lg">
+                                      <div className="flex items-center gap-1 mb-0.5">
+                                        <User className="h-2.5 w-2.5 text-indigo-600" />
+                                        <span className="text-[10px] font-bold text-indigo-700">{comment.reply.creatorName || 'Creator'}</span>
+                                      </div>
+                                      <p className="text-[10px] text-gray-700 break-words">{comment.reply.text}</p>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ));
+                  })()}
+                </div>
+              )}
+            </div>
+
+            {/* Panel Footer */}
+            <div className="px-5 py-4 border-t border-gray-100 bg-gray-50 flex items-center justify-between flex-shrink-0">
+              <div className="text-xs text-gray-500">
+                {(() => {
+                  const visibleComments = reviewPanelComments.filter(c => c.reviewType !== 'internal' && c.authorRole !== 'admin' && c.author !== 'Admin');
+                  return visibleComments.length > 0 && (
+                    <>
+                      <span className="font-semibold text-gray-700">{visibleComments.length}</span>{' '}
+                      comment{visibleComments.length !== 1 ? 's' : ''}
+                      {visibleComments.filter(c => c.done || c.status === 'completed').length > 0 && (
+                        <span className="ml-2 text-emerald-600 font-medium">
+                          · {visibleComments.filter(c => c.done || c.status === 'completed').length} resolved
+                        </span>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+              <button
+                onClick={() => { setReviewPanel(null); navigate(`/customer/content-review?itemId=${reviewPanel.id}`); }}
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold rounded-lg transition-colors shadow-sm"
+              >
+                <MessageSquare className="h-3.5 w-3.5" />
+                Open Full Review
+              </button>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

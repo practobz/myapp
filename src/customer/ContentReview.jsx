@@ -106,9 +106,12 @@ function ContentReview() {
         done: comment.done || comment.status === 'completed' || false
       }));
       
-      // Remove duplicate comments by ID (in case backend has duplicates)
+      // Remove duplicate comments by ID and hide internal/admin review comments from customer
       const uniqueComments = normalizedComments.filter((comment, index, self) =>
-        index === self.findIndex((c) => c.id === comment.id)
+        index === self.findIndex((c) => c.id === comment.id) &&
+        comment.reviewType !== 'internal' &&
+        comment.authorRole !== 'admin' &&
+        comment.author !== 'Admin'
       );
       
       setComments(uniqueComments);
@@ -162,7 +165,12 @@ function ContentReview() {
         return matches;
       });
 
-      if (filteredSubmissions.length === 0) {
+      // Only show content that has been explicitly sent to the customer (not internal-only uploads)
+      const customerFacingSubmissions = filteredSubmissions.filter(sub =>
+        !sub.submission_stage || sub.submission_stage === 'customer'
+      );
+
+      if (customerFacingSubmissions.length === 0) {
         setContentItems([]);
         setSelectedContent(null);
         setLoading(false);
@@ -171,7 +179,7 @@ function ContentReview() {
 
       // Group submissions by assignment ID to handle versions
       const groupedSubmissions = {};
-      filteredSubmissions.forEach(submission => {
+      customerFacingSubmissions.forEach(submission => {
         const assignmentId = submission.assignment_id || submission.assignmentId || 'unknown';
         if (!groupedSubmissions[assignmentId]) {
           groupedSubmissions[assignmentId] = [];
@@ -749,9 +757,12 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
       done: comment.done || comment.status === 'completed' || false
     }));
     
-    // Remove duplicate comments by ID
+    // Remove duplicate comments by ID and hide internal/admin review comments from customer
     const uniqueComments = normalizedComments.filter((comment, index, self) =>
-      index === self.findIndex((c) => c.id === comment.id)
+      index === self.findIndex((c) => c.id === comment.id) &&
+      comment.reviewType !== 'internal' &&
+      comment.authorRole !== 'admin' &&
+      comment.author !== 'Admin'
     );
     
     setComments(uniqueComments);
@@ -780,9 +791,12 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
       done: comment.done || comment.status === 'completed' || false
     }));
     
-    // Remove duplicate comments by ID
+    // Remove duplicate comments by ID and hide internal/admin review comments from customer
     const uniqueComments = normalizedComments.filter((comment, index, self) =>
-      index === self.findIndex((c) => c.id === comment.id)
+      index === self.findIndex((c) => c.id === comment.id) &&
+      comment.reviewType !== 'internal' &&
+      comment.authorRole !== 'admin' &&
+      comment.author !== 'Admin'
     );
     
     setComments(uniqueComments);
@@ -804,7 +818,10 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
       done: comment.done || comment.status === 'completed' || false
     }));
     const uniqueComments = normalizedComments.filter((comment, idx, self) =>
-      idx === self.findIndex((c) => c.id === comment.id)
+      idx === self.findIndex((c) => c.id === comment.id) &&
+      comment.reviewType !== 'internal' &&
+      comment.authorRole !== 'admin' &&
+      comment.author !== 'Admin'
     );
     setComments(uniqueComments);
     setActiveComment(null);
@@ -1216,9 +1233,12 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
   const totalComments = comments.length;
 
   // All comments across every version of the selected item (for the right panel)
+  // Internal review comments are hidden from the customer
   const allVersionComments = selectedContent
     ? selectedContent.versions.flatMap((v, i) =>
-        (v.comments || []).map(c => ({ ...c, _versionNumber: i + 1 }))
+        (v.comments || [])
+          .filter(c => c.reviewType !== 'internal' && c.authorRole !== 'admin' && c.author !== 'Admin')
+          .map(c => ({ ...c, _versionNumber: i + 1 }))
       )
     : [];
 

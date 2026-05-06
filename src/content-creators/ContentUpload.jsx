@@ -361,7 +361,6 @@ function ContentUpload() {
             }).filter(Boolean);
           };
           const normalized = allVersionsSorted
-            .filter(sub => (sub.submission_stage || sub.submissionStage || 'internal') !== 'customer')
             .map((sub, idx) => ({
               versionNumber: idx + 1,
               caption: sub.caption || '',

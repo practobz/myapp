@@ -611,7 +611,7 @@ function ContentUpload() {
       const result = await response.json();
       console.log('✅ Content submission successful:', result);
 
-      alert('Content submitted successfully! The customer will review your work.');
+      alert('Content sent directly to customer successfully! The customer can now review your work.');
       navigate('/content-creator/assignments');
     } catch (err) {
       console.error('❌ Upload error:', err);
@@ -974,9 +974,9 @@ function ContentUpload() {
             {/* Submit Button */}
             <div className="bg-white rounded-lg shadow-sm p-6">
               <div className="text-center">
-                <h3 className="font-semibold text-gray-900 mb-2">Ready to Submit?</h3>
+                <h3 className="font-semibold text-gray-900 mb-2">Send Directly to Customer</h3>
                 <p className="text-sm text-gray-600 mb-4">
-                  Your content will be sent to {assignment.customerName} for review
+                  Admin will directly send this content to {assignment.customerName} for review
                 </p>
                 <button
                   onClick={handleSubmit}
@@ -991,7 +991,7 @@ function ContentUpload() {
                   ) : (
                     <>
                       <Send className="h-4 w-4 mr-2" />
-                      Submit Content
+                      Send to Customer
                     </>
                   )}
                 </button>

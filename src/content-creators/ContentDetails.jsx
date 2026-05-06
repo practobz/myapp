@@ -170,7 +170,13 @@ function ContentDetails() {
         return subAssignmentId && String(subAssignmentId) === String(assignmentId) && String(subAssignmentId) !== 'undefined';
       });
 
-      filtered.sort((a, b) => new Date(a.created_at || a.createdAt || 0) - new Date(b.created_at || b.createdAt || 0));
+      // Show versions sent to the customer, plus legacy records with no stage tag
+      const customerFiltered = filtered.filter(sub => {
+        const stage = sub.submission_stage || sub.submissionStage || '';
+        return stage === 'customer' || stage === '';
+      });
+
+      customerFiltered.sort((a, b) => new Date(a.created_at || a.createdAt || 0) - new Date(b.created_at || b.createdAt || 0));
 
       // Normalize to the same shape as ContentPortfolio's selectedContent.versions
       const normMedia = (media) => {
@@ -187,7 +193,7 @@ function ContentDetails() {
         }).filter(Boolean);
       };
 
-      const normalized = filtered.map((version, idx) => ({
+      const normalized = customerFiltered.map((version, idx) => ({
         id: version._id,
         versionNumber: idx + 1,
         media: normMedia(version.media || version.images || []),

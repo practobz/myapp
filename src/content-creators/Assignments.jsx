@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
-import { ArrowLeft, Filter, Search, MessageSquare, CheckCircle, Clock, AlertCircle, Palette, Calendar, User, ChevronDown, ChevronUp, Building2, Users, Globe, ShieldCheck, Bell, Send } from 'lucide-react';
+import { ArrowLeft, Filter, Search, MessageSquare, CheckCircle, Clock, AlertCircle, Palette, Calendar, User, ChevronDown, ChevronUp, Building2, Users, Globe, ShieldCheck, Bell, Send, Image } from 'lucide-react';
+import { Facebook, Instagram, Linkedin, Youtube, Twitter } from 'lucide-react';
 import Footer from '../admin/components/layout/Footer';
 import Logo from '../admin/components/layout/Logo';
 
@@ -128,10 +129,11 @@ function Assignments() {
         const res = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions`);
         if (!res.ok) return;
         const data = await res.json();
-        const creatorSubs = Array.isArray(data)
-          ? data.filter(s => (s.created_by || '').toLowerCase() === creatorEmail.toLowerCase())
-          : [];
-        setSubmissions(creatorSubs);
+        const allSubs = Array.isArray(data) ? data : [];
+        // Store ALL submissions for thumbnail/status display (includes admin-uploaded ones)
+        setSubmissions(allSubs);
+        // Stats use only creator's own submissions
+        const creatorSubs = allSubs.filter(s => (s.created_by || '').toLowerCase() === creatorEmail.toLowerCase());
         // Admin approved count (internal stage only)
         setAdminApprovedCount(creatorSubs.filter(s =>
           s.status === 'approved' &&
@@ -178,6 +180,18 @@ function Assignments() {
     });
     if (subs.length === 0) return null;
     return [...subs].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))[0];
+  };
+
+  // Helper: get thumbnail URL from the latest submission for an assignment
+  const getSubmissionThumbnail = (assignment) => {
+    const sub = getLatestSubmission(assignment);
+    if (!sub) return null;
+    const images = sub.images || sub.media || [];
+    if (!Array.isArray(images) || images.length === 0) return null;
+    const first = images[0];
+    const url = typeof first === 'string' ? first : (first?.url || first?.publicUrl || '');
+    if (!url || /\.(mp4|mov|webm|avi|mkv)(\?|$)/i.test(url)) return null;
+    return url;
   };
 
   // Precomputed Sets for reliable submission-based filtering.
@@ -264,13 +278,24 @@ function Assignments() {
 
   const platformColor = (p) => {
     switch ((p || '').toLowerCase()) {
-      case 'facebook': return 'bg-blue-100 text-blue-800';
-      case 'instagram': return 'bg-pink-100 text-pink-800';
-      case 'youtube': return 'bg-red-100 text-red-800';
-      case 'linkedin': return 'bg-blue-50 text-blue-800';
-      case 'twitter': return 'bg-sky-100 text-sky-800';
-      case 'tiktok': return 'bg-black text-white';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'facebook': return 'bg-blue-100 text-blue-700 border-blue-200';
+      case 'instagram': return 'bg-pink-100 text-pink-700 border-pink-200';
+      case 'youtube': return 'bg-red-100 text-red-700 border-red-200';
+      case 'linkedin': return 'bg-blue-50 text-blue-700 border-blue-200';
+      case 'twitter': return 'bg-sky-100 text-sky-700 border-sky-200';
+      case 'tiktok': return 'bg-gray-900 text-white border-gray-700';
+      default: return 'bg-gray-100 text-gray-700 border-gray-200';
+    }
+  };
+
+  const PlatformIcon = ({ platform, className = 'h-3 w-3' }) => {
+    switch ((platform || '').toLowerCase()) {
+      case 'facebook':  return <Facebook  className={className} />;
+      case 'instagram': return <Instagram className={className} />;
+      case 'linkedin':  return <Linkedin  className={className} />;
+      case 'youtube':   return <Youtube   className={className} />;
+      case 'twitter':   return <Twitter   className={className} />;
+      default:          return <Globe     className={className} />;
     }
   };
 
@@ -626,6 +651,24 @@ function Assignments() {
                                         onClick={() => handleAssignmentClick(assignment)}
                                         className="px-4 py-3 hover:bg-purple-50/50 cursor-pointer transition-colors"
                                       >
+                                        <div className="flex gap-3 items-start">
+                                        {/* Submission thumbnail */}
+                                        {(() => {
+                                          const thumb = getSubmissionThumbnail(assignment);
+                                          return (
+                                            <div className="flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden border border-gray-200 bg-gray-100">
+                                              {thumb ? (
+                                                <img src={thumb} alt="" className="w-full h-full object-cover" />
+                                              ) : (
+                                                <div className="w-full h-full flex items-center justify-center">
+                                                  <Image className="h-5 w-5 text-gray-300" />
+                                                </div>
+                                              )}
+                                            </div>
+                                          );
+                                        })()}
+                                        {/* Assignment details */}
+                                        <div className="flex-1 min-w-0">
                                         {/* Line 1: Item label + title */}
                                         <div className="flex items-center justify-between gap-2 mb-1.5">
                                           <div className="flex items-center gap-1.5 min-w-0">
@@ -639,15 +682,13 @@ function Assignments() {
                                         </div>
                                         {/* Line 2: Platform, Due Date, Priority */}
                                         <div className="flex items-center gap-4 flex-wrap">
-                                          <div className="flex items-center gap-1">
-                                            <span className="text-xs font-semibold text-gray-400 uppercase">Platform:</span>
-                                            <div className="flex gap-1">
-                                              {parsePlatforms(assignment.platform || assignment.type).map((p, i) => (
-                                                <span key={i} className={`px-1.5 py-0.5 rounded text-xs font-medium ${platformColor(p)}`}>
-                                                  {p.charAt(0).toUpperCase() + p.slice(1)}
-                                                </span>
-                                              ))}
-                                            </div>
+                                          <div className="flex items-center gap-1 flex-wrap">
+                                            {parsePlatforms(assignment.platform || assignment.type).map((p, i) => (
+                                              <span key={i} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-xs font-medium ${platformColor(p)}`}>
+                                                <PlatformIcon platform={p} className="h-3 w-3 flex-shrink-0" />
+                                                {p.charAt(0).toUpperCase() + p.slice(1)}
+                                              </span>
+                                            ))}
                                           </div>
                                           <div className="flex items-center gap-1">
                                             <span className="text-xs font-semibold text-gray-400 uppercase">Due:</span>
@@ -695,6 +736,8 @@ function Assignments() {
                                             </div>
                                           );
                                         })()}
+                                        </div>{/* end assignment details */}
+                                        </div>{/* end flex gap-3 */}
                                       </div>
                                     ))}
                                   </div>

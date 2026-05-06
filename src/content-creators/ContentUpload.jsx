@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Upload, Image, X, Check, CheckCircle, FileText, Calendar, Clock, Palette, Send, MapPin, Tag, MessageSquare, Play, Video, Bell, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, User, ShieldCheck, AlertCircle, History, Search } from 'lucide-react';
+import { ArrowLeft, Upload, Image, X, Check, CheckCircle, FileText, Calendar, Clock, Palette, Send, MapPin, Tag, MessageSquare, Play, Video, Bell, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, User, ShieldCheck, AlertCircle, History, Search, Globe } from 'lucide-react';
+import { Facebook, Instagram, Linkedin, Youtube, Twitter } from 'lucide-react';
 
 // Helper to get creator email from localStorage
 function getCreatorEmail() {
@@ -20,6 +21,18 @@ function getCreatorEmail() {
     email = '';
   }
   return email;
+}
+
+// Helper to get current user role from localStorage
+function getUserRole() {
+  try {
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      const userObj = JSON.parse(userStr);
+      return (userObj.role || '').toLowerCase();
+    }
+  } catch (e) {}
+  return '';
 }
 
 function ContentUpload() {
@@ -153,7 +166,7 @@ function ContentUpload() {
                   customerName: customerMap[custId] || calendar.customerName || calendar.name || '',
                   itemIndex: index,
                   id: item.id || item._id || item.title,
-                  platform: item.platform || 'Instagram',
+                  platform: item.platform || item.type || 'Instagram',
                   dueDate: item.dueDate || item.due_date || item.date,
                 });
               }
@@ -225,7 +238,7 @@ function ContentUpload() {
                 customerEmail: customerInfo.email || '',
                 id: item.id || item._id || item.title,
                 dueDate: item.dueDate || item.due_date || item.date,
-                platform: item.platform || 'Instagram',
+                platform: item.platform || item.type || 'Instagram',
                 requirements: item.requirements || [],
               };
               
@@ -821,7 +834,8 @@ function ContentUpload() {
         assignment_description: assignment.description,
         due_date: assignment.dueDate,
         status: 'submitted',
-        submission_stage: 'internal',
+        // Content creators submit for internal review; customers/admins upload directly for customer review
+        submission_stage: getUserRole() === 'content_creator' ? 'internal' : 'customer',
         item_index: parseInt(itemIndex, 10),
         created_at: new Date().toISOString(),
         type: 'submission',
@@ -937,7 +951,7 @@ function ContentUpload() {
       if (subs.length === 0) return null;
       const latest = [...subs].sort((x, y) => new Date(y.created_at || 0) - new Date(x.created_at || 0))[0];
       if (latest.submission_stage === 'customer' || latest.submissionStage === 'customer') {
-        return { label: 'Sent to Customer', color: 'bg-blue-100 text-blue-700' };
+        return { label: 'Admin Directly Sent to Customer', color: 'bg-blue-100 text-blue-700' };
       }
       if (latest.status === 'approved') {
         return { label: 'Approved by Admin', color: 'bg-orange-100 text-orange-700' };
@@ -948,20 +962,28 @@ function ContentUpload() {
       return { label: 'Under Admin Review', color: 'bg-amber-100 text-amber-700' };
     };
 
+    // Helper: flatten platform (string or array) into a lowercase string array
+    const flatPlatforms = (val) => {
+      if (!val) return [];
+      if (Array.isArray(val)) return val.map(v => String(v).trim().toLowerCase()).filter(Boolean);
+      return [String(val).trim().toLowerCase()];
+    };
+
     // Derived filter options
-    const allPlatforms = [...new Set(pickerAssignments.map(a => (a.platform || 'Unknown').trim()))].sort();
+    const allPlatforms = [...new Set(pickerAssignments.flatMap(a => flatPlatforms(a.platform).map(p => p.charAt(0).toUpperCase() + p.slice(1))))].sort();
     const allStatuses  = [...new Set(pickerAssignments.map(a => a.status || 'pending'))].sort();
     const allCustomers = [...new Set(pickerAssignments.map(a => a.customerName || a.calendarName || 'Unknown'))].sort();
 
     const filtered = pickerAssignments
       .filter(a => {
         const q = pickerSearch.toLowerCase();
+        const platforms = flatPlatforms(a.platform);
         const matchSearch = !q ||
           (a.title || '').toLowerCase().includes(q) ||
           (a.customerName || '').toLowerCase().includes(q) ||
-          (a.platform || '').toLowerCase().includes(q) ||
+          platforms.some(p => p.includes(q)) ||
           (a.description || '').toLowerCase().includes(q);
-        const matchPlatform = pickerPlatform === 'all' || (a.platform || '').toLowerCase() === pickerPlatform.toLowerCase();
+        const matchPlatform = pickerPlatform === 'all' || platforms.some(p => p === pickerPlatform.toLowerCase());
         const matchStatus   = pickerStatus === 'all'   || (a.status || 'pending') === pickerStatus;
         const matchCustomer = pickerCustomer === 'all' || (a.customerName || a.calendarName || 'Unknown') === pickerCustomer;
         return matchSearch && matchPlatform && matchStatus && matchCustomer;
@@ -979,14 +1001,36 @@ function ContentUpload() {
 
     const platformColor = (p) => {
       switch ((p || '').toLowerCase()) {
-        case 'facebook':  return 'bg-blue-100 text-blue-800';
-        case 'instagram': return 'bg-pink-100 text-pink-800';
-        case 'youtube':   return 'bg-red-100 text-red-800';
-        case 'linkedin':  return 'bg-blue-50 text-blue-700';
-        case 'twitter':   return 'bg-sky-100 text-sky-800';
-        case 'tiktok':    return 'bg-gray-900 text-white';
-        default:          return 'bg-gray-100 text-gray-700';
+        case 'facebook':  return 'bg-blue-100 text-blue-700 border-blue-200';
+        case 'instagram': return 'bg-pink-100 text-pink-700 border-pink-200';
+        case 'youtube':   return 'bg-red-100 text-red-700 border-red-200';
+        case 'linkedin':  return 'bg-blue-50 text-blue-700 border-blue-200';
+        case 'twitter':   return 'bg-sky-100 text-sky-700 border-sky-200';
+        case 'tiktok':    return 'bg-gray-900 text-white border-gray-700';
+        default:          return 'bg-gray-100 text-gray-700 border-gray-200';
       }
+    };
+
+    const PlatformIcon = ({ platform, className = 'h-3 w-3' }) => {
+      switch ((platform || '').toLowerCase()) {
+        case 'facebook':  return <Facebook  className={className} />;
+        case 'instagram': return <Instagram className={className} />;
+        case 'linkedin':  return <Linkedin  className={className} />;
+        case 'youtube':   return <Youtube   className={className} />;
+        case 'twitter':   return <Twitter   className={className} />;
+        default:          return <Globe     className={className} />;
+      }
+    };
+
+    const parsePlatforms = (val) => {
+      if (!val) return [];
+      if (Array.isArray(val)) return val.map(v => String(v).trim()).filter(Boolean);
+      const s = String(val || '');
+      if (s.includes(',')) return s.split(',').map(v => v.trim()).filter(Boolean);
+      if (s.includes(' ')) return s.split(/\s+/).map(v => v.trim()).filter(Boolean);
+      const matches = s.match(/facebook|instagram|youtube|linkedin|twitter|tiktok|pinterest/ig);
+      if (matches) return matches.map(m => m.toLowerCase());
+      return [s];
     };
 
     const statusColor = (s) => {
@@ -1124,7 +1168,7 @@ function ContentUpload() {
                     >
                       <span>{p}</span>
                       <span className={`text-[10px] px-1.5 rounded-full ${pickerPlatform === p ? 'bg-purple-500 text-white' : 'bg-gray-200 text-gray-600'}`}>
-                        {pickerAssignments.filter(a => (a.platform || '').toLowerCase() === p.toLowerCase()).length}
+                        {pickerAssignments.filter(a => flatPlatforms(a.platform).some(fp => fp === p.toLowerCase())).length}
                       </span>
                     </button>
                   ))}
@@ -1237,14 +1281,15 @@ function ContentUpload() {
                         className="bg-white rounded-xl shadow-sm border border-transparent hover:border-purple-200 hover:shadow-md transition-all group overflow-hidden"
                       >
                         {/* Top accent bar by platform */}
-                        <div className={`h-1 w-full ${
-                          (a.platform || '').toLowerCase() === 'instagram' ? 'bg-gradient-to-r from-pink-400 to-purple-500' :
-                          (a.platform || '').toLowerCase() === 'facebook'  ? 'bg-blue-500' :
-                          (a.platform || '').toLowerCase() === 'youtube'   ? 'bg-red-500' :
-                          (a.platform || '').toLowerCase() === 'linkedin'  ? 'bg-blue-700' :
-                          (a.platform || '').toLowerCase() === 'twitter'   ? 'bg-sky-400' :
-                          'bg-purple-400'
-                        }`} />
+                        <div className={`h-1 w-full ${(() => {
+                          const fps = flatPlatforms(a.platform);
+                          if (fps.includes('instagram')) return 'bg-gradient-to-r from-pink-400 to-purple-500';
+                          if (fps.includes('facebook'))  return 'bg-blue-500';
+                          if (fps.includes('youtube'))   return 'bg-red-500';
+                          if (fps.includes('linkedin'))  return 'bg-blue-700';
+                          if (fps.includes('twitter'))   return 'bg-sky-400';
+                          return 'bg-purple-400';
+                        })()}`} />
                         <div className="p-4 flex items-start gap-4">
                           {/* Index badge */}
                           <div className="w-8 h-8 rounded-lg bg-purple-100 text-purple-700 font-bold text-sm flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -1258,9 +1303,12 @@ function ContentUpload() {
                                 {a.title || 'Untitled Assignment'}
                               </p>
                               <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap">
-                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${platformColor(a.platform)}`}>
-                                  {a.platform || 'Unknown'}
-                                </span>
+                                {parsePlatforms(a.platform || a.type).map((p, pi) => (
+                                  <span key={pi} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] font-semibold ${platformColor(p)}`}>
+                                    <PlatformIcon platform={p} className="h-2.5 w-2.5 flex-shrink-0" />
+                                    {p.charAt(0).toUpperCase() + p.slice(1)}
+                                  </span>
+                                ))}
                                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${statusColor(a.status)}`}>
                                   {statusLabel(a.status)}
                                 </span>
@@ -1391,9 +1439,26 @@ function ContentUpload() {
                 <Calendar className="h-3 w-3 mr-1" />
                 {assignment.dueDate ? new Date(assignment.dueDate).toLocaleDateString() : 'N/A'}
               </div>
-              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800">
-                {assignment.platform}
-              </span>
+              <div className="flex items-center gap-1 flex-wrap">
+                {(Array.isArray(assignment.platform) ? assignment.platform : [assignment.platform]).filter(Boolean).map((p, pi) => (
+                  <span key={pi} className={`inline-flex items-center gap-1 px-1.5 py-1 rounded border text-xs font-medium ${
+                    p.toLowerCase() === 'facebook'  ? 'bg-blue-100 text-blue-700 border-blue-200' :
+                    p.toLowerCase() === 'instagram' ? 'bg-pink-100 text-pink-700 border-pink-200' :
+                    p.toLowerCase() === 'youtube'   ? 'bg-red-100 text-red-700 border-red-200' :
+                    p.toLowerCase() === 'linkedin'  ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                    p.toLowerCase() === 'twitter'   ? 'bg-sky-100 text-sky-700 border-sky-200' :
+                    'bg-gray-100 text-gray-700 border-gray-200'
+                  }`}>
+                    {p.toLowerCase() === 'facebook'  ? <Facebook  className="h-3 w-3" /> :
+                     p.toLowerCase() === 'instagram' ? <Instagram className="h-3 w-3" /> :
+                     p.toLowerCase() === 'linkedin'  ? <Linkedin  className="h-3 w-3" /> :
+                     p.toLowerCase() === 'youtube'   ? <Youtube   className="h-3 w-3" /> :
+                     p.toLowerCase() === 'twitter'   ? <Twitter   className="h-3 w-3" /> :
+                     <Globe className="h-3 w-3" />}
+                    {p.charAt(0).toUpperCase() + p.slice(1)}
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -1413,9 +1478,26 @@ function ContentUpload() {
                 <Calendar className="h-3 w-3 mr-1" />
                 {assignment.dueDate ? new Date(assignment.dueDate).toLocaleDateString() : 'N/A'}
               </div>
-              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800">
-                {assignment.platform}
-              </span>
+              <div className="flex items-center gap-1 flex-wrap justify-end">
+                {(Array.isArray(assignment.platform) ? assignment.platform : [assignment.platform]).filter(Boolean).map((p, pi) => (
+                  <span key={pi} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-xs font-medium ${
+                    p.toLowerCase() === 'facebook'  ? 'bg-blue-100 text-blue-700 border-blue-200' :
+                    p.toLowerCase() === 'instagram' ? 'bg-pink-100 text-pink-700 border-pink-200' :
+                    p.toLowerCase() === 'youtube'   ? 'bg-red-100 text-red-700 border-red-200' :
+                    p.toLowerCase() === 'linkedin'  ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                    p.toLowerCase() === 'twitter'   ? 'bg-sky-100 text-sky-700 border-sky-200' :
+                    'bg-gray-100 text-gray-700 border-gray-200'
+                  }`}>
+                    {p.toLowerCase() === 'facebook'  ? <Facebook  className="h-3 w-3" /> :
+                     p.toLowerCase() === 'instagram' ? <Instagram className="h-3 w-3" /> :
+                     p.toLowerCase() === 'linkedin'  ? <Linkedin  className="h-3 w-3" /> :
+                     p.toLowerCase() === 'youtube'   ? <Youtube   className="h-3 w-3" /> :
+                     p.toLowerCase() === 'twitter'   ? <Twitter   className="h-3 w-3" /> :
+                     <Globe className="h-3 w-3" />}
+                    {p.charAt(0).toUpperCase() + p.slice(1)}
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
           {assignment.description && (
@@ -1437,7 +1519,7 @@ function ContentUpload() {
             </div>
             <span className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-full">
               <Check className="h-3 w-3" />
-              Sent to Customer
+              Admin Directly Sent to Customer
             </span>
           </div>
         )}
@@ -2392,7 +2474,7 @@ function ContentUpload() {
                   <div className="flex items-center gap-2 mb-2">
                     <ShieldCheck className={`h-5 w-5 ${sentToCustomer ? 'text-green-600' : 'text-orange-600'}`} />
                     <h3 className={`font-semibold text-sm ${sentToCustomer ? 'text-green-800' : 'text-orange-800'}`}>
-                      {sentToCustomer ? 'Sent to Customer' : 'Admin Approved — Ready to Send'}
+                      {sentToCustomer ? 'Admin Directly Sent to Customer' : 'Admin Approved — Ready to Send'}
                     </h3>
                   </div>
                   {sentToCustomer ? (

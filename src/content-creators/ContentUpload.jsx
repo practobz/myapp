@@ -1361,6 +1361,7 @@ function ContentUpload() {
 
                             {/* Admin review status label */}
                             {(() => {
+                              if (getPickerFilterStatus(a) === 'published') return null;
                               const reviewStatus = getPickerReviewStatus(a);
                               if (!reviewStatus) return null;
                               return (

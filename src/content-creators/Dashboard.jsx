@@ -590,7 +590,7 @@ function Dashboard() {
                         <Send className="h-5 w-5 text-white" />
                       </div>
                       <div className="text-left">
-                        <span className="text-sm font-bold text-gray-900 group-hover:text-rose-900">Upload Content</span>
+                        <span className="text-sm font-bold text-gray-900 group-hover:text-rose-900">Internal Review</span>
                         <p className="text-xs text-gray-500 mt-0.5">Pick an assignment to submit media</p>
                       </div>
                     </button>

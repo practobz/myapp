@@ -152,6 +152,7 @@ function Dashboard() {
     const adminApprovedKeys = new Set();
     const customerApprovedKeys = new Set();
     const reviewKeys = new Set();
+    const anySubmissionKeys = new Set();
     submissions.forEach(s => {
       const keys = [];
       if (s.assignment_id) keys.push(String(s.assignment_id));
@@ -160,6 +161,8 @@ function Dashboard() {
         keys.push(`${s.calendar_id}::${Number(s.item_index)}`);
       }
       const stage = s.submission_stage || s.submissionStage || '';
+      // Track every assignment that has any submission
+      keys.forEach(k => anySubmissionKeys.add(k));
       if (s.status === 'approved' && stage !== 'customer') {
         keys.forEach(k => adminApprovedKeys.add(k));
       }
@@ -170,7 +173,7 @@ function Dashboard() {
         keys.forEach(k => reviewKeys.add(k));
       }
     });
-    return { adminApprovedKeys, customerApprovedKeys, reviewKeys };
+    return { adminApprovedKeys, customerApprovedKeys, reviewKeys, anySubmissionKeys };
   }, [submissions]);
 
   const assignmentMatchesSet = (assignment, set) => {
@@ -205,6 +208,7 @@ function Dashboard() {
     const actual = getActualStatus(assignment);
     if (actual === 'published') return 'published';
     if (assignmentMatchesSet(assignment, submissionFilterSets.customerApprovedKeys)) return 'approved';
+    if (assignmentMatchesSet(assignment, submissionFilterSets.adminApprovedKeys)) return 'approved';
     if (!submissionFilterSets.customerApprovedKeys.size && actual === 'approved') return 'approved';
     return 'pending';
   };
@@ -231,8 +235,23 @@ function Dashboard() {
     };
   }, [assignments, scheduledPosts, submissions, submissionFilterSets]);
 
-  // Recent assignments: show pending (newly assigned) items sorted by newest first
-  const pendingRecentAssignments = assignments.filter(a => getFilterStatus(a) === 'pending');
+  // Recent assignments: show only truly fresh (no submission yet) or revision-requested items
+  const pendingRecentAssignments = assignments.filter(a => {
+    if (getFilterStatus(a) !== 'pending') return false;
+    // If already submitted (under review), exclude unless revision was requested
+    if (assignmentMatchesSet(a, submissionFilterSets.anySubmissionKeys)) {
+      const latestSub = submissions
+        .filter(s => {
+          if (s.assignment_id && String(s.assignment_id) === String(a.id || a._id || '')) return true;
+          if (a.calendarId && a.itemIndex !== undefined &&
+              s.calendar_id === a.calendarId && String(s.item_index) === String(a.itemIndex)) return true;
+          return false;
+        })
+        .sort((x, y) => new Date(y.created_at || 0) - new Date(x.created_at || 0))[0];
+      return latestSub?.status === 'revision_requested';
+    }
+    return true;
+  });
   const recentAssignments = (pendingRecentAssignments.length > 0 ? pendingRecentAssignments : assignments)
     .sort((a, b) => {
       const da = new Date(a.assignedAt || a.createdAt || a.dueDate || 0);

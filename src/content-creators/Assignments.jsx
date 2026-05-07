@@ -717,6 +717,7 @@ function Assignments() {
                                         </div>
                                         {/* Line 3: Submission Review Status */}
                                         {(() => {
+                                          if (getFilterStatus(assignment) === 'published') return null;
                                           const statusInfo = getSubmissionStatusInfo(assignment.id);
                                           if (!statusInfo) return null;
                                           const isApproved = statusInfo.label === 'Admin Approved';

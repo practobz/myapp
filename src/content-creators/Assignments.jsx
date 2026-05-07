@@ -466,7 +466,7 @@ function Assignments() {
       {/* Main Content */}
       <div className="flex-1 flex min-h-0">
         {/* Customer Sidebar */}
-        <aside className="w-52 bg-white border-r border-gray-200/70 flex-shrink-0 sticky top-16 self-start h-[calc(100vh-4rem)] overflow-y-auto">
+        <aside className="hidden md:block w-52 bg-white border-r border-gray-200/70 flex-shrink-0 sticky top-16 self-start h-[calc(100vh-4rem)] overflow-y-auto">
           <div className="p-4">
             <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Customers</h3>
             <ul className="space-y-1">
@@ -494,11 +494,25 @@ function Assignments() {
         </aside>
         {/* Content Area */}
         <div className="flex-1 min-w-0">
-        <div className="px-6 py-6">
+        <div className="px-3 py-4 sm:px-6 sm:py-6">
           <div className="space-y-5">
 
+            {/* Mobile customer selector */}
+            <div className="md:hidden">
+              <select
+                value={selectedCustomerId || ''}
+                onChange={e => setSelectedCustomerId(e.target.value || null)}
+                className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500"
+              >
+                <option value="">All Customers</option>
+                {allCustomersSorted.map(cust => (
+                  <option key={cust.customerId} value={cust.customerId}>{cust.customerName}</option>
+                ))}
+              </select>
+            </div>
+
             {/* Stats Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            <div className="grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3">
               {[
                 { key: 'all',      label: 'Total Assigned',   value: stats.total,         icon: <Users className="h-5 w-5 text-indigo-600" />,    bg: 'bg-indigo-50',   text: 'text-indigo-700'   },
                 { key: 'pending',  label: 'Pending',          value: stats.pending,        icon: <MessageSquare className="h-5 w-5 text-orange-600" />, bg: 'bg-orange-50', text: 'text-orange-700'  },
@@ -509,16 +523,16 @@ function Assignments() {
                 <div
                   key={s.key}
                   onClick={() => setSelectedFilter(s.key)}
-                  className={`bg-white rounded-xl p-4 border shadow-sm transition-all cursor-pointer hover:shadow-md ${
+                  className={`bg-white rounded-xl p-2.5 sm:p-4 border shadow-sm transition-all cursor-pointer hover:shadow-md ${
                     selectedFilter === s.key ? 'border-purple-300 ring-2 ring-purple-200' : 'border-gray-100'
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <div>
-                      <p className={`text-2xl font-bold ${s.text}`}>{s.value}</p>
-                      <p className="text-xs text-gray-500 mt-1 leading-tight">{s.label}</p>
+                    <div className="min-w-0 flex-1 mr-1">
+                      <p className={`text-lg sm:text-2xl font-bold ${s.text}`}>{s.value}</p>
+                      <p className="text-[10px] sm:text-xs text-gray-500 mt-1 leading-tight">{s.label}</p>
                     </div>
-                    <div className={`h-10 w-10 rounded-lg ${s.bg} flex items-center justify-center flex-shrink-0`}>
+                    <div className={`h-8 w-8 sm:h-10 sm:w-10 rounded-lg ${s.bg} flex items-center justify-center flex-shrink-0`}>
                       {s.icon}
                     </div>
                   </div>
@@ -527,14 +541,14 @@ function Assignments() {
               {/* Review Updates — navigates to CustomerFeedback */}
               <div
                 onClick={() => navigate('/content-creator/customer-feedback')}
-                className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm transition-all cursor-pointer hover:shadow-md hover:border-rose-300"
+                className="bg-white rounded-xl p-2.5 sm:p-4 border border-gray-100 shadow-sm transition-all cursor-pointer hover:shadow-md hover:border-rose-300"
               >
                 <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-2xl font-bold text-rose-700">{reviewCount}</p>
-                    <p className="text-xs text-gray-500 mt-1 leading-tight">Review Updates</p>
+                  <div className="min-w-0 flex-1 mr-1">
+                    <p className="text-lg sm:text-2xl font-bold text-rose-700">{reviewCount}</p>
+                    <p className="text-[10px] sm:text-xs text-gray-500 mt-1 leading-tight">Review Updates</p>
                   </div>
-                  <div className="h-10 w-10 rounded-lg bg-rose-50 flex items-center justify-center flex-shrink-0">
+                  <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg bg-rose-50 flex items-center justify-center flex-shrink-0">
                     <Bell className="h-5 w-5 text-rose-600" />
                   </div>
                 </div>
@@ -583,7 +597,7 @@ function Assignments() {
                     placeholder="Search assignments..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-9 pr-4 py-2 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent shadow-sm w-56"
+                    className="pl-9 pr-4 py-2 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent shadow-sm w-full sm:w-56"
                   />
                 </div>
               </div>

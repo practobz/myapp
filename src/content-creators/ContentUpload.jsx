@@ -131,6 +131,7 @@ function ContentUpload() {
   const [pickerCustomer, setPickerCustomer] = useState('all');
   const [pickerSort, setPickerSort] = useState('due');
   const [pickerSubmissions, setPickerSubmissions] = useState([]);
+  const [pickerScheduledPosts, setPickerScheduledPosts] = useState([]);
 
   // When no params, fetch assignments for the picker
   useEffect(() => {
@@ -138,14 +139,16 @@ function ContentUpload() {
     const fetchPicker = async () => {
       setPickerLoading(true);
       try {
-        const [custRes, calRes, subRes] = await Promise.all([
+        const [custRes, calRes, subRes, schedRes] = await Promise.all([
           fetch(`${process.env.REACT_APP_API_URL}/api/customers`),
           fetch(`${process.env.REACT_APP_API_URL}/calendars`),
           fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions`),
+          fetch(`${process.env.REACT_APP_API_URL}/api/scheduled-posts`),
         ]);
         const custData = await custRes.json();
         const calendars = await calRes.json();
         const subData = await subRes.json();
+        const schedData = schedRes.ok ? await schedRes.json() : [];
         const customerMap = {};
         if (Array.isArray(custData.customers)) {
           custData.customers.forEach(c => {
@@ -153,6 +156,7 @@ function ContentUpload() {
           });
         }
         setPickerSubmissions(Array.isArray(subData) ? subData : (subData.submissions || []));
+        setPickerScheduledPosts(Array.isArray(schedData) ? schedData : []);
         const all = [];
         calendars.forEach(calendar => {
           if (Array.isArray(calendar.contentItems)) {
@@ -937,6 +941,27 @@ function ContentUpload() {
 
   // No params — show assignment picker
   if (!calendarId || itemIndex === undefined) {
+    // Helper: get normalized display status (mirrors Assignments.jsx getFilterStatus)
+    const getPickerFilterStatus = (a) => {
+      // Check published flag or scheduled post
+      if (a.published === true) return 'published';
+      const aid = a.id || a._id || '';
+      if (aid && pickerScheduledPosts.some(post => post.contentId === aid && post.status === 'published')) return 'published';
+      // Check customer-approval via submissions
+      const subs = pickerSubmissions.filter(sub => {
+        const subCal = sub.calendar_id || sub.calendarId;
+        const subIdx = sub.item_index !== undefined ? String(sub.item_index) : undefined;
+        if (subCal && subIdx !== undefined) {
+          return subCal === a.calendarId && subIdx === String(a.itemIndex);
+        }
+        const subId = sub.assignment_id || sub.assignmentId;
+        return subId && String(subId) === String(a.id);
+      });
+      const isCustomerApproved = subs.some(s => s.status === 'approved' && (s.submission_stage || s.submissionStage || '') === 'customer');
+      if (isCustomerApproved) return 'approved';
+      return 'pending';
+    };
+
     // Helper: get latest internal-stage submission status for a picker assignment
     const getPickerReviewStatus = (a) => {
       const subs = pickerSubmissions.filter(sub => {
@@ -971,7 +996,7 @@ function ContentUpload() {
 
     // Derived filter options
     const allPlatforms = [...new Set(pickerAssignments.flatMap(a => flatPlatforms(a.platform).map(p => p.charAt(0).toUpperCase() + p.slice(1))))].sort();
-    const allStatuses  = [...new Set(pickerAssignments.map(a => a.status || 'pending'))].sort();
+    const allStatuses  = [...new Set(pickerAssignments.map(a => getPickerFilterStatus(a)))].sort();
     const allCustomers = [...new Set(pickerAssignments.map(a => a.customerName || a.calendarName || 'Unknown'))].sort();
 
     const filtered = pickerAssignments
@@ -984,15 +1009,15 @@ function ContentUpload() {
           platforms.some(p => p.includes(q)) ||
           (a.description || '').toLowerCase().includes(q);
         const matchPlatform = pickerPlatform === 'all' || platforms.some(p => p === pickerPlatform.toLowerCase());
-        const matchStatus   = pickerStatus === 'all'   || (a.status || 'pending') === pickerStatus;
+        const matchStatus   = pickerStatus === 'all'   || getPickerFilterStatus(a) === pickerStatus;
         const matchCustomer = pickerCustomer === 'all' || (a.customerName || a.calendarName || 'Unknown') === pickerCustomer;
         return matchSearch && matchPlatform && matchStatus && matchCustomer;
       })
       .sort((a, b) => {
         if (pickerSort === 'due') {
-          const da = a.dueDate ? new Date(a.dueDate) : new Date('9999');
-          const db = b.dueDate ? new Date(b.dueDate) : new Date('9999');
-          return da - db;
+          const da = new Date(a.assignedAt || a.createdAt || a.dueDate || 0);
+          const db = new Date(b.assignedAt || b.createdAt || b.dueDate || 0);
+          return db - da;
         }
         if (pickerSort === 'name') return (a.title || '').localeCompare(b.title || '');
         if (pickerSort === 'customer') return (a.customerName || '').localeCompare(b.customerName || '');
@@ -1124,7 +1149,7 @@ function ContentUpload() {
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Sort By</p>
                 <div className="space-y-1">
                   {[
-                    { key: 'due',      label: 'Due Date' },
+                    { key: 'due',      label: 'Newest First' },
                     { key: 'name',     label: 'Name' },
                     { key: 'customer', label: 'Customer' },
                   ].map(opt => (
@@ -1309,8 +1334,8 @@ function ContentUpload() {
                                     {p.charAt(0).toUpperCase() + p.slice(1)}
                                   </span>
                                 ))}
-                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${statusColor(a.status)}`}>
-                                  {statusLabel(a.status)}
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${statusColor(getPickerFilterStatus(a))}`}>
+                                  {statusLabel(getPickerFilterStatus(a))}
                                 </span>
                               </div>
                             </div>

@@ -200,6 +200,15 @@ function Dashboard() {
     return assignment.status || 'assigned';
   };
 
+  // Helper: get display status (mirrors Assignments.jsx logic)
+  const getFilterStatus = (assignment) => {
+    const actual = getActualStatus(assignment);
+    if (actual === 'published') return 'published';
+    if (assignmentMatchesSet(assignment, submissionFilterSets.customerApprovedKeys)) return 'approved';
+    if (!submissionFilterSets.customerApprovedKeys.size && actual === 'approved') return 'approved';
+    return 'pending';
+  };
+
   // Calculate stats from assignments
   const oneWeekAgo = new Date();
   oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
@@ -222,10 +231,14 @@ function Dashboard() {
     };
   }, [assignments, scheduledPosts, submissions, submissionFilterSets]);
 
-  // Recent assignments: show pending (newly assigned) items sorted by soonest due date
-  const pendingRecentAssignments = assignments.filter(a => getActualStatus(a) === 'pending');
+  // Recent assignments: show pending (newly assigned) items sorted by newest first
+  const pendingRecentAssignments = assignments.filter(a => getFilterStatus(a) === 'pending');
   const recentAssignments = (pendingRecentAssignments.length > 0 ? pendingRecentAssignments : assignments)
-    .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate))
+    .sort((a, b) => {
+      const da = new Date(a.assignedAt || a.createdAt || a.dueDate || 0);
+      const db = new Date(b.assignedAt || b.createdAt || b.dueDate || 0);
+      return db - da;
+    })
     .slice(0, 3);
 
   const handleUserMenuToggle = () => {
@@ -455,7 +468,7 @@ function Dashboard() {
                   ) : (
                     <div className="space-y-3">
                       {recentAssignments.map((assignment) => {
-                        const status = getActualStatus(assignment);
+                        const status = getFilterStatus(assignment);
                         const platforms = parsePlatforms(assignment.platform || assignment.type);
                         return (
                           <div 

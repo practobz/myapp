@@ -77,20 +77,22 @@ function CommentPin({ comment, index, onActivate, activeId, hoveredId, setHovere
   const isActive = activeId === comment.id || hoveredId === comment.id;
   const x = comment.x ?? 0;
   const y = comment.y ?? 0;
+  const isNormalized = x > 0 && x <= 1 && y > 0 && y <= 1;
 
   const pinColor = comment.done        ? '#10b981'
     : comment.repositioning            ? '#8b5cf6'
     : comment.editing                  ? '#3b82f6'
     :                                    '#ef4444';
 
-  const popupLeft  = x > 150 ? 'auto' : 30;
-  const popupRight = x > 150 ? 30    : 'auto';
+  const popupLeft  = (isNormalized ? x > 0.5 : x > 150) ? 'auto' : 30;
+  const popupRight = (isNormalized ? x > 0.5 : x > 150) ? 30 : 'auto';
 
   return (
     <div
       style={{
         position: 'absolute',
-        top: y - 12, left: x - 12,
+        top: isNormalized ? `calc(${y * 100}% - 12px)` : `${y - 12}px`,
+        left: isNormalized ? `calc(${x * 100}% - 12px)` : `${x - 12}px`,
         width: 24, height: 24,
         background: pinColor,
         color: '#fff',
@@ -217,6 +219,7 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
   const [sendingToCustomer, setSendingToCustomer] = useState(false);
   const [deleteConfirm, setDeleteConfirm]         = useState(null); // null | 'version' | 'all'
   const [deleting, setDeleting]                   = useState(false);
+  const [mobilePanelTab, setMobilePanelTab]       = useState('actions'); // 'media' | 'actions'
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -247,8 +250,8 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
     const rect = e.target.getBoundingClientRect();
     const newComment = {
       id: uuidv4(),
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
+      x: (e.clientX - rect.left) / rect.width,
+      y: (e.clientY - rect.top) / rect.height,
       comment: '',
       editing: true,
       done: false,
@@ -267,8 +270,8 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
     const repositioning = commentsForMedia.find(c => c.repositioning);
     if (repositioning) {
       const rect = e.target.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
+      const x = (e.clientX - rect.left) / rect.width;
+      const y = (e.clientY - rect.top) / rect.height;
       setComments(prev => prev.map(c => c.id === repositioning.id ? { ...c, x, y, repositioning: false } : c));
       try {
         await fetch(
@@ -532,53 +535,64 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
           </div>
         </div>
 
+        {/* Mobile tab bar */}
+        <div className="flex md:hidden border-b border-gray-200 flex-shrink-0">
+          <button
+            onClick={() => setMobilePanelTab('media')}
+            className={`flex-1 py-2.5 text-xs font-semibold transition-colors ${mobilePanelTab === 'media' ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            Media
+          </button>
+          <button
+            onClick={() => setMobilePanelTab('actions')}
+            className={`flex-1 py-2.5 text-xs font-semibold transition-colors ${mobilePanelTab === 'actions' ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            Actions &amp; Comments
+          </button>
+        </div>
+
         {/* ── Body ── */}
         <div className="flex flex-1 overflow-hidden">
 
           {/* ── LEFT: Media area ── */}
-          <div className="flex-1 flex flex-col overflow-y-auto bg-slate-50 p-4 gap-4 items-center">
+          <div className={`${mobilePanelTab === 'media' ? 'flex' : 'hidden'} md:flex flex-1 flex-col overflow-y-auto bg-slate-50 p-4 gap-4 items-center`}>
 
-            {/* Version selector — only shown when there are multiple versions */}
-            {localVersions.length > 1 && (
-              <div className="w-full max-w-2xl">
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Version History</p>
-                <div className="flex gap-2 flex-wrap">
-                  {localVersions.map((v, i) => {
-                    const vCfg = getStatusConfig(v.status);
-                    return (
-                      <div key={v._id || i} className="flex items-center">
-                        <button
-                          onClick={() => setActiveVersionIdx(i)}
-                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-l-lg text-xs font-semibold border-y border-l transition-all ${
-                            i === activeVersionIdx
-                              ? 'bg-blue-600 text-white border-blue-600 shadow'
-                              : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:bg-blue-50'
-                          }`}
-                        >
-                          v{i + 1}
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
-                            i === activeVersionIdx ? 'bg-white/20 text-white' : vCfg.color
-                          }`}>
-                            {vCfg.label}
-                          </span>
-                        </button>
-                        <button
-                          onClick={() => { setActiveVersionIdx(i); setDeleteConfirm('version'); }}
-                          title={`Delete v${i + 1}`}
-                          className={`p-1.5 border-y border-r rounded-r-lg transition-all ${
-                            i === activeVersionIdx
-                              ? 'bg-blue-700 border-blue-600 text-white/70 hover:text-white hover:bg-blue-800'
-                              : 'bg-white border-gray-200 text-gray-300 hover:text-red-500 hover:border-red-300 hover:bg-red-50'
-                          }`}
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+            {/* Version selector */}
+            <div className="flex flex-wrap gap-2 justify-center">
+              {localVersions.map((v, i) => {
+                const vCfg = getStatusConfig(v.status);
+                return (
+                  <div key={v._id || i} className="flex items-center">
+                    <button
+                      onClick={() => setActiveVersionIdx(i)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-l-lg text-xs font-semibold border-y border-l transition-all ${
+                        i === activeVersionIdx
+                          ? 'bg-blue-600 text-white border-blue-600 shadow'
+                          : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:bg-blue-50'
+                      }`}
+                    >
+                      v{i + 1}
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                        i === activeVersionIdx ? 'bg-white/20 text-white' : vCfg.color
+                      }`}>
+                        {vCfg.label}
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => { setActiveVersionIdx(i); setDeleteConfirm('version'); }}
+                      title={`Delete v${i + 1}`}
+                      className={`p-1.5 border-y border-r rounded-r-lg transition-all ${
+                        i === activeVersionIdx
+                          ? 'bg-blue-700 border-blue-600 text-white/70 hover:text-white hover:bg-blue-800'
+                          : 'bg-white border-gray-200 text-gray-300 hover:text-red-500 hover:border-red-300 hover:bg-red-50'
+                      }`}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
 
             {/* Media nav */}
             {mediaItems.length > 1 && (
@@ -599,19 +613,19 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
 
             {/* Media + pins */}
             {currentMedia ? (
-              <div className="relative inline-block">
+              <div className="relative inline-block w-full flex justify-center">
                 {isVideoUrl(currentMedia.url) ? (
                   <video
                     src={currentMedia.url}
                     controls
-                    className="max-w-full h-auto max-h-[60vh] rounded-xl shadow-lg border border-gray-200 object-contain cursor-crosshair"
+                    className="w-full max-w-full h-auto max-h-[45vh] sm:max-h-[60vh] rounded-xl shadow-lg border border-gray-200 object-contain cursor-crosshair"
                     onClick={handleImageClickWithReposition}
                   />
                 ) : (
                   <img
                     src={currentMedia.url}
                     alt="media"
-                    className="max-w-full h-auto max-h-[60vh] rounded-xl shadow-lg border border-gray-200 object-contain cursor-crosshair"
+                    className="w-full max-w-full h-auto max-h-[45vh] sm:max-h-[60vh] rounded-xl shadow-lg border border-gray-200 object-contain cursor-crosshair"
                     onClick={handleImageClickWithReposition}
                   />
                 )}
@@ -689,7 +703,7 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
           </div>
 
           {/* ── RIGHT: Sidebar ── */}
-          <div className="w-80 xl:w-96 flex-shrink-0 border-l border-gray-200 bg-white flex flex-col overflow-hidden">
+          <div className={`${mobilePanelTab === 'actions' ? 'flex' : 'hidden'} md:flex w-full md:w-80 xl:w-96 flex-shrink-0 border-l border-gray-200 bg-white flex-col overflow-hidden`}>
 
             {/* Action area */}
             <div className="p-4 border-b border-gray-100 space-y-2 flex-shrink-0">

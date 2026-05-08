@@ -314,7 +314,9 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
   const getMediaType = (url) => {
     if (!url || typeof url !== 'string') return 'image';
     
-    const extension = url.toLowerCase().split('.').pop();
+    // Strip query string and fragment before checking extension (handles GCS signed URLs)
+    const cleanUrl = url.split('?')[0].split('#')[0];
+    const extension = cleanUrl.toLowerCase().split('.').pop();
     const videoExtensions = ['mp4', 'webm', 'ogg', 'mov', 'avi'];
     
     return videoExtensions.includes(extension) ? 'video' : 'image';
@@ -1711,12 +1713,22 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
                               src={currentMedia.url}
                               controls
                               playsInline
+                              preload="metadata"
                               className="max-w-full h-auto max-h-[65vh] rounded-xl shadow-lg border border-slate-200 object-contain"
                               onLoadedMetadata={handleImageLoad}
                               onError={(e) => {
                                 e.target.style.display = 'none';
+                                const fallback = e.target.parentNode?.querySelector('.video-error-fallback');
+                                if (fallback) fallback.style.display = 'flex';
                               }}
                             />
+                            <div className="video-error-fallback w-96 h-72 bg-slate-100 rounded-xl items-center justify-center border border-slate-200" style={{ display: 'none' }}>
+                              <div className="text-center">
+                                <svg className="h-10 w-10 text-slate-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10l4.553-2.069A1 1 0 0121 8.87v6.26a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" /></svg>
+                                <p className="text-slate-500 text-sm font-medium">Unable to load video</p>
+                                <a href={currentMedia.url} target="_blank" rel="noopener noreferrer" className="text-indigo-600 text-xs hover:underline mt-1 inline-block">Open video in new tab</a>
+                              </div>
+                            </div>
                             {/* Overlay — only active in comment mode to avoid blocking native video controls */}
                             <div
                               style={{

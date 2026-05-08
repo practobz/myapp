@@ -1689,8 +1689,8 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
                 <div className="flex justify-center mb-6">
                   <div
                     ref={imageContainerRef}
-                    className="relative inline-block"
-                    style={{ position: 'relative' }}
+                    className="relative w-full"
+                    style={{ position: 'relative', maxWidth: '720px' }}
                   >
                     {currentMedia ? (
                       currentMedia.url && typeof currentMedia.url === 'string' ? (
@@ -1714,7 +1714,8 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
                               controls
                               playsInline
                               preload="metadata"
-                              className="max-w-full h-auto max-h-[65vh] rounded-xl shadow-lg border border-slate-200 object-contain"
+                              className="rounded-xl shadow-lg border border-slate-200 bg-black"
+                              style={{ display: 'block', maxWidth: '100%', width: '100%', height: 'auto', maxHeight: '65vh' }}
                               onLoadedMetadata={handleImageLoad}
                               onError={(e) => {
                                 e.target.style.display = 'none';

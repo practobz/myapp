@@ -19,12 +19,13 @@ const getStatusLabel = (status) => {
   switch (status) {
     case 'approved_admin':    return 'Approved by Admin';
     case 'approved_customer': return 'Approved by Customer';
+    case 'approved_both':     return 'Approved by Admin & Customer';
     case 'under_review':      return 'Under Review';
     case 'revision_requested': return 'Revision Requested';
     case 'published':         return 'Published';
     case 'submitted':         return 'Submitted';
     case 'rejected':          return 'Rejected';
-    default: return status.replace(/_/g, ' ');
+    default: return (status || '').replace(/_/g, ' ');
   }
 };
 
@@ -477,9 +478,20 @@ function AdminContentPortfolio() {
             hashtags: version.hashtags || extractHashtags(version.caption || ''),
             notes: version.notes || '',
             createdAt: version.created_at,
-            status: version.status === 'approved'
-              ? (version.submission_stage === 'customer' ? 'approved_customer' : 'approved_admin')
-              : (version.status || 'submitted'),
+            status: (() => {
+              if (version.status === 'approved') {
+                const notes = (version.approvalNotes || '').toLowerCase();
+                const customerApproved = notes.includes('approved by customer') || version.approved_by_customer === true;
+                const adminApproved = version.approved_by_admin === true ||
+                  (notes && !notes.includes('customer') && notes.includes('admin')) ||
+                  (!notes.includes('customer') && !version.approved_by_customer);
+                if (customerApproved && adminApproved) return 'approved_both';
+                if (customerApproved) return 'approved_customer';
+                return 'approved_admin';
+              }
+              return version.status || 'submitted';
+            })(),
+            approvalNotes: version.approvalNotes || '',
             comments: version.comments || []
           })),
           totalVersions: versions.length,
@@ -545,8 +557,14 @@ function AdminContentPortfolio() {
     const latestVersion = versions[versions.length - 1];
     const status = latestVersion.status || 'under_review';
     if (status === 'approved') {
-      const stage = latestVersion.submission_stage || 'internal';
-      return stage === 'customer' ? 'approved_customer' : 'approved_admin';
+      const notes = (latestVersion.approvalNotes || '').toLowerCase();
+      const customerApproved = notes.includes('approved by customer') || latestVersion.approved_by_customer === true;
+      const adminApproved = latestVersion.approved_by_admin === true ||
+        (notes && !notes.includes('customer') && notes.includes('admin')) ||
+        (!notes.includes('customer') && !latestVersion.approved_by_customer);
+      if (customerApproved && adminApproved) return 'approved_both';
+      if (customerApproved) return 'approved_customer';
+      return 'approved_admin';
     }
     return status;
   };
@@ -575,6 +593,8 @@ function AdminContentPortfolio() {
         return 'bg-orange-100 text-orange-800';
       case 'approved_customer':
         return 'bg-green-100 text-green-800';
+      case 'approved_both':
+        return 'bg-teal-100 text-teal-800';
       case 'approved':
         return 'bg-green-100 text-green-800';
       case 'published':
@@ -593,6 +613,7 @@ function AdminContentPortfolio() {
       case 'approved':
       case 'approved_admin':
       case 'approved_customer':
+      case 'approved_both':
       case 'published':
         return <CheckCircle className="h-3 w-3" />;
       case 'revision_requested':

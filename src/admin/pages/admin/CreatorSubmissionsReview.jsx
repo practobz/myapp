@@ -451,7 +451,7 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ versionId: activeVersion._id, status: 'approved' }),
+          body: JSON.stringify({ versionId: activeVersion._id, status: 'approved', approvalNotes: 'Approved by admin', approved_by_admin: true }),
         }
       );
       if (!res.ok) throw new Error();

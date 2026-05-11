@@ -12,6 +12,7 @@ const getStatusLabel = (status) => {
   switch (status) {
     case 'approved_admin':    return 'Approved by Admin';
     case 'approved_customer': return 'Approved by Customer';
+    case 'approved_both':     return 'Approved by Admin & Customer';
     case 'under_review':      return 'Under Review';
     case 'revision_requested': return 'Revision Requested';
     case 'published':         return 'Published';

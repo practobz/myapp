@@ -942,7 +942,8 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
           body: JSON.stringify({
             status: 'approved',
             approvedAt: new Date().toISOString(),
-            approvalNotes: 'Approved by customer'
+            approvalNotes: 'Approved by customer',
+            approved_by_customer: true
           })
         }
       );

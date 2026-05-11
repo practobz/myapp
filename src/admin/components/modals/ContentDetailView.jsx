@@ -7,6 +7,20 @@ import {
 
 const API_URL = process.env.REACT_APP_API_URL;
 
+// Helper: human-readable status label
+const getStatusLabel = (status) => {
+  switch (status) {
+    case 'approved_admin':    return 'Approved by Admin';
+    case 'approved_customer': return 'Approved by Customer';
+    case 'under_review':      return 'Under Review';
+    case 'revision_requested': return 'Revision Requested';
+    case 'published':         return 'Published';
+    case 'submitted':         return 'Submitted';
+    case 'rejected':          return 'Rejected';
+    default: return (status || '').replace(/_/g, ' ');
+  }
+};
+
 // ── Author badge ──────────────────────────────────────────────────────────────
 const AuthorBadge = ({ comment }) => {
   const isAdmin = comment.authorRole === 'admin';
@@ -542,7 +556,7 @@ function ContentDetailView({
             <span className={`inline-flex items-center px-2 py-1.5 rounded-lg text-xs font-medium ${getStatusColor(isPublished ? 'published' : selectedContent.status)}`}>
               {getStatusIcon(isPublished ? 'published' : selectedContent.status)}
               <span className="ml-1">
-                {isPublished ? 'Published' : selectedContent.status.replace('_', ' ')}
+                {isPublished ? 'Published' : getStatusLabel(selectedContent.status)}
               </span>
               {isPublished && (
                 <span className="ml-1 flex flex-wrap gap-1">
@@ -738,7 +752,7 @@ function ContentDetailView({
                     <div className="flex items-center justify-between text-[10px] text-gray-500">
                       <span>Created: {formatDate(currentVersion.createdAt)}</span>
                       <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getStatusColor(currentVersion.status)}`}>
-                        {currentVersion.status.replace('_', ' ')}
+                        {getStatusLabel(currentVersion.status)}
                       </span>
                     </div>
                   </div>

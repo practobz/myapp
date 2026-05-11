@@ -14,6 +14,20 @@ import ContentDetailView from '../../components/modals/ContentDetailView';
 import SocialIntegrations from '../../../customer/Integration/SocialIntegrations';
 import { useAuth } from '../../contexts/AuthContext';
 
+// Helper: human-readable status label
+const getStatusLabel = (status) => {
+  switch (status) {
+    case 'approved_admin':    return 'Approved by Admin';
+    case 'approved_customer': return 'Approved by Customer';
+    case 'under_review':      return 'Under Review';
+    case 'revision_requested': return 'Revision Requested';
+    case 'published':         return 'Published';
+    case 'submitted':         return 'Submitted';
+    case 'rejected':          return 'Rejected';
+    default: return status.replace(/_/g, ' ');
+  }
+};
+
 // Memoized Customer Card Component
 const CustomerCard = memo(({ customerData, customer, onSelect, getStatusColor, isContentPublished, getPublishedPlatformsForContent }) => {
   const customerName = customer?.name || `Customer ${customerData.customerId}`;
@@ -56,7 +70,7 @@ const CustomerCard = memo(({ customerData, customer, onSelect, getStatusColor, i
                   <span className="truncate">{portfolio.title || portfolio.calendarName || 'Content'}</span>
                 </div>
                 <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getStatusColor(isPublished ? 'published' : portfolio.status)}`}>
-                  {isPublished ? 'Done' : portfolio.status.replace('_', ' ')}
+                  {isPublished ? 'Done' : getStatusLabel(portfolio.status)}
                 </span>
               </div>
             );
@@ -113,7 +127,7 @@ const PortfolioCard = memo(({ item, onView, onSchedule, onDelete, formatDate, ge
         <div className="absolute top-2 left-2">
           <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${getStatusColor(published ? 'published' : item.status)}`}>
             {getStatusIcon(published ? 'published' : item.status)}
-            <span className="ml-1">{published ? 'Published' : item.status.replace('_', ' ')}</span>
+            <span className="ml-1">{published ? 'Published' : getStatusLabel(item.status)}</span>
           </span>
         </div>
         
@@ -463,7 +477,9 @@ function AdminContentPortfolio() {
             hashtags: version.hashtags || extractHashtags(version.caption || ''),
             notes: version.notes || '',
             createdAt: version.created_at,
-            status: version.status || 'submitted',
+            status: version.status === 'approved'
+              ? (version.submission_stage === 'customer' ? 'approved_customer' : 'approved_admin')
+              : (version.status || 'submitted'),
             comments: version.comments || []
           })),
           totalVersions: versions.length,
@@ -527,7 +543,12 @@ function AdminContentPortfolio() {
 
   const getLatestStatus = (versions) => {
     const latestVersion = versions[versions.length - 1];
-    return latestVersion.status || 'under_review';
+    const status = latestVersion.status || 'under_review';
+    if (status === 'approved') {
+      const stage = latestVersion.submission_stage || 'internal';
+      return stage === 'customer' ? 'approved_customer' : 'approved_admin';
+    }
+    return status;
   };
 
   const getAllFeedback = (versions) => {
@@ -550,6 +571,10 @@ function AdminContentPortfolio() {
     switch (status) {
       case 'under_review':
         return 'bg-yellow-100 text-yellow-800';
+      case 'approved_admin':
+        return 'bg-orange-100 text-orange-800';
+      case 'approved_customer':
+        return 'bg-green-100 text-green-800';
       case 'approved':
         return 'bg-green-100 text-green-800';
       case 'published':
@@ -566,6 +591,8 @@ function AdminContentPortfolio() {
   const getStatusIcon = useCallback((status) => {
     switch (status) {
       case 'approved':
+      case 'approved_admin':
+      case 'approved_customer':
       case 'published':
         return <CheckCircle className="h-3 w-3" />;
       case 'revision_requested':

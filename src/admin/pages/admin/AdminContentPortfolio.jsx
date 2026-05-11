@@ -477,9 +477,17 @@ function AdminContentPortfolio() {
             hashtags: version.hashtags || extractHashtags(version.caption || ''),
             notes: version.notes || '',
             createdAt: version.created_at,
-            status: version.status === 'approved'
-              ? (version.submission_stage === 'customer' ? 'approved_customer' : 'approved_admin')
-              : (version.status || 'submitted'),
+            status: (() => {
+              if (version.status === 'approved') {
+                const stage = version.submission_stage || 'internal';
+                const notes = (version.approvalNotes || '').toLowerCase();
+                return (stage === 'customer' || notes.includes('customer'))
+                  ? 'approved_customer'
+                  : 'approved_admin';
+              }
+              return version.status || 'submitted';
+            })(),
+            approvalNotes: version.approvalNotes || '',
             comments: version.comments || []
           })),
           totalVersions: versions.length,
@@ -546,7 +554,10 @@ function AdminContentPortfolio() {
     const status = latestVersion.status || 'under_review';
     if (status === 'approved') {
       const stage = latestVersion.submission_stage || 'internal';
-      return stage === 'customer' ? 'approved_customer' : 'approved_admin';
+      const notes = (latestVersion.approvalNotes || '').toLowerCase();
+      return (stage === 'customer' || notes.includes('customer'))
+        ? 'approved_customer'
+        : 'approved_admin';
     }
     return status;
   };

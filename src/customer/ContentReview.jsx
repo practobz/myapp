@@ -1725,12 +1725,12 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
                               src={currentMedia.url}
                               controls
                               playsInline
-                              preload="metadata"
+                              preload="auto"
                               className="rounded-xl shadow-lg border border-slate-200 bg-black"
                               style={{ display: 'block', maxWidth: '100%', width: '100%', height: 'auto', maxHeight: '65vh', transform: 'translateZ(0)', isolation: 'isolate' }}
                               onLoadStart={() => setVideoLoading(true)}
-                              onCanPlay={() => setVideoLoading(false)}
                               onLoadedMetadata={(e) => { handleImageLoad(e); setVideoLoading(false); }}
+                              onCanPlay={() => setVideoLoading(false)}
                               onError={(e) => {
                                 setVideoLoading(false);
                                 e.target.style.display = 'none';

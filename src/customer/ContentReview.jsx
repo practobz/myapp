@@ -1722,16 +1722,17 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
                             )}
                             <video
                               ref={videoRef}
-                              src={currentMedia.url}
+                              src={`${currentMedia.url}#t=0.001`}
                               controls
                               playsInline
                               preload="metadata"
-                              crossOrigin="anonymous"
                               className="rounded-xl shadow-lg border border-slate-200 bg-black"
                               style={{ display: 'block', maxWidth: '100%', width: '100%', height: 'auto', maxHeight: '65vh' }}
                               onLoadStart={() => setVideoLoading(true)}
                               onLoadedMetadata={(e) => { handleImageLoad(e); setVideoLoading(false); }}
                               onCanPlay={() => setVideoLoading(false)}
+                              onWaiting={() => setVideoLoading(true)}
+                              onPlaying={() => setVideoLoading(false)}
                               onError={(e) => {
                                 setVideoLoading(false);
                                 e.target.style.display = 'none';

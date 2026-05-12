@@ -839,7 +839,7 @@ function ContentUpload() {
         due_date: assignment.dueDate,
         status: 'submitted',
         // Content creators submit for internal review; customers/admins upload directly for customer review
-        submission_stage: getUserRole() === 'content_creator' ? 'internal' : 'customer',
+        submission_stage: 'customer',
         item_index: parseInt(itemIndex, 10),
         created_at: new Date().toISOString(),
         type: 'submission',
@@ -893,11 +893,24 @@ function ContentUpload() {
       const result = await response.json();
       console.log('✅ Content submission successful:', result);
 
+      // Automatically send to customer so content appears immediately in ContentReview and ContentCalendar
+      const newSubmissionId = result._id || result.id;
+      if (newSubmissionId) {
+        try {
+          await fetch(
+            `${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(newSubmissionId)}/send-to-customer`,
+            { method: 'PATCH', headers: { 'Content-Type': 'application/json' } }
+          );
+        } catch (e) {
+          console.warn('send-to-customer step failed (non-critical):', e);
+        }
+      }
+
       const adminNames = selectedAdmins.map(a => a.name).join(', ');
       const adminMsg = selectedAdmins.length > 0
         ? `\n\nNotified admin(s): ${adminNames}`
         : '';
-      alert(`Content submitted for admin review!${adminMsg}\n\nThe admin will review your submission and notify you with feedback or approval.`);
+      alert(`Content submitted successfully!${adminMsg}\n\nThe customer can now review your submission.`);
       navigate('/content-creator/assignments');
     } catch (err) {
       console.error('❌ Upload error:', err);

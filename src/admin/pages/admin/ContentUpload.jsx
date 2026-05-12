@@ -611,6 +611,19 @@ function ContentUpload() {
       const result = await response.json();
       console.log('✅ Content submission successful:', result);
 
+      // Automatically send to customer so content appears immediately in ContentReview and ContentCalendar
+      const newSubmissionId = result._id || result.id;
+      if (newSubmissionId) {
+        try {
+          await fetch(
+            `${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(newSubmissionId)}/send-to-customer`,
+            { method: 'PATCH', headers: { 'Content-Type': 'application/json' } }
+          );
+        } catch (e) {
+          console.warn('send-to-customer step failed (non-critical):', e);
+        }
+      }
+
       alert('Content sent directly to customer successfully! The customer can now review your work.');
       navigate('/content-creator/assignments');
     } catch (err) {

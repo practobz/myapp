@@ -1722,14 +1722,24 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
                             )}
                             <video
                               ref={videoRef}
-                              src={`${currentMedia.url}#t=0.001`}
+                              src={currentMedia.url}
                               controls
                               playsInline
-                              preload="metadata"
+                              preload="auto"
+                              crossOrigin="anonymous"
                               className="rounded-xl shadow-lg border border-slate-200 bg-black"
                               style={{ display: 'block', maxWidth: '100%', width: '100%', height: 'auto', maxHeight: '65vh' }}
                               onLoadStart={() => setVideoLoading(true)}
-                              onLoadedMetadata={(e) => { handleImageLoad(e); setVideoLoading(false); }}
+                              onLoadedMetadata={(e) => {
+                                handleImageLoad(e);
+                                setVideoLoading(false);
+                                // Seek to first frame for thumbnail after metadata is ready
+                                // (avoids premature Range requests that cause black screen on large videos)
+                                const vid = e.target;
+                                if (vid && vid.duration > 0 && vid.currentTime === 0) {
+                                  vid.currentTime = 0.001;
+                                }
+                              }}
                               onCanPlay={() => setVideoLoading(false)}
                               onWaiting={() => setVideoLoading(true)}
                               onPlaying={() => setVideoLoading(false)}

@@ -126,6 +126,8 @@ function ContentReview() {
   useEffect(() => {
     setIsVideoCommentMode(false);
     setVideoLoading(false);
+    setVideoCompatibleUrl(null);
+    setVideoTranscoding(false);
   }, [selectedMediaIndex, selectedVersionIndex, selectedContent]);
 
   // Add new useEffect to filter comments by media index
@@ -834,6 +836,8 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
   const [undoingApprove, setUndoingApprove] = useState(false);
   const [isVideoCommentMode, setIsVideoCommentMode] = useState(false);
   const [videoLoading, setVideoLoading] = useState(false);
+  const [videoCompatibleUrl, setVideoCompatibleUrl] = useState(null); // null = use original URL
+  const [videoTranscoding, setVideoTranscoding] = useState(false); // true while backend is transcoding
   const [activeMarkerRect, setActiveMarkerRect] = useState(null); // viewport rect of the active marker
   const [sidebarTab, setSidebarTab] = useState('content'); // 'content' | 'calendars' | 'comments'
   const [sidebarSearch, setSidebarSearch] = useState('');
@@ -1711,7 +1715,17 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
                           />
                         ) : (
                           <>
-                            {videoLoading && (
+                            {videoTranscoding && (
+                              <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 rounded-xl z-20">
+                                <svg className="animate-spin h-12 w-12 text-yellow-400 mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                                </svg>
+                                <p className="text-white text-sm font-semibold mb-1">Converting video for your browser…</p>
+                                <p className="text-white/60 text-xs">This video uses H.265 encoding. Converting to H.264, please wait.</p>
+                              </div>
+                            )}
+                            {videoLoading && !videoTranscoding && (
                               <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 rounded-xl z-10">
                                 <svg className="animate-spin h-12 w-12 text-indigo-400 mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -1722,22 +1736,38 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
                             )}
                             <video
                               ref={videoRef}
-                              src={currentMedia.url}
+                              src={videoCompatibleUrl || currentMedia.url}
                               controls
                               playsInline
                               preload="auto"
-                              crossOrigin="anonymous"
                               className="rounded-xl shadow-lg border border-slate-200 bg-black"
                               style={{ display: 'block', maxWidth: '100%', width: '100%', height: 'auto', maxHeight: '65vh' }}
                               onLoadStart={() => setVideoLoading(true)}
                               onLoadedMetadata={(e) => {
                                 handleImageLoad(e);
                                 setVideoLoading(false);
-                                // Seek to first frame for thumbnail after metadata is ready
-                                // (avoids premature Range requests that cause black screen on large videos)
                                 const vid = e.target;
                                 if (vid && vid.duration > 0 && vid.currentTime === 0) {
                                   vid.currentTime = 0.001;
+                                }
+                                // Detect H.265/unsupported codec: videoWidth===0 means the browser
+                                // can parse metadata but can't decode the video track (e.g. HEVC on Chrome).
+                                // Skip if we already have a compatible URL to avoid infinite loops.
+                                if (!videoCompatibleUrl && vid.videoWidth === 0 && vid.duration > 0) {
+                                  setVideoTranscoding(true);
+                                  fetch(`${process.env.REACT_APP_API_URL}/api/video/transcode`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ videoUrl: currentMedia.url }),
+                                  })
+                                    .then((r) => r.json())
+                                    .then((data) => {
+                                      setVideoTranscoding(false);
+                                      if (data.url && data.url !== currentMedia.url) {
+                                        setVideoCompatibleUrl(data.url);
+                                      }
+                                    })
+                                    .catch(() => setVideoTranscoding(false));
                                 }
                               }}
                               onCanPlay={() => setVideoLoading(false)}

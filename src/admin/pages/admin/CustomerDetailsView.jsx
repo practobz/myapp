@@ -1027,6 +1027,25 @@ function CustomerDetailsView() {
       });
 
       if (!response.ok) throw new Error('Failed to add content item');
+
+      // Send assignment email notification to the creator
+      if (item.assignedTo) {
+        try {
+          await fetch(`${API_URL}/calendars/notify-creator`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              creatorEmail: item.assignedTo,
+              calendarName: calendar.name || 'Content Calendar',
+              customerName: customer?.name || '',
+              item
+            })
+          });
+        } catch (notifyErr) {
+          console.warn('⚠️ Failed to send creator notification email:', notifyErr);
+        }
+      }
+
       fetchCalendars();
     } catch (err) {
       console.error('Error adding content item:', err);

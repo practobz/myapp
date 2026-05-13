@@ -221,6 +221,11 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
   const [deleting, setDeleting]                   = useState(false);
   const [mobilePanelTab, setMobilePanelTab]       = useState('actions'); // 'media' | 'actions'
 
+  // Caption / hashtag editing
+  const [captionDraft, setCaptionDraft]           = useState(activeVersion.caption || '');
+  const [hashtagsDraft, setHashtagsDraft]         = useState(activeVersion.hashtags || '');
+  const [savingCaption, setSavingCaption]         = useState(false);
+
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 4000);
@@ -237,6 +242,8 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
     setShowRevisionInput(false);
     setRevisionNotes('');
     setDeleteConfirm(null);
+    setCaptionDraft(localVersions[activeVersionIdx].caption || '');
+    setHashtagsDraft(localVersions[activeVersionIdx].hashtags || '');
   }, [activeVersionIdx]); // eslint-disable-line
 
   // Sync commentsForMedia
@@ -377,6 +384,31 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
   };
 
   const handleActivate = (id) => setActiveComment(prev => prev === id ? null : id);
+
+  // ── Caption / hashtag save ──
+  const handleSaveCaptionHashtags = async () => {
+    setSavingCaption(true);
+    try {
+      const res = await fetch(
+        `${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(activeVersion._id)}/caption-hashtags`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ caption: captionDraft.trim(), hashtags: hashtagsDraft.trim() }),
+        }
+      );
+      if (!res.ok) throw new Error();
+      // Update local version data so the left panel reflects the change immediately
+      setLocalVersions(prev => prev.map((v, i) =>
+        i === activeVersionIdx ? { ...v, caption: captionDraft.trim(), hashtags: hashtagsDraft.trim() } : v
+      ));
+      showToast('Caption and hashtags saved.');
+    } catch {
+      showToast('Failed to save. Please try again.', 'error');
+    } finally {
+      setSavingCaption(false);
+    }
+  };
 
   // ── Send to customer ──
   const handleSendToCustomer = async () => {
@@ -988,12 +1020,45 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
                     <SidebarRow icon={User} label="Notified Admins"
                       value={submission.notify_admins.map(a => a.name || a.email).join(', ')} />
                   )}
-                  {activeVersion.hashtags && (
-                    <div>
-                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Hashtags</p>
-                      <p className="text-xs text-blue-500 break-all">{activeVersion.hashtags}</p>
+
+                  {/* ── Caption & Hashtags editor ── */}
+                  <div className="border-t border-gray-100 pt-3 space-y-3">
+                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+                      <Edit3 className="h-3 w-3" />Caption &amp; Hashtags
+                    </p>
+                    <div className="space-y-2">
+                      <div>
+                        <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide block mb-1">Caption</label>
+                        <textarea
+                          className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-blue-400 focus:border-blue-400 resize-none bg-gray-50 focus:bg-white transition-colors"
+                          rows={4}
+                          placeholder="Enter caption for this post…"
+                          value={captionDraft}
+                          onChange={e => setCaptionDraft(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide block mb-1">Hashtags</label>
+                        <textarea
+                          className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-blue-400 focus:border-blue-400 resize-none bg-gray-50 focus:bg-white transition-colors"
+                          rows={2}
+                          placeholder="#hashtag1 #hashtag2 …"
+                          value={hashtagsDraft}
+                          onChange={e => setHashtagsDraft(e.target.value)}
+                        />
+                      </div>
+                      <button
+                        onClick={handleSaveCaptionHashtags}
+                        disabled={savingCaption}
+                        className="w-full py-2 bg-blue-600 text-white rounded-xl text-xs font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+                      >
+                        {savingCaption
+                          ? <><div className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />Saving…</>
+                          : <><Check className="h-3.5 w-3.5" />Save Caption &amp; Hashtags</>}
+                      </button>
                     </div>
-                  )}
+                  </div>
+
                   {activeVersion.approvalNotes && (
                     <div>
                       <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Approval Notes</p>

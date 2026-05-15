@@ -230,7 +230,8 @@ function Dashboard() {
     customerAnalytics: () => navigate('/admin/customer-analytics'),
     socialAccounts: () => navigate('/admin/social-accounts'),
     creatorSubmissions: () => navigate('/admin/creator-submissions'),
-    summaryReport: () => navigate('/admin/summary-report')
+    summaryReport: () => navigate('/admin/summary-report'),
+    contentCalendarTracker: () => navigate('/admin/content-calendar-tracker')
   }), [navigate]);
 
   // Loading state with skeleton UI
@@ -266,7 +267,7 @@ function Dashboard() {
           {/* Quick Actions Skeleton */}
           <div className="bg-white/70 backdrop-blur-sm rounded-xl sm:rounded-2xl shadow-lg border border-gray-200/50 p-4 sm:p-6 lg:p-8 animate-pulse">
             <div className="h-6 bg-gray-200 rounded w-32 mb-4 sm:mb-6" />
-            <div className="grid grid-cols-5 sm:grid-cols-10 gap-2 sm:gap-3 lg:gap-4">
+            <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-3 lg:gap-4">
               {[...Array(9)].map((_, i) => (
                 <div key={i} className="bg-gray-200 rounded-xl min-h-[80px] sm:min-h-[100px]" />
               ))}
@@ -415,7 +416,7 @@ function Dashboard() {
             <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900">Quick Actions</h2>
             <span className="text-xs sm:text-sm text-gray-500">Click to navigate</span>
           </div>
-          <div className="grid grid-cols-5 sm:grid-cols-10 gap-2 sm:gap-3 lg:gap-4">
+          <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-3 lg:gap-4">
             <QuickActionButton 
               icon={Users}
               label="Customers"
@@ -481,6 +482,12 @@ function Dashboard() {
               label="Summary Report"
               gradientClass="bg-gradient-to-br from-rose-600 to-pink-600 hover:from-rose-700 hover:to-pink-700 focus:ring-rose-500"
               onClick={navigationHandlers.summaryReport}
+            />
+            <QuickActionButton 
+              icon={Calendar}
+              label="Calendar Tracker"
+              gradientClass="bg-gradient-to-br from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 focus:ring-amber-500"
+              onClick={navigationHandlers.contentCalendarTracker}
             />
           </div>
         </div>

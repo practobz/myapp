@@ -25,6 +25,7 @@ import MultiCustomerAnalytics from './admin/pages/admin/MultiCustomerAnalytics';
 import CustomerSocialAccounts from './admin/pages/admin/CustomerSocialAccounts';
 import CreatorSubmissionsReview from './admin/pages/admin/CreatorSubmissionsReview';
 import SummaryReport from './admin/pages/admin/SummaryReport';
+import ContentCalendarTracker from './admin/pages/admin/ContentCalendarTracker';
 
 
 // Super Admin imports
@@ -445,7 +446,12 @@ function App() {
                   <MultiCustomerAnalytics />
                 </ProtectedRoutePortal>
               } />
-                
+                <Route path="/admin/content-calendar-tracker" element={
+                <ProtectedRoutePortal role="admin">
+                  <ContentCalendarTracker />
+                </ProtectedRoutePortal>
+              } />
+              
               {/* Admin Multi-Customer Analytics Dashboard */}
               <Route path="/admin/customer-analytics" element={
                 <ProtectedRoutePortal role="admin">

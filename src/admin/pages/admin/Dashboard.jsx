@@ -229,7 +229,8 @@ function Dashboard() {
     publishManager: () => navigate('/admin/publish-manager'),
     customerAnalytics: () => navigate('/admin/customer-analytics'),
     socialAccounts: () => navigate('/admin/social-accounts'),
-    creatorSubmissions: () => navigate('/admin/creator-submissions')
+    creatorSubmissions: () => navigate('/admin/creator-submissions'),
+    summaryReport: () => navigate('/admin/summary-report')
   }), [navigate]);
 
   // Loading state with skeleton UI
@@ -474,6 +475,12 @@ function Dashboard() {
               label="Creator Inbox"
               gradientClass="bg-gradient-to-br from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700 focus:ring-purple-500"
               onClick={navigationHandlers.creatorSubmissions}
+            />
+            <QuickActionButton 
+              icon={BarChart3}
+              label="Summary Report"
+              gradientClass="bg-gradient-to-br from-rose-600 to-pink-600 hover:from-rose-700 hover:to-pink-700 focus:ring-rose-500"
+              onClick={navigationHandlers.summaryReport}
             />
           </div>
         </div>

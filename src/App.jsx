@@ -24,6 +24,7 @@ import PublishManager from './admin/pages/admin/PublishManager';
 import MultiCustomerAnalytics from './admin/pages/admin/MultiCustomerAnalytics';
 import CustomerSocialAccounts from './admin/pages/admin/CustomerSocialAccounts';
 import CreatorSubmissionsReview from './admin/pages/admin/CreatorSubmissionsReview';
+import SummaryReport from './admin/pages/admin/SummaryReport';
 
 
 // Super Admin imports
@@ -370,6 +371,11 @@ function App() {
                  <Route path="/admin/creator-submissions" element={
                 <ProtectedRoutePortal role="admin">
                   <CreatorSubmissionsReview />
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/admin/summary-report" element={
+                <ProtectedRoutePortal role="admin">
+                  <SummaryReport />
                 </ProtectedRoutePortal>
               } />
               {/* Admin Social Manager Route */}

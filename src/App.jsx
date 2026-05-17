@@ -56,6 +56,7 @@ import IntegratedPostAnalytics from './components/IntegratedPostAnalytics';
 import PostAnalytics from './components/PostAnalytics';
 import CustomerValueDashboard from './components/CustomerValueDashboard';
 import SocialAnalyticsDashboard from './customer/Integration/SocialAnalyticsDashboard';
+import ContentApprovalReport from './admin/pages/admin/ContentApprovalReport';
 
 // Integration imports
 import FacebookIntegration from './customer/Integration/FacebookIntegration';
@@ -444,6 +445,11 @@ function App() {
               <Route path="/admin/customer-analytics" element={
                 <ProtectedRoutePortal role="admin">
                   <MultiCustomerAnalytics />
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/admin/content-approval-report" element={
+                <ProtectedRoutePortal role="admin">
+                  <ContentApprovalReport />
                 </ProtectedRoutePortal>
               } />
                 <Route path="/admin/content-calendar-tracker" element={

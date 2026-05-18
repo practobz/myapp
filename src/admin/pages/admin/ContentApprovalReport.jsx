@@ -1012,23 +1012,23 @@ export default function ContentApprovalReport() {
                                   {(row.versions || []).map((v) => (
                                     <div key={v.id} className="bg-white rounded-xl border border-gray-200 p-4">
                                       {/* Version header */}
-                                      <div className="flex flex-wrap items-center gap-3 mb-3">
-                                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold">
+                                      <div className="flex flex-wrap items-center gap-2 mb-3">
+                                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold whitespace-nowrap flex-shrink-0">
                                           <GitBranch className="w-3 h-3" /> Version {v.version_number}
                                         </span>
-                                        <span className="text-xs text-gray-500">
+                                        <span className="text-xs text-gray-500 min-w-0 break-words">
                                           Uploaded by <span className="font-medium text-gray-700">{v.created_by || '—'}</span>
                                           {v.uploaded_at && (
                                             <> on <span className="font-medium text-gray-700">{fmtDate(v.uploaded_at)}</span> at {format(parseISO(v.uploaded_at), 'h:mm a')}</>
                                           )}
                                         </span>
-                                        <StatusBadge status={v.status} />
+                                        <span className="flex-shrink-0"><StatusBadge status={v.status} /></span>
                                         {v.approved_by_admin && (
-                                          <span className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded font-medium">Admin Approved</span>
+                                          <span className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded font-medium whitespace-nowrap flex-shrink-0">Admin Approved</span>
                                         )}
                                         {v.approved_by_customer && v.approved_at && (
-                                          <span className="text-xs bg-green-50 text-green-700 border border-green-200 px-2 py-0.5 rounded font-medium">
-                                            Customer Approved · {fmtDate(v.approved_at)} {format(parseISO(v.approved_at), 'h:mm a')}
+                                          <span className="text-xs bg-green-50 text-green-700 border border-green-200 px-2 py-0.5 rounded font-medium whitespace-nowrap flex-shrink-0">
+                                            Customer Approved &middot; {fmtDate(v.approved_at)} {format(parseISO(v.approved_at), 'h:mm a')}
                                           </span>
                                         )}
                                       </div>

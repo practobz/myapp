@@ -121,16 +121,22 @@ async function exportPDF(rows, summary, adminName) {
   // ── Pre-load all images as base64 via canvas ─────────────────────────────
   const imageCache = {};
   const allImageUrls = [];
+  const allVideoUrls  = [];
   rows.forEach(row =>
     (row.versions || []).forEach(v =>
-      (v.images || []).filter(i => i.type !== 'video' && i.url).forEach(i => allImageUrls.push(i.url))
+      (v.images || []).forEach(i => {
+        if (!i.url) return;
+        if (i.type === 'video') allVideoUrls.push(i.url);
+        else allImageUrls.push(i.url);
+      })
     )
   );
 
   const loadImgBase64 = (url) => new Promise((resolve) => {
+    const proxyUrl = `${API_URL}/api/image-proxy?url=${encodeURIComponent(url)}`;
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    const tid = setTimeout(() => resolve(null), 8000);
+    const tid = setTimeout(() => resolve(null), 10000);
     img.onload = () => {
       clearTimeout(tid);
       try {
@@ -142,13 +148,44 @@ async function exportPDF(rows, summary, adminName) {
       } catch { resolve(null); }
     };
     img.onerror = () => { clearTimeout(tid); resolve(null); };
-    img.src = url + (url.includes('?') ? '&' : '?') + '_t=' + Date.now();
+    img.src = proxyUrl;
   });
 
-  await Promise.all(allImageUrls.map(async (url) => {
-    const b64 = await loadImgBase64(url);
-    if (b64) imageCache[url] = b64;
-  }));
+  // Capture a thumbnail from the first frame of a video via <video> + canvas
+  const loadVideoThumbnail = (url) => new Promise((resolve) => {
+    const proxyUrl = `${API_URL}/api/image-proxy?url=${encodeURIComponent(url)}`;
+    const video = document.createElement('video');
+    video.crossOrigin = 'anonymous';
+    video.preload = 'metadata';
+    video.muted = true;
+    const tid = setTimeout(() => { video.src = ''; resolve(null); }, 12000);
+    video.addEventListener('loadeddata', () => {
+      video.currentTime = 0;
+    }, { once: true });
+    video.addEventListener('seeked', () => {
+      clearTimeout(tid);
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width  = video.videoWidth  || 320;
+        canvas.height = video.videoHeight || 180;
+        canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
+      } catch { resolve(null); }
+    }, { once: true });
+    video.addEventListener('error', () => { clearTimeout(tid); resolve(null); }, { once: true });
+    video.src = proxyUrl;
+  });
+
+  await Promise.all([
+    ...allImageUrls.map(async (url) => {
+      const b64 = await loadImgBase64(url);
+      if (b64) imageCache[url] = b64;
+    }),
+    ...allVideoUrls.map(async (url) => {
+      const b64 = await loadVideoThumbnail(url);
+      if (b64) imageCache[url] = b64;
+    }),
+  ]);
 
   // ── Setup ─────────────────────────────────────────────────────────────────
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -451,7 +488,7 @@ async function exportPDF(rows, summary, adminName) {
           checkY(THUMB + 6);
           let tx = M + 5;
           thumbsToShow.forEach((img) => {
-            if (img.type === 'video' || !imageCache[img.url]) {
+            if (!imageCache[img.url]) {
               // Placeholder
               doc.setFillColor(...C.border);
               doc.roundedRect(tx, y, THUMB, THUMB, 1, 1, 'F');
@@ -465,6 +502,14 @@ async function exportPDF(rows, summary, adminName) {
                 doc.setDrawColor(...C.border);
                 doc.setLineWidth(0.2);
                 doc.roundedRect(tx, y, THUMB, THUMB, 1, 1, 'S');
+                // Play icon overlay for videos
+                if (img.type === 'video') {
+                  const cx = tx + THUMB / 2, cy = y + THUMB / 2, r = 4;
+                  doc.setFillColor(0, 0, 0, 0.45);
+                  doc.circle(cx, cy, r, 'F');
+                  doc.setFillColor(255, 255, 255);
+                  doc.triangle(cx - 1.2, cy - 2, cx - 1.2, cy + 2, cx + 2.2, cy, 'F');
+                }
               } catch { /* skip broken image */ }
             }
             tx += THUMB + GAP;

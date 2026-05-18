@@ -210,12 +210,12 @@ async function exportPDF(rows, summary, adminName) {
   doc.rect(0, 0, 4, 40, 'F');
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(14);
+  doc.setFontSize(16);
   doc.setTextColor(...C.white);
   doc.text('CONTENT APPROVAL TIMELINE REPORT', M + 4, 16);
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
+  doc.setFontSize(10);
   doc.setTextColor(148, 163, 184);
   doc.text(`Versions · Images · Comments  •  ${rows.length} item${rows.length !== 1 ? 's' : ''}`, M + 4, 27);
 
@@ -239,11 +239,11 @@ async function exportPDF(rows, summary, adminName) {
     doc.setFillColor(...b.color);
     doc.rect(bx, y, 3, 18, 'F');
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(15);
+    doc.setFontSize(17);
     doc.setTextColor(...b.color);
     doc.text(b.value, bx + 8, y + 12);
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7);
+    doc.setFontSize(9);
     doc.setTextColor(...C.slate);
     doc.text(b.label, bx + 8, y + 17);
   });
@@ -264,7 +264,7 @@ async function exportPDF(rows, summary, adminName) {
   doc.setFillColor(...C.dark);
   doc.roundedRect(M, y, CW, 10, 2, 2, 'F');
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.5);
+  doc.setFontSize(9.5);
   doc.setTextColor(...C.white);
   Object.values(COL).forEach(c => doc.text(c.label, c.x + 2, y + 7));
   y += 10;
@@ -284,27 +284,27 @@ async function exportPDF(rows, summary, adminName) {
 
     // Item name
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
+    doc.setFontSize(10);
     doc.setTextColor(...C.dark);
     doc.text(clip(row.item_name || row.calendar_name, 24), COL.item.x + 2, textY);
     if (row.calendar_name && row.calendar_name !== row.item_name) {
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7);
+      doc.setFontSize(9);
       doc.setTextColor(...C.slate);
       doc.text(clip(row.calendar_name, 24), COL.item.x + 2, y + ROW_H - 2);
     }
 
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
+    doc.setFontSize(10);
     doc.setTextColor(...C.dark);
     doc.text(clip(row.customer_name, 15), COL.customer.x + 2, textY);
     doc.text(clip(row.created_by, 22), COL.by.x + 2, textY);
     doc.text(fmtD(row.uploaded_at), COL.uploaded.x + 2, textY);
     if (row.uploaded_at) {
       try {
-        doc.setFontSize(7); doc.setTextColor(...C.slate);
+        doc.setFontSize(9); doc.setTextColor(...C.slate);
         doc.text(format(parseISO(row.uploaded_at), 'h:mm a'), COL.uploaded.x + 2, textY + 4);
-        doc.setFontSize(8); doc.setTextColor(...C.dark);
+        doc.setFontSize(10); doc.setTextColor(...C.dark);
       } catch { /* ignore */ }
     }
 
@@ -312,9 +312,9 @@ async function exportPDF(rows, summary, adminName) {
       doc.setTextColor(...C.green); doc.setFont('helvetica', 'bold');
       doc.text(fmtD(row.approved_at), COL.approved.x + 2, textY);
       try {
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(...C.slate);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...C.slate);
         doc.text(format(parseISO(row.approved_at), 'h:mm a'), COL.approved.x + 2, textY + 4);
-        doc.setFontSize(8); doc.setTextColor(...C.dark);
+        doc.setFontSize(10); doc.setTextColor(...C.dark);
       } catch { /* ignore */ }
       doc.setFont('helvetica', 'normal'); doc.setTextColor(...C.dark);
     } else {
@@ -329,16 +329,16 @@ async function exportPDF(rows, summary, adminName) {
       const pillBg    = d <= 1 ? C.bggreen : d <= 3 ? C.bgamber : C.bgred;
       doc.setFillColor(...pillBg);
       doc.roundedRect(COL.days.x + 1, y + 4, 9, 6, 1, 1, 'F');
-      doc.setFontSize(7.5); doc.setFont('helvetica', 'bold'); doc.setTextColor(...pillColor);
+      doc.setFontSize(9.5); doc.setFont('helvetica', 'bold'); doc.setTextColor(...pillColor);
       doc.text(`${d}d`, COL.days.x + 5.5, y + 8.5, { align: 'center' });
-      doc.setFont('helvetica', 'normal'); doc.setTextColor(...C.dark); doc.setFontSize(8);
+      doc.setFont('helvetica', 'normal'); doc.setTextColor(...C.dark); doc.setFontSize(10);
     }
 
     const sLabel = row.status === 'submitted' ? 'In Review' : String(row.status || '—').replace(/_/g, ' ');
     const sClr   = { approved: C.green, rejected: C.red, published: [5, 150, 105] }[row.status] || C.slate;
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...sClr);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(...sClr);
     doc.text(clip(sLabel, 12), COL.status.x + 2, textY);
-    doc.setFont('helvetica', 'normal'); doc.setTextColor(...C.dark); doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal'); doc.setTextColor(...C.dark); doc.setFontSize(10);
 
     doc.setDrawColor(...C.border); doc.setLineWidth(0.1);
     doc.line(M, y + ROW_H, M + CW, y + ROW_H);
@@ -354,7 +354,7 @@ async function exportPDF(rows, summary, adminName) {
   doc.setFillColor(...C.indigo);
   doc.rect(M, y, 3, 12, 'F');
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
+  doc.setFontSize(11);
   doc.setTextColor(...C.white);
   doc.text('DETAILED VERSIONS & COMMENTS', M + 7, y + 8.5);
   y += 16;
@@ -373,13 +373,13 @@ async function exportPDF(rows, summary, adminName) {
 
     // Item name
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9);
+    doc.setFontSize(11);
     doc.setTextColor(...C.white);
     doc.text(clip(row.item_name || '—', 45), M + 6, y + 6.5);
 
     // Calendar name
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7);
+    doc.setFontSize(9);
     doc.setTextColor(148, 163, 184);
     doc.text(clip(row.calendar_name || '', 35), M + 6, y + 12.5);
 
@@ -387,7 +387,7 @@ async function exportPDF(rows, summary, adminName) {
     const sLabel = row.status === 'submitted' ? 'In Review' : String(row.status || '—').replace(/_/g, ' ');
     const sColor = { approved: C.green, rejected: C.red, published: [5, 150, 105] }[row.status] || C.slate;
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
+    doc.setFontSize(10);
     doc.setTextColor(...sColor);
     doc.text(sLabel.toUpperCase(), PW - M - 3, y + 6.5, { align: 'right' });
 
@@ -399,7 +399,7 @@ async function exportPDF(rows, summary, adminName) {
       ...(row.days_to_approval != null ? [`${row.days_to_approval}d`] : []),
     ];
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7);
+    doc.setFontSize(9);
     doc.setTextColor(203, 213, 225);
     doc.text(metaParts.join('  |  '), PW - M - 3, y + 12.5, { align: 'right' });
 
@@ -411,7 +411,7 @@ async function exportPDF(rows, summary, adminName) {
       doc.setFillColor(...C.light);
       doc.roundedRect(M + 3, y, CW - 3, 7, 1, 1, 'F');
       doc.setFont('helvetica', 'italic');
-      doc.setFontSize(7);
+      doc.setFontSize(9);
       doc.setTextColor(...C.slate);
       doc.text('No version data available.', M + 7, y + 5);
       y += 10;
@@ -427,12 +427,12 @@ async function exportPDF(rows, summary, adminName) {
         doc.rect(M + 3, y, 2.5, 11, 'F');
 
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(8);
+        doc.setFontSize(10);
         doc.setTextColor(...C.indigo);
         doc.text(`v${v.version_number}`, M + 8, y + 7.5);
 
         doc.setFont('helvetica', 'normal');
-        doc.setFontSize(7);
+        doc.setFontSize(9);
         doc.setTextColor(...C.dark);
         doc.text(`Uploaded by ${clip(v.created_by, 28)}  on  ${fmtDT(v.uploaded_at)}`, M + 16, y + 4.5);
 
@@ -440,7 +440,7 @@ async function exportPDF(rows, summary, adminName) {
         const vsLabel = v.status === 'submitted' ? 'In Review' : String(v.status || '—').replace(/_/g, ' ');
         const vsColor = { approved: C.green, rejected: C.red, submitted: C.amber }[v.status] || C.slate;
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(7);
+        doc.setFontSize(9);
         doc.setTextColor(...vsColor);
         doc.text(vsLabel, PW - M - 4, y + 4.5, { align: 'right' });
 
@@ -450,7 +450,7 @@ async function exportPDF(rows, summary, adminName) {
         if (v.approved_by_customer && v.approved_at) flags.push(`Customer Approved: ${fmtD(v.approved_at)}`);
         if (flags.length > 0) {
           doc.setFont('helvetica', 'normal');
-          doc.setFontSize(6.5);
+          doc.setFontSize(8.5);
           doc.setTextColor(...C.green);
           doc.text(flags.join('  ·  '), PW - M - 4, y + 9.5, { align: 'right' });
         }
@@ -462,7 +462,7 @@ async function exportPDF(rows, summary, adminName) {
           doc.setFillColor(...C.bggreen);
           doc.roundedRect(M + 5, y, CW - 8, 6.5, 1, 1, 'F');
           doc.setFont('helvetica', 'normal');
-          doc.setFontSize(7);
+          doc.setFontSize(9);
           doc.setTextColor(...C.green);
           doc.text(`✓  ${clip(v.approval_notes, 95)}`, M + 8, y + 4.5);
           y += 8;
@@ -472,7 +472,7 @@ async function exportPDF(rows, summary, adminName) {
           doc.setFillColor(...C.bgred);
           doc.roundedRect(M + 5, y, CW - 8, 6.5, 1, 1, 'F');
           doc.setFont('helvetica', 'normal');
-          doc.setFontSize(7);
+          doc.setFontSize(9);
           doc.setTextColor(...C.red);
           doc.text(`✕  ${clip(v.rejection_reason, 95)}`, M + 8, y + 4.5);
           y += 8;
@@ -493,7 +493,7 @@ async function exportPDF(rows, summary, adminName) {
               doc.setFillColor(...C.border);
               doc.roundedRect(tx, y, THUMB, THUMB, 1, 1, 'F');
               doc.setFont('helvetica', 'bold');
-              doc.setFontSize(6);
+              doc.setFontSize(8);
               doc.setTextColor(...C.slate);
               doc.text(img.type === 'video' ? 'VIDEO' : 'IMG', tx + THUMB / 2, y + THUMB / 2 + 2, { align: 'center' });
             } else {
@@ -516,7 +516,7 @@ async function exportPDF(rows, summary, adminName) {
           });
           if (media.length > maxPerRow) {
             doc.setFont('helvetica', 'normal');
-            doc.setFontSize(6.5);
+            doc.setFontSize(8.5);
             doc.setTextColor(...C.slate);
             doc.text(`+${media.length - maxPerRow} more`, tx, y + THUMB / 2 + 2);
           }
@@ -528,7 +528,7 @@ async function exportPDF(rows, summary, adminName) {
         if (comments.length > 0) {
           checkY(10);
           doc.setFont('helvetica', 'bold');
-          doc.setFontSize(7);
+          doc.setFontSize(9);
           doc.setTextColor(...C.slate);
           doc.text(`COMMENTS (${comments.length})`, M + 5, y + 5);
           y += 7;
@@ -543,13 +543,15 @@ async function exportPDF(rows, summary, adminName) {
             doc.roundedRect(M + 5, y, CW - 8, lineH, 1, 1, 'F');
 
             // Author label
-            const authorColor = c.author === 'Admin' ? C.indigo : C.green;
-            doc.setFont('helvetica', 'bold');
-            doc.setFontSize(7);
-            doc.setTextColor(...authorColor);
-            doc.text(`${c.author}:`, M + 8, y + 5);
+            if (c.author && c.author !== 'Unknown') {
+              const authorColor = c.author === 'Admin' ? C.indigo : C.green;
+              doc.setFont('helvetica', 'bold');
+              doc.setFontSize(9);
+              doc.setTextColor(...authorColor);
+              doc.text(`${c.author}:`, M + 8, y + 5);
+            }
 
-            const authorW = doc.getTextWidth(`${c.author}: `);
+            const authorW = (c.author && c.author !== 'Unknown') ? doc.getTextWidth(`${c.author}: `) : 0;
 
             // Comment text
             doc.setFont('helvetica', 'normal');
@@ -560,7 +562,7 @@ async function exportPDF(rows, summary, adminName) {
 
             // Timestamp top-right
             if (c.timestamp) {
-              doc.setFontSize(6);
+              doc.setFontSize(8);
               doc.setTextColor(...C.slate);
               try { doc.text(format(parseISO(c.timestamp), 'dd MMM, h:mm a'), PW - M - 5, y + 4, { align: 'right' }); } catch {}
             }
@@ -572,7 +574,7 @@ async function exportPDF(rows, summary, adminName) {
           doc.setFillColor(...C.light);
           doc.roundedRect(M + 5, y, CW - 8, 6, 1, 1, 'F');
           doc.setFont('helvetica', 'italic');
-          doc.setFontSize(7);
+          doc.setFontSize(9);
           doc.setTextColor(...C.slate);
           doc.text('No comments on this version.', M + 8, y + 4.5);
           y += 8;
@@ -592,7 +594,7 @@ async function exportPDF(rows, summary, adminName) {
     doc.setFillColor(...C.dark);
     doc.rect(0, PH - 10, PW, 10, 'F');
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
+    doc.setFontSize(10);
     doc.setTextColor(148, 163, 184);
     doc.text('Content Approval Timeline Report  •  Airspark', M, PH - 4);
     doc.text(`Page ${p} of ${totalPages}`, PW - M, PH - 4, { align: 'right' });
@@ -1084,9 +1086,11 @@ export default function ContentApprovalReport() {
                                           <div className="space-y-1.5">
                                             {v.comments.map((c, ci) => (
                                               <div key={c.id || ci} className={`flex gap-2 items-start text-xs rounded-lg px-3 py-2 ${c.done ? 'bg-gray-50 opacity-60' : 'bg-amber-50'}`}>
-                                                <span className={`font-semibold flex-shrink-0 ${c.author === 'Admin' ? 'text-indigo-600' : 'text-emerald-600'}`}>
-                                                  {c.author}:
-                                                </span>
+                                                {c.author && c.author !== 'Unknown' && (
+                                                  <span className={`font-semibold flex-shrink-0 ${c.author === 'Admin' ? 'text-indigo-600' : 'text-emerald-600'}`}>
+                                                    {c.author}:
+                                                  </span>
+                                                )}
                                                 <span className={`text-gray-700 flex-1 ${c.done ? 'line-through' : ''}`}>{c.comment}</span>
                                                 {c.timestamp && (
                                                   <span className="text-gray-400 flex-shrink-0 whitespace-nowrap">

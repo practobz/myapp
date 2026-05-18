@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import {
   Download, RefreshCw, Filter, Calendar, CheckCircle, Clock,
   AlertCircle, Loader2, User, FileText, BarChart2, X,
+  ChevronDown, ChevronRight, MessageSquare, GitBranch,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import jsPDF from 'jspdf';
@@ -116,205 +117,437 @@ const C = {
   bgred:  [254, 242, 242],
 };
 
-function exportPDF(rows, summary, adminName) {
+async function exportPDF(rows, summary, adminName) {
+  // ── Pre-load all images as base64 via canvas ─────────────────────────────
+  const imageCache = {};
+  const allImageUrls = [];
+  rows.forEach(row =>
+    (row.versions || []).forEach(v =>
+      (v.images || []).filter(i => i.type !== 'video' && i.url).forEach(i => allImageUrls.push(i.url))
+    )
+  );
+
+  const loadImgBase64 = (url) => new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    const tid = setTimeout(() => resolve(null), 8000);
+    img.onload = () => {
+      clearTimeout(tid);
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width  = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        canvas.getContext('2d').drawImage(img, 0, 0);
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
+      } catch { resolve(null); }
+    };
+    img.onerror = () => { clearTimeout(tid); resolve(null); };
+    img.src = url + (url.includes('?') ? '&' : '?') + '_t=' + Date.now();
+  });
+
+  await Promise.all(allImageUrls.map(async (url) => {
+    const b64 = await loadImgBase64(url);
+    if (b64) imageCache[url] = b64;
+  }));
+
+  // ── Setup ─────────────────────────────────────────────────────────────────
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-  const PW  = doc.internal.pageSize.getWidth();   // 297
-  const PH  = doc.internal.pageSize.getHeight();  // 210
-  const M   = 10;
+  const PW  = doc.internal.pageSize.getWidth();
+  const PH  = doc.internal.pageSize.getHeight();
+  const M   = 12;
   const CW  = PW - 2 * M;
   let y     = 0;
 
   const addPage = () => { doc.addPage(); y = M; };
   const checkY  = (need) => { if (y + need > PH - 14) addPage(); };
+  const clip    = (s, max) => { const str = String(s || '—'); return str.length > max ? str.slice(0, max - 1) + '…' : str; };
+  const fmtD    = (iso) => { if (!iso) return '—'; try { return format(parseISO(iso), 'dd MMM yyyy'); } catch { return '—'; } };
+  const fmtDT   = (iso) => { if (!iso) return '—'; try { return format(parseISO(iso), 'dd MMM yyyy, h:mm a'); } catch { return '—'; } };
 
-  const rr = (x, _y, w, h, fill, stroke) => {
-    doc.setFillColor(...fill);
-    if (stroke) doc.setDrawColor(...stroke);
-    doc.roundedRect(x, _y, w, h, 2, 2, stroke ? 'FD' : 'F');
-  };
-
-  const clip = (s, max) => {
-    const str = String(s || '—');
-    return str.length > max ? str.slice(0, max - 1) + '…' : str;
-  };
-
-  const getPlatformLabel = (p) => {
-    const key = String(Array.isArray(p) ? p[0] : p || '').toLowerCase();
-    return { instagram: 'Instagram', facebook: 'Facebook', linkedin: 'LinkedIn',
-             twitter: 'Twitter/X', youtube: 'YouTube' }[key] || (key || '—');
-  };
-
-  const fmtD = (iso) => {
-    if (!iso) return '—';
-    try { return format(parseISO(iso), 'dd MMM yyyy'); } catch { return '—'; }
-  };
-
-  // ── HEADER ─────────────────────────────────────────────────────────────────
+  // ── PAGE HEADER ───────────────────────────────────────────────────────────
   doc.setFillColor(...C.dark);
-  doc.rect(0, 0, PW, 42, 'F');
+  doc.rect(0, 0, PW, 40, 'F');
   doc.setFillColor(...C.blue);
-  doc.rect(0, 40, PW, 2, 'F');
+  doc.rect(0, 38, PW, 2, 'F');
   doc.setFillColor(...C.indigo);
-  doc.rect(0, 0, 4, 42, 'F');
+  doc.rect(0, 0, 4, 40, 'F');
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(14);
   doc.setTextColor(...C.white);
-  doc.text('CONTENT APPROVAL TIMELINE REPORT', M + 3, 17);
+  doc.text('CONTENT APPROVAL TIMELINE REPORT', M + 4, 16);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(148, 163, 184);
-  doc.text(`Upload Date  →  Customer Approval Date  •  ${rows.length} item${rows.length !== 1 ? 's' : ''}`, M + 3, 29);
+  doc.text(`Versions · Images · Comments  •  ${rows.length} item${rows.length !== 1 ? 's' : ''}`, M + 4, 27);
 
-  doc.setFontSize(8);
   doc.setTextColor(203, 213, 225);
-  doc.text(`Generated: ${format(new Date(), 'dd MMM yyyy, HH:mm')}`, PW - M, 18, { align: 'right' });
-  if (adminName) doc.text(`Admin: ${adminName}`, PW - M, 30, { align: 'right' });
+  doc.text(`Generated: ${format(new Date(), 'dd MMM yyyy, HH:mm')}`, PW - M, 16, { align: 'right' });
+  if (adminName) doc.text(`Admin: ${adminName}`, PW - M, 27, { align: 'right' });
 
-  y = 50;
+  y = 48;
 
-  // ── TABLE HEADER ───────────────────────────────────────────────────────────
+  // ── SUMMARY STATS (4 boxes) ───────────────────────────────────────────────
+  const boxW = (CW - 9) / 4;
+  [
+    { label: 'Total Content',    value: String(summary.total),              color: C.indigo },
+    { label: 'Approved',         value: String(summary.approved),           color: C.green  },
+    { label: 'Pending Approval', value: String(summary.pending_approval),   color: C.amber  },
+    { label: 'Avg Days',         value: summary.avg_days_to_approval !== null ? `${summary.avg_days_to_approval}d` : '—', color: C.blue },
+  ].forEach((b, i) => {
+    const bx = M + i * (boxW + 3);
+    doc.setFillColor(...C.light);
+    doc.roundedRect(bx, y, boxW, 18, 2, 2, 'F');
+    doc.setFillColor(...b.color);
+    doc.rect(bx, y, 3, 18, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(15);
+    doc.setTextColor(...b.color);
+    doc.text(b.value, bx + 8, y + 12);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.setTextColor(...C.slate);
+    doc.text(b.label, bx + 8, y + 17);
+  });
+  y += 26;
+
+  // ── SUMMARY TABLE ─────────────────────────────────────────────────────────
   const COL = {
-    item:     { x: M,        w: 42 },
-    customer: { x: M + 43,   w: 28 },
-    by:       { x: M + 72,   w: 38 },
-    uploaded: { x: M + 111,  w: 22 },
-    approved: { x: M + 134,  w: 22 },
-    days:     { x: M + 157,  w: 11 },
-    status:   { x: M + 169,  w: 21 },
+    item:     { x: M,        w: 42, label: 'CONTENT ITEM' },
+    customer: { x: M + 43,   w: 28, label: 'CUSTOMER'     },
+    by:       { x: M + 72,   w: 38, label: 'UPLOADED BY'  },
+    uploaded: { x: M + 111,  w: 22, label: 'UPLOADED'     },
+    approved: { x: M + 134,  w: 22, label: 'APPROVED'     },
+    days:     { x: M + 157,  w: 11, label: 'DAYS'         },
+    status:   { x: M + 169,  w: 21, label: 'STATUS'       },
   };
 
-  rr(M, y, CW, 10, C.dark, null);
+  checkY(10);
+  doc.setFillColor(...C.dark);
+  doc.roundedRect(M, y, CW, 10, 2, 2, 'F');
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7.5);
   doc.setTextColor(...C.white);
-  Object.entries(COL).forEach(([, c]) => {
-    const labels = { item: 'CONTENT ITEM', customer: 'CUSTOMER',
-      by: 'UPLOADED BY', uploaded: 'UPLOADED', approved: 'APPROVED',
-      days: 'DAYS', status: 'STATUS' };
-    doc.text(labels[Object.keys(COL).find(k => COL[k] === c)], c.x + 2, y + 7);
-  });
+  Object.values(COL).forEach(c => doc.text(c.label, c.x + 2, y + 7));
   y += 10;
 
-  // ── TABLE ROWS ─────────────────────────────────────────────────────────────
   const ROW_H = 14;
   rows.forEach((row, idx) => {
     checkY(ROW_H + 2);
+    doc.setFillColor(...(idx % 2 === 0 ? C.white : C.light));
+    doc.rect(M, y, CW, ROW_H, 'F');
 
-    const bg = idx % 2 === 0 ? C.white : C.light;
-    rr(M, y, CW, ROW_H, bg, null);
-
-    // Thin left accent for approved rows
     if (row.approved_at) {
       doc.setFillColor(...C.green);
       doc.rect(M, y, 1.5, ROW_H, 'F');
     }
 
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    doc.setTextColor(...C.dark);
-
     const textY = y + 6;
 
-    // Content item
+    // Item name
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
+    doc.setTextColor(...C.dark);
     doc.text(clip(row.item_name || row.calendar_name, 24), COL.item.x + 2, textY);
     if (row.calendar_name && row.calendar_name !== row.item_name) {
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(7);
       doc.setTextColor(...C.slate);
       doc.text(clip(row.calendar_name, 24), COL.item.x + 2, y + ROW_H - 2);
-      doc.setFontSize(8);
-      doc.setTextColor(...C.dark);
     }
 
-    // Customer
     doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(...C.dark);
     doc.text(clip(row.customer_name, 15), COL.customer.x + 2, textY);
-
-    // Uploaded by
     doc.text(clip(row.created_by, 22), COL.by.x + 2, textY);
-
-    // Upload date
     doc.text(fmtD(row.uploaded_at), COL.uploaded.x + 2, textY);
     if (row.uploaded_at) {
       try {
-        doc.setFontSize(7);
-        doc.setTextColor(...C.slate);
+        doc.setFontSize(7); doc.setTextColor(...C.slate);
         doc.text(format(parseISO(row.uploaded_at), 'h:mm a'), COL.uploaded.x + 2, textY + 4);
-        doc.setFontSize(8);
-        doc.setTextColor(...C.dark);
+        doc.setFontSize(8); doc.setTextColor(...C.dark);
       } catch { /* ignore */ }
     }
 
-    // Approval date
     if (row.approved_at) {
-      doc.setTextColor(...C.green);
-      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(...C.green); doc.setFont('helvetica', 'bold');
       doc.text(fmtD(row.approved_at), COL.approved.x + 2, textY);
       try {
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(7);
-        doc.setTextColor(...C.slate);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(...C.slate);
         doc.text(format(parseISO(row.approved_at), 'h:mm a'), COL.approved.x + 2, textY + 4);
-        doc.setFontSize(8);
-        doc.setTextColor(...C.dark);
+        doc.setFontSize(8); doc.setTextColor(...C.dark);
       } catch { /* ignore */ }
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(...C.dark);
+      doc.setFont('helvetica', 'normal'); doc.setTextColor(...C.dark);
     } else {
       doc.setTextColor(...C.slate);
       doc.text('Pending', COL.approved.x + 2, textY);
       doc.setTextColor(...C.dark);
     }
 
-    // Days pill
     if (row.days_to_approval !== null && row.days_to_approval !== undefined) {
       const d = row.days_to_approval;
       const pillColor = d <= 1 ? C.green : d <= 3 ? C.amber : C.red;
       const pillBg    = d <= 1 ? C.bggreen : d <= 3 ? C.bgamber : C.bgred;
-      rr(COL.days.x + 1, y + 4, 8, 6, pillBg, null);
-      doc.setFontSize(7.5);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(...pillColor);
-      doc.text(`${d}d`, COL.days.x + 5, y + 8.5, { align: 'center' });
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(...C.dark);
-      doc.setFontSize(8);
+      doc.setFillColor(...pillBg);
+      doc.roundedRect(COL.days.x + 1, y + 4, 9, 6, 1, 1, 'F');
+      doc.setFontSize(7.5); doc.setFont('helvetica', 'bold'); doc.setTextColor(...pillColor);
+      doc.text(`${d}d`, COL.days.x + 5.5, y + 8.5, { align: 'center' });
+      doc.setFont('helvetica', 'normal'); doc.setTextColor(...C.dark); doc.setFontSize(8);
     }
 
-    // Status
-    const statusLabel = row.status === 'submitted' ? 'In Review'
-      : String(row.status || '—').replace(/_/g, ' ');
-    const sColor = {
-      approved: C.green, rejected: C.red, published: [5, 150, 105],
-    }[row.status] || C.slate;
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(...sColor);
-    doc.text(clip(statusLabel, 12), COL.status.x + 2, textY);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(...C.dark);
-    doc.setFontSize(8);
+    const sLabel = row.status === 'submitted' ? 'In Review' : String(row.status || '—').replace(/_/g, ' ');
+    const sClr   = { approved: C.green, rejected: C.red, published: [5, 150, 105] }[row.status] || C.slate;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...sClr);
+    doc.text(clip(sLabel, 12), COL.status.x + 2, textY);
+    doc.setFont('helvetica', 'normal'); doc.setTextColor(...C.dark); doc.setFontSize(8);
 
-    // Row divider
-    doc.setDrawColor(...C.border);
-    doc.setLineWidth(0.1);
+    doc.setDrawColor(...C.border); doc.setLineWidth(0.1);
     doc.line(M, y + ROW_H, M + CW, y + ROW_H);
-
     y += ROW_H;
   });
 
-  // ── FOOTER on each page ────────────────────────────────────────────────────
+  y += 12; // gap before detail section
+
+  // ── SECTION DIVIDER: DETAILED VERSIONS & COMMENTS ────────────────────────
+  checkY(14);
+  doc.setFillColor(...C.dark);
+  doc.roundedRect(M, y, CW, 12, 2, 2, 'F');
+  doc.setFillColor(...C.indigo);
+  doc.rect(M, y, 3, 12, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(...C.white);
+  doc.text('DETAILED VERSIONS & COMMENTS', M + 7, y + 8.5);
+  y += 16;
+
+  // ── CONTENT ITEM CARDS ────────────────────────────────────────────────────
+  rows.forEach((row) => {
+    const versions = row.versions || [];
+
+    checkY(22);
+
+    // Item card header (dark bar)
+    doc.setFillColor(...C.dark);
+    doc.roundedRect(M, y, CW, 15, 2, 2, 'F');
+    doc.setFillColor(...C.indigo);
+    doc.rect(M, y, 3, 15, 'F');
+
+    // Item name
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(...C.white);
+    doc.text(clip(row.item_name || '—', 45), M + 6, y + 6.5);
+
+    // Calendar name
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.setTextColor(148, 163, 184);
+    doc.text(clip(row.calendar_name || '', 35), M + 6, y + 12.5);
+
+    // Status (top-right)
+    const sLabel = row.status === 'submitted' ? 'In Review' : String(row.status || '—').replace(/_/g, ' ');
+    const sColor = { approved: C.green, rejected: C.red, published: [5, 150, 105] }[row.status] || C.slate;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(...sColor);
+    doc.text(sLabel.toUpperCase(), PW - M - 3, y + 6.5, { align: 'right' });
+
+    // Meta: customer | upload | approved | days (bottom-right)
+    const metaParts = [
+      clip(row.customer_name, 22),
+      `Uploaded: ${fmtD(row.uploaded_at)}`,
+      `Approved: ${row.approved_at ? fmtD(row.approved_at) : 'Pending'}`,
+      ...(row.days_to_approval != null ? [`${row.days_to_approval}d`] : []),
+    ];
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.setTextColor(203, 213, 225);
+    doc.text(metaParts.join('  |  '), PW - M - 3, y + 12.5, { align: 'right' });
+
+    y += 17;
+
+    // No versions fallback
+    if (versions.length === 0) {
+      checkY(8);
+      doc.setFillColor(...C.light);
+      doc.roundedRect(M + 3, y, CW - 3, 7, 1, 1, 'F');
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(7);
+      doc.setTextColor(...C.slate);
+      doc.text('No version data available.', M + 7, y + 5);
+      y += 10;
+    } else {
+      versions.forEach((v) => {
+        checkY(14);
+
+        // ── Version header bar ──
+        const vBg = [245, 247, 255];
+        doc.setFillColor(...vBg);
+        doc.roundedRect(M + 3, y, CW - 3, 11, 1, 1, 'F');
+        doc.setFillColor(...C.indigo);
+        doc.rect(M + 3, y, 2.5, 11, 'F');
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8);
+        doc.setTextColor(...C.indigo);
+        doc.text(`v${v.version_number}`, M + 8, y + 7.5);
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7);
+        doc.setTextColor(...C.dark);
+        doc.text(`Uploaded by ${clip(v.created_by, 28)}  on  ${fmtDT(v.uploaded_at)}`, M + 16, y + 4.5);
+
+        // Version status
+        const vsLabel = v.status === 'submitted' ? 'In Review' : String(v.status || '—').replace(/_/g, ' ');
+        const vsColor = { approved: C.green, rejected: C.red, submitted: C.amber }[v.status] || C.slate;
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7);
+        doc.setTextColor(...vsColor);
+        doc.text(vsLabel, PW - M - 4, y + 4.5, { align: 'right' });
+
+        // Approval flags
+        const flags = [];
+        if (v.approved_by_admin) flags.push('Admin Approved');
+        if (v.approved_by_customer && v.approved_at) flags.push(`Customer Approved: ${fmtD(v.approved_at)}`);
+        if (flags.length > 0) {
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(6.5);
+          doc.setTextColor(...C.green);
+          doc.text(flags.join('  ·  '), PW - M - 4, y + 9.5, { align: 'right' });
+        }
+        y += 13;
+
+        // ── Approval / rejection notes ──
+        if (v.approval_notes) {
+          checkY(7);
+          doc.setFillColor(...C.bggreen);
+          doc.roundedRect(M + 5, y, CW - 8, 6.5, 1, 1, 'F');
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(7);
+          doc.setTextColor(...C.green);
+          doc.text(`✓  ${clip(v.approval_notes, 95)}`, M + 8, y + 4.5);
+          y += 8;
+        }
+        if (v.rejection_reason) {
+          checkY(7);
+          doc.setFillColor(...C.bgred);
+          doc.roundedRect(M + 5, y, CW - 8, 6.5, 1, 1, 'F');
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(7);
+          doc.setTextColor(...C.red);
+          doc.text(`✕  ${clip(v.rejection_reason, 95)}`, M + 8, y + 4.5);
+          y += 8;
+        }
+
+        // ── Image thumbnails ──
+        const media = v.images || [];
+        if (media.length > 0) {
+          const THUMB = 24;
+          const GAP   = 3;
+          const maxPerRow = Math.floor((CW - 10) / (THUMB + GAP));
+          const thumbsToShow = media.slice(0, maxPerRow);
+          checkY(THUMB + 6);
+          let tx = M + 5;
+          thumbsToShow.forEach((img) => {
+            if (img.type === 'video' || !imageCache[img.url]) {
+              // Placeholder
+              doc.setFillColor(...C.border);
+              doc.roundedRect(tx, y, THUMB, THUMB, 1, 1, 'F');
+              doc.setFont('helvetica', 'bold');
+              doc.setFontSize(6);
+              doc.setTextColor(...C.slate);
+              doc.text(img.type === 'video' ? 'VIDEO' : 'IMG', tx + THUMB / 2, y + THUMB / 2 + 2, { align: 'center' });
+            } else {
+              try {
+                doc.addImage(imageCache[img.url], 'JPEG', tx, y, THUMB, THUMB);
+                doc.setDrawColor(...C.border);
+                doc.setLineWidth(0.2);
+                doc.roundedRect(tx, y, THUMB, THUMB, 1, 1, 'S');
+              } catch { /* skip broken image */ }
+            }
+            tx += THUMB + GAP;
+          });
+          if (media.length > maxPerRow) {
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(6.5);
+            doc.setTextColor(...C.slate);
+            doc.text(`+${media.length - maxPerRow} more`, tx, y + THUMB / 2 + 2);
+          }
+          y += THUMB + 5;
+        }
+
+        // ── Comments ──
+        const comments = v.comments || [];
+        if (comments.length > 0) {
+          checkY(10);
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(7);
+          doc.setTextColor(...C.slate);
+          doc.text(`COMMENTS (${comments.length})`, M + 5, y + 5);
+          y += 7;
+
+          comments.forEach((c) => {
+            const textBody = `${c.comment}${c.done ? '  ✓ Done' : ''}`;
+            const wrappedLines = doc.splitTextToSize(textBody, CW - 30);
+            const lineH = Math.max(wrappedLines.length * 4 + 6, 9);
+            checkY(lineH + 2);
+
+            doc.setFillColor(...(c.done ? C.light : C.bgamber));
+            doc.roundedRect(M + 5, y, CW - 8, lineH, 1, 1, 'F');
+
+            // Author label
+            const authorColor = c.author === 'Admin' ? C.indigo : C.green;
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(7);
+            doc.setTextColor(...authorColor);
+            doc.text(`${c.author}:`, M + 8, y + 5);
+
+            const authorW = doc.getTextWidth(`${c.author}: `);
+
+            // Comment text
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(...C.dark);
+            wrappedLines.forEach((line, li) => {
+              doc.text(line, M + 8 + authorW + 1, y + 5 + li * 4);
+            });
+
+            // Timestamp top-right
+            if (c.timestamp) {
+              doc.setFontSize(6);
+              doc.setTextColor(...C.slate);
+              try { doc.text(format(parseISO(c.timestamp), 'dd MMM, h:mm a'), PW - M - 5, y + 4, { align: 'right' }); } catch {}
+            }
+
+            y += lineH + 2;
+          });
+        } else {
+          checkY(7);
+          doc.setFillColor(...C.light);
+          doc.roundedRect(M + 5, y, CW - 8, 6, 1, 1, 'F');
+          doc.setFont('helvetica', 'italic');
+          doc.setFontSize(7);
+          doc.setTextColor(...C.slate);
+          doc.text('No comments on this version.', M + 8, y + 4.5);
+          y += 8;
+        }
+
+        y += 3; // gap between versions
+      });
+    }
+
+    y += 7; // gap between items
+  });
+
+  // ── FOOTER on each page ───────────────────────────────────────────────────
   const totalPages = doc.internal.getNumberOfPages();
   for (let p = 1; p <= totalPages; p++) {
     doc.setPage(p);
     doc.setFillColor(...C.dark);
     doc.rect(0, PH - 10, PW, 10, 'F');
-    doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
     doc.setTextColor(148, 163, 184);
     doc.text('Content Approval Timeline Report  •  Airspark', M, PH - 4);
     doc.text(`Page ${p} of ${totalPages}`, PW - M, PH - 4, { align: 'right' });
@@ -329,9 +562,17 @@ export default function ContentApprovalReport() {
   const isSuperAdmin = currentUser?.role === 'superadmin';
 
   const [allRows, setAllRows]             = useState([]);
-  const [assignedCustomerIds, setAssignedCustomerIds] = useState(null); // null = not yet loaded
+  const [assignedCustomerIds, setAssignedCustomerIds] = useState(null);
   const [loading, setLoading]             = useState(false);
   const [error, setError]                 = useState('');
+  const [expandedRows, setExpandedRows]   = useState(new Set());
+  const [pdfGenerating, setPdfGenerating] = useState(false);
+
+  const toggleRow = (id) => setExpandedRows(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
 
   // Filters (all client-side)
   const [selectedCustomer, setSelectedCustomer] = useState('');
@@ -474,12 +715,16 @@ export default function ContentApprovalReport() {
                 CSV
               </button>
               <button
-                onClick={() => exportPDF(filteredRows, summary, currentUser?.name)}
-                disabled={filteredRows.length === 0}
+                onClick={async () => {
+                  setPdfGenerating(true);
+                  try { await exportPDF(filteredRows, summary, currentUser?.name); }
+                  finally { setPdfGenerating(false); }
+                }}
+                disabled={filteredRows.length === 0 || pdfGenerating}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 transition disabled:opacity-50"
               >
-                <Download className="w-4 h-4" />
-                Download PDF
+                {pdfGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                {pdfGenerating ? 'Generating…' : 'Download PDF'}
               </button>
             </div>
           </div>
@@ -610,6 +855,7 @@ export default function ContentApprovalReport() {
                 <table className="w-full text-sm text-left">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-100">
+                      <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider w-8"></th>
                       <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Content Item</th>
                       <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Customer</th>
                       <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Uploaded By</th>
@@ -620,75 +866,205 @@ export default function ContentApprovalReport() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {filteredRows.map((row) => (
-                      <tr key={row.id} className="hover:bg-gray-50/60 transition-colors">
-                        {/* Content item */}
-                        <td className="px-4 py-3">
-                          <div className="font-medium text-gray-900 truncate max-w-[180px]">
-                            {row.item_name || '—'}
-                          </div>
-                          {row.calendar_name && row.calendar_name !== row.item_name && (
-                            <div className="text-xs text-gray-400 truncate max-w-[180px]">{row.calendar_name}</div>
-                          )}
-                        </td>
+                    {filteredRows.map((row) => {
+                      const isExpanded = expandedRows.has(row.assignment_id || row.id);
+                      return (
+                        <React.Fragment key={row.id}>
+                          <tr
+                            className={`transition-colors ${isExpanded ? 'bg-indigo-50/40' : 'hover:bg-gray-50/60'} cursor-pointer`}
+                            onClick={() => toggleRow(row.assignment_id || row.id)}
+                          >
+                            {/* Expand toggle */}
+                            <td className="px-3 py-3 text-gray-400">
+                              {isExpanded
+                                ? <ChevronDown className="w-4 h-4 text-indigo-500" />
+                                : <ChevronRight className="w-4 h-4" />}
+                            </td>
 
-                        {/* Customer */}
-                        <td className="px-4 py-3">
-                          <span className="text-gray-700 truncate max-w-[140px] block">
-                            {row.customer_name || '—'}
-                          </span>
-                        </td>
-
-                        {/* Uploaded by */}
-                        <td className="px-4 py-3 text-gray-500 text-xs truncate max-w-[140px]">
-                          {row.created_by || '—'}
-                        </td>
-
-                        {/* Upload date */}
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <span className="text-gray-700">{fmtDate(row.uploaded_at)}</span>
-                          {row.uploaded_at && (
-                            <div className="text-xs text-gray-400">
-                              {format(parseISO(row.uploaded_at), 'h:mm a')}
-                            </div>
-                          )}
-                        </td>
-
-                        {/* Approval date */}
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          {row.approved_at ? (
-                            <>
-                              <span className="text-green-700 font-medium">{fmtDate(row.approved_at)}</span>
-                              <div className="text-xs text-gray-400">
-                                {format(parseISO(row.approved_at), 'h:mm a')}
+                            {/* Content item */}
+                            <td className="px-4 py-3">
+                              <div className="font-medium text-gray-900 truncate max-w-[180px]">
+                                {row.item_name || '—'}
                               </div>
-                            </>
-                          ) : (
-                            <span className="text-gray-400 italic text-xs">Not yet approved</span>
-                          )}
-                        </td>
+                              {row.calendar_name && row.calendar_name !== row.item_name && (
+                                <div className="text-xs text-gray-400 truncate max-w-[180px]">{row.calendar_name}</div>
+                              )}
+                              {row.version_count > 1 && (
+                                <div className="flex items-center gap-1 mt-0.5">
+                                  <GitBranch className="w-3 h-3 text-indigo-400" />
+                                  <span className="text-xs text-indigo-500 font-medium">{row.version_count} versions</span>
+                                </div>
+                              )}
+                            </td>
 
-                        {/* Days to approval */}
-                        <td className="px-4 py-3 text-center">
-                          {row.days_to_approval !== null && row.days_to_approval !== undefined ? (
-                            <span className={`inline-flex items-center justify-center w-10 h-7 rounded-lg text-xs font-bold ${
-                              row.days_to_approval <= 1 ? 'bg-green-100 text-green-700'
-                              : row.days_to_approval <= 3 ? 'bg-amber-100 text-amber-700'
-                              : 'bg-red-100 text-red-700'
-                            }`}>
-                              {row.days_to_approval}d
-                            </span>
-                          ) : (
-                            <span className="text-gray-300">—</span>
-                          )}
-                        </td>
+                            {/* Customer */}
+                            <td className="px-4 py-3">
+                              <span className="text-gray-700 truncate max-w-[140px] block">
+                                {row.customer_name || '—'}
+                              </span>
+                            </td>
 
-                        {/* Status */}
-                        <td className="px-4 py-3">
-                          <StatusBadge status={row.status} />
-                        </td>
-                      </tr>
-                    ))}
+                            {/* Uploaded by */}
+                            <td className="px-4 py-3 text-gray-500 text-xs truncate max-w-[140px]">
+                              {row.created_by || '—'}
+                            </td>
+
+                            {/* Upload date */}
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <span className="text-gray-700">{fmtDate(row.uploaded_at)}</span>
+                              {row.uploaded_at && (
+                                <div className="text-xs text-gray-400">
+                                  {format(parseISO(row.uploaded_at), 'h:mm a')}
+                                </div>
+                              )}
+                            </td>
+
+                            {/* Approval date */}
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              {row.approved_at ? (
+                                <>
+                                  <span className="text-green-700 font-medium">{fmtDate(row.approved_at)}</span>
+                                  <div className="text-xs text-gray-400">
+                                    {format(parseISO(row.approved_at), 'h:mm a')}
+                                  </div>
+                                </>
+                              ) : (
+                                <span className="text-gray-400 italic text-xs">Not yet approved</span>
+                              )}
+                            </td>
+
+                            {/* Days to approval */}
+                            <td className="px-4 py-3 text-center">
+                              {row.days_to_approval !== null && row.days_to_approval !== undefined ? (
+                                <span className={`inline-flex items-center justify-center w-10 h-7 rounded-lg text-xs font-bold ${
+                                  row.days_to_approval <= 1 ? 'bg-green-100 text-green-700'
+                                  : row.days_to_approval <= 3 ? 'bg-amber-100 text-amber-700'
+                                  : 'bg-red-100 text-red-700'
+                                }`}>
+                                  {row.days_to_approval}d
+                                </span>
+                              ) : (
+                                <span className="text-gray-300">—</span>
+                              )}
+                            </td>
+
+                            {/* Status */}
+                            <td className="px-4 py-3">
+                              <StatusBadge status={row.status} />
+                            </td>
+                          </tr>
+
+                          {/* ── Expanded versions + comments panel ── */}
+                          {isExpanded && (
+                            <tr>
+                              <td colSpan={8} className="bg-indigo-50/30 px-6 pb-4 pt-2">
+                                <div className="space-y-3">
+                                  {(!row.versions || row.versions.length === 0) && (
+                                    <p className="text-xs text-gray-400 italic py-2">No version data — please refresh the report.</p>
+                                  )}
+                                  {(row.versions || []).map((v) => (
+                                    <div key={v.id} className="bg-white rounded-xl border border-gray-200 p-4">
+                                      {/* Version header */}
+                                      <div className="flex flex-wrap items-center gap-3 mb-3">
+                                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold">
+                                          <GitBranch className="w-3 h-3" /> Version {v.version_number}
+                                        </span>
+                                        <span className="text-xs text-gray-500">
+                                          Uploaded by <span className="font-medium text-gray-700">{v.created_by || '—'}</span>
+                                          {v.uploaded_at && (
+                                            <> on <span className="font-medium text-gray-700">{fmtDate(v.uploaded_at)}</span> at {format(parseISO(v.uploaded_at), 'h:mm a')}</>
+                                          )}
+                                        </span>
+                                        <StatusBadge status={v.status} />
+                                        {v.approved_by_admin && (
+                                          <span className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded font-medium">Admin Approved</span>
+                                        )}
+                                        {v.approved_by_customer && v.approved_at && (
+                                          <span className="text-xs bg-green-50 text-green-700 border border-green-200 px-2 py-0.5 rounded font-medium">
+                                            Customer Approved · {fmtDate(v.approved_at)} {format(parseISO(v.approved_at), 'h:mm a')}
+                                          </span>
+                                        )}
+                                      </div>
+
+                                      {/* Approval / rejection notes */}
+                                      {v.approval_notes && (
+                                        <p className="text-xs text-green-700 bg-green-50 rounded-lg px-3 py-1.5 mb-2">
+                                          ✅ <span className="font-medium">Approval note:</span> {v.approval_notes}
+                                        </p>
+                                      )}
+                                      {v.rejection_reason && (
+                                        <p className="text-xs text-red-700 bg-red-50 rounded-lg px-3 py-1.5 mb-2">
+                                          ❌ <span className="font-medium">Rejection reason:</span> {v.rejection_reason}
+                                        </p>
+                                      )}
+
+                                      {/* Image thumbnails */}
+                                      {v.images && v.images.length > 0 && (
+                                        <div className="flex flex-wrap gap-2 mb-3">
+                                          {v.images.map((img, ii) => (
+                                            img.type === 'video' ? (
+                                              <a key={ii} href={img.url} target="_blank" rel="noreferrer" className="block relative w-20 h-20 rounded-lg overflow-hidden border border-gray-200 hover:opacity-80 transition bg-black">
+                                                <video
+                                                  src={img.url}
+                                                  className="w-full h-full object-cover"
+                                                  preload="metadata"
+                                                  muted
+                                                />
+                                                <div className="absolute inset-0 flex items-center justify-center">
+                                                  <div className="w-6 h-6 rounded-full bg-black/60 flex items-center justify-center">
+                                                    <svg className="w-3 h-3 text-white fill-white" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                                                  </div>
+                                                </div>
+                                              </a>
+                                            ) : (
+                                              <a key={ii} href={img.url} target="_blank" rel="noreferrer">
+                                                <img
+                                                  src={img.url}
+                                                  alt={img.name || `media-${ii + 1}`}
+                                                  className="w-20 h-20 object-cover rounded-lg border border-gray-200 hover:opacity-80 transition"
+                                                />
+                                              </a>
+                                            )
+                                          ))}
+                                        </div>
+                                      )}
+
+                                      {/* Comments */}
+                                      {v.comments.length > 0 ? (
+                                        <div className="mt-2">
+                                          <div className="flex items-center gap-1.5 mb-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                                            <MessageSquare className="w-3.5 h-3.5" />
+                                            Comments ({v.comments.length})
+                                          </div>
+                                          <div className="space-y-1.5">
+                                            {v.comments.map((c, ci) => (
+                                              <div key={c.id || ci} className={`flex gap-2 items-start text-xs rounded-lg px-3 py-2 ${c.done ? 'bg-gray-50 opacity-60' : 'bg-amber-50'}`}>
+                                                <span className={`font-semibold flex-shrink-0 ${c.author === 'Admin' ? 'text-indigo-600' : 'text-emerald-600'}`}>
+                                                  {c.author}:
+                                                </span>
+                                                <span className={`text-gray-700 flex-1 ${c.done ? 'line-through' : ''}`}>{c.comment}</span>
+                                                {c.timestamp && (
+                                                  <span className="text-gray-400 flex-shrink-0 whitespace-nowrap">
+                                                    {format(parseISO(c.timestamp), 'dd MMM, h:mm a')}
+                                                  </span>
+                                                )}
+                                                {c.done && <span className="text-green-600 flex-shrink-0 font-medium">✓ Done</span>}
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <p className="text-xs text-gray-400 italic mt-1">No comments on this version.</p>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

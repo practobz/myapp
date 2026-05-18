@@ -117,10 +117,10 @@ const C = {
 };
 
 function exportPDF(rows, summary, adminName) {
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const PW  = doc.internal.pageSize.getWidth();   // 297
   const PH  = doc.internal.pageSize.getHeight();  // 210
-  const M   = 14;
+  const M   = 10;
   const CW  = PW - 2 * M;
   let y     = 0;
 
@@ -158,73 +158,47 @@ function exportPDF(rows, summary, adminName) {
   doc.rect(0, 0, 4, 42, 'F');
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(20);
+  doc.setFontSize(14);
   doc.setTextColor(...C.white);
   doc.text('CONTENT APPROVAL TIMELINE REPORT', M + 3, 17);
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(11);
+  doc.setFontSize(8);
   doc.setTextColor(148, 163, 184);
   doc.text(`Upload Date  →  Customer Approval Date  •  ${rows.length} item${rows.length !== 1 ? 's' : ''}`, M + 3, 29);
 
-  doc.setFontSize(10);
+  doc.setFontSize(8);
   doc.setTextColor(203, 213, 225);
   doc.text(`Generated: ${format(new Date(), 'dd MMM yyyy, HH:mm')}`, PW - M, 18, { align: 'right' });
   if (adminName) doc.text(`Admin: ${adminName}`, PW - M, 30, { align: 'right' });
 
   y = 50;
 
-  // ── SUMMARY STATS ──────────────────────────────────────────────────────────
-  const CARD_W = (CW - 9) / 4;
-  const CARD_H = 28;
-  const statCards = [
-    { label: 'TOTAL CONTENT',   value: summary.total,            color: C.blue,   bg: C.bgblue  },
-    { label: 'APPROVED',        value: summary.approved,         color: C.green,  bg: C.bggreen },
-    { label: 'PENDING APPROVAL',value: summary.pending_approval, color: C.amber,  bg: C.bgamber },
-    { label: 'AVG DAYS TO APPROVE',
-      value: summary.avg_days_to_approval !== null ? `${summary.avg_days_to_approval}d` : '—',
-      color: C.indigo, bg: C.bgindig },
-  ];
-  statCards.forEach((s, i) => {
-    const sx = M + i * (CARD_W + 3);
-    rr(sx, y, CARD_W, CARD_H, s.bg, s.color);
-    doc.setFontSize(19);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(...s.color);
-    doc.text(String(s.value ?? '—'), sx + CARD_W / 2, y + 14, { align: 'center' });
-    doc.setFontSize(8.5);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(...C.slate);
-    doc.text(s.label, sx + CARD_W / 2, y + 24, { align: 'center' });
-  });
-  y += CARD_H + 8;
-
   // ── TABLE HEADER ───────────────────────────────────────────────────────────
   const COL = {
-    item:     { x: M,        w: 52 },
-    customer: { x: M + 53,   w: 35 },
-    platform: { x: M + 89,   w: 24 },
-    by:       { x: M + 114,  w: 38 },
-    uploaded: { x: M + 153,  w: 28 },
-    approved: { x: M + 182,  w: 28 },
-    days:     { x: M + 211,  w: 18 },
-    status:   { x: M + 230,  w: 35 },
+    item:     { x: M,        w: 42 },
+    customer: { x: M + 43,   w: 28 },
+    by:       { x: M + 72,   w: 38 },
+    uploaded: { x: M + 111,  w: 22 },
+    approved: { x: M + 134,  w: 22 },
+    days:     { x: M + 157,  w: 11 },
+    status:   { x: M + 169,  w: 21 },
   };
 
-  rr(M, y, CW, 11, C.dark, null);
+  rr(M, y, CW, 10, C.dark, null);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
+  doc.setFontSize(7.5);
   doc.setTextColor(...C.white);
   Object.entries(COL).forEach(([, c]) => {
-    const labels = { item: 'CONTENT ITEM', customer: 'CUSTOMER', platform: 'PLATFORM',
-      by: 'UPLOADED BY', uploaded: 'UPLOAD DATE', approved: 'APPROVAL DATE',
+    const labels = { item: 'CONTENT ITEM', customer: 'CUSTOMER',
+      by: 'UPLOADED BY', uploaded: 'UPLOADED', approved: 'APPROVED',
       days: 'DAYS', status: 'STATUS' };
-    doc.text(labels[Object.keys(COL).find(k => COL[k] === c)], c.x + 2, y + 7.5);
+    doc.text(labels[Object.keys(COL).find(k => COL[k] === c)], c.x + 2, y + 7);
   });
-  y += 11;
+  y += 10;
 
   // ── TABLE ROWS ─────────────────────────────────────────────────────────────
-  const ROW_H = 11;
+  const ROW_H = 14;
   rows.forEach((row, idx) => {
     checkY(ROW_H + 2);
 
@@ -238,44 +212,56 @@ function exportPDF(rows, summary, adminName) {
     }
 
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9.5);
+    doc.setFontSize(8);
     doc.setTextColor(...C.dark);
 
-    const textY = y + 7;
+    const textY = y + 6;
 
     // Content item
     doc.setFont('helvetica', 'bold');
-    doc.text(clip(row.item_name || row.calendar_name, 30), COL.item.x + 2, textY);
+    doc.setFontSize(8);
+    doc.text(clip(row.item_name || row.calendar_name, 24), COL.item.x + 2, textY);
     if (row.calendar_name && row.calendar_name !== row.item_name) {
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8);
+      doc.setFontSize(7);
       doc.setTextColor(...C.slate);
-      doc.text(clip(row.calendar_name, 30), COL.item.x + 2, y + ROW_H - 1);
-      doc.setFontSize(9.5);
+      doc.text(clip(row.calendar_name, 24), COL.item.x + 2, y + ROW_H - 2);
+      doc.setFontSize(8);
       doc.setTextColor(...C.dark);
     }
 
     // Customer
     doc.setFont('helvetica', 'normal');
-    doc.text(clip(row.customer_name, 22), COL.customer.x + 2, textY);
-
-    // Platform
-    const pLabel = getPlatformLabel(row.platform);
-    doc.setTextColor(...C.indigo);
-    doc.text(pLabel, COL.platform.x + 2, textY);
-    doc.setTextColor(...C.dark);
+    doc.text(clip(row.customer_name, 15), COL.customer.x + 2, textY);
 
     // Uploaded by
-    doc.text(clip(row.created_by, 24), COL.by.x + 2, textY);
+    doc.text(clip(row.created_by, 22), COL.by.x + 2, textY);
 
     // Upload date
     doc.text(fmtD(row.uploaded_at), COL.uploaded.x + 2, textY);
+    if (row.uploaded_at) {
+      try {
+        doc.setFontSize(7);
+        doc.setTextColor(...C.slate);
+        doc.text(format(parseISO(row.uploaded_at), 'h:mm a'), COL.uploaded.x + 2, textY + 4);
+        doc.setFontSize(8);
+        doc.setTextColor(...C.dark);
+      } catch { /* ignore */ }
+    }
 
     // Approval date
     if (row.approved_at) {
       doc.setTextColor(...C.green);
       doc.setFont('helvetica', 'bold');
       doc.text(fmtD(row.approved_at), COL.approved.x + 2, textY);
+      try {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7);
+        doc.setTextColor(...C.slate);
+        doc.text(format(parseISO(row.approved_at), 'h:mm a'), COL.approved.x + 2, textY + 4);
+        doc.setFontSize(8);
+        doc.setTextColor(...C.dark);
+      } catch { /* ignore */ }
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(...C.dark);
     } else {
@@ -289,14 +275,14 @@ function exportPDF(rows, summary, adminName) {
       const d = row.days_to_approval;
       const pillColor = d <= 1 ? C.green : d <= 3 ? C.amber : C.red;
       const pillBg    = d <= 1 ? C.bggreen : d <= 3 ? C.bgamber : C.bgred;
-      rr(COL.days.x + 1, y + 2.5, 15, 6, pillBg, null);
-      doc.setFontSize(9);
+      rr(COL.days.x + 1, y + 4, 8, 6, pillBg, null);
+      doc.setFontSize(7.5);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(...pillColor);
-      doc.text(`${d}d`, COL.days.x + 8.5, y + 7, { align: 'center' });
+      doc.text(`${d}d`, COL.days.x + 5, y + 8.5, { align: 'center' });
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(...C.dark);
-      doc.setFontSize(9.5);
+      doc.setFontSize(8);
     }
 
     // Status
@@ -305,13 +291,13 @@ function exportPDF(rows, summary, adminName) {
     const sColor = {
       approved: C.green, rejected: C.red, published: [5, 150, 105],
     }[row.status] || C.slate;
-    doc.setTextColor(...sColor);
+    doc.setFontSize(8);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9);
-    doc.text(clip(statusLabel, 18), COL.status.x + 2, textY);
+    doc.setTextColor(...sColor);
+    doc.text(clip(statusLabel, 12), COL.status.x + 2, textY);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(...C.dark);
-    doc.setFontSize(9.5);
+    doc.setFontSize(8);
 
     // Row divider
     doc.setDrawColor(...C.border);
@@ -626,7 +612,6 @@ export default function ContentApprovalReport() {
                     <tr className="bg-gray-50 border-b border-gray-100">
                       <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Content Item</th>
                       <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Customer</th>
-                      <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Platform</th>
                       <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Uploaded By</th>
                       <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Upload Date</th>
                       <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Approval Date</th>
@@ -652,11 +637,6 @@ export default function ContentApprovalReport() {
                           <span className="text-gray-700 truncate max-w-[140px] block">
                             {row.customer_name || '—'}
                           </span>
-                        </td>
-
-                        {/* Platform */}
-                        <td className="px-4 py-3">
-                          <PlatformPill platform={row.platform} />
                         </td>
 
                         {/* Uploaded by */}

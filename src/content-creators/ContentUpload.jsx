@@ -674,25 +674,35 @@ function ContentUpload() {
       // Direct browser→GCS signed URL uploads require bucket-level CORS config.
       // Streaming through the backend avoids that requirement entirely.
       if (fileSizeMB >= 10) {
-        console.log(`📤 Using stream upload for large file: ${fileObj.name} (${fileSizeMB.toFixed(2)} MB)`);
+        console.log(`📤 Using signed-URL upload for large file: ${fileObj.name} (${fileSizeMB.toFixed(2)} MB)`);
 
-        const uploadResponse = await fetch(
-          `${process.env.REACT_APP_API_URL}/api/gcs/stream-upload?filename=${encodeURIComponent(fileObj.name)}&contentType=${encodeURIComponent(fileObj.file.type)}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': fileObj.file.type },
-            body: fileObj.file,
-          }
-        );
+        // Step 1: Get a signed URL from the backend
+        const signedUrlResponse = await fetch(`${process.env.REACT_APP_API_URL}/api/gcs/signed-url`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename: fileObj.name, contentType: fileObj.file.type }),
+        });
 
-        if (!uploadResponse.ok) {
-          const errorData = await uploadResponse.json().catch(() => ({}));
-          throw new Error(`Stream upload failed: ${errorData.error || uploadResponse.statusText}`);
+        if (!signedUrlResponse.ok) {
+          const errorData = await signedUrlResponse.json().catch(() => ({}));
+          throw new Error(`Failed to get signed URL: ${errorData.error || signedUrlResponse.statusText}`);
         }
 
-        const responseData = await uploadResponse.json();
-        publicUrl = responseData.publicUrl;
-        console.log(`✅ Successfully uploaded ${fileObj.name} via stream upload`);
+        const { signedUrl, publicUrl: signedPublicUrl } = await signedUrlResponse.json();
+
+        // Step 2: PUT the file directly to GCS using the signed URL
+        const gcsUploadResponse = await fetch(signedUrl, {
+          method: 'PUT',
+          headers: { 'Content-Type': fileObj.file.type },
+          body: fileObj.file,
+        });
+
+        if (!gcsUploadResponse.ok) {
+          throw new Error(`GCS upload failed: ${gcsUploadResponse.statusText}`);
+        }
+
+        publicUrl = signedPublicUrl;
+        console.log(`✅ Successfully uploaded ${fileObj.name} via signed URL`);
 
       } else {
         // Use base64 upload for small files (<10MB)

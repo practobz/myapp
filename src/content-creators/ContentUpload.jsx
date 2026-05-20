@@ -653,54 +653,102 @@ function ContentUpload() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  // Upload single file using base64 upload through backend API
+  // Upload single file - uses streaming upload for large files (>=10MB), base64 for small files
   const uploadFileToGCS = async (fileObj) => {
     try {
-      console.log(`📤 Starting upload for ${fileObj.name} (${formatFileSize(fileObj.size)})`);
+      const fileSizeMB = fileObj.file.size / (1024 * 1024);
+      console.log(`📤 Starting upload for ${fileObj.name} (${formatFileSize(fileObj.size)})`);      
+      // Validate file object
+      if (!fileObj.file || !fileObj.file.size || fileObj.file.size === 0) {
+        throw new Error(`Invalid file: ${fileObj.name} has no content or is corrupted`);
+      }
       
       // Update file status to uploading
       setUploadedFiles(prev => 
         prev.map(f => f.id === fileObj.id ? { ...f, uploading: true, error: null } : f)
       );
 
-      // Convert file to base64
-      const base64Data = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const result = reader.result;
-          // Remove the data URL prefix (e.g., "data:image/png;base64,")
-          const base64 = result.split(',')[1];
-          resolve(base64);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(fileObj.file);
-      });
+      let publicUrl;
 
-      // Upload using base64 through backend API
-      const uploadResponse = await fetch(`${process.env.REACT_APP_API_URL}/api/gcs/upload-base64`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      // Use streaming upload (proxied via backend) for large files (>=10MB).
+      // Direct browser→GCS signed URL uploads require bucket-level CORS config.
+      // Streaming through the backend avoids that requirement entirely.
+      if (fileSizeMB >= 10) {
+        console.log(`📤 Using stream upload for large file: ${fileObj.name} (${fileSizeMB.toFixed(2)} MB)`);
+
+        const uploadResponse = await fetch(
+          `${process.env.REACT_APP_API_URL}/api/gcs/stream-upload?filename=${encodeURIComponent(fileObj.name)}&contentType=${encodeURIComponent(fileObj.file.type)}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': fileObj.file.type },
+            body: fileObj.file,
+          }
+        );
+
+        if (!uploadResponse.ok) {
+          const errorData = await uploadResponse.json().catch(() => ({}));
+          throw new Error(`Stream upload failed: ${errorData.error || uploadResponse.statusText}`);
+        }
+
+        const responseData = await uploadResponse.json();
+        publicUrl = responseData.publicUrl;
+        console.log(`✅ Successfully uploaded ${fileObj.name} via stream upload`);
+
+      } else {
+        // Use base64 upload for small files (<10MB)
+        console.log(`📤 Using base64 upload for small file: ${fileObj.name} (${fileSizeMB.toFixed(2)} MB)`);
+
+        const base64Data = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const result = reader.result;
+            if (!result || typeof result !== 'string') {
+              reject(new Error('Failed to read file as base64'));
+              return;
+            }
+            const base64 = result.split(',')[1];
+            if (!base64 || base64.length === 0) {
+              reject(new Error('Base64 conversion resulted in empty data'));
+              return;
+            }
+            resolve(base64);
+          };
+          reader.onerror = () => reject(new Error('FileReader error'));
+          reader.readAsDataURL(fileObj.file);
+        });
+
+        const payload = {
           filename: fileObj.name,
           contentType: fileObj.file.type,
           base64Data: base64Data
-        }),
-      });
+        };
 
-      if (!uploadResponse.ok) {
-        const errorData = await uploadResponse.json();
-        throw new Error(`Upload failed: ${errorData.error || uploadResponse.statusText}`);
+        if (!payload.filename || !payload.contentType || !payload.base64Data) {
+          throw new Error(`Invalid payload: missing ${!payload.filename ? 'filename' : !payload.contentType ? 'contentType' : 'base64Data'}`);
+        }
+
+        const uploadResponse = await fetch(`${process.env.REACT_APP_API_URL}/api/gcs/upload-base64`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        });
+
+        if (!uploadResponse.ok) {
+          const errorData = await uploadResponse.json();
+          throw new Error(`Upload failed: ${errorData.error || uploadResponse.statusText}`);
+        }
+
+        const responseData = await uploadResponse.json();
+        publicUrl = responseData.publicUrl;
+
+        console.log(`✅ Successfully uploaded ${fileObj.name} via base64`);
       }
-
-      const { publicUrl } = await uploadResponse.json();
 
       if (!publicUrl) {
         throw new Error('No public URL returned from upload');
       }
-
-      console.log(`✅ Successfully uploaded ${fileObj.name} via base64`);
 
       // Update file status to uploaded
       setUploadedFiles(prev => 
@@ -839,7 +887,7 @@ function ContentUpload() {
         due_date: assignment.dueDate,
         status: 'submitted',
         // Content creators submit for internal review; customers/admins upload directly for customer review
-        submission_stage: 'customer',
+        submission_stage: getUserRole() === 'content_creator' ? 'internal' : 'customer',
         item_index: parseInt(itemIndex, 10),
         created_at: new Date().toISOString(),
         type: 'submission',
@@ -893,24 +941,11 @@ function ContentUpload() {
       const result = await response.json();
       console.log('✅ Content submission successful:', result);
 
-      // Automatically send to customer so content appears immediately in ContentReview and ContentCalendar
-      const newSubmissionId = result._id || result.id;
-      if (newSubmissionId) {
-        try {
-          await fetch(
-            `${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(newSubmissionId)}/send-to-customer`,
-            { method: 'PATCH', headers: { 'Content-Type': 'application/json' } }
-          );
-        } catch (e) {
-          console.warn('send-to-customer step failed (non-critical):', e);
-        }
-      }
-
       const adminNames = selectedAdmins.map(a => a.name).join(', ');
       const adminMsg = selectedAdmins.length > 0
         ? `\n\nNotified admin(s): ${adminNames}`
         : '';
-      alert(`Content submitted successfully!${adminMsg}\n\nThe customer can now review your submission.`);
+      alert(`Content submitted for admin review!${adminMsg}\n\nThe admin will review your submission and notify you with feedback or approval.`);
       navigate('/content-creator/assignments');
     } catch (err) {
       console.error('❌ Upload error:', err);

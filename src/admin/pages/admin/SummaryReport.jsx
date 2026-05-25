@@ -142,7 +142,6 @@ const VersionRow = ({ version }) => {
         )}
       </div>
 
-      {/* Per-version media thumbnails — 3-column grid */}
       {showCount > 0 && (
         <div className="grid grid-cols-3 gap-1.5 pl-7">
           {mediaUrls.slice(0, showCount).map((url, i) =>
@@ -207,7 +206,6 @@ const PlatformMetricsSection = ({ post }) => {
 
   const m = post.metrics || {};
 
-  // ── Instagram ────────────────────────────────────────────────────────────
   if (platform === 'instagram') {
     const cells = [
       { label: 'Likes',        value: m.likes      },
@@ -244,7 +242,6 @@ const PlatformMetricsSection = ({ post }) => {
     );
   }
 
-  // ── Facebook ─────────────────────────────────────────────────────────────
   if (platform === 'facebook') {
     const mainCells = [
       { label: 'Likes',       value: m.likes       },
@@ -292,7 +289,6 @@ const PlatformMetricsSection = ({ post }) => {
     );
   }
 
-  // ── LinkedIn ─────────────────────────────────────────────────────────────
   if (platform === 'linkedin') {
     const cells = [
       { label: 'Likes',            value: m.likeCount              ?? m.likes    },
@@ -322,7 +318,6 @@ const PlatformMetricsSection = ({ post }) => {
     );
   }
 
-  // ── Generic fallback ─────────────────────────────────────────────────────
   const genCells = [
     { label: 'Likes',       value: m.likes       },
     { label: 'Comments',    value: m.comments    },
@@ -347,14 +342,10 @@ const PlatformMetricsSection = ({ post }) => {
   );
 };
 
-// ── Convert Instagram numeric media ID → shortcode (no API needed) ──────────
-// Instagram encodes its media IDs in base64url. The shortcode is the base64url
-// representation of the numeric ID, which gives a direct permalink.
-// postType: 'reel' → /reel/SHORTCODE/, 'story' → null (stories expire), else → /p/SHORTCODE/
 const instagramMediaIdToUrl = (mediaId, postType) => {
   if (!mediaId) return null;
   const type = (postType || '').toLowerCase();
-  if (type === 'story') return null; // stories have no permanent public permalink
+  if (type === 'story') return null;
   try {
     const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
     let shortcode = '';
@@ -371,7 +362,6 @@ const instagramMediaIdToUrl = (mediaId, postType) => {
   }
 };
 
-// ── Build platform redirect URLs from a published post (mirrors CustomerDetailsView) ──
 const getPostLinks = (post) => {
   const links = [];
   if (!post) return links;
@@ -384,8 +374,6 @@ const getPostLinks = (post) => {
     if (!links.find(l => l.url === fbUrl)) links.push({ url: fbUrl, label: 'Facebook', platform: 'facebook' });
   }
   if (post.instagramPostId) {
-    // Prefer the stored permalink; fall back to deriving it from the media ID
-    // Pass postType so Reels get /reel/ path and Stories are skipped
     const igUrl = post.instagramPermalink || instagramMediaIdToUrl(post.instagramPostId, post.postType);
     if (igUrl && !links.find(l => l.url === igUrl))
       links.push({ url: igUrl, label: 'Instagram', platform: 'instagram' });
@@ -415,15 +403,12 @@ const ContentItemCard = ({ assignment, scheduledPosts, calendarName, isExpanded,
     ].filter(p => p && typeof p === 'string').map(p => p.toLowerCase().trim())
   )];
 
-  // Published posts: either from live metrics cache or direct scheduledPosts match
   const publishedPosts = liveMetrics?.posts?.length > 0
     ? liveMetrics.posts
     : scheduledPosts.filter(p => p.status === 'published' || p.publishedAt);
 
   const metricsLoading = liveMetrics?.loading === true;
 
-  // Posts to show in metrics panel: prefer live-enriched posts, fall back to all matched posts
-  // Deduplicate by _id as final safety net
   const metricsPosts = (() => {
     const raw = liveMetrics?.posts?.length > 0
       ? liveMetrics.posts
@@ -439,7 +424,6 @@ const ContentItemCard = ({ assignment, scheduledPosts, calendarName, isExpanded,
 
   return (
     <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
-      {/* Header */}
       <div className="flex items-start gap-4 p-5">
         <Thumbnail url={assignment.thumbnail} />
         <div className="flex-1 min-w-0">
@@ -464,7 +448,6 @@ const ContentItemCard = ({ assignment, scheduledPosts, calendarName, isExpanded,
             </div>
             <span className="font-medium text-gray-700">{assignment.creatorName}</span>
           </div>
-          {/* Published indicator + per-platform links */}
           {publishedPosts.length > 0 && (
             <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-semibold">
@@ -476,7 +459,6 @@ const ContentItemCard = ({ assignment, scheduledPosts, calendarName, isExpanded,
                   {new Date(publishedPosts[0].publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                 </span>
               )}
-              {/* Direct links to each platform post */}
               {publishedPosts.flatMap(getPostLinks).filter((l, i, arr) => arr.findIndex(x => (x.platform ?? x.label) === (l.platform ?? l.label)) === i).map((link, li) => (
                 <a
                   key={li}
@@ -502,7 +484,6 @@ const ContentItemCard = ({ assignment, scheduledPosts, calendarName, isExpanded,
         </div>
       </div>
 
-      {/* Collapsed state */}
       {!isExpanded && (
         <div className="px-5 pb-4 border-t border-gray-50 pt-3 space-y-2">
           {assignment.caption && (
@@ -526,11 +507,9 @@ const ContentItemCard = ({ assignment, scheduledPosts, calendarName, isExpanded,
         </div>
       )}
 
-      {/* Expanded body */}
       {isExpanded && (
         <div className="border-t border-gray-100">
           <div className="grid grid-cols-1 md:grid-cols-2">
-            {/* Versions panel */}
             <div className="p-5 md:border-r border-gray-100">
               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-1.5">
                 <Layers className="w-3.5 h-3.5" />
@@ -543,7 +522,6 @@ const ContentItemCard = ({ assignment, scheduledPosts, calendarName, isExpanded,
               </div>
             </div>
 
-            {/* Metrics panel */}
             <div className="p-5 border-t md:border-t-0 border-gray-100">
               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-1.5">
                 <BarChart2 className="w-3.5 h-3.5" />
@@ -566,7 +544,6 @@ const ContentItemCard = ({ assignment, scheduledPosts, calendarName, isExpanded,
                     const postLinks = getPostLinks(post);
                     return (
                       <div key={post._id || i}>
-                        {/* Published timestamp + direct link */}
                         {(post.publishedAt || postLinks.length > 0) && (
                           <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                             {post.publishedAt && (
@@ -600,7 +577,6 @@ const ContentItemCard = ({ assignment, scheduledPosts, calendarName, isExpanded,
             </div>
           </div>
 
-          {/* Collapse button */}
           <div className="px-5 py-3 border-t border-gray-100">
             <button onClick={onToggle}
               className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-blue-600 font-medium transition-colors">
@@ -618,7 +594,6 @@ const ContentItemCard = ({ assignment, scheduledPosts, calendarName, isExpanded,
 export default function SummaryReport() {
   const { currentUser } = useAuth();
 
-  // Filters
   const [customers, setCustomers] = useState([]);
   const [selectedCustomer, setSelectedCustomer] = useState('');
   const [fromDate, setFromDate] = useState('');
@@ -628,7 +603,6 @@ export default function SummaryReport() {
   const [contentItems, setContentItems] = useState([]);
   const [selectedItem, setSelectedItem] = useState('');
 
-  // Report state
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
@@ -640,25 +614,19 @@ export default function SummaryReport() {
   const [searchCreator, setSearchCreator] = useState('');
   const [showCreatorTable, setShowCreatorTable] = useState(false);
 
-  // Live scheduled posts fetched directly from the posts API (same source as CustomerDetailsView)
   const [liveScheduledPosts, setLiveScheduledPosts] = useState([]);
-  // Per-assignment live metrics cache: assignmentId -> { loading, posts }
   const [liveMetricsCache, setLiveMetricsCache] = useState({});
   const fetchedMetricsRef = useRef(new Set());
 
   const reportRef = useRef(null);
 
-  // ── Load customers on mount ───────────────────────────────────
   useEffect(() => {
     const adminId = currentUser?._id || currentUser?.id;
     if (!adminId) return;
-
-    // Use assigned customers for this admin
     fetch(`${API_URL}/admin/assigned-customers?adminId=${adminId}`)
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(data => setCustomers(Array.isArray(data) ? data : []))
       .catch(() => {
-        // Fallback: fetch all customers
         fetch(`${API_URL}/api/customers`)
           .then(r => r.ok ? r.json() : Promise.reject())
           .then(data => setCustomers(Array.isArray(data) ? data : []))
@@ -666,38 +634,30 @@ export default function SummaryReport() {
       });
   }, [currentUser]);
 
-  // ── Load calendars when customer changes ─────────────────────
   useEffect(() => {
     setCalendars([]);
     setSelectedCalendar('');
     setContentItems([]);
     setSelectedItem('');
     if (!selectedCustomer) return;
-
     fetch(`${API_URL}/calendars/customer/${selectedCustomer}`)
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(data => setCalendars(Array.isArray(data) ? data : []))
       .catch(() => setCalendars([]));
   }, [selectedCustomer]);
 
-  // ── Load content items when calendar changes ──────────────────
   useEffect(() => {
     setContentItems([]);
     setSelectedItem('');
     if (!selectedCalendar) return;
-
     fetch(`${API_URL}/api/admin/summary-report/items?calendarId=${selectedCalendar}`)
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(data => setContentItems(Array.isArray(data) ? data : []))
       .catch(() => setContentItems([]));
   }, [selectedCalendar]);
 
-  // ── Generate report ───────────────────────────────────────────
   const handleGenerate = useCallback(async () => {
-    if (!selectedCustomer) {
-      setError('Please select a customer.');
-      return;
-    }
+    if (!selectedCustomer) { setError('Please select a customer.'); return; }
     setError('');
     setLoading(true);
     setReport(null);
@@ -708,8 +668,6 @@ export default function SummaryReport() {
       if (selectedCalendar) params.set('calendarId', selectedCalendar);
       if (selectedItem)     params.set('itemId', selectedItem);
 
-      // Fetch report and live posts in parallel to avoid the race condition where
-      // setReport fires the auto-fetch useEffect before liveScheduledPosts is ready.
       const [reportRes, postsRes] = await Promise.all([
         fetch(`${API_URL}/api/admin/summary-report?${params.toString()}`),
         fetch(`${API_URL}/api/scheduled-posts?customerId=${encodeURIComponent(selectedCustomer)}`).catch(() => null),
@@ -720,13 +678,8 @@ export default function SummaryReport() {
         postsRes?.ok ? postsRes.json().catch(() => null) : Promise.resolve(null),
       ]);
       const postsData = Array.isArray(postsDataRaw) ? postsDataRaw : [];
-
-      // Reset cache BEFORE updating state so the useEffect that fires on the
-      // combined render sees a clean slate and fetches all assignments.
       setLiveMetricsCache({});
       fetchedMetricsRef.current = new Set();
-      // Set both in the same synchronous block — React 18 batches them into
-      // a single render, so postsByItem is fully populated on the first fire.
       setReport(data);
       setLiveScheduledPosts(postsData);
     } catch (err) {
@@ -737,7 +690,7 @@ export default function SummaryReport() {
     }
   }, [selectedCustomer, fromDate, toDate, selectedCalendar, selectedItem]);
 
-  // ── Download PDF ──────────────────────────────────────────────
+  // ── Download PDF ─────────────────────────────────────────────────────────────
   const handleDownloadPDF = useCallback(async () => {
     if (!report) return;
     setPdfLoading(true);
@@ -745,12 +698,11 @@ export default function SummaryReport() {
       const customerObj = customers.find(c => (c._id || c.id) === selectedCustomer);
       const customerName = customerObj?.businessName || customerObj?.name || 'Customer';
 
-      // ── Resolve calendar data ─────────────────────────────────
       const calendarObj = report.calendar ||
         calendars.find(c => (c._id || c.id) === selectedCalendar) || null;
       const calendarName = (calendarObj?.name || '').replace(/[\x00-\x1F\x7F]/g, ' ').trim();
 
-      // ── Pre-load thumbnails via backend proxy ─────────────────
+      // Pre-load thumbnails via backend proxy
       const thumbCache = {};
       const API = process.env.REACT_APP_API_URL || 'http://localhost:3001';
       const VIDEO_EXTS = /\.(mp4|webm|mov|avi|mkv|m4v|ogv)(\?.*)?$/i;
@@ -769,7 +721,6 @@ export default function SummaryReport() {
         const urls = [];
         if (a.thumbnail) urls.push(a.thumbnail);
         if (Array.isArray(a.thumbnails)) urls.push(...a.thumbnails.filter(Boolean));
-        // Also scan version media for image files
         if (Array.isArray(a.versions)) {
           for (const v of a.versions) {
             for (const m of (v.media || [])) {
@@ -782,49 +733,51 @@ export default function SummaryReport() {
       });
       await Promise.all(allThumbUrls.map(tryLoadImg));
 
-      // ── jsPDF setup ───────────────────────────────────────────
+      // ── jsPDF setup ───────────────────────────────────────────────────────
       const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-      const PW = 210, PH = 297, M = 16, CW = PW - M * 2;
+      const PW = 210, PH = 297, M = 18, CW = PW - M * 2;
       let y = 0;
 
-      // ── Luxury editorial palette ──────────────────────────────
+      // ── Professional light palette ────────────────────────────────────────
+      // Pure white page, cool-gray borders, slate text, muted steel accents
       const C = {
-        pageBg:       [249, 247, 244],  // #F9F7F4
-        tileBg:       [245, 243, 239],  // #F5F3EF
-        border:       [224, 221, 216],  // #E0DDD8
-        primary:      [26,  26,  24],   // #1A1A18
-        muted:        [154, 152, 145],  // #9A9891
-        // Platform badge tints
-        igBg:         [243, 232, 255],
-        igText:       [107,  33, 168],
-        fbBg:         [219, 234, 254],
-        fbText:       [29,   78, 216],
-        ytBg:         [254, 226, 226],
-        ytText:       [185,  28,  28],
-        liBg:         [204, 251, 241],
-        liText:       [15,  118, 110],
-        twBg:         [243, 244, 246],
-        twText:       [75,   85,  99],
-        // Status badge tints
-        approvedBg:   [220, 252, 231],
-        approvedText: [22,  163,  74],
-        reviewBg:     [254, 243, 199],
-        reviewText:   [180,  83,   9],
-        rejectedBg:   [254, 226, 226],
-        rejectedText: [185,  28,  28],
-        publishedBg:  [220, 252, 231],
-        publishedText:[22,  163,  74],
+        pageBg:        [255, 255, 255],   // pure white
+        cardBg:        [252, 253, 254],   // off-white card background
+        sectionBg:     [247, 249, 251],   // very light blue-gray for tiles
+        border:        [218, 224, 230],   // cool gray border
+        borderLight:   [232, 237, 242],   // lighter divider
+        // Text
+        ink:           [30,  36,  44],    // near-black for headings
+        body:          [60,  72,  84],    // dark slate for body text
+        muted:         [120, 134, 150],   // steel gray for labels
+        faint:         [165, 178, 192],   // faint for secondary meta
+        // Accent — single muted slate-blue
+        accent:        [59,  100, 158],   // professional blue
+        accentLight:   [235, 242, 252],   // light accent fill
+        // Status — all desaturated/muted
+        publishedBg:   [236, 252, 243],  publishedText: [30,  126,  82],
+        approvedBg:    [240, 253, 244],  approvedText:  [34,  120,  78],
+        reviewBg:      [255, 251, 235],  reviewText:    [160,  98,  26],
+        revisionBg:    [255, 247, 237],  revisionText:  [170,  90,  30],
+        rejectedBg:    [255, 241, 241],  rejectedText:  [178,  50,  50],
+        pendingBg:     [246, 248, 250],  pendingText:   [120, 134, 150],
+        // Platform badge — all light-tinted, low saturation
+        igBg:          [253, 242, 248],  igText:  [160,  60, 110],
+        fbBg:          [240, 246, 255],  fbText:  [40,   90, 170],
+        liBg:          [237, 248, 255],  liText:  [30,   90, 150],
+        ytBg:          [255, 242, 242],  ytText:  [170,  40,  40],
+        twBg:          [245, 248, 251],  twText:  [80,  100, 120],
+        // Metric accent
+        engGreen:      [30,  126,  82],
       };
 
-      const sf = a => doc.setFillColor(...a);
-      const ss = a => doc.setDrawColor(...a);
-      const sc = a => doc.setTextColor(...a);
-      // Serif (Times → Cormorant Garamond stand-in for headings & numbers)
-      const serif = (style = 'normal', sz = 10) => { doc.setFont('times', style); doc.setFontSize(sz); };
-      // Sans (Helvetica → DM Sans stand-in for body & labels)
-      const sans  = (style = 'normal', sz = 10) => { doc.setFont('helvetica', style); doc.setFontSize(sz); };
-      // 0.5 pt hairline border
-      const hairline = () => doc.setLineWidth(0.176);
+      const sf  = a => doc.setFillColor(...a);
+      const ss  = a => doc.setDrawColor(...a);
+      const sc  = a => doc.setTextColor(...a);
+      const sans   = (style = 'normal', sz = 10) => { doc.setFont('helvetica', style); doc.setFontSize(sz); };
+      const serif  = (style = 'normal', sz = 10) => { doc.setFont('times', style);     doc.setFontSize(sz); };
+      const hairline = () => doc.setLineWidth(0.18);
+      const thinLine = () => doc.setLineWidth(0.35);
 
       const sanitize = str => {
         if (!str) return '';
@@ -851,20 +804,20 @@ export default function SummaryReport() {
         return new Date(d).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
       };
 
-      // ── Status + platform badge helpers ───────────────────────
+      // ── Badge helpers ─────────────────────────────────────────────────────
       const getStatusStyle = status => {
         const s = (status || '').toLowerCase();
         return ({
-          published:          { bg: C.publishedBg,   tc: C.publishedText,  label: 'Published'  },
-          approved:           { bg: C.approvedBg,    tc: C.approvedText,   label: 'Approved'   },
-          rejected:           { bg: C.rejectedBg,    tc: C.rejectedText,   label: 'Rejected'   },
-          submitted:          { bg: C.reviewBg,      tc: C.reviewText,     label: 'In Review'  },
-          in_review:          { bg: C.reviewBg,      tc: C.reviewText,     label: 'In Review'  },
-          under_review:       { bg: C.reviewBg,      tc: C.reviewText,     label: 'In Review'  },
-          revision_requested: { bg: C.reviewBg,      tc: C.reviewText,     label: 'Revision'   },
-          pending:            { bg: C.tileBg,        tc: C.muted,          label: 'Pending'    },
-          publishing:         { bg: C.fbBg,          tc: C.fbText,         label: 'Publishing' },
-        })[s] || { bg: C.tileBg, tc: C.muted, label: (status || '—').replace(/_/g, ' ') };
+          published:          { bg: C.publishedBg,  tc: C.publishedText,  label: 'Published'  },
+          approved:           { bg: C.approvedBg,   tc: C.approvedText,   label: 'Approved'   },
+          rejected:           { bg: C.rejectedBg,   tc: C.rejectedText,   label: 'Rejected'   },
+          submitted:          { bg: C.reviewBg,     tc: C.reviewText,     label: 'In Review'  },
+          in_review:          { bg: C.reviewBg,     tc: C.reviewText,     label: 'In Review'  },
+          under_review:       { bg: C.reviewBg,     tc: C.reviewText,     label: 'In Review'  },
+          revision_requested: { bg: C.revisionBg,   tc: C.revisionText,   label: 'Revision'   },
+          pending:            { bg: C.pendingBg,    tc: C.pendingText,    label: 'Pending'    },
+          publishing:         { bg: C.accentLight,  tc: C.accent,         label: 'Publishing' },
+        })[s] || { bg: C.pendingBg, tc: C.muted, label: (status || '—').replace(/_/g, ' ') };
       };
 
       const getPlatformStyle = p => ({
@@ -873,23 +826,24 @@ export default function SummaryReport() {
         linkedin:  { bg: C.liBg, tc: C.liText, label: 'LinkedIn'  },
         youtube:   { bg: C.ytBg, tc: C.ytText, label: 'YouTube'   },
         twitter:   { bg: C.twBg, tc: C.twText, label: 'Twitter/X' },
-      })[(p || '').toLowerCase()] || { bg: C.tileBg, tc: C.muted, label: p || '—' };
+      })[(p || '').toLowerCase()] || { bg: C.sectionBg, tc: C.muted, label: p || '—' };
 
-      // ── Page background + checkY ──────────────────────────────
+      // ── Page helpers ──────────────────────────────────────────────────────
       const fillPageBg = () => {
-        sf(C.pageBg); doc.setDrawColor(0, 0, 0, 0);
+        sf(C.pageBg);
+        doc.setLineWidth(0);
         doc.rect(0, 0, PW, PH, 'F');
       };
 
       const checkY = (need = 20) => {
-        if (y + need > PH - 20) {
+        if (y + need > PH - 22) {
           doc.addPage();
           fillPageBg();
           y = M;
         }
       };
 
-      // ── Enrich posts from live cache ──────────────────────────
+      // ── Enrich posts from live cache ──────────────────────────────────────
       const pdfAllEnriched = Object.values(liveMetricsCache).flatMap(c => c?.posts || []);
       const pdfEnrichedById = {};
       pdfAllEnriched.forEach(p => { if (p._id) pdfEnrichedById[p._id] = p; });
@@ -912,17 +866,18 @@ export default function SummaryReport() {
         return report.assignments.length === 1 ? pdfMergedPosts : [];
       };
 
-      // ── Summary counts ────────────────────────────────────────
-      const totalItems    = report.assignments.length;
-      const approvedCount = report.assignments.filter(a =>
+      // ── Summary counts ────────────────────────────────────────────────────
+      const totalItems      = report.assignments.length;
+      const pdfApprovedCount = report.assignments.filter(a =>
         a.versions?.some(v => ['approved', 'published'].includes((v.status || '').toLowerCase()))
       ).length;
-      const inReviewCount = report.assignments.filter(a => {
-        const latest = a.versions?.[a.versions.length - 1];
-        const s = (latest?.status || '').toLowerCase();
-        return s === 'submitted' || s === 'in_review' || s === 'under_review';
-      }).length;
-      const platformsSet = new Set(
+      const pdfPublishedCount = report.assignments.filter(a =>
+        a.versions?.some(v => (v.status || '').toLowerCase() === 'published')
+      ).length;
+      const pdfApprovalRate  = totalItems > 0 ? Math.round((pdfApprovedCount / totalItems) * 100) : 0;
+      const pdfTotalVersions = report.assignments.reduce((s, a) => s + (a.totalVersions || 1), 0);
+      const pdfAvgRevisions  = totalItems > 0 ? (pdfTotalVersions / totalItems).toFixed(1) : '—';
+      const platformsSet     = new Set(
         report.assignments.flatMap(a => [
           ...(Array.isArray(a.platforms) ? a.platforms.flat() : []),
           ...(a.platform ? [a.platform] : []),
@@ -933,91 +888,93 @@ export default function SummaryReport() {
         ? `${report.filters.fromDate} – ${report.filters.toDate}`
         : (report.filters?.fromDate || report.filters?.toDate || 'All dates');
 
-      // ── Page 1 setup ──────────────────────────────────────────
+      // ════════════════════════════════════════════════════════════════════
+      //  PAGE 1
+      // ════════════════════════════════════════════════════════════════════
       fillPageBg();
       y = M;
 
-      // ── DOC HEADER ────────────────────────────────────────────
-      // Top-left brand + calendar label (uppercase, muted, DM Sans 7.5)
-      sans('normal', 7.5); sc(C.muted);
-      const brandLabel = `${sanitize(customerName).toUpperCase()}  ·  CALENDAR: ${sanitize(calendarName || 'ALL').toUpperCase()}`;
-      doc.text(brandLabel, M, y + 3.5);
+      // ── Top header bar ────────────────────────────────────────────────────
+      // Accent rule at very top
+      sf(C.accent); doc.setLineWidth(0);
+      doc.rect(0, 0, PW, 1.2, 'F');
 
-      // Top-right: GENERATED / PERIOD / ITEMS
-      const genDate = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).toUpperCase();
-      const headerMeta = [
-        { label: 'GENERATED', value: genDate },
-        { label: 'PERIOD',    value: sanitize(periodVal).toUpperCase() },
-        { label: 'ITEMS',     value: `${totalItems} OF ${totalItems}` },
+      y = M + 2;
+
+      // Left: brand name
+      sans('bold', 8); sc(C.ink);
+      doc.text(sanitize(customerName).toUpperCase(), M, y);
+      sans('normal', 7); sc(C.muted);
+      doc.text(sanitize(calendarName ? `Calendar: ${calendarName}` : 'All Calendars'), M, y + 5);
+
+      // Right: meta trio (GENERATED / PERIOD / ITEMS) stacked
+      const genDate = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      const rightMeta = [
+        { label: 'Generated', value: genDate },
+        { label: 'Period',    value: sanitize(periodVal) },
+        { label: 'Items',     value: `${totalItems}` },
       ];
-      headerMeta.forEach((hm, i) => {
-        const hy = y + i * 5.5;
-        sans('normal', 6.5); sc(C.muted);
-        doc.text(hm.label, PW - M - 38, hy + 3.5);
-        sans('bold', 6.5); sc(C.primary);
-        doc.text(hm.value, PW - M, hy + 3.5, { align: 'right' });
+      rightMeta.forEach((rm, i) => {
+        sans('normal', 7); sc(C.muted);
+        doc.text(rm.label + ':', PW - M - 30, y + i * 5);
+        sans('bold', 7); sc(C.body);
+        doc.text(rm.value, PW - M, y + i * 5, { align: 'right' });
       });
 
-      y += 10;
+      y += 16;
+
+      // ── Thin divider ──────────────────────────────────────────────────────
       hairline(); ss(C.border);
       doc.line(M, y, PW - M, y);
+      y += 10;
+
+      // ── Report title ──────────────────────────────────────────────────────
+      serif('normal', 26); sc(C.ink);
+      doc.text('Content Performance Report', M, y);
+      y += 8;
+
+      // Subtitle tagline
+      sans('normal', 8.5); sc(C.muted);
+      const execSummary = sanitize(
+        `${totalItems} item${totalItems !== 1 ? 's' : ''} · ${platformCount} platform${platformCount !== 1 ? 's' : ''} · ` +
+        `${pdfApprovedCount} approved (${pdfApprovalRate}%) · ${pdfPublishedCount} published · avg ${pdfAvgRevisions} revision${parseFloat(pdfAvgRevisions) !== 1 ? 's' : ''} per item`
+      );
+      doc.text(execSummary, M, y);
       y += 12;
 
-      // Large serif title
-      serif('normal', 30); sc(C.primary);
-      doc.text('Content Performance', M, y);
-      y += 11;
-      serif('normal', 30); sc(C.primary);
-      doc.text('Report', M, y);
-      y += 10;
+      // ── KPI SUMMARY TILES (5 across) ─────────────────────────────────────
+      const TILE_GAP = 4;
+      const TILE_W   = (CW - TILE_GAP * 4) / 5;
+      const TILE_H   = 26;
 
-      // ── Executive summary paragraph ───────────────────────────
-      const pdfApprovedCount = report.assignments.filter(a =>
-        a.versions?.some(v => ['approved', 'published'].includes((v.status || '').toLowerCase()))
-      ).length;
-      const pdfPublishedCount = report.assignments.filter(a =>
-        a.versions?.some(v => (v.status || '').toLowerCase() === 'published')
-      ).length;
-      const pdfApprovalRate = totalItems > 0 ? Math.round((pdfApprovedCount / totalItems) * 100) : 0;
-      const pdfTotalVersions = report.assignments.reduce((s, a) => s + (a.totalVersions || 1), 0);
-      const pdfAvgRevisions = totalItems > 0 ? (pdfTotalVersions / totalItems).toFixed(1) : '—';
-      const execSummary = sanitize(
-        `This report covers ${totalItems} content item${totalItems !== 1 ? 's' : ''} across ${platformCount} platform${platformCount !== 1 ? 's' : ''} for ${sanitize(customerName)}` +
-        (calendarName ? ` (${sanitize(calendarName)})` : '') +
-        `. ${pdfApprovedCount} of ${totalItems} items were approved (${pdfApprovalRate}%), with ${pdfPublishedCount} published. ` +
-        `On average, ${pdfAvgRevisions} revision${parseFloat(pdfAvgRevisions) !== 1 ? 's were' : ' was'} needed per piece.`
-      );
-      sans('normal', 8.5); sc(C.muted);
-      const execLines = doc.splitTextToSize(execSummary, CW);
-      doc.text(execLines, M, y + 5);
-      y += execLines.length * 5.5 + 8;
-
-      // ── SUMMARY TILES ─────────────────────────────────────────
-      hairline(); ss(C.border);
-      doc.line(M, y, PW - M, y);
-      y += 6;
-
-      const tileW = (CW - 4 * 4) / 5;
-      const tileH = 24;
-      const tiles = [
-        { label: 'TOTAL ITEMS',   value: String(totalItems)             },
-        { label: 'PUBLISHED',     value: String(pdfPublishedCount)      },
-        { label: 'APPROVAL RATE', value: `${pdfApprovalRate}%`          },
-        { label: 'AVG REVISIONS', value: String(pdfAvgRevisions)        },
-        { label: 'PLATFORMS',     value: String(platformCount)          },
+      const kpiTiles = [
+        { label: 'Total Items',    value: String(totalItems),         sub: null           },
+        { label: 'Published',      value: String(pdfPublishedCount),  sub: 'posts live'   },
+        { label: 'Approval Rate',  value: `${pdfApprovalRate}%`,      sub: `${pdfApprovedCount} approved` },
+        { label: 'Avg Revisions',  value: String(pdfAvgRevisions),    sub: 'per item'     },
+        { label: 'Platforms',      value: String(platformCount),      sub: null           },
       ];
-      tiles.forEach((tile, i) => {
-        const tx = M + i * (tileW + 4);
-        sf(C.tileBg); hairline(); ss(C.border);
-        doc.roundedRect(tx, y, tileW, tileH, 2, 2, 'FD');
-        serif('normal', 18); sc(C.primary);
-        doc.text(tile.value, tx + tileW / 2, y + 12, { align: 'center' });
-        sans('bold', 6.5); sc([85, 83, 78]);
-        doc.text(tile.label, tx + tileW / 2, y + 20, { align: 'center' });
-      });
-      y += tileH + 8;
 
-      // ── PLATFORM BREAKDOWN TABLE ──────────────────────────────
+      kpiTiles.forEach((tile, i) => {
+        const tx = M + i * (TILE_W + TILE_GAP);
+        // Card background
+        sf(C.sectionBg); hairline(); ss(C.borderLight);
+        doc.roundedRect(tx, y, TILE_W, TILE_H, 2, 2, 'FD');
+        // Top accent line on first tile
+        if (i === 0) {
+          sf(C.accent); doc.setLineWidth(0);
+          doc.roundedRect(tx, y, TILE_W, 1.5, 1, 1, 'F');
+        }
+        // Value (serif large)
+        serif('normal', 17); sc(C.ink);
+        doc.text(tile.value, tx + TILE_W / 2, y + 14, { align: 'center' });
+        // Label
+        sans('bold', 6); sc(C.muted);
+        doc.text(tile.label.toUpperCase(), tx + TILE_W / 2, y + 21.5, { align: 'center' });
+      });
+      y += TILE_H + 10;
+
+      // ── PLATFORM BREAKDOWN TABLE ──────────────────────────────────────────
       const pdfPlatformMap = {};
       for (const post of pdfMergedPosts) {
         if (post.status !== 'published' && !post.publishedAt && !post.metrics) continue;
@@ -1031,36 +988,66 @@ export default function SummaryReport() {
         pdfPlatformMap[pl].shares   += mm.shares || 0;
       }
       const pdfPlatformRows = Object.values(pdfPlatformMap).sort((a, b) => b.posts - a.posts);
+
       if (pdfPlatformRows.length > 0) {
-        checkY(pdfPlatformRows.length * 8 + 18);
-        sans('bold', 8); sc([85, 83, 78]);
+        checkY(pdfPlatformRows.length * 7 + 20);
+
+        // Section label
+        sans('bold', 7); sc(C.muted);
         doc.text('PLATFORM BREAKDOWN', M, y);
-        y += 6;
+        y += 5;
+
+        hairline(); ss(C.border);
+        doc.line(M, y, PW - M, y);
+        y += 4;
+
         const pCols = [
-          { label: 'PLATFORM', w: 28 }, { label: 'POSTS', w: 16 }, { label: 'REACH', w: 22 },
-          { label: 'LIKES', w: 18 },    { label: 'COMMENTS', w: 22 }, { label: 'SHARES', w: 18 }, { label: 'ENG. RATE', w: 22 },
+          { label: 'Platform',    w: 30 },
+          { label: 'Posts',       w: 16 },
+          { label: 'Reach',       w: 24 },
+          { label: 'Likes',       w: 20 },
+          { label: 'Comments',    w: 24 },
+          { label: 'Shares',      w: 20 },
+          { label: 'Eng. Rate',   w: 20 },
         ];
         let hx = M;
-        pCols.forEach(c => { sans('bold', 6.5); sc(C.muted); doc.text(c.label, hx, y); hx += c.w; });
-        y += 1.5; hairline(); ss(C.border); doc.line(M, y, PW - M, y); y += 4;
+        pCols.forEach(c => { sans('bold', 6.5); sc(C.faint); doc.text(c.label.toUpperCase(), hx, y); hx += c.w; });
+        y += 5;
+
         for (const row of pdfPlatformRows) {
           const eng = row.likes + row.comments + row.shares;
           const er  = row.reach > 0 ? ((eng / row.reach) * 100).toFixed(1) + '%' : '—';
+          const plStyle = getPlatformStyle(row.pl);
           const rowVals = [
-            { v: row.pl.charAt(0).toUpperCase() + row.pl.slice(1), w: 28 },
-            { v: String(row.posts), w: 16 }, { v: fmtNum(row.reach), w: 22 },
-            { v: fmtNum(row.likes), w: 18 }, { v: fmtNum(row.comments), w: 22 },
-            { v: fmtNum(row.shares), w: 18 }, { v: er, w: 22 },
+            { v: row.pl.charAt(0).toUpperCase() + row.pl.slice(1), w: 30, bold: true },
+            { v: String(row.posts),    w: 16 },
+            { v: fmtNum(row.reach),    w: 24 },
+            { v: fmtNum(row.likes),    w: 20 },
+            { v: fmtNum(row.comments), w: 24 },
+            { v: fmtNum(row.shares),   w: 20 },
+            { v: er,                   w: 20, color: C.engGreen },
           ];
+          // Subtle row stripe on alternates
+          if (pdfPlatformRows.indexOf(row) % 2 === 0) {
+            sf(C.sectionBg); doc.setLineWidth(0);
+            doc.rect(M, y - 3.5, CW, 7, 'F');
+          }
           let rx = M;
-          rowVals.forEach(cell => { sans('normal', 7); sc(C.primary); doc.text(sanitize(cell.v), rx, y); rx += cell.w; });
-          y += 6;
+          rowVals.forEach(cell => {
+            if (cell.bold) { sans('bold', 7); sc(C.body); }
+            else if (cell.color) { sans('bold', 7); sc(cell.color); }
+            else { sans('normal', 7); sc(C.body); }
+            doc.text(sanitize(cell.v), rx, y);
+            rx += cell.w;
+          });
+          y += 7;
         }
-        hairline(); ss(C.border); doc.line(M, y, PW - M, y);
-        y += 8;
+        hairline(); ss(C.border);
+        doc.line(M, y, PW - M, y);
+        y += 10;
       }
 
-      // ── STATUS DISTRIBUTION ───────────────────────────────────
+      // ── STATUS DISTRIBUTION ───────────────────────────────────────────────
       const pdfStatusCounts = {};
       for (const a of report.assignments) {
         const latest = a.versions?.[a.versions.length - 1];
@@ -1071,50 +1058,57 @@ export default function SummaryReport() {
       }
       const pdfStatusTotal = report.assignments.length || 1;
       const pdfStatusMeta = {
-        published: { label: 'Published', rgb: [16,  185, 129] },
-        approved:  { label: 'Approved',  rgb: [34,  197,  94] },
-        in_review: { label: 'In Review', rgb: [251, 191,  36] },
-        revision:  { label: 'Revision',  rgb: [251, 146,  60] },
-        rejected:  { label: 'Rejected',  rgb: [239,  68,  68] },
-        pending:   { label: 'Pending',   rgb: [209, 213, 219] },
+        published: { label: 'Published', rgb: [30,  126, 82]  },
+        approved:  { label: 'Approved',  rgb: [56,  159, 95]  },
+        in_review: { label: 'In Review', rgb: [198, 148, 42]  },
+        revision:  { label: 'Revision',  rgb: [200, 110, 42]  },
+        rejected:  { label: 'Rejected',  rgb: [185,  65, 65]  },
+        pending:   { label: 'Pending',   rgb: [180, 192, 205] },
       };
       const pdfStatusRows = ['published', 'approved', 'in_review', 'revision', 'rejected', 'pending']
         .filter(k => pdfStatusCounts[k] > 0)
         .map(k => ({ ...pdfStatusMeta[k], count: pdfStatusCounts[k], pct: Math.round((pdfStatusCounts[k] / pdfStatusTotal) * 100) }));
+
       if (pdfStatusRows.length > 0) {
-        checkY(34);
-        sans('bold', 8); sc([85, 83, 78]);
+        checkY(36);
+        sans('bold', 7); sc(C.muted);
         doc.text('STATUS DISTRIBUTION', M, y);
         y += 5;
-        // Segmented colour bar
-        const barH = 6; let barX = M;
+
+        // Segmented bar (rounded, with gaps between segments)
+        const barH = 7;
+        let barX = M;
         for (const sr of pdfStatusRows) {
           const segW = (sr.pct / 100) * CW;
           if (segW < 0.5) continue;
           doc.setFillColor(...sr.rgb);
-          doc.rect(barX, y, segW, barH, 'F');
+          doc.setLineWidth(0);
+          doc.rect(barX, y, segW - 0.5, barH, 'F');
           barX += segW;
         }
-        // Rounded overlay (border only)
+        // Bar border
         hairline(); ss(C.border); doc.setFillColor(0, 0, 0, 0);
-        doc.roundedRect(M, y, CW, barH, 1, 1, 'D');
-        y += barH + 4;
-        // Legend
+        doc.roundedRect(M, y, CW, barH, 1.5, 1.5, 'D');
+        y += barH + 5;
+
+        // Legend dots
         let legX = M, legY = y;
         for (const sr of pdfStatusRows) {
-          const dotLabel = `${sr.label} ${sr.count} (${sr.pct}%)`;
-          sans('normal', 6.5); sc(C.primary);
-          const dotLabelW = doc.getTextWidth(dotLabel) + 10;
-          if (legX + dotLabelW > PW - M) { legX = M; legY += 7; }
-          doc.setFillColor(...sr.rgb);
+          sans('normal', 6.5); sc(C.body);
+          const lw = doc.getTextWidth(`${sr.label} ${sr.count} (${sr.pct}%)`) + 10;
+          if (legX + lw > PW - M) { legX = M; legY += 6.5; }
+          doc.setFillColor(...sr.rgb); doc.setLineWidth(0);
           doc.circle(legX + 1.5, legY - 1.5, 1.5, 'F');
-          doc.text(dotLabel, legX + 5, legY);
-          legX += dotLabelW;
+          sc(C.body);
+          doc.text(`${sr.label} `, legX + 5, legY);
+          sans('bold', 6.5); sc(C.muted);
+          doc.text(`${sr.count} (${sr.pct}%)`, legX + 5 + doc.getTextWidth(`${sr.label} `), legY);
+          legX += lw;
         }
-        y = legY + 8;
+        y = legY + 9;
       }
 
-      // ── TOP PERFORMING CONTENT ────────────────────────────────
+      // ── TOP PERFORMING CONTENT ────────────────────────────────────────────
       const pdfTopPerformers = report.assignments
         .map(a => {
           const posts = liveMetricsCache[a.assignmentId]?.posts || [];
@@ -1125,51 +1119,66 @@ export default function SummaryReport() {
         .filter(a => a._eng > 0 || a._reach > 0)
         .sort((a, b) => b._eng - a._eng)
         .slice(0, 3);
+
       if (pdfTopPerformers.length > 0) {
-        checkY(52);
-        sans('bold', 8); sc([85, 83, 78]);
+        checkY(54);
+        sans('bold', 7); sc(C.muted);
         doc.text('TOP PERFORMING CONTENT', M, y);
         y += 5;
+
         const tpCount = pdfTopPerformers.length;
-        const tpTileW = (CW - (tpCount - 1) * 4) / tpCount;
-        const tpTileH = 38;
+        const tpTileW = (CW - (tpCount - 1) * 5) / tpCount;
+        const tpTileH = 40;
+
         pdfTopPerformers.forEach((a, i) => {
-          const tx = M + i * (tpTileW + 4);
-          sf(i === 0 ? [255, 251, 235] : C.tileBg);
-          hairline(); ss(i === 0 ? [251, 191, 36] : C.border);
+          const tx = M + i * (tpTileW + 5);
+          // Card bg — first is lightly tinted
+          sf(i === 0 ? [252, 250, 237] : C.sectionBg);
+          hairline(); ss(i === 0 ? [210, 185, 80] : C.borderLight);
           doc.roundedRect(tx, y, tpTileW, tpTileH, 2, 2, 'FD');
+
           // Rank badge
-          sf(i === 0 ? [251, 191, 36] : C.border); doc.setLineWidth(0);
-          doc.roundedRect(tx + 3, y + 3, 9, 5.5, 1, 1, 'F');
-          sans('bold', 6); sc(i === 0 ? C.primary : C.muted);
-          doc.text(`#${i + 1}`, tx + 7.5, y + 7.3, { align: 'center' });
+          const rankBg = i === 0 ? [198, 168, 42] : [185, 195, 210];
+          sf(rankBg); doc.setLineWidth(0);
+          doc.roundedRect(tx + 3, y + 3.5, 10, 6, 1.5, 1.5, 'F');
+          sans('bold', 6.5); sc([255, 255, 255]);
+          doc.text(`#${i + 1}`, tx + 8, y + 8, { align: 'center' });
+
           // Title
-          sans('normal', 7); sc(C.primary);
-          const tpTitle = doc.splitTextToSize(sanitize(a.itemTitle || a.caption?.slice(0, 45) || `Item ${i + 1}`), tpTileW - 8).slice(0, 2);
-          doc.text(tpTitle, tx + 3, y + 13);
-          // Creator
+          sans('normal', 7.5); sc(C.ink);
+          const tpTitle = doc.splitTextToSize(
+            sanitize(a.itemTitle || a.caption?.slice(0, 50) || `Item ${i + 1}`),
+            tpTileW - 10
+          ).slice(0, 2);
+          doc.text(tpTitle, tx + 3.5, y + 15);
+
+          // Creator name
           sans('normal', 6); sc(C.muted);
-          doc.text(sanitize(a.creatorName || '—'), tx + 3, y + 13 + tpTitle.length * 5.2);
-          // Stats row
-          const statsY = y + tpTileH - 8;
+          doc.text(sanitize(a.creatorName || '—'), tx + 3.5, y + 15 + tpTitle.length * 5.5);
+
+          // Stats row at bottom
+          const statsY = y + tpTileH - 9;
+          hairline(); ss(C.borderLight);
+          doc.line(tx + 3, statsY - 3, tx + tpTileW - 3, statsY - 3);
+
           const statItems = [
-            { v: fmtNum(a._eng),   l: 'ENG'   },
-            { v: fmtNum(a._reach), l: 'REACH'  },
-            ...(a._rate ? [{ v: a._rate + '%', l: 'RATE' }] : []),
+            { v: fmtNum(a._eng),   l: 'Eng'   },
+            { v: fmtNum(a._reach), l: 'Reach'  },
+            ...(a._rate ? [{ v: `${a._rate}%`, l: 'Rate' }] : []),
           ];
-          const statW = tpTileW / 3;
+          const statW = (tpTileW - 6) / 3;
           statItems.forEach((st, si) => {
             const sx = tx + 3 + si * statW;
-            serif('normal', 9); sc(C.primary);
-            doc.text(st.v, sx, statsY);
-            sans('bold', 5.5); sc(C.muted);
-            doc.text(st.l, sx, statsY + 5);
+            serif('normal', 9); sc(C.ink);
+            doc.text(st.v, sx, statsY + 1);
+            sans('normal', 5.5); sc(C.faint);
+            doc.text(st.l.toUpperCase(), sx, statsY + 6);
           });
         });
-        y += tpTileH + 8;
+        y += tpTileH + 10;
       }
 
-      // ── CONTENT TYPE BREAKDOWN + CREATOR PERFORMANCE (two columns) ───────
+      // ── TWO-COLUMN: Content Type + Creator Performance ────────────────────
       const pdfTypeMap = {};
       for (const a of report.assignments) {
         const t = (a.mediaType || 'image').toLowerCase();
@@ -1195,90 +1204,103 @@ export default function SummaryReport() {
       }
       const pdfCreatorRows = Object.values(pdfCreatorMap).sort((a, b) => b.assigned - a.assigned);
 
-      const colGap = 6, halfW = (CW - colGap) / 2;
-      const colRX = M + halfW + colGap; // right column x
+      const colGap = 8;
+      const halfW  = (CW - colGap) / 2;
+      const colRX  = M + halfW + colGap;
 
-      // Estimate section heights
-      const typeH = pdfTypeRows.length > 0 ? pdfTypeRows.length * 11 + 16 : 0;
-      const crtrH = pdfCreatorRows.length > 0 ? Math.min(pdfCreatorRows.length, 6) * 8 + 20 : 0;
+      const typeH = pdfTypeRows.length > 0 ? pdfTypeRows.length * 12 + 18 : 0;
+      const crtrH = pdfCreatorRows.length > 0 ? Math.min(pdfCreatorRows.length, 6) * 8 + 22 : 0;
       const twoColH = Math.max(typeH, crtrH);
 
       if (twoColH > 0) {
-        checkY(Math.min(twoColH + 4, 90));
+        checkY(Math.min(twoColH + 6, 100));
         const twoColY = y;
 
         // Left: Content Type Breakdown
         if (pdfTypeRows.length > 0) {
-          sans('bold', 8); sc([85, 83, 78]);
+          sans('bold', 7); sc(C.muted);
           doc.text('CONTENT TYPE BREAKDOWN', M, twoColY);
-          let ty = twoColY + 7;
+          let ty = twoColY + 8;
+
           for (const ct of pdfTypeRows) {
             const pct = totalItems > 0 ? Math.round((ct.count / totalItems) * 100) : 0;
             const er = ct.reach > 0 ? ((ct.eng / ct.reach) * 100).toFixed(1) + '%' : null;
-            // Label + stats
-            sans('normal', 7); sc(C.primary);
+
+            sans('bold', 7.5); sc(C.body);
             doc.text(sanitize(ct.label), M, ty);
+
             sans('normal', 6.5); sc(C.muted);
-            const ctStats = `${ct.count} items (${pct}%)${er ? '  ' + er + ' rate' : ''}`;
-            doc.text(sanitize(ctStats), M + halfW, ty, { align: 'right' });
+            const stat = `${ct.count} items (${pct}%)${er ? `  ·  ${er}` : ''}`;
+            doc.text(sanitize(stat), M + halfW, ty, { align: 'right' });
+
             ty += 4;
             // Bar track
-            sf(C.tileBg); doc.setLineWidth(0); doc.rect(M, ty, halfW, 3, 'F');
+            sf(C.borderLight); doc.setLineWidth(0);
+            doc.roundedRect(M, ty, halfW, 3, 1.5, 1.5, 'F');
             // Fill bar
-            sf(C.primary); doc.rect(M, ty, (pct / 100) * halfW, 3, 'F');
-            ty += 7;
+            sf(C.accent); doc.setLineWidth(0);
+            doc.roundedRect(M, ty, Math.max((pct / 100) * halfW, 2), 3, 1.5, 1.5, 'F');
+            ty += 8;
           }
         }
 
-        // Right: Creator Performance
+        // Right: Creator Performance table
         if (pdfCreatorRows.length > 0) {
-          sans('bold', 8); sc([85, 83, 78]);
+          sans('bold', 7); sc(C.muted);
           doc.text('CREATOR PERFORMANCE', colRX, twoColY);
-          // Header row
-          let hry = twoColY + 7;
+
+          let hry = twoColY + 8;
           const crCols = [
-            { label: 'CREATOR', x: colRX,      w: 38 },
-            { label: 'ITEMS',   x: colRX + 38, w: 16 },
-            { label: 'APPR.',   x: colRX + 54, w: 16 },
-            { label: 'AVG REV', x: colRX + 70, w: 16 },
+            { label: 'Creator', x: colRX,      w: 40 },
+            { label: 'Items',   x: colRX + 40, w: 18 },
+            { label: 'Appr.',   x: colRX + 58, w: 22 },
+            { label: 'Avg Rev', x: colRX + 80, w: 18 },
           ];
-          crCols.forEach(c => { sans('bold', 6.5); sc(C.muted); doc.text(c.label, c.x, hry); });
-          hry += 1.5; hairline(); ss(C.border); doc.line(colRX, hry, colRX + halfW, hry); hry += 4;
+          crCols.forEach(c => { sans('bold', 6.5); sc(C.faint); doc.text(c.label.toUpperCase(), c.x, hry); });
+          hry += 2;
+          hairline(); ss(C.border);
+          doc.line(colRX, hry, colRX + halfW, hry);
+          hry += 5;
+
           const displayCreators = pdfCreatorRows.slice(0, 6);
           for (const c of displayCreators) {
             const apprPct = c.assigned > 0 ? Math.round((c.approved / c.assigned) * 100) : 0;
             const avgRev  = c.assigned > 0 ? (c.totalV / c.assigned).toFixed(1) : '—';
-            sans('normal', 7); sc(C.primary);
-            // Creator name truncated
-            const crName = sanitize(c.name).slice(0, 18);
-            doc.text(crName, colRX, hry);
-            doc.text(String(c.assigned), colRX + 38, hry);
-            doc.text(`${c.approved} (${apprPct}%)`, colRX + 54, hry);
-            doc.text(String(avgRev), colRX + 70, hry);
+
+            sans('bold', 7); sc(C.body);
+            doc.text(sanitize(c.name).slice(0, 20), colRX, hry);
+            sans('normal', 7); sc(C.body);
+            doc.text(String(c.assigned), colRX + 40, hry);
+            doc.text(`${c.approved} (${apprPct}%)`, colRX + 58, hry);
+            doc.text(String(avgRev), colRX + 80, hry);
             hry += 8;
           }
           if (pdfCreatorRows.length > 6) {
-            sans('normal', 6.5); sc(C.muted);
-            doc.text(`+ ${pdfCreatorRows.length - 6} more`, colRX, hry);
+            sans('normal', 6); sc(C.faint);
+            doc.text(`+ ${pdfCreatorRows.length - 6} more creators`, colRX, hry);
           }
         }
-        y = twoColY + twoColH + 6;
+
+        y = twoColY + twoColH + 8;
       }
 
+      // ── Section divider before content items ─────────────────────────────
       hairline(); ss(C.border);
       doc.line(M, y, PW - M, y);
-      y += 6;
-
-      // ── CONTENT ITEMS label ───────────────────────────────────
-      sans('bold', 8.5); sc([85, 83, 78]);
-      doc.text('CONTENT ITEMS', M, y);
       y += 8;
 
-      // ── RENDER EACH ASSIGNMENT CARD ───────────────────────────
+      sans('bold', 8.5); sc(C.ink);
+      doc.text('Content Items', M, y);
+      sans('normal', 7); sc(C.muted);
+      doc.text(`${report.assignments.length} item${report.assignments.length !== 1 ? 's' : ''}`, PW - M, y, { align: 'right' });
+      y += 9;
+
+      // ════════════════════════════════════════════════════════════════════
+      //  CONTENT ITEM CARDS
+      // ════════════════════════════════════════════════════════════════════
       for (let ai = 0; ai < report.assignments.length; ai++) {
         const assignment = report.assignments[ai];
         try {
-          // Build platform list
           const asmPlatforms = [...new Set([
             ...(Array.isArray(assignment.platforms) ? assignment.platforms.flat() : []),
             ...(Array.isArray(assignment.platform) ? assignment.platform : (assignment.platform ? [assignment.platform] : [])),
@@ -1288,17 +1310,14 @@ export default function SummaryReport() {
           const asmMetricsPosts = asmAllPosts.filter(p => p.status === 'published' || p.publishedAt || p.metrics);
           const hasMetrics      = asmMetricsPosts.length > 0;
 
-          // Thumbnail list — prefer non-video images; fall back to video placeholder
           const collectMediaImages = (mediaArr) =>
             (mediaArr || []).map(m => typeof m === 'string' ? m : (m?.url || m?.publicUrl || ''))
                             .filter(u => u && !isVideoUrl(u));
 
           const allThumbs = (() => {
             const urls = [];
-            // 1. Assignment-level thumbnail (prefers images via pickThumbnail on server)
             if (assignment.thumbnail && !isVideoUrl(assignment.thumbnail))
               urls.push(assignment.thumbnail);
-            // 2. Images from each version's media array
             if (Array.isArray(assignment.versions)) {
               for (const v of assignment.versions) {
                 for (const u of collectMediaImages(v.media)) {
@@ -1306,112 +1325,116 @@ export default function SummaryReport() {
                 }
               }
             }
-            // 3. If still nothing but a video exists, push it so we show the play placeholder
             if (urls.length === 0 && assignment.thumbnail) urls.push(assignment.thumbnail);
             return urls;
           })();
-          const THUMB_SZ        = 28;
-          const THUMB_GAP       = 3;
-          const showThumbCount  = Math.min(allThumbs.length, 4);
-          const hasThumbs       = showThumbCount > 0;
 
-          // Estimate card height to decide page break
+          const THUMB_SZ       = 26;
+          const THUMB_GAP      = 3;
+          const showThumbCount = Math.min(allThumbs.length, 4);
+          const hasThumbs      = showThumbCount > 0;
+
+          // Estimate card height
           sans('normal', 14);
-          const itemTitleText = sanitize(assignment.itemTitle || assignment.caption?.slice(0, 60) || `Item ${ai + 1}`);
-          const titleLinesEst = doc.splitTextToSize(itemTitleText, CW - 70).length;
+          const itemTitleText  = sanitize(assignment.itemTitle || assignment.caption?.slice(0, 60) || `Item ${ai + 1}`);
+          const titleLinesEst  = doc.splitTextToSize(itemTitleText, CW - 65).length;
           const estCardH = (
-            8 +
-            Math.max(titleLinesEst * 7.5, 14) + 3 +
-            6 +
+            10 +
+            Math.max(titleLinesEst * 7, 12) + 4 +
+            6 + 4 +
             (asmPlatforms.length > 0 ? 11 : 0) +
-            (hasThumbs ? THUMB_SZ + 6 : 0) +
-            (assignment.versions?.length > 0 ? 12 : 0) +
-            6 +
-            (hasMetrics ? 28 : 14) +
-            8
+            (hasThumbs ? THUMB_SZ + 7 : 0) +
+            (assignment.versions?.length > 0 ? 14 : 0) +
+            8 +
+            (hasMetrics ? 30 : 14) +
+            10
           );
-          checkY(Math.min(estCardH, 90));
+          checkY(Math.min(estCardH, 95));
 
-          const cardStartY  = y;
-          const cardInnerX  = M + 6;
-          const cardInnerW  = CW - 12;
-          y += 8;
+          const cardStartY = y;
+          const CARD_PAD   = 7;
+          const innerX     = M + CARD_PAD;
+          const innerW     = CW - CARD_PAD * 2;
+          y += CARD_PAD + 2;
 
-          // ── Item title (serif 16) ───────────────────────────
-          serif('normal', 16); sc(C.primary);
-          const titleLinesArr = doc.splitTextToSize(itemTitleText, cardInnerW - 62).slice(0, 2);
-          doc.text(titleLinesArr, cardInnerX, y + 1);
+          // ── Item number badge + title ───────────────────────────────────
+          // Small index badge
+          sf(C.sectionBg); hairline(); ss(C.borderLight); doc.setLineWidth(0);
+          doc.roundedRect(innerX, y - 3, 8, 8, 1, 1, 'F');
+          sans('bold', 6); sc(C.muted);
+          doc.text(String(ai + 1), innerX + 4, y + 2, { align: 'center' });
 
-          // ── Creator avatar + name (right side) ─────────────
+          // Title
+          serif('normal', 14); sc(C.ink);
+          const titleLinesArr = doc.splitTextToSize(itemTitleText, innerW - 68).slice(0, 2);
+          doc.text(titleLinesArr, innerX + 11, y + 1.5);
+
+          // ── Creator info (top-right) ────────────────────────────────────
           const creatorName = sanitize(assignment.creatorName || '—');
-          const AVATAR_R    = 5.5;
-          const avatarCX    = M + CW - 5 - AVATAR_R;
+          const AVATAR_R    = 5;
+          const avatarCX    = M + CW - CARD_PAD - AVATAR_R;
           const avatarCY    = y + 1;
-          sf(C.tileBg); hairline(); ss(C.border);
-          doc.circle(avatarCX, avatarCY, AVATAR_R, 'FD');
-          sans('bold', 7); sc(C.primary);
-          doc.text(getInitials(creatorName), avatarCX, avatarCY + 2.5, { align: 'center' });
-          sans('normal', 7.5); sc(C.primary);
-          doc.text(creatorName, avatarCX - AVATAR_R - 2, avatarCY, { align: 'right' });
+
+          sf(C.accentLight); doc.setLineWidth(0);
+          doc.circle(avatarCX, avatarCY, AVATAR_R, 'F');
+          hairline(); ss(C.border);
+          doc.circle(avatarCX, avatarCY, AVATAR_R, 'D');
+          sans('bold', 6); sc(C.accent);
+          doc.text(getInitials(creatorName), avatarCX, avatarCY + 2, { align: 'center' });
+          sans('bold', 7); sc(C.body);
+          doc.text(creatorName, avatarCX - AVATAR_R - 2.5, avatarCY + 1, { align: 'right' });
           if (assignment.creatorEmail) {
-            sans('normal', 6.5); sc(C.muted);
-            doc.text(sanitize(assignment.creatorEmail), avatarCX - AVATAR_R - 2, avatarCY + 5, { align: 'right' });
+            sans('normal', 6); sc(C.faint);
+            doc.text(sanitize(assignment.creatorEmail), avatarCX - AVATAR_R - 2.5, avatarCY + 6, { align: 'right' });
           }
 
-          y += Math.max(titleLinesArr.length * 7.5, 13) + 3;
+          y += Math.max(titleLinesArr.length * 7, 12) + 4;
 
-          // ── Meta: Created · media type ──────────────────────
-          const createdStr = assignment.firstSubmittedAt
-            ? `Created ${fmtDateShort(assignment.firstSubmittedAt)}`
-            : 'Created —';
+          // ── Meta line ──────────────────────────────────────────────────
+          const createdStr = assignment.firstSubmittedAt ? fmtDateShort(assignment.firstSubmittedAt) : '—';
           const mt = (assignment.mediaType || 'image').toLowerCase();
           const mtStr = mt === 'carousel'
-            ? `Carousel  ·  ${assignment.slideCount || '?'} Slides`
+            ? `Carousel · ${assignment.slideCount || '?'} slides`
             : mt === 'video' ? 'Video'
-            : `Image  ·  ${assignment.slideCount || 1} Slide  ·  JPG`;
-          sans('normal', 7.5); sc(C.muted);
-          doc.text(`${createdStr}  ·  ${mtStr}`, cardInnerX, y);
-          y += 6;
+            : `Image · ${assignment.slideCount || 1} slide`;
+          sans('normal', 7); sc(C.muted);
+          doc.text(`${createdStr}  ·  ${mtStr}  ·  ${assignment.totalVersions || 1} version${(assignment.totalVersions || 1) !== 1 ? 's' : ''}`, innerX, y);
+          y += 7;
 
-          // ── Platform pills ──────────────────────────────────
+          // ── Platform pills ─────────────────────────────────────────────
           if (asmPlatforms.length > 0) {
-            let pillX = cardInnerX;
+            let pillX = innerX;
             for (const pl of asmPlatforms) {
               const plStyle = getPlatformStyle(pl);
               sans('normal', 6.5);
-              const pillW = doc.getTextWidth(plStyle.label) + 9;
-              if (pillX + pillW > M + CW - 6) break;
+              const pillW = doc.getTextWidth(plStyle.label) + 8;
+              if (pillX + pillW > M + CW - CARD_PAD) break;
               sf(plStyle.bg); hairline(); ss(plStyle.bg);
-              doc.roundedRect(pillX, y, pillW, 7, 3.5, 3.5, 'F');
+              doc.roundedRect(pillX, y, pillW, 6.5, 3, 3, 'F');
               sc(plStyle.tc);
-              doc.text(plStyle.label, pillX + pillW / 2, y + 5, { align: 'center' });
+              doc.text(plStyle.label, pillX + pillW / 2, y + 4.7, { align: 'center' });
               pillX += pillW + 3;
             }
             y += 11;
           }
 
-          // ── Thumbnail strip ─────────────────────────────────
+          // ── Thumbnail strip ────────────────────────────────────────────
           if (hasThumbs) {
-            let thumbX = cardInnerX;
+            let thumbX = innerX;
             for (let ti = 0; ti < showThumbCount; ti++) {
               const thumbUrl = allThumbs[ti];
               const cached   = thumbCache[thumbUrl];
               const isVideo  = cached === 'VIDEO' || isVideoUrl(thumbUrl);
 
               if (isVideo) {
-                // ── Video placeholder ──
-                sf([30, 28, 26]); hairline(); ss(C.border);
+                sf([45, 50, 58]); hairline(); ss(C.borderLight);
                 doc.roundedRect(thumbX, y, THUMB_SZ, THUMB_SZ, 2, 2, 'FD');
-                // Play triangle
                 const cx = thumbX + THUMB_SZ / 2, cy = y + THUMB_SZ / 2 - 2;
                 sf([255, 255, 255]); doc.setLineWidth(0);
-                doc.triangle(cx - 4, cy - 5, cx - 4, cy + 5, cx + 6, cy, 'F');
-                sans('bold', 6); sc([200, 198, 192]);
-                doc.text('VIDEO', thumbX + THUMB_SZ / 2, y + THUMB_SZ / 2 + 8, { align: 'center' });
+                doc.triangle(cx - 3.5, cy - 4.5, cx - 3.5, cy + 4.5, cx + 5, cy, 'F');
               } else if (cached) {
                 try {
                   const fmt = cached.startsWith('data:image/png') ? 'PNG' : 'JPEG';
-                  // Contain: scale to fit inside THUMB_SZ × THUMB_SZ without stretching
                   const props    = doc.getImageProperties(cached);
                   const imgRatio = props.width / props.height;
                   let fitW, fitH;
@@ -1419,100 +1442,90 @@ export default function SummaryReport() {
                   else              { fitH = THUMB_SZ; fitW = THUMB_SZ * imgRatio; }
                   const offX = (THUMB_SZ - fitW) / 2;
                   const offY = (THUMB_SZ - fitH) / 2;
-                  sf(C.tileBg); doc.setLineWidth(0);
+                  sf(C.sectionBg); doc.setLineWidth(0);
                   doc.roundedRect(thumbX, y, THUMB_SZ, THUMB_SZ, 2, 2, 'F');
                   doc.addImage(cached, fmt, thumbX + offX, y + offY, fitW, fitH, undefined, 'FAST');
-                  // Rounded border overlay
-                  hairline(); ss(C.border); doc.setFillColor(0, 0, 0, 0);
+                  hairline(); ss(C.borderLight); doc.setFillColor(0, 0, 0, 0);
                   doc.roundedRect(thumbX, y, THUMB_SZ, THUMB_SZ, 2, 2, 'D');
                 } catch {
-                  sf(C.tileBg); hairline(); ss(C.border);
+                  sf(C.sectionBg); hairline(); ss(C.borderLight);
                   doc.roundedRect(thumbX, y, THUMB_SZ, THUMB_SZ, 2, 2, 'FD');
-                  sans('normal', 7); sc(C.muted);
+                  sans('normal', 6.5); sc(C.faint);
                   doc.text('—', thumbX + THUMB_SZ / 2, y + THUMB_SZ / 2 + 2, { align: 'center' });
                 }
               } else {
-                sf(C.tileBg); hairline(); ss(C.border);
+                sf(C.sectionBg); hairline(); ss(C.borderLight);
                 doc.roundedRect(thumbX, y, THUMB_SZ, THUMB_SZ, 2, 2, 'FD');
-                sans('normal', 7); sc(C.muted);
-                doc.text('No image', thumbX + THUMB_SZ / 2, y + THUMB_SZ / 2 + 2, { align: 'center' });
+                sans('normal', 6.5); sc(C.faint);
+                doc.text('No img', thumbX + THUMB_SZ / 2, y + THUMB_SZ / 2 + 2, { align: 'center' });
               }
-              // Bottom label bar
-              const barLabel = isVideo ? 'VIDEO' : `SLIDE ${ti + 1}`;
-              doc.setFillColor(0, 0, 0);
-              doc.saveGraphicsState?.();
-              doc.rect(thumbX, y + THUMB_SZ - 7, THUMB_SZ, 7, 'F');
-              sans('bold', 6); sc([255, 255, 255]);
-              doc.text(barLabel, thumbX + THUMB_SZ / 2, y + THUMB_SZ - 1.5, { align: 'center' });
+
+              // Slide label below thumbnail
+              sans('normal', 5.5); sc(C.faint);
+              const barLabel = isVideo ? 'VIDEO' : `Slide ${ti + 1}`;
+              doc.text(barLabel, thumbX + THUMB_SZ / 2, y + THUMB_SZ + 3.5, { align: 'center' });
+
               thumbX += THUMB_SZ + THUMB_GAP;
             }
             // +N more badge
             const extraSlides = Math.max(0, (assignment.slideCount || allThumbs.length) - showThumbCount);
             if (extraSlides > 0) {
-              sf(C.tileBg); hairline(); ss(C.border);
+              sf(C.sectionBg); hairline(); ss(C.borderLight);
               doc.roundedRect(thumbX, y, THUMB_SZ, THUMB_SZ, 2, 2, 'FD');
-              serif('normal', 14); sc(C.muted);
+              sans('bold', 8); sc(C.muted);
               doc.text(`+${extraSlides}`, thumbX + THUMB_SZ / 2, y + THUMB_SZ / 2 + 2, { align: 'center' });
-              sans('normal', 6.5); sc(C.muted);
-              doc.text('MORE', thumbX + THUMB_SZ / 2, y + THUMB_SZ / 2 + 8, { align: 'center' });
+              sans('normal', 5.5); sc(C.faint);
+              doc.text('more', thumbX + THUMB_SZ / 2, y + THUMB_SZ + 3.5, { align: 'center' });
             }
-            y += THUMB_SZ + 6;
+            y += THUMB_SZ + 8;
           }
 
-          // ── Versions: horizontal grid (columns side-by-side) ─────
+          // ── Versions: horizontal columns ───────────────────────────────
           if (assignment.versions?.length > 0) {
-            hairline(); ss(C.border);
-            doc.line(cardInnerX, y, M + CW - 6, y);
+            hairline(); ss(C.borderLight);
+            doc.line(innerX, y, M + CW - CARD_PAD, y);
             y += 5;
 
-            const MAX_COLS  = 4;
-            const COL_GAP   = 4;
-            const THUMB_H   = 34;  // thumbnail height per cell
-            const HDR_H     = 16;  // header area (dot + label + badge + date)
-            const CELL_H    = HDR_H + THUMB_H + 3;
-            const DOT_R     = 2;
+            const MAX_COLS = 4;
+            const COL_GAP  = 4;
+            const THUMB_H  = 32;
+            const HDR_H    = 17;
+            const CELL_H   = HDR_H + THUMB_H + 4;
 
-            // Wrap into rows of MAX_COLS versions
             for (let rowStart = 0; rowStart < assignment.versions.length; rowStart += MAX_COLS) {
               const rowVersions = assignment.versions.slice(rowStart, rowStart + MAX_COLS);
               const COLS = rowVersions.length;
-              const COL_W = (cardInnerW - (COLS - 1) * COL_GAP) / COLS;
+              const COL_W = (innerW - (COLS - 1) * COL_GAP) / COLS;
 
               checkY(CELL_H + 6);
 
               for (let ci = 0; ci < COLS; ci++) {
                 const version = rowVersions[ci];
                 const vs      = getStatusStyle(version.status);
-                const colX    = cardInnerX + ci * (COL_W + COL_GAP);
+                const colX    = innerX + ci * (COL_W + COL_GAP);
                 let   colY    = y;
 
-                // ── Header row: dot · vN · badge ──────────────
-                sf(C.muted); doc.setLineWidth(0);
-                doc.circle(colX + DOT_R, colY + DOT_R, DOT_R, 'F');
+                // Version header: label + badge
+                sans('bold', 7.5); sc(C.body);
+                doc.text(`v${version.versionNumber}`, colX, colY + 4);
 
-                sans('bold', 7.5); sc(C.primary);
-                const vLbl  = `v${version.versionNumber}`;
-                const vLblX = colX + DOT_R * 2 + 2;
-                doc.text(vLbl, vLblX, colY + DOT_R + 2.5);
-
-                const badgeX = vLblX + doc.getTextWidth(vLbl) + 2;
+                const vLblW   = doc.getTextWidth(`v${version.versionNumber}`) + 3;
+                const badgeX  = colX + vLblW;
                 const vBadgeW = doc.getTextWidth(vs.label) + 6;
-                sf(vs.bg); hairline(); ss(vs.bg);
-                doc.roundedRect(badgeX, colY, vBadgeW, 6.5, 3, 3, 'F');
-                sans('normal', 6); sc(vs.tc);
-                doc.text(vs.label, badgeX + vBadgeW / 2, colY + DOT_R + 1.2, { align: 'center' });
+                sf(vs.bg); doc.setLineWidth(0);
+                doc.roundedRect(badgeX, colY, vBadgeW, 6, 3, 3, 'F');
+                sans('normal', 5.5); sc(vs.tc);
+                doc.text(vs.label, badgeX + vBadgeW / 2, colY + 4.2, { align: 'center' });
 
-                colY += DOT_R * 2 + 4;
+                colY += 7;
 
-                // ── Date ──────────────────────────────────────
                 if (version.submittedAt) {
-                  sans('normal', 6); sc(C.muted);
-                  const vDateStr = new Date(version.submittedAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
-                  doc.text(sanitize(vDateStr), colX, colY);
+                  sans('normal', 6); sc(C.faint);
+                  doc.text(new Date(version.submittedAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short' }), colX, colY + 1);
                   colY += 5;
                 }
 
-                // ── Thumbnail (first media item) ───────────────
+                // Version thumbnail
                 const vMediaUrls = (version.media || [])
                   .map(m => typeof m === 'string' ? m : (m?.url || m?.publicUrl || ''))
                   .filter(Boolean);
@@ -1524,16 +1537,15 @@ export default function SummaryReport() {
                   const vIsVid  = vCached === 'VIDEO' || isVideoUrl(vUrl);
 
                   if (vIsVid) {
-                    sf([30, 28, 26]); hairline(); ss(C.border);
+                    sf([45, 50, 58]); hairline(); ss(C.borderLight);
                     doc.roundedRect(colX, thumbTop, COL_W, THUMB_H, 2, 2, 'FD');
                     const vcx = colX + COL_W / 2, vcy = thumbTop + THUMB_H / 2;
                     sf([255, 255, 255]); doc.setLineWidth(0);
-                    doc.triangle(vcx - 4, vcy - 5, vcx - 4, vcy + 5, vcx + 6, vcy, 'F');
+                    doc.triangle(vcx - 3.5, vcy - 4.5, vcx - 3.5, vcy + 4.5, vcx + 5, vcy, 'F');
                   } else if (vCached) {
                     try {
-                      const fmt = vCached.startsWith('data:image/png') ? 'PNG' : 'JPEG';
-                      // Contain: scale to fit inside COL_W × THUMB_H without stretching
-                      const props  = doc.getImageProperties(vCached);
+                      const fmt      = vCached.startsWith('data:image/png') ? 'PNG' : 'JPEG';
+                      const props    = doc.getImageProperties(vCached);
                       const imgRatio = props.width / props.height;
                       const boxRatio = COL_W / THUMB_H;
                       let fitW, fitH;
@@ -1541,50 +1553,47 @@ export default function SummaryReport() {
                       else                     { fitH = THUMB_H; fitW = THUMB_H * imgRatio; }
                       const offX = (COL_W - fitW) / 2;
                       const offY = (THUMB_H - fitH) / 2;
-                      // Background tile
-                      sf(C.tileBg); doc.setLineWidth(0);
+                      sf(C.sectionBg); doc.setLineWidth(0);
                       doc.roundedRect(colX, thumbTop, COL_W, THUMB_H, 2, 2, 'F');
                       doc.addImage(vCached, fmt, colX + offX, thumbTop + offY, fitW, fitH, undefined, 'FAST');
-                      hairline(); ss(C.border); doc.setFillColor(0, 0, 0, 0);
+                      hairline(); ss(C.borderLight); doc.setFillColor(0, 0, 0, 0);
                       doc.roundedRect(colX, thumbTop, COL_W, THUMB_H, 2, 2, 'D');
                     } catch {
-                      sf(C.tileBg); hairline(); ss(C.border);
+                      sf(C.sectionBg); hairline(); ss(C.borderLight);
                       doc.roundedRect(colX, thumbTop, COL_W, THUMB_H, 2, 2, 'FD');
                     }
                   } else {
-                    sf(C.tileBg); hairline(); ss(C.border);
+                    sf(C.sectionBg); hairline(); ss(C.borderLight);
                     doc.roundedRect(colX, thumbTop, COL_W, THUMB_H, 2, 2, 'FD');
                   }
 
-                  // "+N more" badge if multiple media
                   if (vMediaUrls.length > 1) {
                     const moreLabel = `+${vMediaUrls.length - 1}`;
                     sans('bold', 5.5);
                     const moreLabelW = doc.getTextWidth(moreLabel) + 5;
-                    doc.setFillColor(0, 0, 0);
-                    doc.roundedRect(colX + COL_W - moreLabelW - 1.5, thumbTop + THUMB_H - 8, moreLabelW, 6, 1, 1, 'F');
+                    sf([30, 36, 44]); doc.setLineWidth(0);
+                    doc.roundedRect(colX + COL_W - moreLabelW - 2, thumbTop + THUMB_H - 8, moreLabelW, 6, 1, 1, 'F');
                     sc([255, 255, 255]);
-                    doc.text(moreLabel, colX + COL_W - 1.5 - moreLabelW / 2, thumbTop + THUMB_H - 3.5, { align: 'center' });
+                    doc.text(moreLabel, colX + COL_W - 2 - moreLabelW / 2, thumbTop + THUMB_H - 3.5, { align: 'center' });
                   }
                 } else {
-                  sf(C.tileBg); hairline(); ss(C.border);
+                  sf(C.sectionBg); hairline(); ss(C.borderLight);
                   doc.roundedRect(colX, thumbTop, COL_W, THUMB_H, 2, 2, 'FD');
-                  sans('normal', 6); sc(C.muted);
+                  sans('normal', 6); sc(C.faint);
                   doc.text('No media', colX + COL_W / 2, thumbTop + THUMB_H / 2 + 2, { align: 'center' });
                 }
               }
-
               y += CELL_H + 4;
             }
             y += 2;
           }
 
-          // ── Thin divider before metrics ─────────────────────
-          hairline(); ss(C.border);
-          doc.line(cardInnerX, y, M + CW - 6, y);
+          // ── Metrics divider ────────────────────────────────────────────
+          hairline(); ss(C.borderLight);
+          doc.line(innerX, y, M + CW - CARD_PAD, y);
           y += 5;
 
-          // ── Metrics row: 5 columns with 0.5pt vertical dividers
+          // ── Metrics row ────────────────────────────────────────────────
           if (hasMetrics) {
             let totReach = 0, totLikes = 0, totComments = 0, totShares = 0, totSaves = 0;
             for (const post of asmMetricsPosts) {
@@ -1595,69 +1604,82 @@ export default function SummaryReport() {
               totShares   += mm.shares   || 0;
               totSaves    += mm.saves    || mm.saved || 0;
             }
+            const totEng    = totLikes + totComments + totShares;
+            const engRate   = totReach > 0 ? ((totEng / totReach) * 100).toFixed(1) + '%' : '—';
+
             const metricCols = [
-              { label: 'TOTAL REACH', value: fmtNum(totReach)    },
-              { label: 'LIKES',       value: fmtNum(totLikes)    },
-              { label: 'COMMENTS',    value: fmtNum(totComments) },
-              { label: 'SHARES',      value: fmtNum(totShares)   },
-              { label: 'SAVES',       value: fmtNum(totSaves)    },
-              { label: 'ENG. RATE',   value: totReach > 0 ? ((totLikes + totComments + totShares) / totReach * 100).toFixed(1) + '%' : '—' },
+              { label: 'Reach',    value: fmtNum(totReach)    },
+              { label: 'Likes',    value: fmtNum(totLikes)    },
+              { label: 'Comments', value: fmtNum(totComments) },
+              { label: 'Shares',   value: fmtNum(totShares)   },
+              { label: 'Saves',    value: fmtNum(totSaves)    },
+              { label: 'Eng. Rate', value: engRate, isRate: true },
             ];
-            const metColW = cardInnerW / 6;
+
+            const metColW   = innerW / 6;
+            const metricH   = 26;
+
+            // Light metrics row background
+            sf(C.sectionBg); doc.setLineWidth(0);
+            doc.roundedRect(innerX, y, innerW, metricH, 2, 2, 'F');
+
             metricCols.forEach((mc, mi) => {
-              const mx = cardInnerX + mi * metColW;
-              // Vertical divider except first column
+              const mx = innerX + mi * metColW;
               if (mi > 0) {
-                hairline(); ss(C.border);
-                doc.line(mx, y, mx, y + 22);
+                hairline(); ss(C.borderLight);
+                doc.line(mx, y + 3, mx, y + metricH - 3);
               }
-              // Number in serif
-              const isEngRate = mi === metricCols.length - 1;
-              serif('normal', isEngRate ? 16 : 20); sc(isEngRate ? [22, 163, 74] : C.primary);
-              doc.text(mc.value, mx + metColW / 2, y + 13, { align: 'center' });
-              // Label in sans uppercase muted
-              sans('bold', 6.5); sc([85, 83, 78]);
-              doc.text(mc.label, mx + metColW / 2, y + 20, { align: 'center' });
+              // Value
+              serif('normal', mi === 5 ? 14 : 16);
+              sc(mc.isRate ? C.engGreen : C.ink);
+              doc.text(mc.value, mx + metColW / 2, y + 14, { align: 'center' });
+              // Label
+              sans('bold', 5.5); sc(C.faint);
+              doc.text(mc.label.toUpperCase(), mx + metColW / 2, y + 21, { align: 'center' });
             });
-            y += 26;
+            y += metricH + 6;
           } else {
-            sans('normal', 7.5); sc(C.muted);
-            doc.text('No performance data available yet', M + CW / 2, y + 7, { align: 'center' });
-            y += 13;
+            sans('normal', 7); sc(C.faint);
+            doc.text('No performance metrics available', innerX + innerW / 2, y + 6, { align: 'center' });
+            y += 12;
           }
 
-          y += 5;
+          y += CARD_PAD;
 
-          // ── Card border (drawn after content so height is known)
-          const cardH = y - cardStartY - 2;
-          hairline(); doc.setDrawColor(...C.border);
-          doc.roundedRect(M, cardStartY, CW, cardH, 3, 3, 'D');
+          // ── Card border ────────────────────────────────────────────────
+          const cardH = y - cardStartY;
+          hairline(); ss(C.border);
+          doc.roundedRect(M, cardStartY, CW, cardH, 2.5, 2.5, 'D');
 
-          y += 6; // gap between cards
+          y += 5; // gap between cards
 
         } catch (asmErr) {
           console.warn('PDF: skipped assignment due to error', asmErr, assignment);
         }
       }
 
-      // ── Footer on every page ──────────────────────────────────
+      // ── Footer on every page ──────────────────────────────────────────────
       const totalPages = doc.internal.getNumberOfPages();
       for (let p = 1; p <= totalPages; p++) {
         doc.setPage(p);
+        // Bottom accent rule
+        sf(C.sectionBg); doc.setLineWidth(0);
+        doc.rect(0, PH - 14, PW, 14, 'F');
         hairline(); ss(C.border);
-        doc.line(M, PH - 14, PW - M, PH - 14);
-        sans('normal', 7.5); sc(C.muted);
+        doc.line(0, PH - 14, PW, PH - 14);
+
+        sans('normal', 6.5); sc(C.muted);
         doc.text(
-          `${sanitize(customerName).toUpperCase()}  ·  CALENDAR: ${sanitize(calendarName || 'ALL').toUpperCase()}`,
-          M, PH - 7
+          `${sanitize(customerName)}  ·  ${sanitize(calendarName || 'All Calendars')}`,
+          M, PH - 6
         );
         doc.text(
-          `${totalItems} ITEMS  ·  ${sanitize(periodVal)}`,
-          PW - M, PH - 7, { align: 'right' }
+          `${sanitize(periodVal)}  ·  Page ${p} of ${totalPages}`,
+          PW - M, PH - 6, { align: 'right' }
         );
       }
 
-      // ── Save ──────────────────────────────────────────────────
+      // ── Save ──────────────────────────────────────────────────────────────
       const safeCustomer = sanitize(customerName).replace(/[^a-z0-9]/gi, '_');
       const safeCalendar = sanitize(calendarName || 'Report').replace(/[^a-z0-9]/gi, '_');
       const dateStr      = new Date().toISOString().slice(0, 10);
@@ -1690,12 +1712,10 @@ export default function SummaryReport() {
     fetchedMetricsRef.current = new Set();
   }, []);
 
-  // ── Fetch live analytics for published posts (mirrors CustomerDetailsView logic) ──
   const fetchLiveMetrics = useCallback(async (assignmentId, posts) => {
     if (fetchedMetricsRef.current.has(assignmentId)) return;
     fetchedMetricsRef.current.add(assignmentId);
 
-    // Deduplicate by _id before processing to prevent multiple entries per post
     const seenIds = new Set();
     const publishedPosts = posts.filter(p => {
       if (!p._id) return p.status === 'published' || !!p.publishedAt;
@@ -1717,7 +1737,6 @@ export default function SummaryReport() {
       const platform = (post.platform || '').toLowerCase();
       let metrics = post.metrics || null;
 
-      // ── Instagram ──────────────────────────────────────────────────────────
       if (platform === 'instagram') {
         const instagramId = post.instagramId || post.socialAccountId || post.pageId;
         const postMediaId = post.instagramPostId;
@@ -1753,7 +1772,6 @@ export default function SummaryReport() {
         }
       }
 
-      // ── Facebook ───────────────────────────────────────────────────────────
       if (platform === 'facebook') {
         const fbPostId = post.facebookPostId;
         if (fbPostId && !fbPostId.startsWith('fb_shared_from_')) {
@@ -1789,7 +1807,6 @@ export default function SummaryReport() {
         }
       }
 
-      // ── LinkedIn ───────────────────────────────────────────────────────────
       if (platform === 'linkedin') {
         const liPostId = post.linkedinPostId;
         if (liPostId) {
@@ -1833,7 +1850,6 @@ export default function SummaryReport() {
   const selectedCustomerObj = customers.find(c => (c._id || c.id) === selectedCustomer);
   const selectedCalendarObj = calendars.find(c => c._id === selectedCalendar);
 
-  // Resolve calendar name: selected dropdown → report.calendar → first assignment's calendarId → state lookup
   const resolvedCalendarName = useMemo(() => {
     if (selectedCalendarObj?.name) return selectedCalendarObj.name;
     if (report?.calendar?.name) return report.calendar.name;
@@ -1845,16 +1861,12 @@ export default function SummaryReport() {
     return null;
   }, [selectedCalendarObj, report, calendars]);
 
-  // Group scheduledPosts by itemId AND itemTitle — merge report posts with live fetched posts
   const postsByItem = useMemo(() => {
     if (!report) return { byId: {}, byTitle: {}, all: [] };
-
-    // Start with report's posts, then add live posts (normalised), deduplicate by _id
     const combined = [...(report.scheduledPosts || [])];
     const existingIds = new Set(combined.map(p => p._id).filter(Boolean));
     for (const lp of liveScheduledPosts) {
       if (lp._id && existingIds.has(lp._id)) continue;
-      // Normalise live post fields to match the report post shape
       combined.push({
         _id:            lp._id,
         platform:       lp.platform,
@@ -1875,13 +1887,11 @@ export default function SummaryReport() {
         twitterPostId:      lp.twitterPostId      || null,
         postType:           lp.postType            || null,
         metrics:        lp.metrics     || null,
-        // Keep raw fields for CDV-style matching
         item_id:        lp.item_id     || '',
         item_name:      lp.item_name   || '',
         contentId:      lp.contentId   || '',
       });
     }
-
     const byId = {}, byTitle = {};
     for (const post of combined) {
       const itemId = post.itemId || post.item_id;
@@ -1889,7 +1899,6 @@ export default function SummaryReport() {
         if (!byId[itemId]) byId[itemId] = [];
         byId[itemId].push(post);
       }
-      // Also index by contentId (CDV-style) — skip if same as itemId to avoid double-adding
       if (post.contentId && post.contentId !== itemId) {
         if (!byId[post.contentId]) byId[post.contentId] = [];
         byId[post.contentId].push(post);
@@ -1903,19 +1912,12 @@ export default function SummaryReport() {
     return { byId, byTitle, all: combined };
   }, [report, liveScheduledPosts]);
 
-  // Aggregate totals for summary cards
   const summaryTotals = useMemo(() => {
     if (!report) return { items: 0, versions: 0, engagements: 0, reach: 0 };
-
-    // Prefer enriched posts from liveMetricsCache (have fresh analytics metrics).
-    // Fall back to report posts that are not yet cached.
-    const cachedPosts = Object.values(liveMetricsCache)
-      .filter(v => !v.loading)
-      .flatMap(v => v.posts || []);
+    const cachedPosts = Object.values(liveMetricsCache).filter(v => !v.loading).flatMap(v => v.posts || []);
     const cachedIds = new Set(cachedPosts.map(p => p._id).filter(Boolean));
     const fallbackPosts = (report.scheduledPosts || []).filter(p => !p._id || !cachedIds.has(p._id));
     const allPosts = [...cachedPosts, ...fallbackPosts];
-
     const engagements = allPosts.reduce((sum, p) => {
       if (!p.metrics) return sum;
       return sum + (p.metrics.likes || 0) + (p.metrics.comments || 0) + (p.metrics.shares || 0);
@@ -1924,7 +1926,6 @@ export default function SummaryReport() {
       if (!p.metrics) return sum;
       return sum + (p.metrics.reach || p.metrics.impressions || 0);
     }, 0);
-
     const publishedCount = report.assignments.filter(a =>
       a.versions?.some(v => (v.status || '').toLowerCase() === 'published') ||
       (liveMetricsCache[a.assignmentId]?.posts || []).some(p => p.status === 'published' || p.publishedAt)
@@ -1933,12 +1934,10 @@ export default function SummaryReport() {
       a.versions?.some(v => ['approved', 'published'].includes((v.status || '').toLowerCase()))
     ).length;
     const approvalRate = report.assignments.length > 0
-      ? Math.round((approvedCount / report.assignments.length) * 100)
-      : 0;
+      ? Math.round((approvedCount / report.assignments.length) * 100) : 0;
     const totalVersionCount = report.assignments.reduce((s, a) => s + (a.totalVersions || 1), 0);
     const avgRevisions = report.assignments.length > 0
-      ? (totalVersionCount / report.assignments.length).toFixed(1)
-      : '—';
+      ? (totalVersionCount / report.assignments.length).toFixed(1) : '—';
     const timesToApproval = report.assignments
       .map(a => {
         const firstSub = a.firstSubmittedAt ? new Date(a.firstSubmittedAt) : null;
@@ -1949,25 +1948,16 @@ export default function SummaryReport() {
       })
       .filter(d => d !== null && d >= 0);
     const avgTimeToApproval = timesToApproval.length > 0
-      ? (timesToApproval.reduce((s, d) => s + d, 0) / timesToApproval.length).toFixed(1)
-      : null;
+      ? (timesToApproval.reduce((s, d) => s + d, 0) / timesToApproval.length).toFixed(1) : null;
     const overallEngRate = reach > 0 ? ((engagements / reach) * 100).toFixed(1) : null;
-
     return {
-      items:             report.assignments?.length || 0,
-      versions:          report.summary?.totalVersions || 0,
-      engagements,
-      reach,
-      publishedCount,
-      approvedCount,
-      approvalRate,
-      avgRevisions,
-      avgTimeToApproval,
-      overallEngRate,
+      items: report.assignments?.length || 0,
+      versions: report.summary?.totalVersions || 0,
+      engagements, reach, publishedCount, approvedCount, approvalRate,
+      avgRevisions, avgTimeToApproval, overallEngRate,
     };
   }, [report, liveMetricsCache]);
 
-  // ── Platform breakdown (rolled-up per-platform stats) ─────────────────────
   const platformBreakdown = useMemo(() => {
     if (!report) return [];
     const map = {};
@@ -1990,7 +1980,6 @@ export default function SummaryReport() {
     return Object.values(map).sort((a, b) => b.posts - a.posts);
   }, [report, liveMetricsCache]);
 
-  // ── Status distribution ────────────────────────────────────────────────────
   const statusDistribution = useMemo(() => {
     if (!report) return [];
     const counts = {};
@@ -2015,7 +2004,6 @@ export default function SummaryReport() {
       .map(k => ({ status: k, ...meta[k], count: counts[k], pct: Math.round((counts[k] / total) * 100) }));
   }, [report]);
 
-  // ── Top performers ─────────────────────────────────────────────────────────
   const topPerformers = useMemo(() => {
     if (!report) return [];
     return report.assignments
@@ -2030,7 +2018,6 @@ export default function SummaryReport() {
       .slice(0, 3);
   }, [report, liveMetricsCache]);
 
-  // ── Creator stats ──────────────────────────────────────────────────────────
   const creatorStats = useMemo(() => {
     if (!report) return [];
     const map = {};
@@ -2045,7 +2032,6 @@ export default function SummaryReport() {
     return Object.values(map).sort((a, b) => b.assigned - a.assigned);
   }, [report]);
 
-  // ── Content type breakdown ─────────────────────────────────────────────────
   const contentTypeStats = useMemo(() => {
     if (!report) return [];
     const map = {};
@@ -2063,7 +2049,6 @@ export default function SummaryReport() {
     return Object.values(map).sort((a, b) => b.count - a.count);
   }, [report, liveMetricsCache]);
 
-  // ── Filtered & sorted assignments ─────────────────────────────────────────
   const filteredSortedAssignments = useMemo(() => {
     if (!report) return [];
     let items = [...report.assignments];
@@ -2087,8 +2072,8 @@ export default function SummaryReport() {
     }
     const getEng   = a => (liveMetricsCache[a.assignmentId]?.posts || []).reduce((s, p) => s + (p.metrics?.likes || 0) + (p.metrics?.comments || 0) + (p.metrics?.shares || 0), 0);
     const getReach = a => (liveMetricsCache[a.assignmentId]?.posts || []).reduce((s, p) => s + (p.metrics?.reach || p.metrics?.impressions || 0), 0);
-    if (sortBy === 'date_asc')   items.sort((a, b) => new Date(a.firstSubmittedAt || 0) - new Date(b.firstSubmittedAt || 0));
-    else if (sortBy === 'date_desc') items.sort((a, b) => new Date(b.firstSubmittedAt || 0) - new Date(a.firstSubmittedAt || 0));
+    if (sortBy === 'date_asc')        items.sort((a, b) => new Date(a.firstSubmittedAt || 0) - new Date(b.firstSubmittedAt || 0));
+    else if (sortBy === 'date_desc')  items.sort((a, b) => new Date(b.firstSubmittedAt || 0) - new Date(a.firstSubmittedAt || 0));
     else if (sortBy === 'engagement') items.sort((a, b) => getEng(b) - getEng(a));
     else if (sortBy === 'reach')      items.sort((a, b) => getReach(b) - getReach(a));
     else if (sortBy === 'revisions')  items.sort((a, b) => (b.totalVersions || 1) - (a.totalVersions || 1));
@@ -2096,7 +2081,6 @@ export default function SummaryReport() {
     return items;
   }, [report, statusFilter, searchCreator, sortBy, liveMetricsCache]);
 
-  // ── Auto-fetch live metrics for all assignments once report + posts are ready ──
   useEffect(() => {
     if (!report || !report.assignments) return;
     report.assignments.forEach(assignment => {
@@ -2121,7 +2105,7 @@ export default function SummaryReport() {
       <div className="min-h-screen bg-gray-50">
         <div className="max-w-6xl mx-auto px-4 py-6 space-y-5">
 
-          {/* ── Breadcrumb + actions ── */}
+          {/* Breadcrumb + actions */}
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-1.5 text-sm text-gray-500">
               <span>Admin</span>
@@ -2152,7 +2136,7 @@ export default function SummaryReport() {
             </div>
           </div>
 
-          {/* ── Filters card ── */}
+          {/* Filters card */}
           <div className="bg-white border border-gray-200 rounded-2xl p-5">
             <div className="flex items-center gap-2 mb-4">
               <Filter className="w-4 h-4 text-gray-400" />
@@ -2160,7 +2144,6 @@ export default function SummaryReport() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* Customer */}
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Customer</label>
                 <select
@@ -2177,7 +2160,6 @@ export default function SummaryReport() {
                 </select>
               </div>
 
-              {/* Date range */}
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Date range</label>
                 <div className="flex items-center gap-1.5">
@@ -2193,7 +2175,6 @@ export default function SummaryReport() {
                 </div>
               </div>
 
-              {/* Content calendar */}
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Content calendar</label>
                 <select
@@ -2209,7 +2190,6 @@ export default function SummaryReport() {
                 </select>
               </div>
 
-              {/* Content item */}
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Content item</label>
                 <select
@@ -2254,7 +2234,6 @@ export default function SummaryReport() {
             )}
           </div>
 
-          {/* ── Loading ── */}
           {loading && (
             <div className="flex flex-col items-center justify-center py-20">
               <Loader2 className="w-10 h-10 animate-spin mb-4 text-blue-500" />
@@ -2262,17 +2241,16 @@ export default function SummaryReport() {
             </div>
           )}
 
-          {/* ── Summary stat cards ── */}
           {report && !loading && (
             <>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                 {[
-                  { icon: FileText,    iconCls: 'text-blue-500',    label: 'Content Items',     value: summaryTotals.items,                                          sub: null },
-                  { icon: CheckCircle, iconCls: 'text-emerald-500', label: 'Published',         value: summaryTotals.publishedCount,                                 sub: null },
-                  { icon: TrendingUp,  iconCls: 'text-green-500',   label: 'Approval Rate',     value: summaryTotals.approvalRate + '%',                             sub: `${summaryTotals.approvedCount} approved` },
-                  { icon: Layers,      iconCls: 'text-indigo-500',  label: 'Avg Revisions',     value: summaryTotals.avgRevisions,                                   sub: `${summaryTotals.versions} total` },
-                  { icon: Heart,       iconCls: 'text-rose-500',    label: 'Total Engagements', value: fmtNumUI(summaryTotals.engagements),                          sub: summaryTotals.overallEngRate ? `${summaryTotals.overallEngRate}% eng rate` : null },
-                  { icon: Eye,         iconCls: 'text-violet-500',  label: 'Total Reach',       value: fmtNumUI(summaryTotals.reach),                                sub: summaryTotals.avgTimeToApproval ? `~${summaryTotals.avgTimeToApproval}d to approve` : null },
+                  { icon: FileText,    iconCls: 'text-blue-500',    label: 'Content Items',     value: summaryTotals.items,                              sub: null },
+                  { icon: CheckCircle, iconCls: 'text-emerald-500', label: 'Published',         value: summaryTotals.publishedCount,                     sub: null },
+                  { icon: TrendingUp,  iconCls: 'text-green-500',   label: 'Approval Rate',     value: summaryTotals.approvalRate + '%',                 sub: `${summaryTotals.approvedCount} approved` },
+                  { icon: Layers,      iconCls: 'text-indigo-500',  label: 'Avg Revisions',     value: summaryTotals.avgRevisions,                       sub: `${summaryTotals.versions} total` },
+                  { icon: Heart,       iconCls: 'text-rose-500',    label: 'Total Engagements', value: fmtNumUI(summaryTotals.engagements),              sub: summaryTotals.overallEngRate ? `${summaryTotals.overallEngRate}% eng rate` : null },
+                  { icon: Eye,         iconCls: 'text-violet-500',  label: 'Total Reach',       value: fmtNumUI(summaryTotals.reach),                    sub: summaryTotals.avgTimeToApproval ? `~${summaryTotals.avgTimeToApproval}d to approve` : null },
                 ].map(card => {
                   const Icon = card.icon;
                   return (
@@ -2286,7 +2264,6 @@ export default function SummaryReport() {
                 })}
               </div>
 
-              {/* ── Status distribution bar ── */}
               {statusDistribution.length > 0 && (
                 <div className="bg-white border border-gray-200 rounded-2xl p-5">
                   <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Content Status Distribution</p>
@@ -2307,7 +2284,6 @@ export default function SummaryReport() {
                 </div>
               )}
 
-              {/* ── Top performers ── */}
               {topPerformers.length > 0 && (
                 <div className="bg-white border border-gray-200 rounded-2xl p-5">
                   <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
@@ -2346,7 +2322,6 @@ export default function SummaryReport() {
                 </div>
               )}
 
-              {/* ── Platform breakdown table ── */}
               {platformBreakdown.length > 0 && (
                 <div className="bg-white border border-gray-200 rounded-2xl p-5">
                   <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Platform Breakdown</p>
@@ -2381,7 +2356,6 @@ export default function SummaryReport() {
                 </div>
               )}
 
-              {/* ── Content type + Creator stats row ── */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {contentTypeStats.length > 0 && (
                   <div className="bg-white border border-gray-200 rounded-2xl p-5">
@@ -2455,10 +2429,8 @@ export default function SummaryReport() {
             </>
           )}
 
-          {/* ── Report body ── */}
           {report && !loading && (
             <div ref={reportRef}>
-              {/* Report title + filter/sort bar */}
               <div className="flex items-start justify-between mb-4 flex-wrap gap-3">
                 <div>
                   <h2 className="text-lg font-bold text-gray-900">
@@ -2524,7 +2496,6 @@ export default function SummaryReport() {
                 </div>
               </div>
 
-              {/* Content item cards */}
               {filteredSortedAssignments.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 bg-white border border-gray-200 rounded-2xl text-gray-400">
                   <FileText className="w-12 h-12 mb-3 text-gray-300" />
@@ -2539,7 +2510,6 @@ export default function SummaryReport() {
                 <>
                   <div className="space-y-3">
                     {filteredSortedAssignments.slice(0, visibleCount).map((assignment, ai) => {
-                      // Match posts: itemId → contentId → itemTitle → all (if single item)
                       const titleKey = (assignment.itemTitle || '').toLowerCase().trim();
                       const itemPosts = (() => {
                         if (assignment.itemId) {
@@ -2568,7 +2538,6 @@ export default function SummaryReport() {
                               ...prev,
                               [assignment.assignmentId]: nowExpanded,
                             }));
-                            // Kick off live metric fetch the first time an item is expanded
                             if (nowExpanded) {
                               fetchLiveMetrics(assignment.assignmentId, itemPosts);
                             }
@@ -2578,7 +2547,6 @@ export default function SummaryReport() {
                     })}
                   </div>
 
-                  {/* Load more */}
                   {visibleCount < filteredSortedAssignments.length && (
                     <div className="flex items-center justify-center gap-3 mt-6 text-sm text-gray-500">
                       <span>Showing {visibleCount} of {filteredSortedAssignments.length} items</span>

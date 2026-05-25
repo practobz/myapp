@@ -1411,7 +1411,17 @@ export default function SummaryReport() {
               } else if (cached) {
                 try {
                   const fmt = cached.startsWith('data:image/png') ? 'PNG' : 'JPEG';
-                  doc.addImage(cached, fmt, thumbX, y, THUMB_SZ, THUMB_SZ, undefined, 'FAST');
+                  // Contain: scale to fit inside THUMB_SZ × THUMB_SZ without stretching
+                  const props    = doc.getImageProperties(cached);
+                  const imgRatio = props.width / props.height;
+                  let fitW, fitH;
+                  if (imgRatio > 1) { fitW = THUMB_SZ; fitH = THUMB_SZ / imgRatio; }
+                  else              { fitH = THUMB_SZ; fitW = THUMB_SZ * imgRatio; }
+                  const offX = (THUMB_SZ - fitW) / 2;
+                  const offY = (THUMB_SZ - fitH) / 2;
+                  sf(C.tileBg); doc.setLineWidth(0);
+                  doc.roundedRect(thumbX, y, THUMB_SZ, THUMB_SZ, 2, 2, 'F');
+                  doc.addImage(cached, fmt, thumbX + offX, y + offY, fitW, fitH, undefined, 'FAST');
                   // Rounded border overlay
                   hairline(); ss(C.border); doc.setFillColor(0, 0, 0, 0);
                   doc.roundedRect(thumbX, y, THUMB_SZ, THUMB_SZ, 2, 2, 'D');
@@ -1522,7 +1532,19 @@ export default function SummaryReport() {
                   } else if (vCached) {
                     try {
                       const fmt = vCached.startsWith('data:image/png') ? 'PNG' : 'JPEG';
-                      doc.addImage(vCached, fmt, colX, thumbTop, COL_W, THUMB_H, undefined, 'FAST');
+                      // Contain: scale to fit inside COL_W × THUMB_H without stretching
+                      const props  = doc.getImageProperties(vCached);
+                      const imgRatio = props.width / props.height;
+                      const boxRatio = COL_W / THUMB_H;
+                      let fitW, fitH;
+                      if (imgRatio > boxRatio) { fitW = COL_W;   fitH = COL_W / imgRatio; }
+                      else                     { fitH = THUMB_H; fitW = THUMB_H * imgRatio; }
+                      const offX = (COL_W - fitW) / 2;
+                      const offY = (THUMB_H - fitH) / 2;
+                      // Background tile
+                      sf(C.tileBg); doc.setLineWidth(0);
+                      doc.roundedRect(colX, thumbTop, COL_W, THUMB_H, 2, 2, 'F');
+                      doc.addImage(vCached, fmt, colX + offX, thumbTop + offY, fitW, fitH, undefined, 'FAST');
                       hairline(); ss(C.border); doc.setFillColor(0, 0, 0, 0);
                       doc.roundedRect(colX, thumbTop, COL_W, THUMB_H, 2, 2, 'D');
                     } catch {

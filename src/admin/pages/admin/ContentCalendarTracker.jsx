@@ -40,6 +40,8 @@ export default function ContentCalendarTracker() {
   const [search, setSearch]               = useState('');
   const [filterCustomer, setFilterCustomer] = useState('all');
   const [filterCreator, setFilterCreator] = useState('all');
+  const [dateFrom, setDateFrom]           = useState('');
+  const [dateTo, setDateTo]               = useState('');
 
   // sort
   const [sortKey, setSortKey] = useState({ col: 'date', dir: 'desc' });
@@ -121,14 +123,22 @@ export default function ContentCalendarTracker() {
   // ── filtering + sorting ───────────────────────────────────────────────────
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
+    const fromTs = dateFrom ? new Date(dateFrom).setHours(0, 0, 0, 0) : null;
+    const toTs   = dateTo   ? new Date(dateTo).setHours(23, 59, 59, 999) : null;
     return rows.filter(r => {
       if (filterCustomer !== 'all' && r.customerName !== filterCustomer) return false;
       if (filterCreator  !== 'all' && r.creatorName   !== filterCreator)  return false;
       if (q && ![r.customerName, r.calendarName, r.title, r.creatorName]
                  .join(' ').toLowerCase().includes(q)) return false;
+      if (fromTs || toTs) {
+        const rowTs = r.date ? new Date(r.date).getTime() : null;
+        if (!rowTs) return false;
+        if (fromTs && rowTs < fromTs) return false;
+        if (toTs   && rowTs > toTs)   return false;
+      }
       return true;
     });
-  }, [rows, search, filterCustomer, filterCreator]);
+  }, [rows, search, filterCustomer, filterCreator, dateFrom, dateTo]);
 
   const sorted = useMemo(() => {
     if (!sortKey) return filtered;
@@ -165,10 +175,12 @@ export default function ContentCalendarTracker() {
     setSearch('');
     setFilterCustomer('all');
     setFilterCreator('all');
+    setDateFrom('');
+    setDateTo('');
     setPage(1);
   };
 
-  const hasActiveFilter = search || filterCustomer !== 'all' || filterCreator !== 'all';
+  const hasActiveFilter = search || filterCustomer !== 'all' || filterCreator !== 'all' || dateFrom || dateTo;
 
   // ── CSV export ────────────────────────────────────────────────────────────
   const exportCSV = () => {
@@ -260,6 +272,25 @@ export default function ContentCalendarTracker() {
             <option value="all">All Creators</option>
             {creators.map(o => <option key={o} value={o}>{o}</option>)}
           </select>
+          <div className="flex items-center gap-1">
+            <label className="text-[11px] text-gray-500 whitespace-nowrap">From</label>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={e => { setDateFrom(e.target.value); setPage(1); }}
+              className="text-xs border border-gray-300 rounded px-2 py-1 bg-white focus:ring-1 focus:ring-blue-500 outline-none"
+            />
+          </div>
+          <div className="flex items-center gap-1">
+            <label className="text-[11px] text-gray-500 whitespace-nowrap">To</label>
+            <input
+              type="date"
+              value={dateTo}
+              min={dateFrom || undefined}
+              onChange={e => { setDateTo(e.target.value); setPage(1); }}
+              className="text-xs border border-gray-300 rounded px-2 py-1 bg-white focus:ring-1 focus:ring-blue-500 outline-none"
+            />
+          </div>
           {hasActiveFilter && (
             <button onClick={resetFilters} className="text-[11px] text-red-500 hover:text-red-700 underline">
               Clear

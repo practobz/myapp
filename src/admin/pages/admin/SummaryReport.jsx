@@ -90,7 +90,7 @@ const Thumbnail = ({ url }) => {
   const isVideo = /\.(mp4|mov|webm|avi|mkv)/i.test(url);
   return isVideo ? (
     <div className="w-14 h-14 rounded-xl bg-gray-900 flex items-center justify-center flex-shrink-0 relative overflow-hidden">
-      <video src={url} className="w-full h-full object-cover opacity-60" muted />
+      <video src={url} className="w-full h-full object-cover opacity-80" muted preload="metadata" />
       <PlayCircle className="absolute w-6 h-6 text-white" />
     </div>
   ) : (
@@ -114,12 +114,21 @@ const MediaTypeBadge = ({ mediaType, slideCount }) => {
 };
 
 // ── Version row (inline) ──────────────────────────────────────────────────────
+const isVersionVideoUrl = url => /\.(mp4|mov|webm|avi|mkv)/i.test(url);
+
 const VersionRow = ({ version }) => {
   const latestComment = version.comments?.[version.comments.length - 1];
   const feedback = version.rejectionReason || version.approvalNotes || latestComment?.comment || latestComment?.text;
   const feedbackAuthor = latestComment?.authorName || latestComment?.authorEmail;
+
+  const mediaUrls = (version.media || [])
+    .map(m => typeof m === 'string' ? m : (m?.url || m?.publicUrl || ''))
+    .filter(Boolean);
+  const showCount  = Math.min(mediaUrls.length, 5);
+  const extraCount = mediaUrls.length - showCount;
+
   return (
-    <div className="pb-3 border-b border-gray-100 last:border-b-0 last:pb-0 space-y-1">
+    <div className="pb-3 border-b border-gray-100 last:border-b-0 last:pb-0 space-y-2">
       <div className="flex items-center gap-2 flex-wrap">
         <div className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-bold flex-shrink-0">
           {version.versionNumber}
@@ -132,6 +141,34 @@ const VersionRow = ({ version }) => {
           </span>
         )}
       </div>
+
+      {/* Per-version media thumbnails — 3-column grid */}
+      {showCount > 0 && (
+        <div className="grid grid-cols-3 gap-1.5 pl-7">
+          {mediaUrls.slice(0, showCount).map((url, i) =>
+            isVersionVideoUrl(url) ? (
+              <div key={i} className="aspect-square rounded-lg bg-gray-900 flex items-center justify-center relative overflow-hidden">
+                <video src={url} className="w-full h-full object-cover opacity-60" muted preload="metadata" />
+                <PlayCircle className="absolute w-5 h-5 text-white" />
+              </div>
+            ) : (
+              <img
+                key={i}
+                src={url}
+                alt={`v${version.versionNumber} slide ${i + 1}`}
+                className="aspect-square w-full rounded-lg object-cover bg-gray-100 border border-gray-200"
+                onError={e => { e.target.style.display = 'none'; }}
+              />
+            )
+          )}
+          {extraCount > 0 && (
+            <div className="aspect-square rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center text-[10px] font-bold text-gray-400">
+              +{extraCount}
+            </div>
+          )}
+        </div>
+      )}
+
       {version.caption && (
         <p className="text-xs text-gray-700 leading-relaxed line-clamp-2 pl-7">{version.caption}</p>
       )}
@@ -151,6 +188,13 @@ const VersionRow = ({ version }) => {
 };
 
 // ── Platform metrics section ──────────────────────────────────────────────────
+const MetricTile = ({ label, value, highlight }) => (
+  <div className="text-center">
+    <p className={`text-sm font-bold ${highlight ? 'text-emerald-600' : 'text-gray-800'}`}>{fmtNumUI(value)}</p>
+    <p className="text-[9px] text-gray-400 leading-tight mt-0.5">{label}</p>
+  </div>
+);
+
 const PlatformMetricsSection = ({ post }) => {
   const platform = (post.platform || '').toLowerCase();
   const PI = {
@@ -162,66 +206,143 @@ const PlatformMetricsSection = ({ post }) => {
   }[platform] || { color: 'text-gray-600', label: post.platform || 'Unknown' };
 
   const m = post.metrics || {};
-  const cells = platform === 'instagram' ? [
-    { label: 'Likes',    value: m.likes      },
-    { label: 'Comments', value: m.comments   },
-    { label: 'Shares',   value: m.shares     },
-    { label: 'Saves',    value: m.saves ?? m.saved },
-  ] : platform === 'facebook' ? [
-    { label: 'Likes',    value: m.likes      },
-    { label: 'Comments', value: m.comments   },
-    { label: 'Shares',   value: m.shares     },
-    { label: 'Clicks',   value: m.clicks     },
-  ] : platform === 'linkedin' ? [
-    { label: 'Reactions',   value: m.likes ?? m.reactions },
-    { label: 'Comments',    value: m.comments  },
-    { label: 'Shares',      value: m.shares    },
-    { label: 'Impressions', value: m.impressions ?? m.reach },
-  ] : [
+
+  // ── Instagram ────────────────────────────────────────────────────────────
+  if (platform === 'instagram') {
+    const cells = [
+      { label: 'Likes',        value: m.likes      },
+      { label: 'Comments',     value: m.comments   },
+      { label: 'Views',        value: m.views      },
+      { label: 'Shares',       value: m.shares     },
+      { label: 'Saved',        value: m.saves ?? m.saved },
+      { label: 'Reach',        value: m.reach      },
+      { label: 'Interactions', value: m.total_interactions },
+    ].filter(c => c.value != null);
+    const engRaw  = (m.likes || 0) + (m.comments || 0) + (m.shares || 0);
+    const engRate = m.reach && engRaw ? ((engRaw / m.reach) * 100).toFixed(1) : null;
+    const mediaTypeLabel = m.media_type ? m.media_type.replace(/_/g, ' ') : null;
+    const postDate = m.timestamp
+      ? new Date(m.timestamp).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })
+      : null;
+    const permalink = m.permalink || post.instagramPermalink || null;
+    const hasAny = cells.length > 0;
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className={`flex items-center gap-1.5 text-xs font-bold ${PI.color}`}><BarChart2 className="w-3 h-3" />{PI.label}</span>
+          {mediaTypeLabel && <span className="text-[10px] bg-pink-50 text-pink-500 border border-pink-100 px-1.5 py-0.5 rounded-full font-medium">{mediaTypeLabel}</span>}
+          {postDate && <span className="text-[10px] text-gray-400">{postDate}</span>}
+          {permalink && <a href={permalink} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-[10px] text-blue-500 hover:underline flex items-center gap-0.5">View post <ExternalLink className="w-2.5 h-2.5" /></a>}
+        </div>
+        {hasAny ? (
+          <div className="grid grid-cols-4 gap-1">
+            {cells.map(c => <MetricTile key={c.label} label={c.label} value={c.value} />)}
+            {engRate && <MetricTile label="Eng. Rate" value={`${engRate}%`} highlight />}
+          </div>
+        ) : <p className="text-[10px] text-gray-400 italic">Metrics not yet available</p>}
+      </div>
+    );
+  }
+
+  // ── Facebook ─────────────────────────────────────────────────────────────
+  if (platform === 'facebook') {
+    const mainCells = [
+      { label: 'Likes',       value: m.likes       },
+      { label: 'Comments',    value: m.comments    },
+      { label: 'Shares',      value: m.shares      },
+      { label: 'Clicks',      value: m.clicks      },
+      { label: 'Impressions', value: m.impressions },
+      { label: 'Reach',       value: m.reach       },
+      { label: 'Video Views', value: m.videoViews  },
+    ].filter(c => c.value != null && c.value !== 0 || c.label === 'Likes');
+    const er = typeof m.engagementRate === 'number'
+      ? (m.engagementRate * (m.engagementRate > 1 ? 1 : 100)).toFixed(1)
+      : null;
+    const reactions = m.reactions || {};
+    const reactionEntries = Object.entries(reactions).filter(([, v]) => v > 0);
+    const postDate = m.created_time
+      ? new Date(m.created_time).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })
+      : null;
+    const hasAny = mainCells.some(c => c.value != null);
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className={`flex items-center gap-1.5 text-xs font-bold ${PI.color}`}><BarChart2 className="w-3 h-3" />{PI.label}</span>
+          {postDate && <span className="text-[10px] text-gray-400">{postDate}</span>}
+        </div>
+        {hasAny ? (
+          <>
+            <div className="grid grid-cols-4 gap-1">
+              {mainCells.map(c => <MetricTile key={c.label} label={c.label} value={c.value} />)}
+              {er && <MetricTile label="Eng. Rate" value={`${er}%`} highlight />}
+            </div>
+            {reactionEntries.length > 0 && (
+              <div className="flex items-center gap-3 pt-0.5 flex-wrap">
+                <span className="text-[9px] text-gray-400 font-semibold uppercase tracking-wide">Reactions</span>
+                {reactionEntries.map(([k, v]) => (
+                  <span key={k} className="text-[10px] text-gray-600">
+                    <span className="font-semibold">{v}</span> <span className="text-gray-400">{k}</span>
+                  </span>
+                ))}
+              </div>
+            )}
+          </>
+        ) : <p className="text-[10px] text-gray-400 italic">Metrics not yet available</p>}
+      </div>
+    );
+  }
+
+  // ── LinkedIn ─────────────────────────────────────────────────────────────
+  if (platform === 'linkedin') {
+    const cells = [
+      { label: 'Likes',            value: m.likeCount              ?? m.likes    },
+      { label: 'Comments',         value: m.commentCount           ?? m.comments },
+      { label: 'Shares',           value: m.shareCount             ?? m.shares   },
+      { label: 'Clicks',           value: m.clickCount             ?? m.clicks   },
+      { label: 'Impressions',      value: m.impressionCount        ?? m.impressions ?? m.reach },
+      { label: 'Unique Imp.',      value: m.uniqueImpressionsCount },
+    ].filter(c => c.value != null);
+    const engRate = m.engagement != null
+      ? (m.engagement * (m.engagement > 1 ? 1 : 100)).toFixed(2)
+      : null;
+    const hasAny = cells.length > 0;
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-1.5 text-xs font-bold">
+          <BarChart2 className={`w-3 h-3 ${PI.color}`} />
+          <span className={PI.color}>{PI.label}</span>
+        </div>
+        {hasAny ? (
+          <div className="grid grid-cols-4 gap-1">
+            {cells.map(c => <MetricTile key={c.label} label={c.label} value={c.value} />)}
+            {engRate && <MetricTile label="Eng. Rate" value={`${engRate}%`} highlight />}
+          </div>
+        ) : <p className="text-[10px] text-gray-400 italic">Metrics not yet available</p>}
+      </div>
+    );
+  }
+
+  // ── Generic fallback ─────────────────────────────────────────────────────
+  const genCells = [
     { label: 'Likes',       value: m.likes       },
     { label: 'Comments',    value: m.comments    },
     { label: 'Shares',      value: m.shares      },
     { label: 'Impressions', value: m.impressions ?? m.reach },
-  ];
-
-  const reach    = m.reach || m.impressions;
-  const engRaw   = (m.likes || 0) + (m.comments || 0) + (m.shares || 0);
-  const engRate  = reach && engRaw ? ((engRaw / reach) * 100).toFixed(1) : null;
-
-  const hasAnyMetric = cells.some(c => c.value !== undefined && c.value !== null);
-
+  ].filter(c => c.value != null);
+  const genReach  = m.reach || m.impressions;
+  const genEngRaw = (m.likes || 0) + (m.comments || 0) + (m.shares || 0);
+  const genEngRate = genReach && genEngRaw ? ((genEngRaw / genReach) * 100).toFixed(1) : null;
   return (
     <div className="space-y-2">
       <div className={`flex items-center gap-1.5 text-xs font-bold ${PI.color}`}>
-        <BarChart2 className="w-3 h-3" />
-        <span>{PI.label}</span>
+        <BarChart2 className="w-3 h-3" /><span>{PI.label}</span>
       </div>
-      {hasAnyMetric ? (
-        <>
-          <div className="grid grid-cols-4 gap-1">
-            {cells.map(c => (
-              <div key={c.label} className="text-center">
-                <p className="text-sm font-bold text-gray-800">{fmtNumUI(c.value)}</p>
-                <p className="text-[9px] text-gray-400">{c.label}</p>
-              </div>
-            ))}
-          </div>
-          {platform === 'instagram' && (reach || engRate) && (
-            <div className="flex gap-6 pt-0.5">
-              {reach != null && <div>
-                <p className="text-sm font-bold text-gray-700">{fmtNumUI(reach)}</p>
-                <p className="text-[9px] text-gray-400">Reach</p>
-              </div>}
-              {engRate && <div>
-                <p className="text-sm font-bold text-gray-700">{engRate}%</p>
-                <p className="text-[9px] text-gray-400">Eng. rate</p>
-              </div>}
-            </div>
-          )}
-        </>
-      ) : (
-        <p className="text-[10px] text-gray-400 italic">Metrics not yet available</p>
-      )}
+      {genCells.length > 0 ? (
+        <div className="grid grid-cols-4 gap-1">
+          {genCells.map(c => <MetricTile key={c.label} label={c.label} value={c.value} />)}
+          {genEngRate && <MetricTile label="Eng. Rate" value={`${genEngRate}%`} highlight />}
+        </div>
+      ) : <p className="text-[10px] text-gray-400 italic">Metrics not yet available</p>}
     </div>
   );
 };
@@ -356,7 +477,7 @@ const ContentItemCard = ({ assignment, scheduledPosts, calendarName, isExpanded,
                 </span>
               )}
               {/* Direct links to each platform post */}
-              {publishedPosts.flatMap(getPostLinks).filter((l, i, arr) => arr.findIndex(x => x.url === l.url) === i).map((link, li) => (
+              {publishedPosts.flatMap(getPostLinks).filter((l, i, arr) => arr.findIndex(x => (x.platform ?? x.label) === (l.platform ?? l.label)) === i).map((link, li) => (
                 <a
                   key={li}
                   href={link.url}
@@ -383,12 +504,25 @@ const ContentItemCard = ({ assignment, scheduledPosts, calendarName, isExpanded,
 
       {/* Collapsed state */}
       {!isExpanded && (
-        <div className="px-5 pb-4 border-t border-gray-50 pt-3">
-          <button onClick={onToggle}
-            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-blue-600 font-medium transition-colors">
-            <ChevronDown className="w-4 h-4" />
-            Expand to view versions and metrics
-          </button>
+        <div className="px-5 pb-4 border-t border-gray-50 pt-3 space-y-2">
+          {assignment.caption && (
+            <p className="text-xs text-gray-500 leading-relaxed line-clamp-2">{assignment.caption}</p>
+          )}
+          {assignment.hashtags && (
+            <p className="text-[11px] text-blue-400 line-clamp-1">{assignment.hashtags}</p>
+          )}
+          <div className="flex items-center justify-between">
+            <button onClick={onToggle}
+              className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-blue-600 font-medium transition-colors">
+              <ChevronDown className="w-4 h-4" />
+              Expand to view versions and metrics
+            </button>
+            {assignment.totalVersions > 1 && (
+              <span className="text-[11px] text-amber-600 font-semibold bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                {assignment.totalVersions} revisions
+              </span>
+            )}
+          </div>
         </div>
       )}
 
@@ -501,6 +635,10 @@ export default function SummaryReport() {
   const [error, setError] = useState('');
   const [expandedItems, setExpandedItems] = useState({});
   const [visibleCount, setVisibleCount] = useState(5);
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [sortBy, setSortBy] = useState('date_desc');
+  const [searchCreator, setSearchCreator] = useState('');
+  const [showCreatorTable, setShowCreatorTable] = useState(false);
 
   // Live scheduled posts fetched directly from the posts API (same source as CustomerDetailsView)
   const [liveScheduledPosts, setLiveScheduledPosts] = useState([]);
@@ -607,15 +745,19 @@ export default function SummaryReport() {
       const customerObj = customers.find(c => (c._id || c.id) === selectedCustomer);
       const customerName = customerObj?.businessName || customerObj?.name || 'Customer';
 
-      // ── Resolve calendar data (backend report + frontend state fallback) ─
+      // ── Resolve calendar data ─────────────────────────────────
       const calendarObj = report.calendar ||
         calendars.find(c => (c._id || c.id) === selectedCalendar) || null;
+      const calendarName = (calendarObj?.name || '').replace(/[\x00-\x1F\x7F]/g, ' ').trim();
 
       // ── Pre-load thumbnails via backend proxy ─────────────────
       const thumbCache = {};
       const API = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+      const VIDEO_EXTS = /\.(mp4|webm|mov|avi|mkv|m4v|ogv)(\?.*)?$/i;
+      const isVideoUrl = (url) => VIDEO_EXTS.test(url);
       const tryLoadImg = async (url) => {
         if (!url || thumbCache[url] !== undefined) return;
+        if (isVideoUrl(url)) { thumbCache[url] = 'VIDEO'; return; }
         try {
           const resp = await fetch(`${API}/api/admin/summary-report/proxy-image?url=${encodeURIComponent(url)}`);
           if (!resp.ok) { thumbCache[url] = null; return; }
@@ -627,49 +769,62 @@ export default function SummaryReport() {
         const urls = [];
         if (a.thumbnail) urls.push(a.thumbnail);
         if (Array.isArray(a.thumbnails)) urls.push(...a.thumbnails.filter(Boolean));
+        // Also scan version media for image files
+        if (Array.isArray(a.versions)) {
+          for (const v of a.versions) {
+            for (const m of (v.media || [])) {
+              const u = typeof m === 'string' ? m : (m?.url || m?.publicUrl || '');
+              if (u) urls.push(u);
+            }
+          }
+        }
         return urls;
       });
       await Promise.all(allThumbUrls.map(tryLoadImg));
 
       // ── jsPDF setup ───────────────────────────────────────────
       const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-      const PW = 210, PH = 297, M = 14, CW = PW - M * 2;
+      const PW = 210, PH = 297, M = 16, CW = PW - M * 2;
       let y = 0;
 
-      // ── Colour palette ────────────────────────────────────────
+      // ── Luxury editorial palette ──────────────────────────────
       const C = {
-        navy:     [10,  17,  40],
-        navyMid:  [15,  28,  65],
-        navyLight:[22,  40,  90],
-        cyan:     [6,  182, 212],
-        cyanPale: [207, 250, 254],
-        white:    [255, 255, 255],
-        dark:     [15,  23,  42],
-        slate:    [51,  65,  85],
-        gray:     [100, 116, 139],
-        muted:    [148, 163, 184],
-        border:   [226, 232, 240],
-        cardBg:   [248, 250, 252],
-        blue:     [37,  99,  235],
-        bluePale: [219, 234, 254],
-        indigo:   [79,  70,  229],
-        green:    [22,  163,  74],
-        greenPale:[220, 252, 231],
-        amber:    [217, 119,   6],
-        amberPale:[254, 243, 199],
-        red:      [220,  38,  38],
-        redPale:  [254, 226, 226],
-        pink:     [219,  39, 119],
-        pinkPale: [252, 231, 243],
-        teal:     [13,  148, 136],
-        sky:      [14,  165, 233],
-        purple:   [109,  40, 217],
+        pageBg:       [249, 247, 244],  // #F9F7F4
+        tileBg:       [245, 243, 239],  // #F5F3EF
+        border:       [224, 221, 216],  // #E0DDD8
+        primary:      [26,  26,  24],   // #1A1A18
+        muted:        [154, 152, 145],  // #9A9891
+        // Platform badge tints
+        igBg:         [243, 232, 255],
+        igText:       [107,  33, 168],
+        fbBg:         [219, 234, 254],
+        fbText:       [29,   78, 216],
+        ytBg:         [254, 226, 226],
+        ytText:       [185,  28,  28],
+        liBg:         [204, 251, 241],
+        liText:       [15,  118, 110],
+        twBg:         [243, 244, 246],
+        twText:       [75,   85,  99],
+        // Status badge tints
+        approvedBg:   [220, 252, 231],
+        approvedText: [22,  163,  74],
+        reviewBg:     [254, 243, 199],
+        reviewText:   [180,  83,   9],
+        rejectedBg:   [254, 226, 226],
+        rejectedText: [185,  28,  28],
+        publishedBg:  [220, 252, 231],
+        publishedText:[22,  163,  74],
       };
 
-      const sf  = a => doc.setFillColor(...a);
-      const ss  = a => doc.setDrawColor(...a);
-      const sc  = a => doc.setTextColor(...a);
-      const font = (s = 'normal', sz = 10) => { doc.setFont('helvetica', s); doc.setFontSize(sz); };
+      const sf = a => doc.setFillColor(...a);
+      const ss = a => doc.setDrawColor(...a);
+      const sc = a => doc.setTextColor(...a);
+      // Serif (Times → Cormorant Garamond stand-in for headings & numbers)
+      const serif = (style = 'normal', sz = 10) => { doc.setFont('times', style); doc.setFontSize(sz); };
+      // Sans (Helvetica → DM Sans stand-in for body & labels)
+      const sans  = (style = 'normal', sz = 10) => { doc.setFont('helvetica', style); doc.setFontSize(sz); };
+      // 0.5 pt hairline border
+      const hairline = () => doc.setLineWidth(0.176);
 
       const sanitize = str => {
         if (!str) return '';
@@ -693,41 +848,45 @@ export default function SummaryReport() {
 
       const fmtDateShort = d => {
         if (!d) return '—';
-        return new Date(d).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
+        return new Date(d).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
       };
 
-      const checkY = (need = 20) => {
-        if (y + need > PH - 18) { doc.addPage(); y = M + 4; }
-      };
-
-      // ── Section heading (cyan label + underline) ──────────────
-      const sectionLabel = (text) => {
-        checkY(14);
-        font('bold', 9.5); sc(C.cyan);
-        doc.text(text.toUpperCase(), M, y + 6.5);
-        y += 8;
-        ss(C.cyan); doc.setLineWidth(0.35);
-        doc.line(M, y, PW - M, y);
-        y += 6;
-      };
-
-      // ── Platform maps ─────────────────────────────────────────
-      const pColMap  = { instagram: C.pink, facebook: C.blue, linkedin: C.sky, twitter: C.muted, youtube: C.red };
-      const platName = { instagram: 'Instagram', facebook: 'Facebook', linkedin: 'LinkedIn', twitter: 'Twitter/X', youtube: 'YouTube' };
-
-      // ── Status pill config ────────────────────────────────────
+      // ── Status + platform badge helpers ───────────────────────
       const getStatusStyle = status => {
         const s = (status || '').toLowerCase();
         return ({
-          published:          { bg: C.greenPale, tc: C.green,  label: 'PUBLISHED'  },
-          approved:           { bg: C.greenPale, tc: C.green,  label: 'APPROVED'   },
-          rejected:           { bg: C.redPale,   tc: C.red,    label: 'REJECTED'   },
-          submitted:          { bg: C.amberPale, tc: C.amber,  label: 'IN REVIEW'  },
-          in_review:          { bg: C.amberPale, tc: C.amber,  label: 'IN REVIEW'  },
-          revision_requested: { bg: C.amberPale, tc: C.amber,  label: 'REVISION'   },
-          pending:            { bg: C.cardBg,    tc: C.muted,  label: 'PENDING'    },
-          publishing:         { bg: C.bluePale,  tc: C.blue,   label: 'PUBLISHING' },
-        })[s] || { bg: C.cardBg, tc: C.muted, label: (status || '—').replace(/_/g, ' ').toUpperCase() };
+          published:          { bg: C.publishedBg,   tc: C.publishedText,  label: 'Published'  },
+          approved:           { bg: C.approvedBg,    tc: C.approvedText,   label: 'Approved'   },
+          rejected:           { bg: C.rejectedBg,    tc: C.rejectedText,   label: 'Rejected'   },
+          submitted:          { bg: C.reviewBg,      tc: C.reviewText,     label: 'In Review'  },
+          in_review:          { bg: C.reviewBg,      tc: C.reviewText,     label: 'In Review'  },
+          under_review:       { bg: C.reviewBg,      tc: C.reviewText,     label: 'In Review'  },
+          revision_requested: { bg: C.reviewBg,      tc: C.reviewText,     label: 'Revision'   },
+          pending:            { bg: C.tileBg,        tc: C.muted,          label: 'Pending'    },
+          publishing:         { bg: C.fbBg,          tc: C.fbText,         label: 'Publishing' },
+        })[s] || { bg: C.tileBg, tc: C.muted, label: (status || '—').replace(/_/g, ' ') };
+      };
+
+      const getPlatformStyle = p => ({
+        instagram: { bg: C.igBg, tc: C.igText, label: 'Instagram' },
+        facebook:  { bg: C.fbBg, tc: C.fbText, label: 'Facebook'  },
+        linkedin:  { bg: C.liBg, tc: C.liText, label: 'LinkedIn'  },
+        youtube:   { bg: C.ytBg, tc: C.ytText, label: 'YouTube'   },
+        twitter:   { bg: C.twBg, tc: C.twText, label: 'Twitter/X' },
+      })[(p || '').toLowerCase()] || { bg: C.tileBg, tc: C.muted, label: p || '—' };
+
+      // ── Page background + checkY ──────────────────────────────
+      const fillPageBg = () => {
+        sf(C.pageBg); doc.setDrawColor(0, 0, 0, 0);
+        doc.rect(0, 0, PW, PH, 'F');
+      };
+
+      const checkY = (need = 20) => {
+        if (y + need > PH - 20) {
+          doc.addPage();
+          fillPageBg();
+          y = M;
+        }
       };
 
       // ── Enrich posts from live cache ──────────────────────────
@@ -753,405 +912,732 @@ export default function SummaryReport() {
         return report.assignments.length === 1 ? pdfMergedPosts : [];
       };
 
-      const totalItems   = report.assignments.length;
-      const calendarName = sanitize(calendarObj?.name || '');
+      // ── Summary counts ────────────────────────────────────────
+      const totalItems    = report.assignments.length;
+      const approvedCount = report.assignments.filter(a =>
+        a.versions?.some(v => ['approved', 'published'].includes((v.status || '').toLowerCase()))
+      ).length;
+      const inReviewCount = report.assignments.filter(a => {
+        const latest = a.versions?.[a.versions.length - 1];
+        const s = (latest?.status || '').toLowerCase();
+        return s === 'submitted' || s === 'in_review' || s === 'under_review';
+      }).length;
+      const platformsSet = new Set(
+        report.assignments.flatMap(a => [
+          ...(Array.isArray(a.platforms) ? a.platforms.flat() : []),
+          ...(a.platform ? [a.platform] : []),
+        ].filter(p => p && typeof p === 'string').map(p => p.toLowerCase()))
+      );
+      const platformCount = platformsSet.size;
+      const periodVal = (report.filters?.fromDate && report.filters?.toDate)
+        ? `${report.filters.fromDate} – ${report.filters.toDate}`
+        : (report.filters?.fromDate || report.filters?.toDate || 'All dates');
 
-      // Track which assignment starts on which page (for footer)
-      const asmPageMap = []; // [{ assignmentIdx, startPage }]
+      // ── Page 1 setup ──────────────────────────────────────────
+      fillPageBg();
+      y = M;
 
-      // ── RENDER EACH ASSIGNMENT AS ITS OWN SECTION ─────────────
+      // ── DOC HEADER ────────────────────────────────────────────
+      // Top-left brand + calendar label (uppercase, muted, DM Sans 7.5)
+      sans('normal', 7.5); sc(C.muted);
+      const brandLabel = `${sanitize(customerName).toUpperCase()}  ·  CALENDAR: ${sanitize(calendarName || 'ALL').toUpperCase()}`;
+      doc.text(brandLabel, M, y + 3.5);
+
+      // Top-right: GENERATED / PERIOD / ITEMS
+      const genDate = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).toUpperCase();
+      const headerMeta = [
+        { label: 'GENERATED', value: genDate },
+        { label: 'PERIOD',    value: sanitize(periodVal).toUpperCase() },
+        { label: 'ITEMS',     value: `${totalItems} OF ${totalItems}` },
+      ];
+      headerMeta.forEach((hm, i) => {
+        const hy = y + i * 5.5;
+        sans('normal', 6.5); sc(C.muted);
+        doc.text(hm.label, PW - M - 38, hy + 3.5);
+        sans('bold', 6.5); sc(C.primary);
+        doc.text(hm.value, PW - M, hy + 3.5, { align: 'right' });
+      });
+
+      y += 10;
+      hairline(); ss(C.border);
+      doc.line(M, y, PW - M, y);
+      y += 12;
+
+      // Large serif title
+      serif('normal', 30); sc(C.primary);
+      doc.text('Content Performance', M, y);
+      y += 11;
+      serif('normal', 30); sc(C.primary);
+      doc.text('Report', M, y);
+      y += 10;
+
+      // ── Executive summary paragraph ───────────────────────────
+      const pdfApprovedCount = report.assignments.filter(a =>
+        a.versions?.some(v => ['approved', 'published'].includes((v.status || '').toLowerCase()))
+      ).length;
+      const pdfPublishedCount = report.assignments.filter(a =>
+        a.versions?.some(v => (v.status || '').toLowerCase() === 'published')
+      ).length;
+      const pdfApprovalRate = totalItems > 0 ? Math.round((pdfApprovedCount / totalItems) * 100) : 0;
+      const pdfTotalVersions = report.assignments.reduce((s, a) => s + (a.totalVersions || 1), 0);
+      const pdfAvgRevisions = totalItems > 0 ? (pdfTotalVersions / totalItems).toFixed(1) : '—';
+      const execSummary = sanitize(
+        `This report covers ${totalItems} content item${totalItems !== 1 ? 's' : ''} across ${platformCount} platform${platformCount !== 1 ? 's' : ''} for ${sanitize(customerName)}` +
+        (calendarName ? ` (${sanitize(calendarName)})` : '') +
+        `. ${pdfApprovedCount} of ${totalItems} items were approved (${pdfApprovalRate}%), with ${pdfPublishedCount} published. ` +
+        `On average, ${pdfAvgRevisions} revision${parseFloat(pdfAvgRevisions) !== 1 ? 's were' : ' was'} needed per piece.`
+      );
+      sans('normal', 8.5); sc(C.muted);
+      const execLines = doc.splitTextToSize(execSummary, CW);
+      doc.text(execLines, M, y + 5);
+      y += execLines.length * 5.5 + 8;
+
+      // ── SUMMARY TILES ─────────────────────────────────────────
+      hairline(); ss(C.border);
+      doc.line(M, y, PW - M, y);
+      y += 6;
+
+      const tileW = (CW - 4 * 4) / 5;
+      const tileH = 24;
+      const tiles = [
+        { label: 'TOTAL ITEMS',   value: String(totalItems)             },
+        { label: 'PUBLISHED',     value: String(pdfPublishedCount)      },
+        { label: 'APPROVAL RATE', value: `${pdfApprovalRate}%`          },
+        { label: 'AVG REVISIONS', value: String(pdfAvgRevisions)        },
+        { label: 'PLATFORMS',     value: String(platformCount)          },
+      ];
+      tiles.forEach((tile, i) => {
+        const tx = M + i * (tileW + 4);
+        sf(C.tileBg); hairline(); ss(C.border);
+        doc.roundedRect(tx, y, tileW, tileH, 2, 2, 'FD');
+        serif('normal', 18); sc(C.primary);
+        doc.text(tile.value, tx + tileW / 2, y + 12, { align: 'center' });
+        sans('bold', 6.5); sc([85, 83, 78]);
+        doc.text(tile.label, tx + tileW / 2, y + 20, { align: 'center' });
+      });
+      y += tileH + 8;
+
+      // ── PLATFORM BREAKDOWN TABLE ──────────────────────────────
+      const pdfPlatformMap = {};
+      for (const post of pdfMergedPosts) {
+        if (post.status !== 'published' && !post.publishedAt && !post.metrics) continue;
+        const pl = (Array.isArray(post.platform) ? post.platform[0] : post.platform || 'other').toLowerCase();
+        if (!pdfPlatformMap[pl]) pdfPlatformMap[pl] = { pl, posts: 0, reach: 0, likes: 0, comments: 0, shares: 0 };
+        pdfPlatformMap[pl].posts++;
+        const mm = post.metrics || {};
+        pdfPlatformMap[pl].reach    += mm.reach || mm.impressions || 0;
+        pdfPlatformMap[pl].likes    += mm.likes || 0;
+        pdfPlatformMap[pl].comments += mm.comments || 0;
+        pdfPlatformMap[pl].shares   += mm.shares || 0;
+      }
+      const pdfPlatformRows = Object.values(pdfPlatformMap).sort((a, b) => b.posts - a.posts);
+      if (pdfPlatformRows.length > 0) {
+        checkY(pdfPlatformRows.length * 8 + 18);
+        sans('bold', 8); sc([85, 83, 78]);
+        doc.text('PLATFORM BREAKDOWN', M, y);
+        y += 6;
+        const pCols = [
+          { label: 'PLATFORM', w: 28 }, { label: 'POSTS', w: 16 }, { label: 'REACH', w: 22 },
+          { label: 'LIKES', w: 18 },    { label: 'COMMENTS', w: 22 }, { label: 'SHARES', w: 18 }, { label: 'ENG. RATE', w: 22 },
+        ];
+        let hx = M;
+        pCols.forEach(c => { sans('bold', 6.5); sc(C.muted); doc.text(c.label, hx, y); hx += c.w; });
+        y += 1.5; hairline(); ss(C.border); doc.line(M, y, PW - M, y); y += 4;
+        for (const row of pdfPlatformRows) {
+          const eng = row.likes + row.comments + row.shares;
+          const er  = row.reach > 0 ? ((eng / row.reach) * 100).toFixed(1) + '%' : '—';
+          const rowVals = [
+            { v: row.pl.charAt(0).toUpperCase() + row.pl.slice(1), w: 28 },
+            { v: String(row.posts), w: 16 }, { v: fmtNum(row.reach), w: 22 },
+            { v: fmtNum(row.likes), w: 18 }, { v: fmtNum(row.comments), w: 22 },
+            { v: fmtNum(row.shares), w: 18 }, { v: er, w: 22 },
+          ];
+          let rx = M;
+          rowVals.forEach(cell => { sans('normal', 7); sc(C.primary); doc.text(sanitize(cell.v), rx, y); rx += cell.w; });
+          y += 6;
+        }
+        hairline(); ss(C.border); doc.line(M, y, PW - M, y);
+        y += 8;
+      }
+
+      // ── STATUS DISTRIBUTION ───────────────────────────────────
+      const pdfStatusCounts = {};
+      for (const a of report.assignments) {
+        const latest = a.versions?.[a.versions.length - 1];
+        const s = (latest?.status || 'pending').toLowerCase();
+        const key = ['submitted', 'in_review', 'under_review'].includes(s) ? 'in_review'
+          : s === 'revision_requested' ? 'revision' : s;
+        pdfStatusCounts[key] = (pdfStatusCounts[key] || 0) + 1;
+      }
+      const pdfStatusTotal = report.assignments.length || 1;
+      const pdfStatusMeta = {
+        published: { label: 'Published', rgb: [16,  185, 129] },
+        approved:  { label: 'Approved',  rgb: [34,  197,  94] },
+        in_review: { label: 'In Review', rgb: [251, 191,  36] },
+        revision:  { label: 'Revision',  rgb: [251, 146,  60] },
+        rejected:  { label: 'Rejected',  rgb: [239,  68,  68] },
+        pending:   { label: 'Pending',   rgb: [209, 213, 219] },
+      };
+      const pdfStatusRows = ['published', 'approved', 'in_review', 'revision', 'rejected', 'pending']
+        .filter(k => pdfStatusCounts[k] > 0)
+        .map(k => ({ ...pdfStatusMeta[k], count: pdfStatusCounts[k], pct: Math.round((pdfStatusCounts[k] / pdfStatusTotal) * 100) }));
+      if (pdfStatusRows.length > 0) {
+        checkY(34);
+        sans('bold', 8); sc([85, 83, 78]);
+        doc.text('STATUS DISTRIBUTION', M, y);
+        y += 5;
+        // Segmented colour bar
+        const barH = 6; let barX = M;
+        for (const sr of pdfStatusRows) {
+          const segW = (sr.pct / 100) * CW;
+          if (segW < 0.5) continue;
+          doc.setFillColor(...sr.rgb);
+          doc.rect(barX, y, segW, barH, 'F');
+          barX += segW;
+        }
+        // Rounded overlay (border only)
+        hairline(); ss(C.border); doc.setFillColor(0, 0, 0, 0);
+        doc.roundedRect(M, y, CW, barH, 1, 1, 'D');
+        y += barH + 4;
+        // Legend
+        let legX = M, legY = y;
+        for (const sr of pdfStatusRows) {
+          const dotLabel = `${sr.label} ${sr.count} (${sr.pct}%)`;
+          sans('normal', 6.5); sc(C.primary);
+          const dotLabelW = doc.getTextWidth(dotLabel) + 10;
+          if (legX + dotLabelW > PW - M) { legX = M; legY += 7; }
+          doc.setFillColor(...sr.rgb);
+          doc.circle(legX + 1.5, legY - 1.5, 1.5, 'F');
+          doc.text(dotLabel, legX + 5, legY);
+          legX += dotLabelW;
+        }
+        y = legY + 8;
+      }
+
+      // ── TOP PERFORMING CONTENT ────────────────────────────────
+      const pdfTopPerformers = report.assignments
+        .map(a => {
+          const posts = liveMetricsCache[a.assignmentId]?.posts || [];
+          const reach = posts.reduce((s, p) => s + (p.metrics?.reach || p.metrics?.impressions || 0), 0);
+          const eng   = posts.reduce((s, p) => s + (p.metrics?.likes || 0) + (p.metrics?.comments || 0) + (p.metrics?.shares || 0), 0);
+          return { ...a, _reach: reach, _eng: eng, _rate: reach > 0 ? ((eng / reach) * 100).toFixed(1) : null };
+        })
+        .filter(a => a._eng > 0 || a._reach > 0)
+        .sort((a, b) => b._eng - a._eng)
+        .slice(0, 3);
+      if (pdfTopPerformers.length > 0) {
+        checkY(52);
+        sans('bold', 8); sc([85, 83, 78]);
+        doc.text('TOP PERFORMING CONTENT', M, y);
+        y += 5;
+        const tpCount = pdfTopPerformers.length;
+        const tpTileW = (CW - (tpCount - 1) * 4) / tpCount;
+        const tpTileH = 38;
+        pdfTopPerformers.forEach((a, i) => {
+          const tx = M + i * (tpTileW + 4);
+          sf(i === 0 ? [255, 251, 235] : C.tileBg);
+          hairline(); ss(i === 0 ? [251, 191, 36] : C.border);
+          doc.roundedRect(tx, y, tpTileW, tpTileH, 2, 2, 'FD');
+          // Rank badge
+          sf(i === 0 ? [251, 191, 36] : C.border); doc.setLineWidth(0);
+          doc.roundedRect(tx + 3, y + 3, 9, 5.5, 1, 1, 'F');
+          sans('bold', 6); sc(i === 0 ? C.primary : C.muted);
+          doc.text(`#${i + 1}`, tx + 7.5, y + 7.3, { align: 'center' });
+          // Title
+          sans('normal', 7); sc(C.primary);
+          const tpTitle = doc.splitTextToSize(sanitize(a.itemTitle || a.caption?.slice(0, 45) || `Item ${i + 1}`), tpTileW - 8).slice(0, 2);
+          doc.text(tpTitle, tx + 3, y + 13);
+          // Creator
+          sans('normal', 6); sc(C.muted);
+          doc.text(sanitize(a.creatorName || '—'), tx + 3, y + 13 + tpTitle.length * 5.2);
+          // Stats row
+          const statsY = y + tpTileH - 8;
+          const statItems = [
+            { v: fmtNum(a._eng),   l: 'ENG'   },
+            { v: fmtNum(a._reach), l: 'REACH'  },
+            ...(a._rate ? [{ v: a._rate + '%', l: 'RATE' }] : []),
+          ];
+          const statW = tpTileW / 3;
+          statItems.forEach((st, si) => {
+            const sx = tx + 3 + si * statW;
+            serif('normal', 9); sc(C.primary);
+            doc.text(st.v, sx, statsY);
+            sans('bold', 5.5); sc(C.muted);
+            doc.text(st.l, sx, statsY + 5);
+          });
+        });
+        y += tpTileH + 8;
+      }
+
+      // ── CONTENT TYPE BREAKDOWN + CREATOR PERFORMANCE (two columns) ───────
+      const pdfTypeMap = {};
+      for (const a of report.assignments) {
+        const t = (a.mediaType || 'image').toLowerCase();
+        const label = t === 'carousel' ? 'Carousel' : t === 'video' ? 'Video' : 'Image';
+        if (!pdfTypeMap[label]) pdfTypeMap[label] = { label, count: 0, eng: 0, reach: 0 };
+        pdfTypeMap[label].count++;
+        for (const p of (liveMetricsCache[a.assignmentId]?.posts || [])) {
+          if (!p.metrics) continue;
+          pdfTypeMap[label].eng   += (p.metrics.likes || 0) + (p.metrics.comments || 0) + (p.metrics.shares || 0);
+          pdfTypeMap[label].reach += p.metrics.reach || p.metrics.impressions || 0;
+        }
+      }
+      const pdfTypeRows = Object.values(pdfTypeMap).sort((a, b) => b.count - a.count);
+
+      const pdfCreatorMap = {};
+      for (const a of report.assignments) {
+        const name = a.creatorName || 'Unknown';
+        if (!pdfCreatorMap[name]) pdfCreatorMap[name] = { name, assigned: 0, approved: 0, totalV: 0 };
+        pdfCreatorMap[name].assigned++;
+        pdfCreatorMap[name].totalV += a.totalVersions || 1;
+        if (a.versions?.some(v => ['approved', 'published'].includes((v.status || '').toLowerCase())))
+          pdfCreatorMap[name].approved++;
+      }
+      const pdfCreatorRows = Object.values(pdfCreatorMap).sort((a, b) => b.assigned - a.assigned);
+
+      const colGap = 6, halfW = (CW - colGap) / 2;
+      const colRX = M + halfW + colGap; // right column x
+
+      // Estimate section heights
+      const typeH = pdfTypeRows.length > 0 ? pdfTypeRows.length * 11 + 16 : 0;
+      const crtrH = pdfCreatorRows.length > 0 ? Math.min(pdfCreatorRows.length, 6) * 8 + 20 : 0;
+      const twoColH = Math.max(typeH, crtrH);
+
+      if (twoColH > 0) {
+        checkY(Math.min(twoColH + 4, 90));
+        const twoColY = y;
+
+        // Left: Content Type Breakdown
+        if (pdfTypeRows.length > 0) {
+          sans('bold', 8); sc([85, 83, 78]);
+          doc.text('CONTENT TYPE BREAKDOWN', M, twoColY);
+          let ty = twoColY + 7;
+          for (const ct of pdfTypeRows) {
+            const pct = totalItems > 0 ? Math.round((ct.count / totalItems) * 100) : 0;
+            const er = ct.reach > 0 ? ((ct.eng / ct.reach) * 100).toFixed(1) + '%' : null;
+            // Label + stats
+            sans('normal', 7); sc(C.primary);
+            doc.text(sanitize(ct.label), M, ty);
+            sans('normal', 6.5); sc(C.muted);
+            const ctStats = `${ct.count} items (${pct}%)${er ? '  ' + er + ' rate' : ''}`;
+            doc.text(sanitize(ctStats), M + halfW, ty, { align: 'right' });
+            ty += 4;
+            // Bar track
+            sf(C.tileBg); doc.setLineWidth(0); doc.rect(M, ty, halfW, 3, 'F');
+            // Fill bar
+            sf(C.primary); doc.rect(M, ty, (pct / 100) * halfW, 3, 'F');
+            ty += 7;
+          }
+        }
+
+        // Right: Creator Performance
+        if (pdfCreatorRows.length > 0) {
+          sans('bold', 8); sc([85, 83, 78]);
+          doc.text('CREATOR PERFORMANCE', colRX, twoColY);
+          // Header row
+          let hry = twoColY + 7;
+          const crCols = [
+            { label: 'CREATOR', x: colRX,      w: 38 },
+            { label: 'ITEMS',   x: colRX + 38, w: 16 },
+            { label: 'APPR.',   x: colRX + 54, w: 16 },
+            { label: 'AVG REV', x: colRX + 70, w: 16 },
+          ];
+          crCols.forEach(c => { sans('bold', 6.5); sc(C.muted); doc.text(c.label, c.x, hry); });
+          hry += 1.5; hairline(); ss(C.border); doc.line(colRX, hry, colRX + halfW, hry); hry += 4;
+          const displayCreators = pdfCreatorRows.slice(0, 6);
+          for (const c of displayCreators) {
+            const apprPct = c.assigned > 0 ? Math.round((c.approved / c.assigned) * 100) : 0;
+            const avgRev  = c.assigned > 0 ? (c.totalV / c.assigned).toFixed(1) : '—';
+            sans('normal', 7); sc(C.primary);
+            // Creator name truncated
+            const crName = sanitize(c.name).slice(0, 18);
+            doc.text(crName, colRX, hry);
+            doc.text(String(c.assigned), colRX + 38, hry);
+            doc.text(`${c.approved} (${apprPct}%)`, colRX + 54, hry);
+            doc.text(String(avgRev), colRX + 70, hry);
+            hry += 8;
+          }
+          if (pdfCreatorRows.length > 6) {
+            sans('normal', 6.5); sc(C.muted);
+            doc.text(`+ ${pdfCreatorRows.length - 6} more`, colRX, hry);
+          }
+        }
+        y = twoColY + twoColH + 6;
+      }
+
+      hairline(); ss(C.border);
+      doc.line(M, y, PW - M, y);
+      y += 6;
+
+      // ── CONTENT ITEMS label ───────────────────────────────────
+      sans('bold', 8.5); sc([85, 83, 78]);
+      doc.text('CONTENT ITEMS', M, y);
+      y += 8;
+
+      // ── RENDER EACH ASSIGNMENT CARD ───────────────────────────
       for (let ai = 0; ai < report.assignments.length; ai++) {
         const assignment = report.assignments[ai];
         try {
+          // Build platform list
+          const asmPlatforms = [...new Set([
+            ...(Array.isArray(assignment.platforms) ? assignment.platforms.flat() : []),
+            ...(Array.isArray(assignment.platform) ? assignment.platform : (assignment.platform ? [assignment.platform] : [])),
+          ].filter(p => p && typeof p === 'string').map(p => p.toLowerCase().trim()))];
 
-        if (ai > 0) { doc.addPage(); y = 0; }
-        const sectionStartPage = doc.internal.getNumberOfPages();
-        asmPageMap.push({ assignmentIdx: ai, startPage: sectionStartPage });
+          const asmAllPosts     = getPdfPosts(assignment);
+          const asmMetricsPosts = asmAllPosts.filter(p => p.status === 'published' || p.publishedAt || p.metrics);
+          const hasMetrics      = asmMetricsPosts.length > 0;
 
-        // ── HEADER BAND ────────────────────────────────────────
-        const HEADER_H = 55;
-        sf(C.navy);  doc.rect(0, 0, PW, HEADER_H, 'F');
-        sf(C.navyLight); doc.circle(PW - 5, -8, 40, 'F');
-        sf(C.navyMid);   doc.circle(PW + 8, HEADER_H - 2, 22, 'F');
+          // Thumbnail list — prefer non-video images; fall back to video placeholder
+          const collectMediaImages = (mediaArr) =>
+            (mediaArr || []).map(m => typeof m === 'string' ? m : (m?.url || m?.publicUrl || ''))
+                            .filter(u => u && !isVideoUrl(u));
 
-        // Badge
-        const badgeText = 'CONTENT PERFORMANCE REPORT';
-        font('bold', 8); sc(C.cyanPale);
-        const badgeW = doc.getTextWidth(badgeText) + 10;
-        sf(C.navyLight); doc.roundedRect(M, 8, badgeW, 7.5, 3, 3, 'F');
-        doc.text(badgeText, M + 5, 13.5);
-
-        // Title (customer or calendar name)
-        const bigTitle = sanitize(customerName);
-        font('bold', 24); sc(C.white);
-        const titleLines = doc.splitTextToSize(bigTitle, CW - 20).slice(0, 2);
-        doc.text(titleLines, M, 30);
-
-        // Subtitle
-        const subtitleY = 30 + titleLines.length * 10;
-        font('normal', 11); sc([147, 197, 253]);
-        doc.text(`Content Calendar: ${calendarName || '—'}`, M, subtitleY);
-
-        // Meta row at bottom of header
-        const metaY = HEADER_H - 10;
-        const periodVal = (report.filters?.fromDate && report.filters?.toDate)
-          ? `${report.filters.fromDate} – ${report.filters.toDate}`
-          : (report.filters?.fromDate || report.filters?.toDate || 'All dates');
-        const metaCols = [
-          { label: 'REPORT GENERATED', value: new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }) },
-          { label: 'PERIOD',           value: sanitize(periodVal) },
-          { label: 'ITEMS INCLUDED',   value: `${ai + 1} of ${totalItems}` },
-        ];
-        const colW3 = CW / 3;
-        metaCols.forEach((col, ci) => {
-          const cx = M + ci * colW3;
-          font('normal', 7.5); sc(C.muted);
-          doc.text(col.label, cx, metaY);
-          font('bold', 10); sc(C.white);
-          doc.text(col.value, cx, metaY + 6);
-        });
-
-        y = HEADER_H + 8;
-
-        // ── CALENDAR & ITEM INFO ──────────────────────────────
-        sectionLabel('Calendar & Item Info');
-
-        const col1X = M, col2X = M + CW / 2 + 3;
-        const halfW  = CW / 2 - 3;
-
-        // Row 1: Calendar Name | Calendar Created
-        font('normal', 8.5); sc(C.muted);
-        doc.text('CALENDAR NAME',    col1X, y + 5);
-        doc.text('CALENDAR CREATED', col2X, y + 5);
-        y += 7;
-        font('bold', 11.5); sc(C.dark);
-        const calNameLines = doc.splitTextToSize(calendarName || 'N/A', halfW).slice(0, 2);
-        doc.text(calNameLines, col1X, y + 5.5);
-        const calCreatedStr = calendarObj?.createdAt ? sanitize(fmtDateShort(calendarObj.createdAt)) : 'N/A';
-        doc.text(calCreatedStr, col2X, y + 5.5);
-        y += Math.max(calNameLines.length * 6.5, 6.5) + 7;
-
-        // Row 2: Item Name | Item Created
-        checkY(16);
-        font('normal', 8.5); sc(C.muted);
-        doc.text('ITEM NAME',    col1X, y + 5);
-        doc.text('ITEM CREATED', col2X, y + 5);
-        y += 7;
-        font('bold', 11.5); sc(C.dark);
-        const itemName = sanitize(assignment.itemTitle || report.contentItem?.title || '—');
-        const itemNameLines = doc.splitTextToSize(itemName, halfW).slice(0, 2);
-        doc.text(itemNameLines, col1X, y + 5.5);
-        const itemCreated = fmtDateShort(assignment.firstSubmittedAt || report.contentItem?.createdAt);
-        doc.text(sanitize(itemCreated), col2X, y + 5.5);
-        y += Math.max(itemNameLines.length * 6.5, 6.5) + 8;
-
-        // Platforms row
-        const asmPlatforms = [...new Set([
-          ...(Array.isArray(assignment.platforms) ? assignment.platforms.flat() : []),
-          ...(Array.isArray(assignment.platform)  ? assignment.platform : (assignment.platform ? [String(assignment.platform)] : [])),
-        ].filter(p => p && typeof p === 'string').map(p => p.toLowerCase().trim()))];
-
-        if (asmPlatforms.length > 0) {
-          checkY(16);
-          font('normal', 8.5); sc(C.muted);
-          doc.text('PLATFORMS', M, y + 5);
-          y += 7;
-          let pillX = M;
-          for (const pl of asmPlatforms) {
-            const plLower = pl.toLowerCase();
-            const plLabel = platName[plLower] || pl;
-            const dotColor = pColMap[plLower] || C.blue;
-            font('normal', 10); sc(C.dark);
-            const pillW = doc.getTextWidth(plLabel) + 15;
-            if (pillX + pillW > PW - M) break;
-            sf(C.cardBg); ss(C.border); doc.setLineWidth(0.2);
-            doc.roundedRect(pillX, y, pillW, 9, 4.5, 4.5, 'FD');
-            sf(dotColor); doc.circle(pillX + 6, y + 4.5, 2.5, 'F');
-            font('normal', 10); sc(C.dark);
-            doc.text(plLabel, pillX + 10.5, y + 6.5);
-            pillX += pillW + 3;
-          }
-          y += 13;
-        }
-        y += 5;
-
-        // ── CONTENT CREATOR ───────────────────────────────────
-        sectionLabel('Content Creator');
-        checkY(22);
-
-        const creatorName = sanitize(assignment.creatorName || '—');
-        const creatorEmail = sanitize(assignment.creatorEmail || '');
-        const AVATAR_R = 9;
-        const avatarCX = M + AVATAR_R, avatarCY = y + AVATAR_R;
-
-        // Avatar background circle
-        sf(C.blue); doc.circle(avatarCX, avatarCY, AVATAR_R, 'F');
-        font('bold', 10); sc(C.white);
-        doc.text(getInitials(creatorName), avatarCX, avatarCY + 3.5, { align: 'center' });
-
-        // Creator info
-        font('bold', 13); sc(C.dark);
-        doc.text(creatorName, M + AVATAR_R * 2 + 5, y + 8);
-        font('normal', 10); sc(C.gray);
-        doc.text(creatorEmail || 'Content Creator', M + AVATAR_R * 2 + 5, y + 15);
-        y += AVATAR_R * 2 + 8;
-
-        // ── THUMBNAIL / MEDIA ─────────────────────────────────
-        const allThumbs = [
-          assignment.thumbnail,
-          ...(Array.isArray(assignment.thumbnails) ? assignment.thumbnails : []),
-        ].filter(Boolean);
-        const totalSlides  = assignment.slideCount || allThumbs.length || 1;
-        const showSlideCnt = Math.min(allThumbs.length, 3);
-        const extraSlides  = totalSlides > 3 ? totalSlides - 3 : 0;
-
-        sectionLabel('Thumbnail / Media');
-        checkY(38);
-
-        const THUMB_SZ = 30, THUMB_GAP = 4;
-        let thumbX = M;
-
-        for (let ti = 0; ti < showSlideCnt; ti++) {
-          const cached = thumbCache[allThumbs[ti]];
-          if (cached) {
-            try {
-              const fmt = cached.startsWith('data:image/png') ? 'PNG' : 'JPEG';
-              doc.addImage(cached, fmt, thumbX, y, THUMB_SZ, THUMB_SZ);
-            } catch {
-              sf(C.cardBg); ss(C.border); doc.setLineWidth(0.2);
-              doc.roundedRect(thumbX, y, THUMB_SZ, THUMB_SZ, 2, 2, 'FD');
-            }
-          } else {
-            sf(C.cardBg); ss(C.border); doc.setLineWidth(0.2);
-            doc.roundedRect(thumbX, y, THUMB_SZ, THUMB_SZ, 2, 2, 'FD');
-          }
-          // Slide label overlay at bottom
-          sf(C.navy); doc.rect(thumbX, y + THUMB_SZ - 8, THUMB_SZ, 8, 'F');
-          font('bold', 7); sc(C.cyanPale);
-          doc.text(`SLIDE ${ti + 1}`, thumbX + THUMB_SZ / 2, y + THUMB_SZ - 2.5, { align: 'center' });
-          thumbX += THUMB_SZ + THUMB_GAP;
-        }
-
-        // "+N MORE" box
-        if (extraSlides > 0) {
-          sf([230, 236, 245]); ss(C.border); doc.setLineWidth(0.2);
-          doc.roundedRect(thumbX, y, THUMB_SZ, THUMB_SZ, 2, 2, 'FD');
-          font('bold', 12); sc(C.gray);
-          doc.text(`+${extraSlides}`, thumbX + THUMB_SZ / 2, y + THUMB_SZ / 2 - 1, { align: 'center' });
-          font('bold', 8); sc(C.muted);
-          doc.text('MORE', thumbX + THUMB_SZ / 2, y + THUMB_SZ / 2 + 6, { align: 'center' });
-        }
-
-        y += THUMB_SZ + 5;
-
-        // Media type caption
-        const mt     = (assignment.mediaType || 'image').toLowerCase();
-        const mtExt  = 'JPG';
-        const mtLine = mt === 'carousel'
-          ? `Type: Carousel · ${totalSlides} Slides · ${mtExt}`
-          : mt === 'video' ? 'Type: Video' : `Type: Image · ${totalSlides} Slide · ${mtExt}`;
-        font('normal', 9.5); sc(C.gray);
-        doc.text(mtLine, M, y);
-        y += 11;
-
-        // ── VERSION HISTORY ───────────────────────────────────
-        if (assignment.versions?.length > 0) {
-          sectionLabel('Version History');
-
-          for (const version of assignment.versions) {
-            const vs = getStatusStyle(version.status);
-            checkY(18);
-
-            // Version header row
-            const verDate  = version.submittedAt ? ` — ${fmtDateShort(version.submittedAt)}` : '';
-            const verLabel = `Version ${version.versionNumber}${verDate}`;
-
-            sf(C.white); ss(C.border); doc.setLineWidth(0.3);
-            doc.roundedRect(M, y, CW, 11.5, 2, 2, 'FD');
-
-            font('bold', 10.5); sc(C.dark);
-            doc.text(sanitize(verLabel), M + 5, y + 7.5);
-
-            // Status badge (right-aligned)
-            font('bold', 9); sc(vs.tc);
-            const pillW = doc.getTextWidth(vs.label) + 11;
-            sf(vs.bg); ss(vs.tc); doc.setLineWidth(0.25);
-            doc.roundedRect(PW - M - pillW - 2, y + 2, pillW, 7.5, 1.5, 1.5, 'FD');
-            doc.text(vs.label, PW - M - pillW / 2 - 2, y + 7, { align: 'center' });
-
-            y += 14;
-
-            const isApproved = (version.status || '').toLowerCase() === 'approved';
-
-            if (isApproved) {
-              // Approved: caption with left green accent bar
-              if (version.caption) {
-                checkY(20);
-                const captionLines = doc.splitTextToSize(sanitize(version.caption), CW - 12).slice(0, 6);
-                const capH = captionLines.length * 6.5 + 6;
-                sf(C.green); doc.rect(M + 2, y, 2.5, capH, 'F');
-                font('normal', 10.5); sc(C.slate);
-                doc.text(captionLines, M + 8, y + 6);
-                y += capH + 2;
-              }
-              // Hashtag chips
-              if (version.hashtags) {
-                checkY(16);
-                const tags = sanitize(version.hashtags).split(/\s+/).filter(t => t.startsWith('#') || t.length > 0).slice(0, 10);
-                let tagX = M + 4, tagBaseY = y;
-                for (const tag of tags) {
-                  const tagW = doc.getTextWidth(tag) + 9;
-                  if (tagX + tagW > PW - M - 4) { tagX = M + 4; tagBaseY += 11; checkY(11); }
-                  sf(C.bluePale); ss(C.bluePale); doc.setLineWidth(0);
-                  doc.roundedRect(tagX, tagBaseY, tagW, 8, 4, 4, 'F');
-                  font('normal', 9); sc(C.blue);
-                  doc.text(tag, tagX + 4.5, tagBaseY + 5.8);
-                  tagX += tagW + 3;
+          const allThumbs = (() => {
+            const urls = [];
+            // 1. Assignment-level thumbnail (prefers images via pickThumbnail on server)
+            if (assignment.thumbnail && !isVideoUrl(assignment.thumbnail))
+              urls.push(assignment.thumbnail);
+            // 2. Images from each version's media array
+            if (Array.isArray(assignment.versions)) {
+              for (const v of assignment.versions) {
+                for (const u of collectMediaImages(v.media)) {
+                  if (!urls.includes(u)) urls.push(u);
                 }
-                y = tagBaseY + 12;
-              }
-            } else {
-              // Non-approved: show feedback quote
-              const latestCmt = version.comments?.[version.comments.length - 1];
-              const feedback  = version.rejectionReason || version.approvalNotes || latestCmt?.comment || latestCmt?.text;
-              const feedAuthor = latestCmt?.authorName || latestCmt?.authorEmail;
-              if (feedback) {
-                checkY(16);
-                const feedText  = `"${sanitize(feedback)}"${feedAuthor ? ` — ${sanitize(feedAuthor)}` : ''}`;
-                const feedLines = doc.splitTextToSize(feedText, CW - 10).slice(0, 3);
-                font('normal', 10); sc(C.gray);
-                doc.text(feedLines, M + 5, y + 5.5);
-                y += feedLines.length * 6.5 + 5;
               }
             }
-            y += 4;
+            // 3. If still nothing but a video exists, push it so we show the play placeholder
+            if (urls.length === 0 && assignment.thumbnail) urls.push(assignment.thumbnail);
+            return urls;
+          })();
+          const THUMB_SZ        = 28;
+          const THUMB_GAP       = 3;
+          const showThumbCount  = Math.min(allThumbs.length, 4);
+          const hasThumbs       = showThumbCount > 0;
+
+          // Estimate card height to decide page break
+          sans('normal', 14);
+          const itemTitleText = sanitize(assignment.itemTitle || assignment.caption?.slice(0, 60) || `Item ${ai + 1}`);
+          const titleLinesEst = doc.splitTextToSize(itemTitleText, CW - 70).length;
+          const estCardH = (
+            8 +
+            Math.max(titleLinesEst * 7.5, 14) + 3 +
+            6 +
+            (asmPlatforms.length > 0 ? 11 : 0) +
+            (hasThumbs ? THUMB_SZ + 6 : 0) +
+            (assignment.versions?.length > 0 ? 12 : 0) +
+            6 +
+            (hasMetrics ? 28 : 14) +
+            8
+          );
+          checkY(Math.min(estCardH, 90));
+
+          const cardStartY  = y;
+          const cardInnerX  = M + 6;
+          const cardInnerW  = CW - 12;
+          y += 8;
+
+          // ── Item title (serif 16) ───────────────────────────
+          serif('normal', 16); sc(C.primary);
+          const titleLinesArr = doc.splitTextToSize(itemTitleText, cardInnerW - 62).slice(0, 2);
+          doc.text(titleLinesArr, cardInnerX, y + 1);
+
+          // ── Creator avatar + name (right side) ─────────────
+          const creatorName = sanitize(assignment.creatorName || '—');
+          const AVATAR_R    = 5.5;
+          const avatarCX    = M + CW - 5 - AVATAR_R;
+          const avatarCY    = y + 1;
+          sf(C.tileBg); hairline(); ss(C.border);
+          doc.circle(avatarCX, avatarCY, AVATAR_R, 'FD');
+          sans('bold', 7); sc(C.primary);
+          doc.text(getInitials(creatorName), avatarCX, avatarCY + 2.5, { align: 'center' });
+          sans('normal', 7.5); sc(C.primary);
+          doc.text(creatorName, avatarCX - AVATAR_R - 2, avatarCY, { align: 'right' });
+          if (assignment.creatorEmail) {
+            sans('normal', 6.5); sc(C.muted);
+            doc.text(sanitize(assignment.creatorEmail), avatarCX - AVATAR_R - 2, avatarCY + 5, { align: 'right' });
           }
-          y += 2;
-        }
 
-        // ── PERFORMANCE METRICS ───────────────────────────────
-        const asmAllPosts     = getPdfPosts(assignment);
-        const asmMetricsPosts = asmAllPosts.filter(p => p.status === 'published' || p.publishedAt || p.metrics);
+          y += Math.max(titleLinesArr.length * 7.5, 13) + 3;
 
-        if (asmMetricsPosts.length > 0) {
-          checkY(55);
-          sectionLabel('Performance Metrics');
+          // ── Meta: Created · media type ──────────────────────
+          const createdStr = assignment.firstSubmittedAt
+            ? `Created ${fmtDateShort(assignment.firstSubmittedAt)}`
+            : 'Created —';
+          const mt = (assignment.mediaType || 'image').toLowerCase();
+          const mtStr = mt === 'carousel'
+            ? `Carousel  ·  ${assignment.slideCount || '?'} Slides`
+            : mt === 'video' ? 'Video'
+            : `Image  ·  ${assignment.slideCount || 1} Slide  ·  JPG`;
+          sans('normal', 7.5); sc(C.muted);
+          doc.text(`${createdStr}  ·  ${mtStr}`, cardInnerX, y);
+          y += 6;
 
-          // Aggregate
-          let totReach = 0, totLikes = 0, totComments = 0, totShares = 0, totImpr = 0, totSaves = 0;
-          const platAgg = {}; // { platform: { likes } }
-          for (const post of asmMetricsPosts) {
-            const mm   = post.metrics || {};
-            const plat = (Array.isArray(post.platform) ? post.platform[0] : (post.platform || '')).toLowerCase();
-            totLikes    += mm.likes    || 0;
-            totComments += mm.comments || 0;
-            totShares   += mm.shares   || 0;
-            totReach    += mm.reach    || mm.impressions || 0;
-            totImpr     += mm.impressions || mm.reach || 0;
-            totSaves    += mm.saves    || mm.saved  || 0;
-            if (!platAgg[plat]) platAgg[plat] = { likes: 0 };
-            platAgg[plat].likes += mm.likes || 0;
-          }
-          const engRate = totReach > 0 ? ((totLikes + totComments + totShares) / totReach * 100).toFixed(2) : null;
-
-          // ── 4 hero metric numbers (no card, just big numerals) ──
-          checkY(30);
-          const heroMetrics = [
-            { label: 'TOTAL REACH', value: fmtNum(totReach || totImpr) },
-            { label: 'LIKES',       value: fmtNum(totLikes)    },
-            { label: 'COMMENTS',    value: fmtNum(totComments) },
-            { label: 'SHARES',      value: fmtNum(totShares)   },
-          ];
-          const heroW = (CW - 9) / 4;
-          heroMetrics.forEach((hm, i) => {
-            const hx = M + i * (heroW + 3);
-            font('bold', 22); sc(C.blue);
-            doc.text(hm.value, hx + heroW / 2, y + 16, { align: 'center' });
-            font('normal', 9); sc(C.muted);
-            doc.text(hm.label, hx + heroW / 2, y + 23, { align: 'center' });
-          });
-          y += 32;
-
-          // ── Platform bar chart ──────────────────────────────
-          const platList = Object.keys(platAgg);
-          if (platList.length > 0) {
-            const maxLikes = Math.max(...platList.map(p => platAgg[p].likes), 1);
-            const BAR_LABEL_W = 26, BAR_VAL_W = 28, BAR_MAX_W = CW - BAR_LABEL_W - BAR_VAL_W - 4;
-            checkY(platList.length * 11 + 4);
-            for (const plat of platList) {
-              const plLabel  = platName[plat] || plat;
-              const plColor  = pColMap[plat]  || C.blue;
-              const plLikes  = platAgg[plat].likes;
-              const barW     = plLikes > 0 ? Math.max((plLikes / maxLikes) * BAR_MAX_W, 2) : 0;
-
-              font('normal', 10); sc(C.dark);
-              doc.text(plLabel, M, y + 6.3);
-
-              // Background track
-              sf(C.border); ss(C.border); doc.setLineWidth(0);
-              doc.roundedRect(M + BAR_LABEL_W, y, BAR_MAX_W, 9, 1.5, 1.5, 'FD');
-              // Filled bar
-              if (barW > 0) {
-                sf(plColor);
-                doc.roundedRect(M + BAR_LABEL_W, y, barW, 9, 1.5, 1.5, 'F');
-              }
-              // Value label
-              font('normal', 9.5); sc(C.gray);
-              doc.text(`${plLikes.toLocaleString()} likes`, PW - M, y + 6.3, { align: 'right' });
-              y += 13;
+          // ── Platform pills ──────────────────────────────────
+          if (asmPlatforms.length > 0) {
+            let pillX = cardInnerX;
+            for (const pl of asmPlatforms) {
+              const plStyle = getPlatformStyle(pl);
+              sans('normal', 6.5);
+              const pillW = doc.getTextWidth(plStyle.label) + 9;
+              if (pillX + pillW > M + CW - 6) break;
+              sf(plStyle.bg); hairline(); ss(plStyle.bg);
+              doc.roundedRect(pillX, y, pillW, 7, 3.5, 3.5, 'F');
+              sc(plStyle.tc);
+              doc.text(plStyle.label, pillX + pillW / 2, y + 5, { align: 'center' });
+              pillX += pillW + 3;
             }
-            y += 4;
+            y += 11;
           }
 
-          // ── Bottom stats row (Impressions, Saves, Eng Rate) ──
-          checkY(18);
-          ss(C.border); doc.setLineWidth(0.25);
-          doc.line(M, y, PW - M, y);
+          // ── Thumbnail strip ─────────────────────────────────
+          if (hasThumbs) {
+            let thumbX = cardInnerX;
+            for (let ti = 0; ti < showThumbCount; ti++) {
+              const thumbUrl = allThumbs[ti];
+              const cached   = thumbCache[thumbUrl];
+              const isVideo  = cached === 'VIDEO' || isVideoUrl(thumbUrl);
+
+              if (isVideo) {
+                // ── Video placeholder ──
+                sf([30, 28, 26]); hairline(); ss(C.border);
+                doc.roundedRect(thumbX, y, THUMB_SZ, THUMB_SZ, 2, 2, 'FD');
+                // Play triangle
+                const cx = thumbX + THUMB_SZ / 2, cy = y + THUMB_SZ / 2 - 2;
+                sf([255, 255, 255]); doc.setLineWidth(0);
+                doc.triangle(cx - 4, cy - 5, cx - 4, cy + 5, cx + 6, cy, 'F');
+                sans('bold', 6); sc([200, 198, 192]);
+                doc.text('VIDEO', thumbX + THUMB_SZ / 2, y + THUMB_SZ / 2 + 8, { align: 'center' });
+              } else if (cached) {
+                try {
+                  const fmt = cached.startsWith('data:image/png') ? 'PNG' : 'JPEG';
+                  doc.addImage(cached, fmt, thumbX, y, THUMB_SZ, THUMB_SZ, undefined, 'FAST');
+                  // Rounded border overlay
+                  hairline(); ss(C.border); doc.setFillColor(0, 0, 0, 0);
+                  doc.roundedRect(thumbX, y, THUMB_SZ, THUMB_SZ, 2, 2, 'D');
+                } catch {
+                  sf(C.tileBg); hairline(); ss(C.border);
+                  doc.roundedRect(thumbX, y, THUMB_SZ, THUMB_SZ, 2, 2, 'FD');
+                  sans('normal', 7); sc(C.muted);
+                  doc.text('—', thumbX + THUMB_SZ / 2, y + THUMB_SZ / 2 + 2, { align: 'center' });
+                }
+              } else {
+                sf(C.tileBg); hairline(); ss(C.border);
+                doc.roundedRect(thumbX, y, THUMB_SZ, THUMB_SZ, 2, 2, 'FD');
+                sans('normal', 7); sc(C.muted);
+                doc.text('No image', thumbX + THUMB_SZ / 2, y + THUMB_SZ / 2 + 2, { align: 'center' });
+              }
+              // Bottom label bar
+              const barLabel = isVideo ? 'VIDEO' : `SLIDE ${ti + 1}`;
+              doc.setFillColor(0, 0, 0);
+              doc.saveGraphicsState?.();
+              doc.rect(thumbX, y + THUMB_SZ - 7, THUMB_SZ, 7, 'F');
+              sans('bold', 6); sc([255, 255, 255]);
+              doc.text(barLabel, thumbX + THUMB_SZ / 2, y + THUMB_SZ - 1.5, { align: 'center' });
+              thumbX += THUMB_SZ + THUMB_GAP;
+            }
+            // +N more badge
+            const extraSlides = Math.max(0, (assignment.slideCount || allThumbs.length) - showThumbCount);
+            if (extraSlides > 0) {
+              sf(C.tileBg); hairline(); ss(C.border);
+              doc.roundedRect(thumbX, y, THUMB_SZ, THUMB_SZ, 2, 2, 'FD');
+              serif('normal', 14); sc(C.muted);
+              doc.text(`+${extraSlides}`, thumbX + THUMB_SZ / 2, y + THUMB_SZ / 2 + 2, { align: 'center' });
+              sans('normal', 6.5); sc(C.muted);
+              doc.text('MORE', thumbX + THUMB_SZ / 2, y + THUMB_SZ / 2 + 8, { align: 'center' });
+            }
+            y += THUMB_SZ + 6;
+          }
+
+          // ── Versions: horizontal grid (columns side-by-side) ─────
+          if (assignment.versions?.length > 0) {
+            hairline(); ss(C.border);
+            doc.line(cardInnerX, y, M + CW - 6, y);
+            y += 5;
+
+            const MAX_COLS  = 4;
+            const COL_GAP   = 4;
+            const THUMB_H   = 34;  // thumbnail height per cell
+            const HDR_H     = 16;  // header area (dot + label + badge + date)
+            const CELL_H    = HDR_H + THUMB_H + 3;
+            const DOT_R     = 2;
+
+            // Wrap into rows of MAX_COLS versions
+            for (let rowStart = 0; rowStart < assignment.versions.length; rowStart += MAX_COLS) {
+              const rowVersions = assignment.versions.slice(rowStart, rowStart + MAX_COLS);
+              const COLS = rowVersions.length;
+              const COL_W = (cardInnerW - (COLS - 1) * COL_GAP) / COLS;
+
+              checkY(CELL_H + 6);
+
+              for (let ci = 0; ci < COLS; ci++) {
+                const version = rowVersions[ci];
+                const vs      = getStatusStyle(version.status);
+                const colX    = cardInnerX + ci * (COL_W + COL_GAP);
+                let   colY    = y;
+
+                // ── Header row: dot · vN · badge ──────────────
+                sf(C.muted); doc.setLineWidth(0);
+                doc.circle(colX + DOT_R, colY + DOT_R, DOT_R, 'F');
+
+                sans('bold', 7.5); sc(C.primary);
+                const vLbl  = `v${version.versionNumber}`;
+                const vLblX = colX + DOT_R * 2 + 2;
+                doc.text(vLbl, vLblX, colY + DOT_R + 2.5);
+
+                const badgeX = vLblX + doc.getTextWidth(vLbl) + 2;
+                const vBadgeW = doc.getTextWidth(vs.label) + 6;
+                sf(vs.bg); hairline(); ss(vs.bg);
+                doc.roundedRect(badgeX, colY, vBadgeW, 6.5, 3, 3, 'F');
+                sans('normal', 6); sc(vs.tc);
+                doc.text(vs.label, badgeX + vBadgeW / 2, colY + DOT_R + 1.2, { align: 'center' });
+
+                colY += DOT_R * 2 + 4;
+
+                // ── Date ──────────────────────────────────────
+                if (version.submittedAt) {
+                  sans('normal', 6); sc(C.muted);
+                  const vDateStr = new Date(version.submittedAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
+                  doc.text(sanitize(vDateStr), colX, colY);
+                  colY += 5;
+                }
+
+                // ── Thumbnail (first media item) ───────────────
+                const vMediaUrls = (version.media || [])
+                  .map(m => typeof m === 'string' ? m : (m?.url || m?.publicUrl || ''))
+                  .filter(Boolean);
+                const thumbTop = y + HDR_H;
+
+                if (vMediaUrls.length > 0) {
+                  const vUrl    = vMediaUrls[0];
+                  const vCached = thumbCache[vUrl];
+                  const vIsVid  = vCached === 'VIDEO' || isVideoUrl(vUrl);
+
+                  if (vIsVid) {
+                    sf([30, 28, 26]); hairline(); ss(C.border);
+                    doc.roundedRect(colX, thumbTop, COL_W, THUMB_H, 2, 2, 'FD');
+                    const vcx = colX + COL_W / 2, vcy = thumbTop + THUMB_H / 2;
+                    sf([255, 255, 255]); doc.setLineWidth(0);
+                    doc.triangle(vcx - 4, vcy - 5, vcx - 4, vcy + 5, vcx + 6, vcy, 'F');
+                  } else if (vCached) {
+                    try {
+                      const fmt = vCached.startsWith('data:image/png') ? 'PNG' : 'JPEG';
+                      doc.addImage(vCached, fmt, colX, thumbTop, COL_W, THUMB_H, undefined, 'FAST');
+                      hairline(); ss(C.border); doc.setFillColor(0, 0, 0, 0);
+                      doc.roundedRect(colX, thumbTop, COL_W, THUMB_H, 2, 2, 'D');
+                    } catch {
+                      sf(C.tileBg); hairline(); ss(C.border);
+                      doc.roundedRect(colX, thumbTop, COL_W, THUMB_H, 2, 2, 'FD');
+                    }
+                  } else {
+                    sf(C.tileBg); hairline(); ss(C.border);
+                    doc.roundedRect(colX, thumbTop, COL_W, THUMB_H, 2, 2, 'FD');
+                  }
+
+                  // "+N more" badge if multiple media
+                  if (vMediaUrls.length > 1) {
+                    const moreLabel = `+${vMediaUrls.length - 1}`;
+                    sans('bold', 5.5);
+                    const moreLabelW = doc.getTextWidth(moreLabel) + 5;
+                    doc.setFillColor(0, 0, 0);
+                    doc.roundedRect(colX + COL_W - moreLabelW - 1.5, thumbTop + THUMB_H - 8, moreLabelW, 6, 1, 1, 'F');
+                    sc([255, 255, 255]);
+                    doc.text(moreLabel, colX + COL_W - 1.5 - moreLabelW / 2, thumbTop + THUMB_H - 3.5, { align: 'center' });
+                  }
+                } else {
+                  sf(C.tileBg); hairline(); ss(C.border);
+                  doc.roundedRect(colX, thumbTop, COL_W, THUMB_H, 2, 2, 'FD');
+                  sans('normal', 6); sc(C.muted);
+                  doc.text('No media', colX + COL_W / 2, thumbTop + THUMB_H / 2 + 2, { align: 'center' });
+                }
+              }
+
+              y += CELL_H + 4;
+            }
+            y += 2;
+          }
+
+          // ── Thin divider before metrics ─────────────────────
+          hairline(); ss(C.border);
+          doc.line(cardInnerX, y, M + CW - 6, y);
           y += 5;
-          const bottomStats = [
-            { label: 'IMPRESSIONS',       value: fmtNum(totImpr || totReach) },
-            { label: 'SAVES / BOOKMARKS', value: fmtNum(totSaves)            },
-            ...(engRate ? [{ label: 'ENGAGEMENT RATE', value: `${engRate}%` }] : []),
-          ];
-          const bsW = (CW - (bottomStats.length - 1) * 6) / bottomStats.length;
-          bottomStats.forEach((bs, i) => {
-            const bx = M + i * (bsW + 6);
-            font('normal', 8.5); sc(C.muted);
-            doc.text(bs.label, bx, y + 5);
-            font('bold', 12); sc(C.dark);
-            doc.text(bs.value, bx, y + 13);
-          });
-          y += 22;
-        }
+
+          // ── Metrics row: 5 columns with 0.5pt vertical dividers
+          if (hasMetrics) {
+            let totReach = 0, totLikes = 0, totComments = 0, totShares = 0, totSaves = 0;
+            for (const post of asmMetricsPosts) {
+              const mm = post.metrics || {};
+              totReach    += mm.reach    || mm.impressions || 0;
+              totLikes    += mm.likes    || 0;
+              totComments += mm.comments || 0;
+              totShares   += mm.shares   || 0;
+              totSaves    += mm.saves    || mm.saved || 0;
+            }
+            const metricCols = [
+              { label: 'TOTAL REACH', value: fmtNum(totReach)    },
+              { label: 'LIKES',       value: fmtNum(totLikes)    },
+              { label: 'COMMENTS',    value: fmtNum(totComments) },
+              { label: 'SHARES',      value: fmtNum(totShares)   },
+              { label: 'SAVES',       value: fmtNum(totSaves)    },
+              { label: 'ENG. RATE',   value: totReach > 0 ? ((totLikes + totComments + totShares) / totReach * 100).toFixed(1) + '%' : '—' },
+            ];
+            const metColW = cardInnerW / 6;
+            metricCols.forEach((mc, mi) => {
+              const mx = cardInnerX + mi * metColW;
+              // Vertical divider except first column
+              if (mi > 0) {
+                hairline(); ss(C.border);
+                doc.line(mx, y, mx, y + 22);
+              }
+              // Number in serif
+              const isEngRate = mi === metricCols.length - 1;
+              serif('normal', isEngRate ? 16 : 20); sc(isEngRate ? [22, 163, 74] : C.primary);
+              doc.text(mc.value, mx + metColW / 2, y + 13, { align: 'center' });
+              // Label in sans uppercase muted
+              sans('bold', 6.5); sc([85, 83, 78]);
+              doc.text(mc.label, mx + metColW / 2, y + 20, { align: 'center' });
+            });
+            y += 26;
+          } else {
+            sans('normal', 7.5); sc(C.muted);
+            doc.text('No performance data available yet', M + CW / 2, y + 7, { align: 'center' });
+            y += 13;
+          }
+
+          y += 5;
+
+          // ── Card border (drawn after content so height is known)
+          const cardH = y - cardStartY - 2;
+          hairline(); doc.setDrawColor(...C.border);
+          doc.roundedRect(M, cardStartY, CW, cardH, 3, 3, 'D');
+
+          y += 6; // gap between cards
 
         } catch (asmErr) {
           console.warn('PDF: skipped assignment due to error', asmErr, assignment);
         }
       }
 
-      // ── FOOTER on every page ──────────────────────────────────
+      // ── Footer on every page ──────────────────────────────────
       const totalPages = doc.internal.getNumberOfPages();
       for (let p = 1; p <= totalPages; p++) {
         doc.setPage(p);
-        // Find assignment for this page
-        let asmIdx = 0;
-        for (let k = asmPageMap.length - 1; k >= 0; k--) {
-          if (asmPageMap[k].startPage <= p) { asmIdx = asmPageMap[k].assignmentIdx; break; }
-        }
-        const asmForPage = report.assignments[asmIdx];
-        const itemTitle  = sanitize(asmForPage?.itemTitle || report.contentItem?.title || '');
-
-        ss(C.border); doc.setLineWidth(0.3);
+        hairline(); ss(C.border);
         doc.line(M, PH - 14, PW - M, PH - 14);
-        font('normal', 9); sc(C.muted);
-        doc.text(`${calendarName}${itemTitle ? ' · ' + itemTitle : ''}`, M, PH - 7);
-        font('bold', 9); sc(C.blue);
-        doc.text(`Page ${p} of ${totalPages}`, PW - M, PH - 7, { align: 'right' });
+        sans('normal', 7.5); sc(C.muted);
+        doc.text(
+          `${sanitize(customerName).toUpperCase()}  ·  CALENDAR: ${sanitize(calendarName || 'ALL').toUpperCase()}`,
+          M, PH - 7
+        );
+        doc.text(
+          `${totalItems} ITEMS  ·  ${sanitize(periodVal)}`,
+          PW - M, PH - 7, { align: 'right' }
+        );
       }
 
       // ── Save ──────────────────────────────────────────────────
       const safeCustomer = sanitize(customerName).replace(/[^a-z0-9]/gi, '_');
-      const safeCalendar = sanitize(report?.calendar?.name || 'Report').replace(/[^a-z0-9]/gi, '_');
+      const safeCalendar = sanitize(calendarName || 'Report').replace(/[^a-z0-9]/gi, '_');
       const dateStr      = new Date().toISOString().slice(0, 10);
       doc.save(`Content_Performance_Report_${safeCustomer}_${safeCalendar}_${dateStr}.pdf`);
 
@@ -1174,6 +1660,9 @@ export default function SummaryReport() {
     setError('');
     setExpandedItems({});
     setVisibleCount(5);
+    setStatusFilter('all');
+    setSortBy('date_desc');
+    setSearchCreator('');
     setLiveScheduledPosts([]);
     setLiveMetricsCache({});
     fetchedMetricsRef.current = new Set();
@@ -1222,13 +1711,17 @@ export default function SummaryReport() {
                 const found = (snap.media || []).find(m => m.id === postMediaId || m.id === String(postMediaId));
                 if (found) {
                   metrics = {
-                    likes:    found.likes    ?? found.like_count    ?? 0,
-                    comments: found.comments ?? found.comments_count ?? 0,
-                    shares:   found.shares   ?? 0,
-                    saves:    found.saves    ?? found.saved ?? 0,
-                    reach:    found.reach    ?? found.impressions ?? 0,
+                    likes:              found.likes              ?? found.like_count      ?? 0,
+                    comments:           found.comments           ?? found.comments_count  ?? 0,
+                    views:              found.views              ?? 0,
+                    shares:             found.shares             ?? 0,
+                    saves:              found.saves              ?? found.saved           ?? 0,
+                    reach:              found.reach              ?? found.impressions     ?? 0,
+                    total_interactions: found.total_interactions ?? 0,
+                    timestamp:          found.timestamp          ?? null,
+                    media_type:         found.media_type         ?? null,
+                    permalink:          found.permalink          ?? null,
                   };
-                  // Capture the permalink for direct link to the post
                   if (found.permalink) enrichedPosts[i].instagramPermalink = found.permalink;
                   break;
                 }
@@ -1254,11 +1747,17 @@ export default function SummaryReport() {
                 const found = (snap.posts || []).find(p => p.id === fbPostId || p.id === String(fbPostId));
                 if (found) {
                   metrics = {
-                    likes:    found.likes    ?? found.reactionsTotal ?? 0,
-                    comments: found.comments ?? 0,
-                    shares:   found.shares   ?? 0,
-                    clicks:   found.clicks   ?? 0,
-                    reach:    found.reach    ?? found.impressions ?? 0,
+                    likes:          found.likes          ?? found.reactionsTotal ?? 0,
+                    comments:       found.comments       ?? 0,
+                    shares:         found.shares         ?? 0,
+                    clicks:         found.clicks         ?? 0,
+                    impressions:    found.impressions    ?? 0,
+                    reach:          found.reach          ?? 0,
+                    videoViews:     found.videoViews     ?? 0,
+                    reactionsTotal: found.reactionsTotal ?? 0,
+                    reactions:      found.reactions      ?? null,
+                    engagementRate: found.engagementRate ?? null,
+                    created_time:   found.created_time   ?? null,
                   };
                   break;
                 }
@@ -1287,11 +1786,13 @@ export default function SummaryReport() {
                 const found = (snap.posts || []).find(p => p.id === liPostId || p.id === String(liPostId));
                 if (found) {
                   metrics = {
-                    likes:        found.likes    ?? found.reactions ?? 0,
-                    comments:     found.comments ?? 0,
-                    shares:       found.shares   ?? 0,
-                    impressions:  found.impressions ?? found.reach ?? 0,
-                    reach:        found.reach    ?? 0,
+                    likeCount:              found.likeCount              ?? found.likes    ?? found.reactions ?? 0,
+                    commentCount:           found.commentCount           ?? found.comments ?? 0,
+                    shareCount:             found.shareCount             ?? found.shares   ?? 0,
+                    impressionCount:        found.impressionCount        ?? found.impressions ?? found.reach ?? 0,
+                    uniqueImpressionsCount: found.uniqueImpressionsCount ?? 0,
+                    clickCount:             found.clickCount             ?? found.clicks   ?? 0,
+                    engagement:             found.engagement             ?? null,
                   };
                   break;
                 }
@@ -1401,13 +1902,177 @@ export default function SummaryReport() {
       if (!p.metrics) return sum;
       return sum + (p.metrics.reach || p.metrics.impressions || 0);
     }, 0);
+
+    const publishedCount = report.assignments.filter(a =>
+      a.versions?.some(v => (v.status || '').toLowerCase() === 'published') ||
+      (liveMetricsCache[a.assignmentId]?.posts || []).some(p => p.status === 'published' || p.publishedAt)
+    ).length;
+    const approvedCount = report.assignments.filter(a =>
+      a.versions?.some(v => ['approved', 'published'].includes((v.status || '').toLowerCase()))
+    ).length;
+    const approvalRate = report.assignments.length > 0
+      ? Math.round((approvedCount / report.assignments.length) * 100)
+      : 0;
+    const totalVersionCount = report.assignments.reduce((s, a) => s + (a.totalVersions || 1), 0);
+    const avgRevisions = report.assignments.length > 0
+      ? (totalVersionCount / report.assignments.length).toFixed(1)
+      : '—';
+    const timesToApproval = report.assignments
+      .map(a => {
+        const firstSub = a.firstSubmittedAt ? new Date(a.firstSubmittedAt) : null;
+        const approvedV = a.versions?.find(v => ['approved', 'published'].includes((v.status || '').toLowerCase()));
+        const approvedAt = approvedV?.updatedAt || approvedV?.reviewedAt || null;
+        if (!firstSub || !approvedAt) return null;
+        return (new Date(approvedAt) - firstSub) / (1000 * 60 * 60 * 24);
+      })
+      .filter(d => d !== null && d >= 0);
+    const avgTimeToApproval = timesToApproval.length > 0
+      ? (timesToApproval.reduce((s, d) => s + d, 0) / timesToApproval.length).toFixed(1)
+      : null;
+    const overallEngRate = reach > 0 ? ((engagements / reach) * 100).toFixed(1) : null;
+
     return {
-      items:        report.assignments?.length || 0,
-      versions:     report.summary?.totalVersions || 0,
+      items:             report.assignments?.length || 0,
+      versions:          report.summary?.totalVersions || 0,
       engagements,
       reach,
+      publishedCount,
+      approvedCount,
+      approvalRate,
+      avgRevisions,
+      avgTimeToApproval,
+      overallEngRate,
     };
   }, [report, liveMetricsCache]);
+
+  // ── Platform breakdown (rolled-up per-platform stats) ─────────────────────
+  const platformBreakdown = useMemo(() => {
+    if (!report) return [];
+    const map = {};
+    const allCachedPosts = Object.values(liveMetricsCache).filter(v => !v.loading).flatMap(v => v.posts || []);
+    const cachedIds = new Set(allCachedPosts.map(p => p._id).filter(Boolean));
+    const fallback = (report.scheduledPosts || []).filter(p => !p._id || !cachedIds.has(p._id));
+    for (const post of [...allCachedPosts, ...fallback]) {
+      if (post.status !== 'published' && !post.publishedAt && !post.metrics) continue;
+      const pl = (Array.isArray(post.platform) ? post.platform[0] : post.platform || 'unknown').toLowerCase();
+      if (!map[pl]) map[pl] = { platform: pl, posts: 0, reach: 0, likes: 0, comments: 0, shares: 0, saves: 0 };
+      map[pl].posts++;
+      if (post.metrics) {
+        map[pl].reach    += post.metrics.reach    || post.metrics.impressions || 0;
+        map[pl].likes    += post.metrics.likes    || 0;
+        map[pl].comments += post.metrics.comments || 0;
+        map[pl].shares   += post.metrics.shares   || 0;
+        map[pl].saves    += post.metrics.saves    || post.metrics.saved || 0;
+      }
+    }
+    return Object.values(map).sort((a, b) => b.posts - a.posts);
+  }, [report, liveMetricsCache]);
+
+  // ── Status distribution ────────────────────────────────────────────────────
+  const statusDistribution = useMemo(() => {
+    if (!report) return [];
+    const counts = {};
+    for (const a of (report.assignments || [])) {
+      const latest = a.versions?.[a.versions.length - 1];
+      const s = (latest?.status || 'pending').toLowerCase();
+      const key = ['submitted', 'in_review', 'under_review'].includes(s) ? 'in_review'
+        : s === 'revision_requested' ? 'revision' : s;
+      counts[key] = (counts[key] || 0) + 1;
+    }
+    const total = report.assignments?.length || 1;
+    const meta = {
+      published: { label: 'Published', color: 'bg-emerald-500' },
+      approved:  { label: 'Approved',  color: 'bg-green-500'   },
+      in_review: { label: 'In Review', color: 'bg-amber-400'   },
+      revision:  { label: 'Revision',  color: 'bg-orange-400'  },
+      rejected:  { label: 'Rejected',  color: 'bg-red-400'     },
+      pending:   { label: 'Pending',   color: 'bg-gray-300'    },
+    };
+    return ['published', 'approved', 'in_review', 'revision', 'rejected', 'pending']
+      .filter(k => counts[k] > 0)
+      .map(k => ({ status: k, ...meta[k], count: counts[k], pct: Math.round((counts[k] / total) * 100) }));
+  }, [report]);
+
+  // ── Top performers ─────────────────────────────────────────────────────────
+  const topPerformers = useMemo(() => {
+    if (!report) return [];
+    return report.assignments
+      .map(a => {
+        const posts = liveMetricsCache[a.assignmentId]?.posts || [];
+        const reach = posts.reduce((s, p) => s + (p.metrics?.reach || p.metrics?.impressions || 0), 0);
+        const eng   = posts.reduce((s, p) => s + (p.metrics?.likes || 0) + (p.metrics?.comments || 0) + (p.metrics?.shares || 0), 0);
+        return { ...a, _totalReach: reach, _totalEng: eng, _engRate: reach > 0 ? parseFloat(((eng / reach) * 100).toFixed(1)) : 0 };
+      })
+      .filter(a => a._totalEng > 0 || a._totalReach > 0)
+      .sort((a, b) => b._totalEng - a._totalEng)
+      .slice(0, 3);
+  }, [report, liveMetricsCache]);
+
+  // ── Creator stats ──────────────────────────────────────────────────────────
+  const creatorStats = useMemo(() => {
+    if (!report) return [];
+    const map = {};
+    for (const a of (report.assignments || [])) {
+      const name = a.creatorName || 'Unknown';
+      if (!map[name]) map[name] = { name, email: a.creatorEmail || '', assigned: 0, approved: 0, published: 0, totalVersions: 0 };
+      map[name].assigned++;
+      map[name].totalVersions += a.totalVersions || 1;
+      if (a.versions?.some(v => ['approved', 'published'].includes((v.status || '').toLowerCase()))) map[name].approved++;
+      if (a.versions?.some(v => (v.status || '').toLowerCase() === 'published')) map[name].published++;
+    }
+    return Object.values(map).sort((a, b) => b.assigned - a.assigned);
+  }, [report]);
+
+  // ── Content type breakdown ─────────────────────────────────────────────────
+  const contentTypeStats = useMemo(() => {
+    if (!report) return [];
+    const map = {};
+    for (const a of (report.assignments || [])) {
+      const t = (a.mediaType || 'image').toLowerCase();
+      const label = t === 'carousel' ? 'Carousel' : t === 'video' ? 'Video' : 'Image';
+      if (!map[label]) map[label] = { type: label, count: 0, eng: 0, reach: 0 };
+      map[label].count++;
+      for (const p of (liveMetricsCache[a.assignmentId]?.posts || [])) {
+        if (!p.metrics) continue;
+        map[label].eng   += (p.metrics.likes || 0) + (p.metrics.comments || 0) + (p.metrics.shares || 0);
+        map[label].reach += p.metrics.reach || p.metrics.impressions || 0;
+      }
+    }
+    return Object.values(map).sort((a, b) => b.count - a.count);
+  }, [report, liveMetricsCache]);
+
+  // ── Filtered & sorted assignments ─────────────────────────────────────────
+  const filteredSortedAssignments = useMemo(() => {
+    if (!report) return [];
+    let items = [...report.assignments];
+    if (statusFilter !== 'all') {
+      items = items.filter(a => {
+        const latest = a.versions?.[a.versions.length - 1];
+        const s = (latest?.status || '').toLowerCase();
+        if (statusFilter === 'published')  return a.versions?.some(v => (v.status || '').toLowerCase() === 'published');
+        if (statusFilter === 'approved')   return ['approved', 'published'].includes(s);
+        if (statusFilter === 'in_review')  return ['submitted', 'in_review', 'under_review'].includes(s);
+        if (statusFilter === 'rejected')   return s === 'rejected';
+        if (statusFilter === 'revision')   return s === 'revision_requested';
+        return true;
+      });
+    }
+    if (searchCreator.trim()) {
+      const q = searchCreator.trim().toLowerCase();
+      items = items.filter(a =>
+        (a.creatorName || '').toLowerCase().includes(q) || (a.creatorEmail || '').toLowerCase().includes(q)
+      );
+    }
+    const getEng   = a => (liveMetricsCache[a.assignmentId]?.posts || []).reduce((s, p) => s + (p.metrics?.likes || 0) + (p.metrics?.comments || 0) + (p.metrics?.shares || 0), 0);
+    const getReach = a => (liveMetricsCache[a.assignmentId]?.posts || []).reduce((s, p) => s + (p.metrics?.reach || p.metrics?.impressions || 0), 0);
+    if (sortBy === 'date_asc')   items.sort((a, b) => new Date(a.firstSubmittedAt || 0) - new Date(b.firstSubmittedAt || 0));
+    else if (sortBy === 'date_desc') items.sort((a, b) => new Date(b.firstSubmittedAt || 0) - new Date(a.firstSubmittedAt || 0));
+    else if (sortBy === 'engagement') items.sort((a, b) => getEng(b) - getEng(a));
+    else if (sortBy === 'reach')      items.sort((a, b) => getReach(b) - getReach(a));
+    else if (sortBy === 'revisions')  items.sort((a, b) => (b.totalVersions || 1) - (a.totalVersions || 1));
+    else if (sortBy === 'creator')    items.sort((a, b) => (a.creatorName || '').localeCompare(b.creatorName || ''));
+    return items;
+  }, [report, statusFilter, searchCreator, sortBy, liveMetricsCache]);
 
   // ── Auto-fetch live metrics for all assignments once report + posts are ready ──
   useEffect(() => {
@@ -1423,7 +2088,7 @@ export default function SummaryReport() {
           const byTitle = postsByItem.byTitle[titleKey];
           if (byTitle?.length) return byTitle;
         }
-        return report.assignments.length === 1 ? postsByItem.all : [];
+        return [];
       })();
       fetchLiveMetrics(assignment.assignmentId, itemPosts);
     });
@@ -1577,65 +2242,281 @@ export default function SummaryReport() {
 
           {/* ── Summary stat cards ── */}
           {report && !loading && (
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              {[
-                { icon: FileText,   iconCls: 'text-blue-500',    label: 'Content items',      value: summaryTotals.items },
-                { icon: Layers,     iconCls: 'text-indigo-500',  label: 'Total versions',     value: summaryTotals.versions },
-                { icon: Heart,      iconCls: 'text-rose-500',    label: 'Total engagements',  value: fmtNumUI(summaryTotals.engagements) },
-                { icon: TrendingUp, iconCls: 'text-emerald-500', label: 'Total reach',        value: fmtNumUI(summaryTotals.reach) },
-              ].map(card => {
-                const Icon = card.icon;
-                return (
-                  <div key={card.label} className="bg-white border border-gray-200 rounded-2xl p-5">
-                    <Icon className={`w-6 h-6 ${card.iconCls} mb-3`} />
-                    <p className="text-2xl font-bold text-gray-900">{card.value}</p>
-                    <p className="text-sm text-gray-500 mt-0.5">{card.label}</p>
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                {[
+                  { icon: FileText,    iconCls: 'text-blue-500',    label: 'Content Items',     value: summaryTotals.items,                                          sub: null },
+                  { icon: CheckCircle, iconCls: 'text-emerald-500', label: 'Published',         value: summaryTotals.publishedCount,                                 sub: null },
+                  { icon: TrendingUp,  iconCls: 'text-green-500',   label: 'Approval Rate',     value: summaryTotals.approvalRate + '%',                             sub: `${summaryTotals.approvedCount} approved` },
+                  { icon: Layers,      iconCls: 'text-indigo-500',  label: 'Avg Revisions',     value: summaryTotals.avgRevisions,                                   sub: `${summaryTotals.versions} total` },
+                  { icon: Heart,       iconCls: 'text-rose-500',    label: 'Total Engagements', value: fmtNumUI(summaryTotals.engagements),                          sub: summaryTotals.overallEngRate ? `${summaryTotals.overallEngRate}% eng rate` : null },
+                  { icon: Eye,         iconCls: 'text-violet-500',  label: 'Total Reach',       value: fmtNumUI(summaryTotals.reach),                                sub: summaryTotals.avgTimeToApproval ? `~${summaryTotals.avgTimeToApproval}d to approve` : null },
+                ].map(card => {
+                  const Icon = card.icon;
+                  return (
+                    <div key={card.label} className="bg-white border border-gray-200 rounded-2xl p-4">
+                      <Icon className={`w-5 h-5 ${card.iconCls} mb-2`} />
+                      <p className="text-xl font-bold text-gray-900">{card.value}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">{card.label}</p>
+                      {card.sub && <p className="text-[11px] text-gray-400 mt-0.5">{card.sub}</p>}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* ── Status distribution bar ── */}
+              {statusDistribution.length > 0 && (
+                <div className="bg-white border border-gray-200 rounded-2xl p-5">
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Content Status Distribution</p>
+                  <div className="flex h-3 rounded-full overflow-hidden gap-px mb-3">
+                    {statusDistribution.map(s => (
+                      <div key={s.status} className={`${s.color} transition-all`} style={{ width: `${s.pct}%` }} title={`${s.label}: ${s.count} (${s.pct}%)`} />
+                    ))}
                   </div>
-                );
-              })}
-            </div>
+                  <div className="flex flex-wrap gap-4">
+                    {statusDistribution.map(s => (
+                      <div key={s.status} className="flex items-center gap-1.5">
+                        <div className={`w-2.5 h-2.5 rounded-full ${s.color}`} />
+                        <span className="text-xs text-gray-600 font-medium">{s.label}</span>
+                        <span className="text-xs text-gray-400">{s.count} ({s.pct}%)</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ── Top performers ── */}
+              {topPerformers.length > 0 && (
+                <div className="bg-white border border-gray-200 rounded-2xl p-5">
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                    <TrendingUp className="w-3.5 h-3.5 text-amber-500" />
+                    Top Performing Content
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {topPerformers.map((a, i) => (
+                      <div key={a.assignmentId} className={`rounded-xl border p-3 ${i === 0 ? 'border-amber-200 bg-amber-50' : 'border-gray-100 bg-gray-50'}`}>
+                        <div className="flex items-start gap-2">
+                          <span className={`text-xs font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${i === 0 ? 'bg-amber-400 text-white' : 'bg-gray-200 text-gray-500'}`}>#{i + 1}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-semibold text-gray-800 line-clamp-1">{a.itemTitle || a.caption?.slice(0, 50) || `Item ${i + 1}`}</p>
+                            <p className="text-[10px] text-gray-400 mt-0.5">{a.creatorName}</p>
+                          </div>
+                        </div>
+                        <div className="flex gap-3 mt-2 pt-2 border-t border-gray-200">
+                          <div>
+                            <p className="text-sm font-bold text-gray-800">{fmtNumUI(a._totalEng)}</p>
+                            <p className="text-[9px] text-gray-400">Engagements</p>
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-gray-800">{fmtNumUI(a._totalReach)}</p>
+                            <p className="text-[9px] text-gray-400">Reach</p>
+                          </div>
+                          {a._engRate > 0 && (
+                            <div>
+                              <p className="text-sm font-bold text-emerald-600">{a._engRate}%</p>
+                              <p className="text-[9px] text-gray-400">Eng. rate</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ── Platform breakdown table ── */}
+              {platformBreakdown.length > 0 && (
+                <div className="bg-white border border-gray-200 rounded-2xl p-5">
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Platform Breakdown</p>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-gray-100">
+                          {['Platform', 'Posts', 'Reach', 'Likes', 'Comments', 'Shares', 'Eng. Rate'].map(h => (
+                            <th key={h} className="text-left text-[11px] font-bold text-gray-400 uppercase pb-2 pr-4 whitespace-nowrap">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {platformBreakdown.map(row => {
+                          const eng = row.likes + row.comments + row.shares;
+                          const engRate = row.reach > 0 ? ((eng / row.reach) * 100).toFixed(1) : null;
+                          return (
+                            <tr key={row.platform} className="border-b border-gray-50 last:border-0">
+                              <td className="py-2 pr-4"><PlatformPill platform={row.platform} /></td>
+                              <td className="py-2 pr-4 font-semibold text-gray-800">{row.posts}</td>
+                              <td className="py-2 pr-4 text-gray-600">{fmtNumUI(row.reach)}</td>
+                              <td className="py-2 pr-4 text-gray-600">{fmtNumUI(row.likes)}</td>
+                              <td className="py-2 pr-4 text-gray-600">{fmtNumUI(row.comments)}</td>
+                              <td className="py-2 pr-4 text-gray-600">{fmtNumUI(row.shares)}</td>
+                              <td className="py-2 pr-4 font-semibold text-emerald-600">{engRate ? `${engRate}%` : '—'}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Content type + Creator stats row ── */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {contentTypeStats.length > 0 && (
+                  <div className="bg-white border border-gray-200 rounded-2xl p-5">
+                    <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Content Type Breakdown</p>
+                    <div className="space-y-3">
+                      {contentTypeStats.map(ct => {
+                        const engRate = ct.reach > 0 ? ((ct.eng / ct.reach) * 100).toFixed(1) : null;
+                        const pct = summaryTotals.items > 0 ? Math.round((ct.count / summaryTotals.items) * 100) : 0;
+                        return (
+                          <div key={ct.type}>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-sm font-medium text-gray-700">{ct.type}</span>
+                              <div className="flex items-center gap-3 text-xs text-gray-500">
+                                <span>{ct.count} items ({pct}%)</span>
+                                {ct.eng > 0 && <span className="text-emerald-600 font-semibold">{fmtNumUI(ct.eng)} eng</span>}
+                                {engRate && <span className="text-gray-400">{engRate}% rate</span>}
+                              </div>
+                            </div>
+                            <div className="h-1.5 bg-gray-100 rounded-full">
+                              <div className="h-1.5 bg-blue-500 rounded-full" style={{ width: `${pct}%` }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                {creatorStats.length > 0 && (
+                  <div className="bg-white border border-gray-200 rounded-2xl p-5">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Creator Performance</p>
+                      {creatorStats.length > 3 && (
+                        <button onClick={() => setShowCreatorTable(v => !v)} className="text-xs text-blue-600 font-medium hover:underline">
+                          {showCreatorTable ? 'Show less' : `View all ${creatorStats.length}`}
+                        </button>
+                      )}
+                    </div>
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-gray-100">
+                          {['Creator', 'Assigned', 'Approved', 'Avg Rev.'].map(h => (
+                            <th key={h} className="text-left text-[11px] font-bold text-gray-400 uppercase pb-2 pr-3">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(showCreatorTable ? creatorStats : creatorStats.slice(0, 3)).map(c => (
+                          <tr key={c.name} className="border-b border-gray-50 last:border-0">
+                            <td className="py-2 pr-3">
+                              <div className="flex items-center gap-1.5">
+                                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0 ${getAvatarColor(c.name)}`}>
+                                  {getInitials(c.name)}
+                                </div>
+                                <span className="font-medium text-gray-800 text-xs truncate max-w-[90px]">{c.name}</span>
+                              </div>
+                            </td>
+                            <td className="py-2 pr-3 font-semibold text-gray-800">{c.assigned}</td>
+                            <td className="py-2 pr-3">
+                              <span className={`text-xs font-semibold ${c.approved === c.assigned ? 'text-emerald-600' : 'text-gray-600'}`}>
+                                {c.approved} <span className="text-gray-400 font-normal">({c.assigned > 0 ? Math.round((c.approved / c.assigned) * 100) : 0}%)</span>
+                              </span>
+                            </td>
+                            <td className="py-2 pr-3 text-gray-600">{c.assigned > 0 ? (c.totalVersions / c.assigned).toFixed(1) : '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </>
           )}
 
           {/* ── Report body ── */}
           {report && !loading && (
             <div ref={reportRef}>
-              {/* Report title row */}
+              {/* Report title + filter/sort bar */}
               <div className="flex items-start justify-between mb-4 flex-wrap gap-3">
                 <div>
                   <h2 className="text-lg font-bold text-gray-900">
                     {resolvedCalendarName || 'All Calendars'} — Report
                   </h2>
                   <p className="text-sm text-gray-500 mt-0.5">
-                    Showing {Math.min(visibleCount, report.assignments.length)} of {report.assignments.length} items
-                    {selectedCustomerObj ? ` · Customer: ${selectedCustomerObj.businessName || selectedCustomerObj.name}` : ''}
+                    Showing {Math.min(visibleCount, filteredSortedAssignments.length)} of {filteredSortedAssignments.length} items
+                    {filteredSortedAssignments.length !== report.assignments.length ? ` (filtered from ${report.assignments.length})` : ''}
+                    {selectedCustomerObj ? ` · ${selectedCustomerObj.businessName || selectedCustomerObj.name}` : ''}
                     {(fromDate || toDate)
                       ? ` · ${fromDate ? new Date(fromDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '…'} – ${toDate ? new Date(toDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '…'}`
                       : ''}
                   </p>
                 </div>
-                <div className="flex gap-2">
-                  <button className="flex items-center gap-1.5 border border-gray-200 bg-white text-gray-600 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-50">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    onClick={() => {
+                      const allIds = report.assignments.map(a => a.assignmentId);
+                      const anyCollapsed = allIds.some(id => expandedItems[id] === false);
+                      const next = {};
+                      allIds.forEach(id => { next[id] = anyCollapsed ? true : false; });
+                      setExpandedItems(next);
+                    }}
+                    className="flex items-center gap-1.5 border border-gray-200 bg-white text-gray-600 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-50"
+                  >
                     <AlignJustify className="w-3.5 h-3.5" />
-                    Sort
+                    {Object.values(expandedItems).some(v => v === false) ? 'Expand All' : 'Collapse All'}
                   </button>
-                  <button className="flex items-center gap-1.5 border border-gray-200 bg-white text-gray-600 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-50">
-                    <Sliders className="w-3.5 h-3.5" />
-                    Columns
-                  </button>
+                  <div className="relative">
+                    <User className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+                    <input
+                      type="text"
+                      placeholder="Search creator…"
+                      value={searchCreator}
+                      onChange={e => { setSearchCreator(e.target.value); setVisibleCount(5); }}
+                      className="pl-7 pr-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500 w-36"
+                    />
+                  </div>
+                  <select
+                    value={statusFilter}
+                    onChange={e => { setStatusFilter(e.target.value); setVisibleCount(5); }}
+                    className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white focus:ring-1 focus:ring-blue-500"
+                  >
+                    <option value="all">All statuses</option>
+                    <option value="published">Published</option>
+                    <option value="approved">Approved</option>
+                    <option value="in_review">In Review</option>
+                    <option value="revision">Revision Requested</option>
+                    <option value="rejected">Rejected</option>
+                  </select>
+                  <select
+                    value={sortBy}
+                    onChange={e => { setSortBy(e.target.value); setVisibleCount(5); }}
+                    className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white focus:ring-1 focus:ring-blue-500"
+                  >
+                    <option value="date_desc">Newest first</option>
+                    <option value="date_asc">Oldest first</option>
+                    <option value="engagement">Most engaged</option>
+                    <option value="reach">Most reach</option>
+                    <option value="revisions">Most revisions</option>
+                    <option value="creator">By creator</option>
+                  </select>
                 </div>
               </div>
 
               {/* Content item cards */}
-              {report.assignments.length === 0 ? (
+              {filteredSortedAssignments.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 bg-white border border-gray-200 rounded-2xl text-gray-400">
                   <FileText className="w-12 h-12 mb-3 text-gray-300" />
-                  <p className="text-base font-semibold text-gray-500">No content found</p>
-                  <p className="text-sm mt-1">Try adjusting your filters.</p>
+                  <p className="text-base font-semibold text-gray-500">
+                    {report.assignments.length === 0 ? 'No content found' : 'No results match your filters'}
+                  </p>
+                  <p className="text-sm mt-1">
+                    {report.assignments.length === 0 ? 'Try adjusting your filters.' : 'Clear or change the status / creator filters above.'}
+                  </p>
                 </div>
               ) : (
                 <>
                   <div className="space-y-3">
-                    {report.assignments.slice(0, visibleCount).map((assignment, ai) => {
+                    {filteredSortedAssignments.slice(0, visibleCount).map((assignment, ai) => {
                       // Match posts: itemId → contentId → itemTitle → all (if single item)
                       const titleKey = (assignment.itemTitle || '').toLowerCase().trim();
                       const itemPosts = (() => {
@@ -1647,7 +2528,7 @@ export default function SummaryReport() {
                           const byTitle = postsByItem.byTitle[titleKey];
                           if (byTitle?.length) return byTitle;
                         }
-                        return report.assignments.length === 1 ? postsByItem.all : [];
+                        return [];
                       })();
                       const isExpanded = expandedItems[assignment.assignmentId] !== false;
                       const liveMetrics = liveMetricsCache[assignment.assignmentId];
@@ -1676,9 +2557,9 @@ export default function SummaryReport() {
                   </div>
 
                   {/* Load more */}
-                  {visibleCount < report.assignments.length && (
+                  {visibleCount < filteredSortedAssignments.length && (
                     <div className="flex items-center justify-center gap-3 mt-6 text-sm text-gray-500">
-                      <span>Showing {visibleCount} of {report.assignments.length} items</span>
+                      <span>Showing {visibleCount} of {filteredSortedAssignments.length} items</span>
                       <button
                         onClick={() => setVisibleCount(v => v + 5)}
                         className="text-blue-600 font-semibold hover:underline"

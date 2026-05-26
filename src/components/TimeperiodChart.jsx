@@ -1082,6 +1082,31 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
 
       // ========== POSTS BREAKDOWN SECTION ==========
       if (latestPosts.length > 0) {
+        // Strip emojis and non-printable chars — jsPDF Helvetica only renders ASCII
+        const sanitizeForPdf = (text) => {
+          if (!text) return '-';
+          return text
+            .replace(/\n|\r/g, ' ')
+            .replace(/[^\x20-\x7E]/g, '') // keep only printable ASCII (strips emojis, Devanagari, etc.)
+            .replace(/\s+/g, ' ')
+            .trim() || '-';
+        };
+
+        // Parse Instagram-style timestamps like "2026-05-23T11:48:38+0000"
+        const parsePostDate = (raw) => {
+          if (!raw) return null;
+          // Normalise +HHMM → +HH:MM so Date constructor is spec-compliant
+          const fixed = raw.replace(/([+-])(\d{2})(\d{2})$/, '$1$2:$3');
+          const d = new Date(fixed);
+          return isNaN(d.getTime()) ? null : d;
+        };
+
+        // Media type abbreviations for the Type column
+        const mediaTypeLabel = (type) => {
+          const map = { IMAGE: 'IMG', VIDEO: 'VID', CAROUSEL_ALBUM: 'CRSL', REEL: 'REEL' };
+          return map[type] || (type ? type.substring(0, 4) : '-');
+        };
+
         pdf.addPage();
         yPosition = margin;
 
@@ -1097,35 +1122,69 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
         const postsDateLabel = latestPostsDate
           ? new Date(latestPostsDate).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
           : '';
-        pdf.text(`${latestPosts.length} posts from latest snapshot  •  ${postsDateLabel}`, margin, 30);
+        pdf.text(`${latestPosts.length} posts from latest snapshot  -  ${postsDateLabel}`, margin, 30);
         yPosition = 45;
 
         // Info note
         pdf.setFontSize(9);
         pdf.setTextColor(75, 85, 99);
-        pdf.text('These are the posts included in the analytics calculations for the selected period (sorted by engagement).', margin, yPosition);
+        pdf.text('Posts included in the analytics calculations, sorted by total engagement (highest first).', margin, yPosition);
         yPosition += 10;
 
-        // Sort posts by total engagement desc
+        // Sort by total_interactions if available, otherwise sum fields
         const sortedPosts = [...latestPosts].sort((a, b) => {
-          const aEng = (a.likes || a.like_count || 0) + (a.comments || a.comments_count || 0) + (a.shares || 0) + (a.views || 0);
-          const bEng = (b.likes || b.like_count || 0) + (b.comments || b.comments_count || 0) + (b.shares || 0) + (b.views || 0);
+          const aEng = a.total_interactions || ((a.likes || 0) + (a.comments || 0) + (a.shares || 0) + (a.views || 0));
+          const bEng = b.total_interactions || ((b.likes || 0) + (b.comments || 0) + (b.shares || 0) + (b.views || 0));
           return bEng - aEng;
         });
 
         const totalTableWidth = pageWidth - 2 * margin;
         const isYouTube = platform === 'youtube';
-        const colHeaders = isYouTube
-          ? ['#', 'Title', 'Published', 'Views', 'Likes', 'Comments']
-          : ['#', 'Caption / Message', 'Date', 'Likes', 'Comments', isYouTube ? 'Views' : 'Shares'];
-        const colW = [8, totalTableWidth * 0.45, totalTableWidth * 0.18, totalTableWidth * 0.10, totalTableWidth * 0.10, totalTableWidth * 0.09];
+        const isInstagram = platform === 'instagram';
+
+        // Platform-specific column definitions
+        // colHeaders / colW must be parallel arrays
+        let colHeaders, colW;
+        if (isYouTube) {
+          colHeaders = ['#', 'Title', 'Published', 'Views', 'Likes', 'Comments'];
+          colW = [
+            totalTableWidth * 0.04,
+            totalTableWidth * 0.44,
+            totalTableWidth * 0.18,
+            totalTableWidth * 0.12,
+            totalTableWidth * 0.11,
+            totalTableWidth * 0.11,
+          ];
+        } else if (isInstagram) {
+          colHeaders = ['#', 'Type', 'Caption / Message', 'Date', 'Likes', 'Comments', 'Views'];
+          colW = [
+            totalTableWidth * 0.04,
+            totalTableWidth * 0.07,
+            totalTableWidth * 0.37,
+            totalTableWidth * 0.14,
+            totalTableWidth * 0.11,
+            totalTableWidth * 0.13,
+            totalTableWidth * 0.14,
+          ];
+        } else {
+          // Facebook / LinkedIn
+          colHeaders = ['#', 'Caption / Message', 'Date', 'Likes', 'Comments', 'Shares'];
+          colW = [
+            totalTableWidth * 0.04,
+            totalTableWidth * 0.46,
+            totalTableWidth * 0.17,
+            totalTableWidth * 0.11,
+            totalTableWidth * 0.11,
+            totalTableWidth * 0.11,
+          ];
+        }
 
         // Table header row
-        pdf.setFillColor(243, 244, 246);
+        pdf.setFillColor(99, 102, 241);
         pdf.rect(margin, yPosition, totalTableWidth, 8, 'F');
         pdf.setFontSize(8.5);
         pdf.setFont('helvetica', 'bold');
-        pdf.setTextColor(55, 65, 81);
+        pdf.setTextColor(255, 255, 255);
         let hx = margin + 2;
         colHeaders.forEach((h, i) => { pdf.text(h, hx, yPosition + 5.5); hx += colW[i]; });
         yPosition += 8;
@@ -1137,26 +1196,35 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
           checkPageBreak(rowH + 2);
 
           if (idx % 2 === 0) {
-            pdf.setFillColor(249, 250, 251);
+            pdf.setFillColor(240, 240, 255);
             pdf.rect(margin, yPosition, totalTableWidth, rowH, 'F');
           }
 
-          const rawCaption = post.caption || post.message || post.title || '—';
-          const caption = rawCaption.replace(/\n/g, ' ').replace(/\r/g, '');
-          const truncCaption = caption.length > 60 ? caption.substring(0, 57) + '...' : caption;
+          // Caption — strip emojis & unicode so jsPDF can render it
+          const rawCaption = post.caption || post.message || post.title || '';
+          const cleanCaption = sanitizeForPdf(rawCaption);
+          const maxChars = isInstagram ? 48 : 62;
+          const truncCaption = cleanCaption.length > maxChars
+            ? cleanCaption.substring(0, maxChars - 3) + '...'
+            : (cleanCaption || '(no caption)');
 
-          const rawDate = post.timestamp || post.created_time || post.publishedAt;
-          const postDate = rawDate
-            ? new Date(rawDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })
-            : '—';
+          // Date
+          const parsedDate = parsePostDate(post.timestamp || post.created_time || post.publishedAt);
+          const postDate = parsedDate
+            ? parsedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })
+            : '-';
 
-          const likes = (post.likes || post.like_count || 0).toLocaleString();
+          const likes    = (post.likes    || post.like_count    || 0).toLocaleString();
           const comments = (post.comments || post.comments_count || 0).toLocaleString();
-          const sharesOrViews = isYouTube
-            ? (post.views || 0).toLocaleString()
-            : (post.shares || 0).toLocaleString();
 
-          const cells = [String(idx + 1), truncCaption, postDate, likes, comments, sharesOrViews];
+          let cells;
+          if (isYouTube) {
+            cells = [String(idx + 1), truncCaption, postDate, (post.views || 0).toLocaleString(), likes, comments];
+          } else if (isInstagram) {
+            cells = [String(idx + 1), mediaTypeLabel(post.media_type), truncCaption, postDate, likes, comments, (post.views || 0).toLocaleString()];
+          } else {
+            cells = [String(idx + 1), truncCaption, postDate, likes, comments, (post.shares || 0).toLocaleString()];
+          }
 
           pdf.setFontSize(8);
           pdf.setTextColor(31, 41, 55);
@@ -1173,7 +1241,7 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
           yPosition += 3;
           pdf.setFontSize(8);
           pdf.setTextColor(107, 114, 128);
-          pdf.text(`... and ${sortedPosts.length - 50} more posts (showing top 50 by engagement)`, margin + 2, yPosition);
+          pdf.text(`... and ${sortedPosts.length - 50} more posts not shown (top 50 by engagement displayed above).`, margin + 2, yPosition);
           yPosition += 6;
         }
 
@@ -1193,7 +1261,14 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
         pdf.setTextColor(55, 48, 163);
 
         let tx = margin + 2;
-        const totalCells = [' ', `TOTALS  (${sortedPosts.length} posts)`, '', tLikes.toLocaleString(), tComments.toLocaleString(), isYouTube ? tViews.toLocaleString() : tShares.toLocaleString()];
+        let totalCells;
+        if (isYouTube) {
+          totalCells = [' ', `TOTALS (${sortedPosts.length} posts)`, '', tViews.toLocaleString(), tLikes.toLocaleString(), tComments.toLocaleString()];
+        } else if (isInstagram) {
+          totalCells = [' ', '', `TOTALS (${sortedPosts.length} posts)`, '', tLikes.toLocaleString(), tComments.toLocaleString(), tViews.toLocaleString()];
+        } else {
+          totalCells = [' ', `TOTALS (${sortedPosts.length} posts)`, '', tLikes.toLocaleString(), tComments.toLocaleString(), tShares.toLocaleString()];
+        }
         totalCells.forEach((cell, i) => { pdf.text(cell, tx, yPosition + 6); tx += colW[i]; });
         yPosition += 15;
       }

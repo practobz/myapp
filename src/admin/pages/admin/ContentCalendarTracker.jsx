@@ -40,6 +40,7 @@ export default function ContentCalendarTracker() {
   const [search, setSearch]               = useState('');
   const [filterCustomer, setFilterCustomer] = useState('all');
   const [filterCreator, setFilterCreator] = useState('all');
+  const [filterStatus, setFilterStatus]   = useState('all');
   const [dateFrom, setDateFrom]           = useState('');
   const [dateTo, setDateTo]               = useState('');
 
@@ -99,6 +100,11 @@ export default function ContentCalendarTracker() {
               description:   item.description || '',
               date:          item.date || item.scheduledDate || '',
               creatorName:   item.assignedToName || item.creatorName || item.assignedTo || '',
+              status: (item.published === true || item.status === 'published' || item.publishedAt)
+                        ? 'published'
+                        : (item.approvedAt || item.approved_at || item.status === 'approved')
+                          ? 'approved'
+                          : (item.status || ''),
               createdAt:     item.createdAt || cal.createdAt || '',
             });
           });
@@ -128,6 +134,7 @@ export default function ContentCalendarTracker() {
     return rows.filter(r => {
       if (filterCustomer !== 'all' && r.customerName !== filterCustomer) return false;
       if (filterCreator  !== 'all' && r.creatorName   !== filterCreator)  return false;
+      if (filterStatus   !== 'all' && (r.status || '').toLowerCase() !== filterStatus) return false;
       if (q && ![r.customerName, r.calendarName, r.title, r.creatorName]
                  .join(' ').toLowerCase().includes(q)) return false;
       if (fromTs || toTs) {
@@ -138,7 +145,7 @@ export default function ContentCalendarTracker() {
       }
       return true;
     });
-  }, [rows, search, filterCustomer, filterCreator, dateFrom, dateTo]);
+  }, [rows, search, filterCustomer, filterCreator, filterStatus, dateFrom, dateTo]);
 
   const sorted = useMemo(() => {
     if (!sortKey) return filtered;
@@ -175,16 +182,17 @@ export default function ContentCalendarTracker() {
     setSearch('');
     setFilterCustomer('all');
     setFilterCreator('all');
+    setFilterStatus('all');
     setDateFrom('');
     setDateTo('');
     setPage(1);
   };
 
-  const hasActiveFilter = search || filterCustomer !== 'all' || filterCreator !== 'all' || dateFrom || dateTo;
+  const hasActiveFilter = search || filterCustomer !== 'all' || filterCreator !== 'all' || filterStatus !== 'all' || dateFrom || dateTo;
 
   // ── CSV export ────────────────────────────────────────────────────────────
   const exportCSV = () => {
-    const headers = ['#', 'Customer', 'Calendar', 'Title', ' Date', 'Creator'];
+    const headers = ['#', 'Customer', 'Calendar', 'Title', ' Date', 'Creator', 'Status'];
     const csvRows = [
       headers.join(','),
       ...sorted.map((r, i) =>
@@ -195,6 +203,7 @@ export default function ContentCalendarTracker() {
           `"${(r.title         || '').replace(/"/g, '""')}"`,
           r.date ? `="${new Date(r.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}"` : '',
           `"${(r.creatorName   || '').replace(/"/g, '""')}"`,
+          `"${(r.status        || '').replace(/"/g, '""')}"`,
         ].join(',')
       )
     ];
@@ -272,6 +281,15 @@ export default function ContentCalendarTracker() {
             <option value="all">All Creators</option>
             {creators.map(o => <option key={o} value={o}>{o}</option>)}
           </select>
+          <select
+            value={filterStatus}
+            onChange={e => { setFilterStatus(e.target.value); setPage(1); }}
+            className="text-xs border border-gray-300 rounded px-2 py-1 bg-white focus:ring-1 focus:ring-blue-500 outline-none"
+          >
+            <option value="all">All Statuses</option>
+            <option value="published">Published</option>
+            <option value="approved">Approved</option>
+          </select>
           <div className="flex items-center gap-1">
             <label className="text-[11px] text-gray-500 whitespace-nowrap">From</label>
             <input
@@ -331,6 +349,7 @@ export default function ContentCalendarTracker() {
                     <col style={{ minWidth: 220 }} />
                     <col style={{ width: 110 }} />
                     <col style={{ width: 140 }} />
+                    <col style={{ width: 100 }} />
                   </colgroup>
                   <thead>
                     <tr>
@@ -340,6 +359,7 @@ export default function ContentCalendarTracker() {
                       <Th col="title"        label="Item / Title"   sortKey={sortKey} onSort={handleSort} />
                       <Th col="date"         label=" Date" sortKey={sortKey} onSort={handleSort} />
                       <Th col="creatorName"  label="Creator"        sortKey={sortKey} onSort={handleSort} />
+                      <Th col="status"       label="Status"         sortKey={sortKey} onSort={handleSort} />
                     </tr>
                   </thead>
                   <tbody>
@@ -374,6 +394,15 @@ export default function ContentCalendarTracker() {
                             {row.creatorName
                               ? <span className="truncate block max-w-[130px]" title={row.creatorName}>{row.creatorName}</span>
                               : <span className="text-gray-300 italic">Unassigned</span>}
+                          </td>
+                          <td className={`${cell} text-center`}>
+                            {row.status
+                              ? <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                                  row.status.toLowerCase() === 'published' ? 'bg-green-100 text-green-700' :
+                                  row.status.toLowerCase() === 'approved'  ? 'bg-blue-100 text-blue-700'  :
+                                  'bg-gray-100 text-gray-600'
+                                }`}>{row.status}</span>
+                              : <span className="text-gray-300">—</span>}
                           </td>
                         </tr>
                       );

@@ -89,15 +89,23 @@ const CHART_TYPE_OPTIONS = [
   { value: 'pie', label: 'Pie', fullLabel: 'Pie Chart', icon: PieChartIcon, description: 'Distribution breakdown' }
 ];
 
+// platforms[] = which platforms collect this metric (used to filter chips per platform)
 const METRICS_OPTIONS = [
-  { value: 'followers', label: 'Followers', color: '#3B82F6', gradient: 'from-blue-500 to-blue-600', bgLight: 'bg-blue-50' },
-  { value: 'likes', label: 'Likes', color: '#10B981', gradient: 'from-emerald-500 to-green-600', bgLight: 'bg-emerald-50' },
-  { value: 'comments', label: 'Comments', color: '#8B5CF6', gradient: 'from-violet-500 to-purple-600', bgLight: 'bg-violet-50' },
-  { value: 'shares', label: 'Shares', color: '#F59E0B', gradient: 'from-amber-500 to-orange-500', bgLight: 'bg-amber-50' },
-  { value: 'engagement', label: 'Engagement', color: '#EF4444', gradient: 'from-red-500 to-rose-600', bgLight: 'bg-red-50' },
-  // { value: 'views', label: 'Views', color: '#06B6D4', gradient: 'from-cyan-500 to-teal-500', bgLight: 'bg-cyan-50' },
-  // { value: 'reach', label: 'Reach', color: '#84CC16', gradient: 'from-lime-500 to-green-500', bgLight: 'bg-lime-50' },
-  // { value: 'impressions', label: 'Impressions', color: '#F97316', gradient: 'from-orange-500 to-amber-500', bgLight: 'bg-orange-50' }
+  { value: 'followers',  label: 'Followers',   color: '#3B82F6', gradient: 'from-blue-500 to-blue-600',    bgLight: 'bg-blue-50',    platforms: ['facebook','instagram','youtube','linkedin'] },
+  { value: 'likes',      label: 'Likes',       color: '#10B981', gradient: 'from-emerald-500 to-green-600',bgLight: 'bg-emerald-50', platforms: ['facebook','instagram','linkedin'] },
+  { value: 'comments',   label: 'Comments',    color: '#8B5CF6', gradient: 'from-violet-500 to-purple-600',bgLight: 'bg-violet-50',  platforms: ['facebook','instagram','youtube','linkedin'] },
+  { value: 'shares',     label: 'Shares',      color: '#F59E0B', gradient: 'from-amber-500 to-orange-500', bgLight: 'bg-amber-50',   platforms: ['facebook','instagram','linkedin'] },
+  { value: 'engagement', label: 'Engagement',  color: '#EF4444', gradient: 'from-red-500 to-rose-600',     bgLight: 'bg-red-50',     platforms: ['facebook','instagram','linkedin'] },
+  { value: 'views',      label: 'Views',       color: '#06B6D4', gradient: 'from-cyan-500 to-teal-500',    bgLight: 'bg-cyan-50',    platforms: ['facebook','instagram','youtube'] },
+  { value: 'reach',      label: 'Reach',       color: '#84CC16', gradient: 'from-lime-500 to-green-500',   bgLight: 'bg-lime-50',    platforms: ['facebook','instagram','linkedin'] },
+  { value: 'impressions',label: 'Impressions', color: '#F97316', gradient: 'from-orange-500 to-amber-500', bgLight: 'bg-orange-50',  platforms: ['facebook','instagram','linkedin'] },
+  { value: 'clicks',     label: 'Clicks',      color: '#0EA5E9', gradient: 'from-sky-500 to-blue-500',     bgLight: 'bg-sky-50',     platforms: ['facebook','linkedin'] },
+  { value: 'reactions',      label: 'Reactions',        color: '#F43F5E', gradient: 'from-rose-500 to-pink-600',      bgLight: 'bg-rose-50',    platforms: ['facebook'] },
+  { value: 'saved',          label: 'Saved',            color: '#A855F7', gradient: 'from-purple-500 to-violet-600',  bgLight: 'bg-purple-50',  platforms: ['instagram'] },
+  { value: 'profile_views',  label: 'Profile Views',    color: '#6366F1', gradient: 'from-indigo-500 to-violet-600',  bgLight: 'bg-indigo-50',  platforms: ['instagram'] },
+  { value: 'avg_engagement', label: 'Avg Engagement',   color: '#14B8A6', gradient: 'from-teal-500 to-cyan-500',      bgLight: 'bg-teal-50',    platforms: ['facebook', 'instagram', 'linkedin'] },
+  { value: 'post_count',     label: 'Post Count',       color: '#64748B', gradient: 'from-slate-500 to-gray-600',     bgLight: 'bg-slate-50',   platforms: ['facebook', 'instagram', 'linkedin', 'youtube'] },
+  { value: 'video_count',    label: 'Video Count',      color: '#DC2626', gradient: 'from-red-600 to-rose-600',       bgLight: 'bg-red-50',     platforms: ['youtube'] },
 ];
 
 // Custom tooltip component
@@ -190,6 +198,21 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [postDetails, setPostDetails] = useState(null); // { date, metric } — when set, show overlay
   const chartContainerRef = useRef(null);
+
+  // Metrics available for the current platform — drives both the chip buttons and selection validation
+  const availableMetrics = METRICS_OPTIONS.filter(
+    opt => !platform || opt.platforms.includes(platform.toLowerCase())
+  );
+
+  // When platform prop changes, drop any selected metrics that are not valid for the new platform
+  useEffect(() => {
+    setSelectedMetrics(prev => {
+      const platformKey = (platform || '').toLowerCase();
+      const validOptions = METRICS_OPTIONS.filter(o => !platformKey || o.platforms.includes(platformKey));
+      const valid = prev.filter(m => validOptions.some(opt => opt.value === m));
+      return valid.length > 0 ? valid : [validOptions[0]?.value || defaultMetric];
+    });
+  }, [platform]);
 
   // Open post details as an inline overlay (no navigation, parent state preserved)
   const handleViewDetails = (dateStr, metricName) => {
@@ -697,6 +720,25 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
     setGeneratingPdf(true);
 
     try {
+      // Fetch post details for the most recent snapshot in the period
+      let latestPosts = [];
+      let latestPostsDate = null;
+      try {
+        const anyMetricKey = selectedMetrics.find(m => chartData[m]?.length > 0);
+        if (anyMetricKey) {
+          latestPostsDate = chartData[anyMetricKey][chartData[anyMetricKey].length - 1]?.date;
+          if (latestPostsDate) {
+            const postRes = await fetch(
+              `${process.env.REACT_APP_API_URL}/api/analytics-data/post-details?platform=${encodeURIComponent(platform)}&accountId=${encodeURIComponent(accountId)}&date=${encodeURIComponent(latestPostsDate)}`
+            );
+            const postResult = await postRes.json();
+            if (postResult.success) latestPosts = postResult.posts || [];
+          }
+        }
+      } catch (postErr) {
+        console.warn('Could not fetch post details for PDF:', postErr);
+      }
+
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
@@ -1038,6 +1080,124 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
         }
       }
 
+      // ========== POSTS BREAKDOWN SECTION ==========
+      if (latestPosts.length > 0) {
+        pdf.addPage();
+        yPosition = margin;
+
+        // Section header
+        pdf.setFillColor(99, 102, 241);
+        pdf.rect(0, 0, pageWidth, 35, 'F');
+        pdf.setTextColor(255, 255, 255);
+        pdf.setFontSize(20);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text('Posts Breakdown', margin, 22);
+        pdf.setFontSize(10);
+        pdf.setFont('helvetica', 'normal');
+        const postsDateLabel = latestPostsDate
+          ? new Date(latestPostsDate).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+          : '';
+        pdf.text(`${latestPosts.length} posts from latest snapshot  •  ${postsDateLabel}`, margin, 30);
+        yPosition = 45;
+
+        // Info note
+        pdf.setFontSize(9);
+        pdf.setTextColor(75, 85, 99);
+        pdf.text('These are the posts included in the analytics calculations for the selected period (sorted by engagement).', margin, yPosition);
+        yPosition += 10;
+
+        // Sort posts by total engagement desc
+        const sortedPosts = [...latestPosts].sort((a, b) => {
+          const aEng = (a.likes || a.like_count || 0) + (a.comments || a.comments_count || 0) + (a.shares || 0) + (a.views || 0);
+          const bEng = (b.likes || b.like_count || 0) + (b.comments || b.comments_count || 0) + (b.shares || 0) + (b.views || 0);
+          return bEng - aEng;
+        });
+
+        const totalTableWidth = pageWidth - 2 * margin;
+        const isYouTube = platform === 'youtube';
+        const colHeaders = isYouTube
+          ? ['#', 'Title', 'Published', 'Views', 'Likes', 'Comments']
+          : ['#', 'Caption / Message', 'Date', 'Likes', 'Comments', isYouTube ? 'Views' : 'Shares'];
+        const colW = [8, totalTableWidth * 0.45, totalTableWidth * 0.18, totalTableWidth * 0.10, totalTableWidth * 0.10, totalTableWidth * 0.09];
+
+        // Table header row
+        pdf.setFillColor(243, 244, 246);
+        pdf.rect(margin, yPosition, totalTableWidth, 8, 'F');
+        pdf.setFontSize(8.5);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setTextColor(55, 65, 81);
+        let hx = margin + 2;
+        colHeaders.forEach((h, i) => { pdf.text(h, hx, yPosition + 5.5); hx += colW[i]; });
+        yPosition += 8;
+
+        // Table rows
+        pdf.setFont('helvetica', 'normal');
+        sortedPosts.slice(0, 50).forEach((post, idx) => {
+          const rowH = 10;
+          checkPageBreak(rowH + 2);
+
+          if (idx % 2 === 0) {
+            pdf.setFillColor(249, 250, 251);
+            pdf.rect(margin, yPosition, totalTableWidth, rowH, 'F');
+          }
+
+          const rawCaption = post.caption || post.message || post.title || '—';
+          const caption = rawCaption.replace(/\n/g, ' ').replace(/\r/g, '');
+          const truncCaption = caption.length > 60 ? caption.substring(0, 57) + '...' : caption;
+
+          const rawDate = post.timestamp || post.created_time || post.publishedAt;
+          const postDate = rawDate
+            ? new Date(rawDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })
+            : '—';
+
+          const likes = (post.likes || post.like_count || 0).toLocaleString();
+          const comments = (post.comments || post.comments_count || 0).toLocaleString();
+          const sharesOrViews = isYouTube
+            ? (post.views || 0).toLocaleString()
+            : (post.shares || 0).toLocaleString();
+
+          const cells = [String(idx + 1), truncCaption, postDate, likes, comments, sharesOrViews];
+
+          pdf.setFontSize(8);
+          pdf.setTextColor(31, 41, 55);
+          let cx = margin + 2;
+          cells.forEach((cell, i) => {
+            pdf.text(String(cell), cx, yPosition + 6.5);
+            cx += colW[i];
+          });
+
+          yPosition += rowH;
+        });
+
+        if (sortedPosts.length > 50) {
+          yPosition += 3;
+          pdf.setFontSize(8);
+          pdf.setTextColor(107, 114, 128);
+          pdf.text(`... and ${sortedPosts.length - 50} more posts (showing top 50 by engagement)`, margin + 2, yPosition);
+          yPosition += 6;
+        }
+
+        // Totals row
+        yPosition += 3;
+        checkPageBreak(14);
+        const tLikes    = sortedPosts.reduce((s, p) => s + (p.likes    || p.like_count    || 0), 0);
+        const tComments = sortedPosts.reduce((s, p) => s + (p.comments || p.comments_count || 0), 0);
+        const tShares   = sortedPosts.reduce((s, p) => s + (p.shares   || 0), 0);
+        const tViews    = sortedPosts.reduce((s, p) => s + (p.views    || 0), 0);
+
+        pdf.setFillColor(224, 231, 255);
+        pdf.setDrawColor(99, 102, 241);
+        pdf.rect(margin, yPosition, totalTableWidth, 9, 'FD');
+        pdf.setFontSize(8.5);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setTextColor(55, 48, 163);
+
+        let tx = margin + 2;
+        const totalCells = [' ', `TOTALS  (${sortedPosts.length} posts)`, '', tLikes.toLocaleString(), tComments.toLocaleString(), isYouTube ? tViews.toLocaleString() : tShares.toLocaleString()];
+        totalCells.forEach((cell, i) => { pdf.text(cell, tx, yPosition + 6); tx += colW[i]; });
+        yPosition += 15;
+      }
+
       // ========== RECOMMENDATIONS SECTION ==========
       pdf.addPage();
       yPosition = margin;
@@ -1329,7 +1489,7 @@ export function TimePeriodChart({ platform, accountId, title, defaultMetric = 'f
                 Metrics
               </label>
               <div className="flex flex-wrap gap-1.5">
-                {METRICS_OPTIONS.map(option => {
+                {availableMetrics.map(option => {
                   const isSelected = selectedMetrics.includes(option.value);
                   return (
                     <button

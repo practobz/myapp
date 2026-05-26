@@ -71,14 +71,20 @@ export default function ContentCalendarTracker() {
         return;
       }
 
-      // 2. Fetch calendars for every customer in parallel
-      const calendarArrays = await Promise.all(
-        customers.map(c =>
-          fetch(`${API}/calendars/customer/${c._id}`)
-            .then(r => r.ok ? r.json() : [])
-            .catch(() => [])
-        )
-      );
+      // 2. Fetch calendars + scheduled posts in parallel
+      const [calendarArrays, scheduledPostsRaw] = await Promise.all([
+        Promise.all(
+          customers.map(c =>
+            fetch(`${API}/calendars/customer/${c._id}`)
+              .then(r => r.ok ? r.json() : [])
+              .catch(() => [])
+          )
+        ),
+        fetch(`${API}/api/scheduled-posts`)
+          .then(r => r.ok ? r.json() : [])
+          .catch(() => [])
+      ]);
+      const scheduledPosts = Array.isArray(scheduledPostsRaw) ? scheduledPostsRaw : [];
 
       // 3. Flatten to rows
       const customerMap = Object.fromEntries(customers.map(c => [c._id, c]));
@@ -100,11 +106,21 @@ export default function ContentCalendarTracker() {
               description:   item.description || '',
               date:          item.date || item.scheduledDate || '',
               creatorName:   item.assignedToName || item.creatorName || item.assignedTo || '',
-              status: (item.published === true || item.status === 'published' || item.publishedAt)
-                        ? 'published'
-                        : (item.approvedAt || item.approved_at || item.status === 'approved')
-                          ? 'approved'
-                          : (item.status || ''),
+              status: (() => {
+                const isPublished =
+                  item.published === true ||
+                  item.status === 'published' ||
+                  !!item.publishedAt ||
+                  scheduledPosts.some(p =>
+                    ((p.item_id && p.item_id === (item.id || item._id)) ||
+                     (p.contentId && p.contentId === (item.id || item._id)) ||
+                     (p.item_name && p.item_name === (item.title || item.description))) &&
+                    (p.status === 'published' || !!p.publishedAt)
+                  );
+                if (isPublished) return 'published';
+                if (item.approvedAt || item.approved_at || item.status === 'approved') return 'approved';
+                return item.status || '';
+              })(),
               createdAt:     item.createdAt || cal.createdAt || '',
             });
           });

@@ -1301,14 +1301,16 @@ export default function SummaryReport() {
       for (let ai = 0; ai < report.assignments.length; ai++) {
         const assignment = report.assignments[ai];
         try {
-          const asmPlatforms = [...new Set([
-            ...(Array.isArray(assignment.platforms) ? assignment.platforms.flat() : []),
-            ...(Array.isArray(assignment.platform) ? assignment.platform : (assignment.platform ? [assignment.platform] : [])),
-          ].filter(p => p && typeof p === 'string').map(p => p.toLowerCase().trim()))];
-
           const asmAllPosts     = getPdfPosts(assignment);
           const asmMetricsPosts = asmAllPosts.filter(p => p.status === 'published' || p.publishedAt || p.metrics);
           const hasMetrics      = asmMetricsPosts.length > 0;
+
+          const asmPlatforms = [...new Set([
+            ...(Array.isArray(assignment.platforms) ? assignment.platforms.flat() : []),
+            ...(Array.isArray(assignment.platform) ? assignment.platform : (assignment.platform ? [assignment.platform] : [])),
+            // Include platforms from the actual scheduled/published posts
+            ...asmAllPosts.map(p => Array.isArray(p.platform) ? p.platform[0] : p.platform).filter(Boolean),
+          ].filter(p => p && typeof p === 'string').map(p => p.toLowerCase().trim()))];
 
           const collectMediaImages = (mediaArr) =>
             (mediaArr || []).map(m => typeof m === 'string' ? m : (m?.url || m?.publicUrl || ''))
@@ -1593,51 +1595,104 @@ export default function SummaryReport() {
           doc.line(innerX, y, M + CW - CARD_PAD, y);
           y += 5;
 
-          // ── Metrics row ────────────────────────────────────────────────
+          // ── Metrics rows (per platform) ────────────────────────────────
           if (hasMetrics) {
-            let totReach = 0, totLikes = 0, totComments = 0, totShares = 0, totSaves = 0;
+            // Group published posts by platform
+            const platformPostsMap = {};
             for (const post of asmMetricsPosts) {
-              const mm = post.metrics || {};
-              totReach    += mm.reach    || mm.impressions || 0;
-              totLikes    += mm.likes    || 0;
-              totComments += mm.comments || 0;
-              totShares   += mm.shares   || 0;
-              totSaves    += mm.saves    || mm.saved || 0;
+              const pl = (Array.isArray(post.platform) ? post.platform[0] : post.platform || 'other').toLowerCase();
+              if (!platformPostsMap[pl]) platformPostsMap[pl] = [];
+              platformPostsMap[pl].push(post);
             }
-            const totEng    = totLikes + totComments + totShares;
-            const engRate   = totReach > 0 ? ((totEng / totReach) * 100).toFixed(1) + '%' : '—';
 
-            const metricCols = [
-              { label: 'Reach',    value: fmtNum(totReach)    },
-              { label: 'Likes',    value: fmtNum(totLikes)    },
-              { label: 'Comments', value: fmtNum(totComments) },
-              { label: 'Shares',   value: fmtNum(totShares)   },
-              { label: 'Saves',    value: fmtNum(totSaves)    },
-              { label: 'Eng. Rate', value: engRate, isRate: true },
-            ];
-
-            const metColW   = innerW / 6;
-            const metricH   = 26;
-
-            // Light metrics row background
-            sf(C.sectionBg); doc.setLineWidth(0);
-            doc.roundedRect(innerX, y, innerW, metricH, 2, 2, 'F');
-
-            metricCols.forEach((mc, mi) => {
-              const mx = innerX + mi * metColW;
-              if (mi > 0) {
-                hairline(); ss(C.borderLight);
-                doc.line(mx, y + 3, mx, y + metricH - 3);
+            const getPlMetricCols = (posts, pl) => {
+              let likes = 0, comments = 0, shares = 0, reach = 0, saves = 0,
+                  clicks = 0, impressions = 0, views = 0;
+              for (const p of posts) {
+                const m = p.metrics || {};
+                likes       += (m.likes        ?? m.likeCount       ?? 0);
+                comments    += (m.comments     ?? m.commentCount    ?? 0);
+                shares      += (m.shares       ?? m.shareCount      ?? 0);
+                clicks      += (m.clicks       ?? m.clickCount      ?? 0);
+                views       += (m.views        ?? m.videoViews      ?? 0);
+                saves       += (m.saves        ?? m.saved           ?? 0);
+                impressions += (m.impressions  ?? m.impressionCount ?? 0);
+                reach       += pl === 'linkedin'
+                  ? (m.uniqueImpressionsCount ?? m.impressionCount ?? m.reach ?? 0)
+                  : (m.reach ?? m.impressions ?? 0);
               }
-              // Value
-              serif('normal', mi === 5 ? 14 : 16);
-              sc(mc.isRate ? C.engGreen : C.ink);
-              doc.text(mc.value, mx + metColW / 2, y + 14, { align: 'center' });
-              // Label
-              sans('bold', 5.5); sc(C.faint);
-              doc.text(mc.label.toUpperCase(), mx + metColW / 2, y + 21, { align: 'center' });
-            });
-            y += metricH + 6;
+              const eng     = likes + comments + shares;
+              const engRate = reach > 0 ? ((eng / reach) * 100).toFixed(1) + '%' : '—';
+              if (pl === 'instagram') return [
+                { label: 'Likes',    value: fmtNum(likes)    },
+                { label: 'Comments', value: fmtNum(comments) },
+                { label: 'Reach',    value: fmtNum(reach)    },
+                { label: 'Shares',   value: fmtNum(shares)   },
+                { label: 'Saves',    value: fmtNum(saves)    },
+                { label: 'Eng.Rate', value: engRate, isRate: true },
+              ];
+              if (pl === 'facebook') return [
+                { label: 'Likes',       value: fmtNum(likes)       },
+                { label: 'Comments',    value: fmtNum(comments)    },
+                { label: 'Shares',      value: fmtNum(shares)      },
+                { label: 'Impressions', value: fmtNum(impressions) },
+                { label: 'Clicks',      value: fmtNum(clicks)      },
+                { label: 'Eng.Rate',    value: engRate, isRate: true },
+              ];
+              if (pl === 'linkedin') return [
+                { label: 'Likes',       value: fmtNum(likes)       },
+                { label: 'Comments',    value: fmtNum(comments)    },
+                { label: 'Shares',      value: fmtNum(shares)      },
+                { label: 'Impressions', value: fmtNum(impressions) },
+                { label: 'Clicks',      value: fmtNum(clicks)      },
+                { label: 'Eng.Rate',    value: engRate, isRate: true },
+              ];
+              if (pl === 'youtube') return [
+                { label: 'Views',    value: fmtNum(views)    },
+                { label: 'Likes',    value: fmtNum(likes)    },
+                { label: 'Comments', value: fmtNum(comments) },
+                { label: 'Eng.Rate', value: engRate, isRate: true },
+              ];
+              return [
+                { label: 'Likes',    value: fmtNum(likes)       },
+                { label: 'Comments', value: fmtNum(comments)    },
+                { label: 'Shares',   value: fmtNum(shares)      },
+                { label: 'Reach',    value: fmtNum(reach)       },
+                { label: 'Eng.Rate', value: engRate, isRate: true },
+              ];
+            };
+
+            const ROW_H    = 22;
+            const PLABEL_W = 28;
+            for (const [pl, plPosts] of Object.entries(platformPostsMap)) {
+              const plStyle  = getPlatformStyle(pl);
+              const cols     = getPlMetricCols(plPosts, pl);
+              checkY(ROW_H + 4);
+
+              // Platform label badge
+              sf(plStyle.bg); doc.setLineWidth(0);
+              doc.roundedRect(innerX, y, PLABEL_W, ROW_H, 2, 2, 'F');
+              sans('bold', 6.5); sc(plStyle.tc);
+              doc.text(plStyle.label, innerX + PLABEL_W / 2, y + ROW_H / 2 + 2.5, { align: 'center' });
+
+              // Metric tile area
+              const metAreaX = innerX + PLABEL_W + 2;
+              const metAreaW = innerW - PLABEL_W - 2;
+              sf(C.sectionBg); doc.setLineWidth(0);
+              doc.roundedRect(metAreaX, y, metAreaW, ROW_H, 2, 2, 'F');
+
+              const colW = metAreaW / cols.length;
+              cols.forEach((mc, mi) => {
+                const mx = metAreaX + mi * colW;
+                if (mi > 0) { hairline(); ss(C.borderLight); doc.line(mx, y + 3, mx, y + ROW_H - 3); }
+                serif('normal', 11); sc(mc.isRate ? C.engGreen : C.ink);
+                doc.text(mc.value, mx + colW / 2, y + 12, { align: 'center' });
+                sans('bold', 5); sc(C.faint);
+                doc.text(mc.label.toUpperCase(), mx + colW / 2, y + ROW_H - 3, { align: 'center' });
+              });
+              y += ROW_H + 3;
+            }
+            y += 3;
           } else {
             sans('normal', 7); sc(C.faint);
             doc.text('No performance metrics available', innerX + innerW / 2, y + 6, { align: 'center' });

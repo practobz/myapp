@@ -251,7 +251,7 @@ const PlatformMetricsSection = ({ post }) => {
       { label: 'Impressions', value: m.impressions },
       { label: 'Reach',       value: m.reach       },
       { label: 'Video Views', value: m.videoViews  },
-    ].filter(c => c.value != null && c.value !== 0 || c.label === 'Likes');
+    ].filter(c => c.value != null);
     const er = typeof m.engagementRate === 'number'
       ? (m.engagementRate * (m.engagementRate > 1 ? 1 : 100)).toFixed(1)
       : null;

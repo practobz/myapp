@@ -1723,6 +1723,7 @@ export default function SummaryReport() {
       seenIds.add(p._id);
       return p.status === 'published' || !!p.publishedAt;
     });
+
     if (publishedPosts.length === 0) {
       setLiveMetricsCache(prev => ({ ...prev, [assignmentId]: { loading: false, posts: [] } }));
       return;
@@ -1730,121 +1731,31 @@ export default function SummaryReport() {
 
     setLiveMetricsCache(prev => ({ ...prev, [assignmentId]: { loading: true, posts: publishedPosts } }));
 
-    const enrichedPosts = publishedPosts.map(p => ({ ...p }));
+    try {
+      const res = await fetch(`${API_URL}/api/admin/post-metrics/live`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customerId: selectedCustomer, posts: publishedPosts }),
+      });
 
-    for (let i = 0; i < enrichedPosts.length; i++) {
-      const post = enrichedPosts[i];
-      const platform = (post.platform || '').toLowerCase();
-      let metrics = post.metrics || null;
-
-      if (platform === 'instagram') {
-        const instagramId = post.instagramId || post.socialAccountId || post.pageId;
-        const postMediaId = post.instagramPostId;
-        if (instagramId && postMediaId) {
-          try {
-            const res = await fetch(`${API_URL}/api/analytics/data?platform=instagram&accountId=${encodeURIComponent(instagramId)}`);
-            if (res.ok) {
-              const json = await res.json();
-              const docs = (Array.isArray(json) ? json : (json.docs || json.data || []))
-                .filter(d => d.type === 'analytics_data' && d.platform === 'instagram')
-                .sort((a, b) => new Date(b.collectedAt) - new Date(a.collectedAt));
-              for (const snap of docs) {
-                const found = (snap.media || []).find(m => m.id === postMediaId || m.id === String(postMediaId));
-                if (found) {
-                  metrics = {
-                    likes:              found.likes              ?? found.like_count      ?? 0,
-                    comments:           found.comments           ?? found.comments_count  ?? 0,
-                    views:              found.views              ?? 0,
-                    shares:             found.shares             ?? 0,
-                    saves:              found.saves              ?? found.saved           ?? 0,
-                    reach:              found.reach              ?? found.impressions     ?? 0,
-                    total_interactions: found.total_interactions ?? 0,
-                    timestamp:          found.timestamp          ?? null,
-                    media_type:         found.media_type         ?? null,
-                    permalink:          found.permalink          ?? null,
-                  };
-                  if (found.permalink) enrichedPosts[i].instagramPermalink = found.permalink;
-                  break;
-                }
-              }
-            }
-          } catch { /* skip */ }
-        }
+      if (res.ok) {
+        const json = await res.json();
+        const enrichedPosts = json.posts || publishedPosts;
+        // Carry back any permalink that the API resolved
+        enrichedPosts.forEach(p => {
+          if (p.metrics?.permalink && !p.instagramPermalink) {
+            p.instagramPermalink = p.metrics.permalink;
+          }
+        });
+        setLiveMetricsCache(prev => ({ ...prev, [assignmentId]: { loading: false, posts: enrichedPosts } }));
+        return;
       }
-
-      if (platform === 'facebook') {
-        const fbPostId = post.facebookPostId;
-        if (fbPostId && !fbPostId.startsWith('fb_shared_from_')) {
-          const fbAccountId = post.pageId || fbPostId.split('_')[0];
-          try {
-            const res = await fetch(`${API_URL}/api/analytics/data?platform=facebook&accountId=${encodeURIComponent(fbAccountId)}`);
-            if (res.ok) {
-              const json = await res.json();
-              const docs = (Array.isArray(json) ? json : (json.docs || json.data || []))
-                .filter(d => d.type === 'analytics_data' && d.platform === 'facebook')
-                .sort((a, b) => new Date(b.collectedAt) - new Date(a.collectedAt));
-              for (const snap of docs) {
-                const found = (snap.posts || []).find(p => p.id === fbPostId || p.id === String(fbPostId));
-                if (found) {
-                  metrics = {
-                    likes:          found.likes          ?? found.reactionsTotal ?? 0,
-                    comments:       found.comments       ?? 0,
-                    shares:         found.shares         ?? 0,
-                    clicks:         found.clicks         ?? 0,
-                    impressions:    found.impressions    ?? 0,
-                    reach:          found.reach          ?? 0,
-                    videoViews:     found.videoViews     ?? 0,
-                    reactionsTotal: found.reactionsTotal ?? 0,
-                    reactions:      found.reactions      ?? null,
-                    engagementRate: found.engagementRate ?? null,
-                    created_time:   found.created_time   ?? null,
-                  };
-                  break;
-                }
-              }
-            }
-          } catch { /* skip */ }
-        }
-      }
-
-      if (platform === 'linkedin') {
-        const liPostId = post.linkedinPostId;
-        if (liPostId) {
-          const liAccountId = post.linkedinAccountId || post.organizationId;
-          const liQuery = liAccountId
-            ? `platform=linkedin&accountId=${encodeURIComponent(liAccountId)}`
-            : `platform=linkedin&customerId=${encodeURIComponent(selectedCustomer)}`;
-          try {
-            const res = await fetch(`${API_URL}/api/analytics/data?${liQuery}`);
-            if (res.ok) {
-              const json = await res.json();
-              const docs = (Array.isArray(json) ? json : (json.docs || json.data || []))
-                .filter(d => d.type === 'analytics_data' && d.platform === 'linkedin')
-                .sort((a, b) => new Date(b.collectedAt) - new Date(a.collectedAt));
-              for (const snap of docs) {
-                const found = (snap.posts || []).find(p => p.id === liPostId || p.id === String(liPostId));
-                if (found) {
-                  metrics = {
-                    likeCount:              found.likeCount              ?? found.likes    ?? found.reactions ?? 0,
-                    commentCount:           found.commentCount           ?? found.comments ?? 0,
-                    shareCount:             found.shareCount             ?? found.shares   ?? 0,
-                    impressionCount:        found.impressionCount        ?? found.impressions ?? found.reach ?? 0,
-                    uniqueImpressionsCount: found.uniqueImpressionsCount ?? 0,
-                    clickCount:             found.clickCount             ?? found.clicks   ?? 0,
-                    engagement:             found.engagement             ?? null,
-                  };
-                  break;
-                }
-              }
-            }
-          } catch { /* skip */ }
-        }
-      }
-
-      enrichedPosts[i] = { ...post, metrics };
+    } catch (err) {
+      console.warn('[fetchLiveMetrics] live endpoint failed, falling back to cached data:', err.message);
     }
 
-    setLiveMetricsCache(prev => ({ ...prev, [assignmentId]: { loading: false, posts: enrichedPosts } }));
+    // Fallback: keep whatever metrics are already on the posts (from the report payload)
+    setLiveMetricsCache(prev => ({ ...prev, [assignmentId]: { loading: false, posts: publishedPosts } }));
   }, [selectedCustomer]);
 
   const selectedCustomerObj = customers.find(c => (c._id || c.id) === selectedCustomer);

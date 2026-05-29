@@ -39,7 +39,9 @@ function CustomerLogin() {
       await customerLogin(email, password);
       navigate('/customer');
     } catch (err) {
-      if (err.message?.includes('Invalid credentials') || err.message?.includes('401')) {
+      if (err.message?.includes('deactivated') || err.message?.includes('403')) {
+        setError('Your account has been deactivated. Please contact support to reactivate your account.');
+      } else if (err.message?.includes('Invalid credentials') || err.message?.includes('401')) {
         setError('Invalid email or password. Please check your credentials or sign up to create an account.');
       } else if (err.message?.includes('User not found')) {
         setError('No account found with this email. Please sign up to create an account.');

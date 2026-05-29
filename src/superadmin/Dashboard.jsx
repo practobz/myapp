@@ -1,8 +1,291 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, Settings, UserPlus, BarChart3, RefreshCw, CheckCircle, AlertCircle, X, Crown, Mail, User, AlertTriangle, Search, UserMinus, Shield, UserCheck, ArrowRight, Filter } from 'lucide-react';
+import {
+  Users, UserPlus, BarChart3, RefreshCw, CheckCircle, AlertCircle,
+  X, Crown, Mail, User, AlertTriangle, Search, UserMinus, Shield,
+  UserCheck, ArrowRight, Filter, ChevronDown, Power
+} from 'lucide-react';
 
-// API Service
+/* ─────────────────────────────────────────────
+   Global styles injected once
+───────────────────────────────────────────── */
+const STYLES = `
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #f4f5f7;
+    --surface:   #ffffff;
+    --border:    #e2e4e9;
+    --text:      #0f1117;
+    --muted:     #6b7280;
+    --accent:    #1a56db;
+    --accent-lt: #eff4ff;
+    --accent-dk: #1240a8;
+    --danger:    #dc2626;
+    --success:   #059669;
+    --warn:      #d97706;
+    --header-h:  72px;
+    --radius:    12px;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+    --shadow-md: 0 4px 12px rgba(0,0,0,.08);
+    --shadow-lg: 0 8px 28px rgba(0,0,0,.10);
+  }
+
+  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); }
+
+  .sa-shell { min-height: 100vh; display: flex; flex-direction: column; }
+
+  /* ── Header ── */
+  .sa-header {
+    height: var(--header-h);
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center;
+    padding: 0 32px;
+    justify-content: space-between;
+    position: sticky; top: 0; z-index: 100;
+    box-shadow: var(--shadow-sm);
+  }
+  .sa-header-brand { display: flex; align-items: center; gap: 12px; }
+  .sa-header-icon {
+    width: 36px; height: 36px;
+    background: var(--accent);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .sa-header-title { font-size: 17px; font-weight: 700; letter-spacing: -.3px; }
+  .sa-header-sub { font-size: 12px; color: var(--muted); margin-top: 1px; }
+  .sa-header-actions { display: flex; align-items: center; gap: 10px; }
+
+  /* ── Buttons ── */
+  .btn {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-family: 'DM Sans', sans-serif; font-size: 13.5px; font-weight: 600;
+    border: none; cursor: pointer; border-radius: 8px;
+    padding: 8px 16px; transition: all .15s ease;
+    white-space: nowrap;
+  }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn-ghost {
+    background: transparent; color: var(--muted);
+    border: 1px solid var(--border);
+  }
+  .btn-ghost:hover:not(:disabled) { background: var(--bg); color: var(--text); border-color: #c4c8d2; }
+  .btn-primary {
+    background: var(--accent); color: #fff;
+  }
+  .btn-primary:hover:not(:disabled) { background: var(--accent-dk); }
+  .btn-danger { background: var(--danger); color: #fff; }
+  .btn-danger:hover:not(:disabled) { background: #b91c1c; }
+  .btn-lg { padding: 11px 24px; font-size: 14.5px; border-radius: 10px; }
+
+  /* ── Body layout ── */
+  .sa-body { flex: 1; padding: 28px 32px; max-width: 1280px; margin: 0 auto; width: 100%; }
+
+  /* ── Stat cards ── */
+  .sa-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 28px; }
+  .stat-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px 22px;
+    box-shadow: var(--shadow-sm); cursor: default;
+    transition: box-shadow .15s, transform .15s;
+  }
+  .stat-card.clickable { cursor: pointer; }
+  .stat-card.clickable:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+  .stat-card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; }
+  .stat-icon {
+    width: 38px; height: 38px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .stat-icon.blue   { background: #eff4ff; color: var(--accent); }
+  .stat-icon.slate  { background: #f1f2f4; color: #4b5563; }
+  .stat-icon.green  { background: #ecfdf5; color: var(--success); }
+  .stat-icon.amber  { background: #fffbeb; color: var(--warn); }
+  .stat-arrow { color: var(--muted); opacity: 0; transition: opacity .15s, transform .15s; }
+  .stat-card.clickable:hover .stat-arrow { opacity: 1; transform: translateX(3px); }
+  .stat-value { font-size: 28px; font-weight: 700; letter-spacing: -.5px; }
+  .stat-label { font-size: 12.5px; color: var(--muted); font-weight: 500; margin-top: 2px; }
+  .stat-sub { font-size: 11.5px; color: var(--muted); margin-top: 6px; }
+
+  /* ── Divider ── */
+  .sa-section-title {
+    font-size: 13px; font-weight: 600; color: var(--muted); letter-spacing: .6px; text-transform: uppercase;
+    margin-bottom: 14px;
+  }
+
+  /* ── Card ── */
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); box-shadow: var(--shadow-sm);
+    overflow: hidden;
+  }
+  .card-header {
+    padding: 18px 22px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .card-title { font-size: 14.5px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .card-body { padding: 20px 22px; }
+
+  /* ── Two-col grid ── */
+  .sa-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+
+  /* ── Select ── */
+  .sa-select-wrap { position: relative; }
+  .sa-select-wrap select {
+    width: 100%;
+    padding: 11px 40px 11px 14px;
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px; font-weight: 500;
+    color: var(--text);
+    background: var(--surface);
+    appearance: none;
+    cursor: pointer;
+    transition: border-color .15s;
+  }
+  .sa-select-wrap select:focus { outline: none; border-color: var(--accent); }
+  .sa-select-chevron {
+    position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+    color: var(--muted); pointer-events: none;
+  }
+
+  /* ── Admin preview card ── */
+  .admin-preview {
+    margin-top: 14px; padding: 14px 16px;
+    border: 1.5px solid var(--border); border-radius: 10px;
+    background: var(--bg);
+    display: flex; align-items: center; gap: 12px;
+  }
+  .avatar {
+    width: 40px; height: 40px; border-radius: 8px;
+    background: var(--accent); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 15px; flex-shrink: 0;
+  }
+  .avatar.sm { width: 32px; height: 32px; font-size: 12px; border-radius: 6px; }
+  .avatar-green { background: #059669; }
+  .admin-preview-name { font-size: 14px; font-weight: 700; }
+  .admin-preview-email { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 4px; margin-top: 2px; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11.5px; font-weight: 600; padding: 3px 9px;
+    border-radius: 999px;
+  }
+  .badge-blue  { background: var(--accent-lt); color: var(--accent); }
+  .badge-green { background: #ecfdf5; color: var(--success); }
+  .badge-slate { background: #f1f2f4; color: #4b5563; border: 1px solid var(--border); }
+
+  /* ── Search input ── */
+  .search-wrap { position: relative; }
+  .search-wrap input {
+    width: 100%;
+    padding: 10px 14px 10px 38px;
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    font-family: 'DM Sans', sans-serif; font-size: 13.5px;
+    background: var(--bg); color: var(--text);
+    transition: border-color .15s, background .15s;
+  }
+  .search-wrap input:focus { outline: none; border-color: var(--accent); background: var(--surface); }
+  .search-icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--muted); }
+
+  /* ── Customer list ── */
+  .customer-scroll { max-height: 360px; overflow-y: auto; }
+  .customer-scroll::-webkit-scrollbar { width: 4px; }
+  .customer-scroll::-webkit-scrollbar-track { background: transparent; }
+  .customer-scroll::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 999px; }
+  .customer-item {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer; transition: background .1s;
+  }
+  .customer-item:last-child { border-bottom: none; }
+  .customer-item:hover { background: var(--bg); }
+  .customer-item.selected { background: #f0f5ff; }
+  .customer-item input[type=checkbox] {
+    width: 16px; height: 16px; accent-color: var(--accent);
+    flex-shrink: 0; margin-top: 3px; cursor: pointer;
+  }
+  .customer-name { font-size: 13.5px; font-weight: 600; }
+  .customer-email { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 4px; margin-top: 2px; }
+  .customer-admins { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+  .badge-red   { background: #fef2f2; color: #b91c1c; border: 1px solid #fca5a5; }
+  .badge-amber { background: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
+  .customer-item.inactive { opacity: .65; background: #fafafa; }
+  .btn-toggle-active   { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+  .btn-toggle-active:hover:not(:disabled)   { background: #d1fae5; }
+  .btn-toggle-inactive { background: #fef2f2; color: #991b1b; border: 1px solid #fca5a5; }
+  .btn-toggle-inactive:hover:not(:disabled) { background: #fee2e2; }
+
+  /* ── Assignment summary bar ── */
+  .summary-bar {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); box-shadow: var(--shadow-sm);
+    padding: 18px 24px;
+    display: flex; align-items: center; justify-content: space-between; gap: 20px;
+  }
+  .summary-info { font-size: 13.5px; color: var(--muted); }
+  .summary-info strong { color: var(--text); font-weight: 700; }
+  .summary-note {
+    margin-top: 12px; padding: 12px 16px;
+    background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px;
+    font-size: 12.5px; color: #92400e;
+    display: flex; align-items: flex-start; gap: 8px;
+  }
+
+  /* ── Toast ── */
+  .toast {
+    position: fixed; top: 20px; right: 24px;
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 18px; border-radius: 10px;
+    font-size: 13.5px; font-weight: 500;
+    box-shadow: var(--shadow-lg); z-index: 999;
+    animation: toast-in .2s ease;
+    max-width: 380px;
+  }
+  .toast.success { background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; }
+  .toast.error   { background: #fef2f2; border: 1px solid #fca5a5; color: #7f1d1d; }
+  .toast.info    { background: var(--accent-lt); border: 1px solid #bfdbfe; color: #1e3a8a; }
+  @keyframes toast-in { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: none; } }
+
+  /* ── Modal ── */
+  .modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(15,17,23,.45);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 200; animation: fade-in .15s ease;
+  }
+  @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+  .modal {
+    background: var(--surface); border-radius: 14px;
+    padding: 28px; max-width: 420px; width: 90%;
+    box-shadow: var(--shadow-lg);
+  }
+  .modal-title { font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .modal-body  { font-size: 13.5px; color: var(--muted); line-height: 1.6; margin-bottom: 22px; }
+  .modal-actions { display: flex; gap: 10px; }
+
+  /* ── Responsive ── */
+  @media (max-width: 900px) {
+    .sa-stats { grid-template-columns: repeat(2, 1fr); }
+    .sa-cols  { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 560px) {
+    .sa-body { padding: 20px 16px; }
+    .sa-header { padding: 0 16px; }
+    .sa-stats { grid-template-columns: 1fr 1fr; }
+    .summary-bar { flex-direction: column; align-items: flex-start; }
+  }
+`;
+
+/* ─────────────────────────────────────────────
+   API Service
+───────────────────────────────────────────── */
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 
 const getAuthHeaders = () => ({
@@ -11,368 +294,78 @@ const getAuthHeaders = () => ({
 });
 
 const handleResponse = async (response) => {
-  const responseText = await response.text();
-  
+  const text = await response.text();
   let data;
-  try {
-    data = JSON.parse(responseText);
-  } catch (parseError) {
-    throw new Error('Invalid response from server');
-  }
-
-  if (!response.ok) {
-    throw new Error(data.error || data.message || `Request failed with status ${response.status}`);
-  }
-
+  try { data = JSON.parse(text); } catch { throw new Error('Invalid server response'); }
+  if (!response.ok) throw new Error(data.error || data.message || `Error ${response.status}`);
   return data;
 };
 
 const apiService = {
-  async getCustomers() {
-    const response = await fetch(`${API_BASE_URL}/customers`);
-    return handleResponse(response);
-  },
-
-  async getAdmins() {
-    const response = await fetch(`${API_BASE_URL}/users?role=admin`);
-    return handleResponse(response);
-  },
-
-  async assignCustomers(adminId, customerIds) {
-    const response = await fetch(`${API_BASE_URL}/superadmin/assign-customers`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({
-        adminId,
-        customerIds
-      })
-    });
-    return handleResponse(response);
-  }
+  getCustomers: () => fetch(`${API_BASE_URL}/customers`).then(handleResponse),
+  getAdmins: () => fetch(`${API_BASE_URL}/users?role=admin`).then(handleResponse),
+  assignCustomers: (adminId, customerIds) =>
+    fetch(`${API_BASE_URL}/superadmin/assign-customers`, {
+      method: 'POST', headers: getAuthHeaders(),
+      body: JSON.stringify({ adminId, customerIds })
+    }).then(handleResponse),
+  setCustomerStatus: (customerId, isActive) =>
+    fetch(`${API_BASE_URL}/api/customers/${customerId}/status`, {
+      method: 'PUT', headers: getAuthHeaders(),
+      body: JSON.stringify({ isActive })
+    }).then(handleResponse)
 };
 
-// Admin Selector Component
-const AdminSelector = ({ admins, selectedAdmin, onAdminSelect }) => {
-  const selectedAdminData = admins.find(admin => admin._id === selectedAdmin);
-
-  return (
-    <div className="bg-white rounded-xl shadow-sm border">
-      <div className="p-6 border-b border-gray-100">
-        <h2 className="text-xl font-semibold text-gray-900 flex items-center space-x-2">
-          <Crown className="text-yellow-500" size={20} />
-          <span>Select Admin</span>
-        </h2>
-        <p className="text-gray-600 mt-1">Choose an admin to assign customers to</p>
-      </div>
-      
-      <div className="p-6">
-        <select
-          value={selectedAdmin}
-          onChange={(e) => onAdminSelect(e.target.value)}
-          className="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900 transition-colors"
-        >
-          <option value="">Choose an admin...</option>
-          {admins.map(admin => (
-            <option key={admin._id} value={admin._id}>
-              {admin.name || admin.email?.split('@')[0] || admin.email} ({admin.email})
-            </option>
-          ))}
-        </select>
-
-        {selectedAdminData && (
-          <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center">
-                <Crown className="text-white" size={16} />
-              </div>
-              <div>
-                <h3 className="font-semibold text-gray-900">
-                  {admins.find(a => a._id === selectedAdmin)?.name || 
-                   admins.find(a => a._id === selectedAdmin)?.email?.split('@')[0] || 
-                   admins.find(a => a._id === selectedAdmin)?.email}
-                </h3>
-                <div className="flex items-center space-x-1 text-gray-600">
-                  <Mail size={14} />
-                  <span className="text-sm">{admins.find(a => a._id === selectedAdmin).email}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+/* ─────────────────────────────────────────────
+   Helpers
+───────────────────────────────────────────── */
+const initials = (name, email) => {
+  const src = name || email || '?';
+  return src.slice(0, 2).toUpperCase();
 };
 
-// Customer List Component
-const CustomerList = ({ customers, selectedCustomers, onCustomerSelect }) => {
-  if (customers.length === 0) {
-    return (
-      <div className="p-8 text-center">
-        <User className="mx-auto text-gray-400 mb-4" size={48} />
-        <p className="text-gray-500">No customers found</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="max-h-96 overflow-y-auto">
-      <div className="p-4 space-y-2">
-        {customers.map(customer => (
-          <div
-            key={customer._id}
-            className={`flex items-center p-4 rounded-lg border transition-all cursor-pointer hover:shadow-md ${
-              selectedCustomers.includes(customer._id)
-                ? 'bg-blue-50 border-blue-300 shadow-sm'
-                : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
-            }`}
-            onClick={() => onCustomerSelect(customer._id)}
-          >
-            <input
-              type="checkbox"
-              checked={selectedCustomers.includes(customer._id)}
-              onChange={() => onCustomerSelect(customer._id)}
-              className="mr-4 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-            />
-            <div className="flex items-center space-x-3 flex-1">
-              <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-                <User className="text-white" size={16} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="font-semibold text-gray-900 truncate">{customer.name}</h3>
-                <div className="flex items-center space-x-1 text-gray-500">
-                  <Mail size={12} />
-                  <span className="text-sm truncate">{customer.email}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-// Assignment View Component
-const AssignmentView = ({ assignments, admins, customers, onRemoveAssignment, loading }) => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [removeConfirm, setRemoveConfirm] = useState(null);
-
-  const getAdminName = (adminId) => {
-    const admin = admins.find(a => a._id === adminId);
-    return admin ? admin.name : 'Unknown Admin';
-  };
-
-  const getAdminEmail = (adminId) => {
-    const admin = admins.find(a => a._id === adminId);
-    return admin ? admin.email : '';
-  };
-
-  const getCustomerName = (customerId) => {
-    const customer = customers.find(c => c._id === customerId);
-    return customer ? customer.name : 'Unknown Customer';
-  };
-
-  const getCustomerEmail = (customerId) => {
-    const customer = customers.find(c => c._id === customerId);
-    return customer ? customer.email : '';
-  };
-
-  const filteredAssignments = assignments.filter(assignment => {
-    const adminName = getAdminName(assignment.adminId).toLowerCase();
-    const customerNames = assignment.customerIds.map(id => getCustomerName(id).toLowerCase()).join(' ');
-    const search = searchTerm.toLowerCase();
-    return adminName.includes(search) || customerNames.includes(search);
-  });
-
-  const handleRemoveClick = (adminId, customerId) => {
-    setRemoveConfirm({ adminId, customerId });
-  };
-
-  const confirmRemove = async () => {
-    if (removeConfirm) {
-      await onRemoveAssignment(removeConfirm.adminId, removeConfirm.customerId);
-      setRemoveConfirm(null);
-    }
-  };
-
-  return (
-    <div className="space-y-6">
-      {/* Remove Confirmation Modal */}
-      {removeConfirm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 max-w-md mx-4">
-            <div className="flex items-center space-x-3 mb-4">
-              <AlertTriangle className="text-red-500" size={24} />
-              <h3 className="text-lg font-semibold text-gray-900">Confirm Removal</h3>
-            </div>
-            <p className="text-gray-600 mb-6">
-              Are you sure you want to remove this customer assignment? This action cannot be undone.
-            </p>
-            <div className="flex space-x-3">
-              <button
-                onClick={confirmRemove}
-                disabled={loading}
-                className="flex-1 bg-red-600 text-white py-2 px-4 rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors"
-              >
-                {loading ? 'Removing...' : 'Remove'}
-              </button>
-              <button
-                onClick={() => setRemoveConfirm(null)}
-                className="flex-1 bg-gray-300 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-400 transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Search and Stats */}
-      <div className="bg-white rounded-xl shadow-sm border p-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
-          <div>
-            <h2 className="text-xl font-semibold text-gray-900">Current Assignments</h2>
-            <p className="text-gray-600">View and manage admin-customer relationships</p>
-          </div>
-          
-          <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2 text-sm text-gray-600">
-              <Users size={16} />
-              <span>{assignments.length} admin{assignments.length !== 1 ? 's' : ''}</span>
-            </div>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
-              <input
-                type="text"
-                placeholder="Search assignments..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-64"
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Assignments List */}
-      <div className="space-y-6">
-        {filteredAssignments.length === 0 ? (
-          <div className="bg-white rounded-xl shadow-sm border p-12 text-center">
-            <Users className="mx-auto text-gray-400 mb-4" size={48} />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">No assignments found</h3>
-            <p className="text-gray-600">
-              {assignments.length === 0 
-                ? 'No customers have been assigned to admins yet.'
-                : 'No assignments match your search criteria.'
-              }
-            </p>
-          </div>
-        ) : (
-          filteredAssignments.map(assignment => (
-            <div key={assignment.adminId} className="bg-white rounded-xl shadow-sm border">
-              <div className="p-6 border-b border-gray-100">
-                <div className="flex items-center space-x-3">
-                  <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-blue-600 rounded-full flex items-center justify-center">
-                    <Crown className="text-white" size={20} />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900">{getAdminName(assignment.adminId)}</h3>
-                    <div className="flex items-center space-x-1 text-gray-600">
-                      <Mail size={14} />
-                      <span className="text-sm">{getAdminEmail(assignment.adminId)}</span>
-                    </div>
-                  </div>
-                  <div className="ml-auto">
-                    <span className="bg-green-100 text-green-800 text-sm font-medium px-3 py-1 rounded-full">
-                      {assignment.customerIds.length} customer{assignment.customerIds.length !== 1 ? 's' : ''}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-6">
-                <h4 className="text-md font-medium text-gray-900 mb-4">Assigned Customers</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {assignment.customerIds.map(customerId => (
-                    <div
-                      key={customerId}
-                      className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200"
-                    >
-                      <div className="flex items-center space-x-3">
-                        <div className="w-8 h-8 bg-gradient-to-r from-green-500 to-teal-600 rounded-full flex items-center justify-center">
-                          <User className="text-white" size={14} />
-                        </div>
-                        <div>
-                          <h5 className="font-medium text-gray-900">{getCustomerName(customerId)}</h5>
-                          <p className="text-sm text-gray-600">{getCustomerEmail(customerId)}</p>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => handleRemoveClick(assignment.adminId, customerId)}
-                        disabled={loading}
-                        className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
-                        title="Remove customer from admin"
-                      >
-                        <UserMinus size={16} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-    </div>
-  );
-};
-
-// Main Dashboard Component
+/* ─────────────────────────────────────────────
+   Main Component
+───────────────────────────────────────────── */
 const SuperAdminDashboard = () => {
-  const [customers, setCustomers] = useState([]);
-  const [admins, setAdmins] = useState([]);
+  const [customers, setCustomers]           = useState([]);
+  const [admins, setAdmins]                 = useState([]);
   const [selectedCustomers, setSelectedCustomers] = useState([]);
-  const [selectedAdmin, setSelectedAdmin] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [notification, setNotification] = useState(null);
-  const [activeTab, setActiveTab] = useState('assign');
-  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedAdmin, setSelectedAdmin]   = useState('');
+  const [loading, setLoading]               = useState(false);
+  const [refreshing, setRefreshing]         = useState(false);
+  const [notification, setNotification]     = useState(null);
+  const [searchTerm, setSearchTerm]         = useState('');
+  const [removeConfirm, setRemoveConfirm]   = useState(null);
+  const [statusUpdating, setStatusUpdating] = useState(null);
   const navigate = useNavigate();
 
+  // Inject styles once
   useEffect(() => {
-    loadInitialData();
+    const id = 'sa-styles';
+    if (!document.getElementById(id)) {
+      const el = document.createElement('style');
+      el.id = id; el.textContent = STYLES;
+      document.head.appendChild(el);
+    }
   }, []);
+
+  useEffect(() => { loadInitialData(); }, []);
 
   const loadInitialData = async () => {
     setRefreshing(true);
-    try {
-      await Promise.all([
-        fetchCustomers(),
-        fetchAdmins()
-      ]);
-    } finally {
-      setRefreshing(false);
-    }
+    try { await Promise.all([fetchCustomers(), fetchAdmins()]); }
+    finally { setRefreshing(false); }
   };
 
   const fetchCustomers = async () => {
-    try {
-      const data = await apiService.getCustomers();
-      setCustomers(data);
-    } catch (error) {
-      showNotification('Failed to fetch customers', 'error');
-    }
+    try { setCustomers(await apiService.getCustomers()); }
+    catch { showNotification('Failed to fetch customers', 'error'); }
   };
 
   const fetchAdmins = async () => {
-    try {
-      const data = await apiService.getAdmins();
-      setAdmins(data);
-    } catch (error) {
-      showNotification('Failed to fetch admins', 'error');
-    }
+    try { setAdmins(await apiService.getAdmins()); }
+    catch { showNotification('Failed to fetch admins', 'error'); }
   };
 
   const showNotification = (message, type = 'info') => {
@@ -380,449 +373,402 @@ const SuperAdminDashboard = () => {
     setTimeout(() => setNotification(null), 5000);
   };
 
-  const handleCustomerSelect = (customerId) => {
-    // Allow selection - multi-admin support means customers can be assigned to multiple admins
+  const toggleCustomer = (id) =>
     setSelectedCustomers(prev =>
-      prev.includes(customerId)
-        ? prev.filter(id => id !== customerId)
-        : [...prev, customerId]
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
     );
+
+  const getAdminsForCustomer = (customerId) =>
+    admins.filter(a => (a.assignedCustomers || []).includes(customerId));
+
+  const handleToggleStatus = async (e, customer) => {
+    e.stopPropagation();
+    const newStatus = !customer.isActive;
+    setStatusUpdating(customer._id);
+    try {
+      await apiService.setCustomerStatus(customer._id, newStatus);
+      setCustomers(prev =>
+        prev.map(c => c._id === customer._id ? { ...c, isActive: newStatus } : c)
+      );
+      showNotification(
+        newStatus
+          ? `${customer.name || customer.email} has been activated.`
+          : `${customer.name || customer.email} has been deactivated.`,
+        newStatus ? 'success' : 'error'
+      );
+    } catch (err) {
+      showNotification(`Failed to update status: ${err.message}`, 'error');
+    } finally {
+      setStatusUpdating(null);
+    }
   };
 
-  // Helper: find admin who currently has a customer
-  const getAdminsForCustomer = (customerId) => {
-    return admins.filter(a => (a.assignedCustomers || []).includes(customerId));
-  };
+  const filteredCustomers = customers.filter(c =>
+    (c.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (c.email || '').toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   const handleSelectAll = () => {
-    const filteredCustomers = customers.filter(customer =>
-      (customer.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (customer.email || '').toLowerCase().includes(searchTerm.toLowerCase())
-    );
-
-    if (selectedCustomers.length === filteredCustomers.length && filteredCustomers.length > 0) {
+    if (selectedCustomers.length === filteredCustomers.length && filteredCustomers.length > 0)
       setSelectedCustomers([]);
-    } else {
+    else
       setSelectedCustomers(filteredCustomers.map(c => c._id));
-    }
   };
 
   const handleAssignment = async () => {
     if (!selectedAdmin || selectedCustomers.length === 0) {
-      showNotification('Please select an admin and at least one customer', 'error');
-      return;
+      showNotification('Select an admin and at least one customer', 'error'); return;
     }
-
     setLoading(true);
-    
     try {
-      const result = await apiService.assignCustomers(selectedAdmin, selectedCustomers);
-      
-      // Count how many customers were newly assigned vs already assigned
-      const alreadyAssignedCount = selectedCustomers.filter(cId => {
-        const customer = customers.find(c => c._id === cId);
-        const admins = getAdminsForCustomer(cId);
-        return admins.some(a => a._id === selectedAdmin);
-      }).length;
-      
-      const newlyAssignedCount = selectedCustomers.length - alreadyAssignedCount;
-      
-      let message = '';
-      if (newlyAssignedCount > 0 && alreadyAssignedCount > 0) {
-        message = `Successfully assigned ${newlyAssignedCount} new customer${newlyAssignedCount !== 1 ? 's' : ''}. ${alreadyAssignedCount} already assigned.`;
-      } else if (alreadyAssignedCount === selectedCustomers.length) {
-        message = `All ${alreadyAssignedCount} customer${alreadyAssignedCount !== 1 ? 's are' : ' is'} already assigned to this admin.`;
-      } else {
-        message = `Successfully assigned ${newlyAssignedCount} customer${newlyAssignedCount !== 1 ? 's' : ''} to admin`;
-      }
-      
-      showNotification(message, 'success');
-
-      // Refresh data to reflect the multi-admin assignments
-      await Promise.all([ fetchCustomers(), fetchAdmins() ]);
-
-      // Clear customer selection but keep admin selected for multiple assignments
+      await apiService.assignCustomers(selectedAdmin, selectedCustomers);
+      const already = selectedCustomers.filter(cId =>
+        getAdminsForCustomer(cId).some(a => a._id === selectedAdmin)
+      ).length;
+      const fresh = selectedCustomers.length - already;
+      const msg = fresh > 0
+        ? `${fresh} customer${fresh !== 1 ? 's' : ''} assigned successfully.${already ? ` ${already} already assigned.` : ''}`
+        : `All selected customers already assigned to this admin.`;
+      showNotification(msg, 'success');
+      await Promise.all([fetchCustomers(), fetchAdmins()]);
       setSelectedCustomers([]);
-    } catch (error) {
-      showNotification(error.message || 'Assignment failed', 'error');
+    } catch (e) {
+      showNotification(e.message || 'Assignment failed', 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  const filteredCustomers = customers.filter(customer =>
-    customer.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    customer.email?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const getNotificationStyles = (type) => {
-    const baseStyles = "fixed top-4 right-4 p-4 rounded-lg shadow-lg z-50 flex items-center space-x-2 max-w-md";
-    switch (type) {
-      case 'success':
-        return `${baseStyles} bg-green-50 border border-green-200 text-green-800`;
-      case 'error':
-        return `${baseStyles} bg-red-50 border border-red-200 text-red-800`;
-      default:
-        return `${baseStyles} bg-blue-50 border border-blue-200 text-blue-800`;
-    }
-  };
+  const selectedAdminObj = admins.find(a => a._id === selectedAdmin);
+  const totalAssigned = admins.reduce((n, a) => n + (a.assignedCustomers?.length || 0), 0);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-      {/* Notification */}
+    <div className="sa-shell">
+      {/* ── Toast ── */}
       {notification && (
-        <div className={getNotificationStyles(notification.type)}>
-          {notification.type === 'success' && <CheckCircle size={20} />}
-          {notification.type === 'error' && <AlertCircle size={20} />}
-          <span className="font-medium">{notification.message}</span>
+        <div className={`toast ${notification.type}`}>
+          {notification.type === 'success' && <CheckCircle size={16} />}
+          {notification.type === 'error'   && <AlertCircle size={16} />}
+          {notification.type === 'info'    && <AlertCircle size={16} />}
+          <span>{notification.message}</span>
           <button
             onClick={() => setNotification(null)}
-            className="ml-2 hover:opacity-70 transition-opacity"
+            style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', opacity: .7 }}
           >
-            <X size={16} />
+            <X size={14} />
           </button>
         </div>
       )}
 
-      {/* Modern Header with Gradient */}
-      <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 shadow-xl">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-8">
-            <div className="flex items-center space-x-4">
-              <div className="w-14 h-14 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center shadow-lg">
-                <Crown className="text-white" size={28} />
-              </div>
-              <div>
-                <h1 className="text-3xl font-bold text-white tracking-tight">Super Admin Dashboard</h1>
-                <p className="mt-1 text-indigo-100">Manage customer assignments across multiple admins</p>
-              </div>
+      {/* ── Confirm Modal ── */}
+      {removeConfirm && (
+        <div className="modal-overlay">
+          <div className="modal">
+            <div className="modal-title">
+              <AlertTriangle size={18} style={{ color: 'var(--danger)' }} />
+              Remove Assignment
             </div>
-            <button
-              onClick={loadInitialData}
-              disabled={refreshing}
-              className="flex items-center space-x-2 px-5 py-3 bg-white/20 backdrop-blur-sm text-white rounded-xl hover:bg-white/30 disabled:opacity-50 transition-all shadow-lg hover:shadow-xl border border-white/30"
-            >
-              <RefreshCw size={18} className={refreshing ? 'animate-spin' : ''} />
-              <span className="font-medium">Refresh</span>
-            </button>
+            <div className="modal-body">
+              Are you sure you want to remove this customer assignment? This cannot be undone.
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-danger" onClick={async () => { setRemoveConfirm(null); }}
+                disabled={loading}>
+                {loading ? 'Removing…' : 'Remove'}
+              </button>
+              <button className="btn btn-ghost" onClick={() => setRemoveConfirm(null)}>Cancel</button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Enhanced Statistics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-shadow border border-gray-100 overflow-hidden">
-            <div className="bg-gradient-to-br from-purple-500 to-indigo-600 p-6">
-              <div className="flex items-center justify-between">
-                <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
-                  <Users className="text-white" size={24} />
-                </div>
-                <div className="text-right">
-                  <p className="text-purple-100 text-sm font-medium">Total Customers</p>
-                  <p className="text-4xl font-bold text-white mt-1">{customers.length}</p>
-                </div>
-              </div>
-            </div>
+      {/* ── Header ── */}
+      <header className="sa-header">
+        <div className="sa-header-brand">
+          <div className="sa-header-icon">
+            <Crown size={18} color="#fff" />
           </div>
-
-          <div className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-shadow border border-gray-100 overflow-hidden">
-            <div className="bg-gradient-to-br from-orange-500 to-pink-600 p-6">
-              <div className="flex items-center justify-between">
-                <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
-                  <Crown className="text-white" size={24} />
-                </div>
-                <div className="text-right">
-                  <p className="text-orange-100 text-sm font-medium">Total Admins</p>
-                  <p className="text-4xl font-bold text-white mt-1">{admins.length}</p>
-                </div>
-              </div>
-            </div>
+          <div>
+            <div className="sa-header-title">Super Admin</div>
+            <div className="sa-header-sub">Customer assignment dashboard</div>
           </div>
-
+        </div>
+        <div className="sa-header-actions">
           <button
+            className="btn btn-ghost"
+            onClick={loadInitialData}
+            disabled={refreshing}
+          >
+            <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
+            Refresh
+          </button>
+          <button className="btn btn-primary" onClick={() => navigate('/superadmin/analytics')}>
+            <BarChart3 size={14} />
+            Analytics
+          </button>
+        </div>
+      </header>
+
+      {/* ── Body ── */}
+      <main className="sa-body">
+
+        {/* ── Stat Row ── */}
+        <div className="sa-stats">
+          <div className="stat-card">
+            <div className="stat-card-top">
+              <div className="stat-icon blue"><Users size={18} /></div>
+            </div>
+            <div className="stat-value">{customers.length}</div>
+            <div className="stat-label">Total Customers</div>
+            <div className="stat-sub">{customers.filter(c => c.isActive !== false).length} active · {customers.filter(c => c.isActive === false).length} inactive</div>
+          </div>
+
+          <div className="stat-card">
+            <div className="stat-card-top">
+              <div className="stat-icon slate"><Shield size={18} /></div>
+            </div>
+            <div className="stat-value">{admins.length}</div>
+            <div className="stat-label">Active Admins</div>
+          </div>
+
+          <div
+            className="stat-card clickable"
             onClick={() => navigate('/superadmin/analytics')}
-            className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all border border-gray-100 overflow-hidden group hover:scale-105 transform duration-200"
+            role="button" tabIndex={0}
           >
-            <div className="bg-gradient-to-br from-blue-500 to-cyan-600 p-6">
-              <div className="flex items-center justify-between">
-                <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                  <BarChart3 className="text-white" size={24} />
-                </div>
-                <ArrowRight className="text-white opacity-0 group-hover:opacity-100 transition-opacity" size={20} />
-              </div>
-              <div className="mt-4">
-                <p className="text-white font-bold text-lg">Analytics</p>
-                <p className="text-blue-100 text-sm mt-1">Track performance metrics</p>
-              </div>
+            <div className="stat-card-top">
+              <div className="stat-icon green"><BarChart3 size={18} /></div>
+              <ArrowRight size={16} className="stat-arrow" />
             </div>
-          </button>
+            <div className="stat-value">{totalAssigned}</div>
+            <div className="stat-label">Total Assignments</div>
+            <div className="stat-sub">View analytics →</div>
+          </div>
 
-          <button
+          <div
+            className="stat-card clickable"
             onClick={() => navigate('/superadmin/view-assignments')}
-            className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all border border-gray-100 overflow-hidden group hover:scale-105 transform duration-200"
+            role="button" tabIndex={0}
           >
-            <div className="bg-gradient-to-br from-green-500 to-emerald-600 p-6">
-              <div className="flex items-center justify-between">
-                <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                  <UserCheck className="text-white" size={24} />
-                </div>
-                <ArrowRight className="text-white opacity-0 group-hover:opacity-100 transition-opacity" size={20} />
-              </div>
-              <div className="mt-4">
-                <p className="text-white font-bold text-lg">View Assignments</p>
-                <p className="text-green-100 text-sm mt-1">See all relationships</p>
-              </div>
+            <div className="stat-card-top">
+              <div className="stat-icon amber"><UserCheck size={18} /></div>
+              <ArrowRight size={16} className="stat-arrow" />
             </div>
-          </button>
+            <div className="stat-value">
+              {customers.length > 0
+                ? `${Math.round((customers.filter(c => getAdminsForCustomer(c._id).length > 0).length / customers.length) * 100)}%`
+                : '—'}
+            </div>
+            <div className="stat-label">Assignment Rate</div>
+            <div className="stat-sub">View all assignments →</div>
+          </div>
         </div>
 
-        {/* Modern Assignment Section */}
-        <div className="space-y-8">
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-            {/* Enhanced Admin Selection */}
-            <div className="bg-white rounded-2xl shadow-xl border border-gray-100">
-              <div className="p-6 border-b border-gray-100 bg-gradient-to-r from-purple-50 to-pink-50">
-                <h2 className="text-xl font-bold text-gray-900 flex items-center space-x-2">
-                  <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
-                    <Crown className="text-white" size={16} />
-                  </div>
-                  <span>Select Admin</span>
-                </h2>
-                <p className="text-gray-600 mt-2 ml-10">Choose an admin to assign customers to</p>
-              </div>
-              
-              <div className="p-6">
-                <select
-                  value={selectedAdmin}
-                  onChange={(e) => setSelectedAdmin(e.target.value)}
-                  className="w-full p-4 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 bg-white text-gray-900 transition-all font-medium hover:border-gray-300"
-                >
-                  <option value="">Choose an admin...</option>
-                  {admins.map(admin => (
-                    <option key={admin._id} value={admin._id}>
-                      {admin.name || admin.email?.split('@')[0] || admin.email} • {admin.email}
+        {/* ── Assignment Section ── */}
+        <p className="sa-section-title">New Assignment</p>
+
+        <div className="sa-cols">
+          {/* Admin Selection */}
+          <div className="card">
+            <div className="card-header">
+              <span className="card-title">
+                <Crown size={15} style={{ color: 'var(--accent)' }} />
+                Admin
+              </span>
+              {selectedAdminObj && (
+                <span className="badge badge-blue">
+                  <Users size={11} />
+                  {(selectedAdminObj.assignedCustomers || []).length} assigned
+                </span>
+              )}
+            </div>
+            <div className="card-body">
+              <div className="sa-select-wrap">
+                <select value={selectedAdmin} onChange={e => setSelectedAdmin(e.target.value)}>
+                  <option value="">Choose an admin…</option>
+                  {admins.map(a => (
+                    <option key={a._id} value={a._id}>
+                      {a.name || a.email?.split('@')[0]} — {a.email}
                     </option>
                   ))}
                 </select>
+                <ChevronDown size={15} className="sa-select-chevron" />
+              </div>
 
-                {selectedAdmin && admins.find(a => a._id === selectedAdmin) && (
-                  <div className="mt-4 p-5 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl border-2 border-purple-200">
-                    <div className="flex items-center space-x-4">
-                      <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
-                        <Crown className="text-white" size={20} />
-                      </div>
-                      <div className="flex-1">
-                        <h3 className="font-bold text-gray-900 text-lg">
-                          {admins.find(a => a._id === selectedAdmin)?.name || 
-                           admins.find(a => a._id === selectedAdmin)?.email?.split('@')[0] || 
-                           admins.find(a => a._id === selectedAdmin)?.email}
-                        </h3>
-                        <div className="flex items-center space-x-2 text-gray-600 mt-1">
-                          <Mail size={14} />
-                          <span className="text-sm">{admins.find(a => a._id === selectedAdmin).email}</span>
-                        </div>
-                        <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 bg-white rounded-full text-xs font-medium text-purple-700 border border-purple-200">
-                          <Users size={12} />
-                          <span>{(admins.find(a => a._id === selectedAdmin).assignedCustomers || []).length} customers assigned</span>
-                        </div>
-                      </div>
+              {selectedAdminObj && (
+                <div className="admin-preview">
+                  <div className="avatar">{initials(selectedAdminObj.name, selectedAdminObj.email)}</div>
+                  <div>
+                    <div className="admin-preview-name">
+                      {selectedAdminObj.name || selectedAdminObj.email?.split('@')[0]}
+                    </div>
+                    <div className="admin-preview-email">
+                      <Mail size={11} />
+                      {selectedAdminObj.email}
                     </div>
                   </div>
-                )}
-              </div>
-            </div>
-
-            {/* Enhanced Customer Selection */}
-            <div className="bg-white rounded-2xl shadow-xl border border-gray-100">
-              <div className="p-6 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-indigo-50">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-xl font-bold text-gray-900 flex items-center space-x-2">
-                    <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-lg flex items-center justify-center">
-                      <Users className="text-white" size={16} />
-                    </div>
-                    <span>Select Customers</span>
-                  </h2>
-                  <div className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-full font-bold text-sm shadow-md">
-                    <UserCheck size={16} />
-                    <span>{selectedCustomers.length} selected</span>
-                  </div>
                 </div>
-                
-                {/* Enhanced Search Bar */}
-                <div className="relative">
-                  <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-                  <input
-                    type="text"
-                    placeholder="Search customers by name or email..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white"
-                  />
+              )}
+
+              {!selectedAdminObj && (
+                <div style={{ marginTop: 16, fontSize: 12.5, color: 'var(--muted)', lineHeight: 1.6 }}>
+                  Select an admin from the dropdown to view their profile and current assignment count.
                 </div>
-
-                <button
-                  onClick={handleSelectAll}
-                  className="mt-3 text-blue-600 hover:text-blue-800 text-sm font-semibold transition-colors flex items-center gap-2 hover:gap-3"
-                >
-                  <Filter size={14} />
-                  {selectedCustomers.length === filteredCustomers.length && filteredCustomers.length > 0
-                    ? 'Deselect All'
-                    : 'Select All'}
-                </button>
-              </div>
-
-              {/* Customer List */}
-              <div className="max-h-96 overflow-y-auto">
-                <div className="p-4 space-y-3">
-                  {filteredCustomers.length > 0 ? (
-                    filteredCustomers.map(customer => {
-                      const assignedAdmins = getAdminsForCustomer(customer._id);
-                      const isAlreadyAssignedToSelected = assignedAdmins.some(a => a._id === selectedAdmin);
-                      
-                      return (
-                        <div
-                          key={customer._id}
-                          className={`relative rounded-xl border transition-all ${
-                            selectedCustomers.includes(customer._id)
-                              ? 'bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-300 shadow-md'
-                              : 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm'
-                          }`}
-                        >
-                          <div 
-                            className="flex items-start p-4 cursor-pointer"
-                            onClick={() => handleCustomerSelect(customer._id)}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={selectedCustomers.includes(customer._id)}
-                              onChange={() => handleCustomerSelect(customer._id)}
-                              className="mt-1 mr-4 h-5 w-5 text-blue-600 focus:ring-2 focus:ring-blue-500 border-gray-300 rounded transition-all"
-                            />
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-start justify-between">
-                                <div className="flex items-center space-x-3 flex-1">
-                                  <div className="w-10 h-10 bg-gradient-to-br from-blue-500 via-indigo-500 to-purple-600 rounded-full flex items-center justify-center shadow-md flex-shrink-0">
-                                    <User className="text-white" size={18} />
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <h3 className="font-semibold text-gray-900 text-base truncate">{customer.name}</h3>
-                                    <div className="flex items-center space-x-1 text-gray-600 mt-0.5">
-                                      <Mail size={14} />
-                                      <span className="text-sm truncate">{customer.email}</span>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-
-                              {/* Assigned Admins Display */}
-                              {assignedAdmins.length > 0 && (
-                                <div className="mt-3 pt-3 border-t border-gray-100">
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <Shield size={14} className="text-purple-600" />
-                                    <span className="text-xs font-medium text-gray-700">Assigned to:</span>
-                                  </div>
-                                  <div className="flex flex-wrap gap-2">
-                                    {assignedAdmins.map(admin => (
-                                      <div
-                                        key={admin._id}
-                                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium ${
-                                          admin._id === selectedAdmin
-                                            ? 'bg-gradient-to-r from-green-100 to-emerald-100 text-green-800 border border-green-300'
-                                            : 'bg-gradient-to-r from-purple-100 to-pink-100 text-purple-800 border border-purple-300'
-                                        }`}
-                                      >
-                                        <Crown size={12} />
-                                        <span>{admin.name || admin.email?.split('@')[0] || admin.email}</span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Status Badge */}
-                              {isAlreadyAssignedToSelected && selectedAdmin && (
-                                <div className="mt-2 flex items-center gap-2">
-                                  <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-green-50 text-green-700 rounded-lg text-xs font-medium border border-green-200">
-                                    <UserCheck size={12} />
-                                    <span>Already assigned to selected admin</span>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <div className="p-8 text-center">
-                      <User className="mx-auto text-gray-400 mb-4" size={48} />
-                      <p className="text-gray-500">No customers found</p>
-                    </div>
-                  )}
-                </div>
-              </div>
+              )}
             </div>
           </div>
 
-          {/* Enhanced Assignment Action */}
-          <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-            <div className="bg-gradient-to-r from-emerald-500 to-teal-600 p-6">
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                <div className="text-white">
-                  <h3 className="text-xl font-bold flex items-center gap-2">
-                    <UserPlus size={24} />
-                    Assignment Summary
-                  </h3>
-                  <p className="mt-2 text-emerald-50">
-                    {selectedAdmin && selectedCustomers.length > 0
-                      ? `Ready to assign ${selectedCustomers.length} customer${selectedCustomers.length > 1 ? 's' : ''} to ${
-                          admins.find(a => a._id === selectedAdmin)?.name || 
-                          admins.find(a => a._id === selectedAdmin)?.email?.split('@')[0] ||
-                          admins.find(a => a._id === selectedAdmin)?.email
-                        }`
-                      : 'Select an admin and customers to proceed with assignment'
-                    }
-                  </p>
-                </div>
+          {/* Customer Selection */}
+          <div className="card">
+            <div className="card-header">
+              <span className="card-title">
+                <Users size={15} style={{ color: 'var(--accent)' }} />
+                Customers
+              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {selectedCustomers.length > 0 && (
+                  <span className="badge badge-blue">
+                    <UserCheck size={11} />
+                    {selectedCustomers.length} selected
+                  </span>
+                )}
                 <button
-                  onClick={handleAssignment}
-                  disabled={loading || !selectedAdmin || selectedCustomers.length === 0}
-                  className="flex items-center justify-center space-x-3 px-8 py-4 bg-white text-emerald-600 rounded-xl hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-bold shadow-lg hover:shadow-xl disabled:hover:bg-white transform hover:scale-105 disabled:hover:scale-100 border-2 border-white/50"
+                  className="btn btn-ghost"
+                  style={{ padding: '4px 10px', fontSize: 12 }}
+                  onClick={handleSelectAll}
                 >
-                  {loading ? (
-                    <>
-                      <RefreshCw size={20} className="animate-spin" />
-                      <span>Assigning...</span>
-                    </>
-                  ) : (
-                    <>
-                      <UserPlus size={20} />
-                      <span>Assign Now</span>
-                      <ArrowRight size={20} />
-                    </>
-                  )}
+                  <Filter size={12} />
+                  {selectedCustomers.length === filteredCustomers.length && filteredCustomers.length > 0
+                    ? 'Deselect all' : 'Select all'}
                 </button>
               </div>
             </div>
-            
-            {/* Info Banner */}
-            <div className="p-6 bg-gradient-to-r from-blue-50 to-indigo-50 border-t border-gray-100">
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <AlertCircle className="text-blue-600" size={20} />
-                </div>
-                <div>
-                  <h4 className="font-semibold text-gray-900">Multi-Admin Support</h4>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Customers can now be assigned to multiple admins simultaneously. Assignments are additive and won't remove existing admin relationships.
-                  </p>
-                </div>
+
+            {/* Search */}
+            <div style={{ padding: '14px 22px', borderBottom: '1px solid var(--border)' }}>
+              <div className="search-wrap">
+                <Search size={14} className="search-icon" />
+                <input
+                  type="text"
+                  placeholder="Search by name or email…"
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                />
               </div>
+            </div>
+
+            {/* List */}
+            <div className="customer-scroll">
+              {filteredCustomers.length === 0 ? (
+                <div style={{ padding: 32, textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>
+                  <User size={32} style={{ margin: '0 auto 8px', opacity: .3 }} />
+                  No customers found
+                </div>
+              ) : (
+                filteredCustomers.map(customer => {
+                  const assigned = getAdminsForCustomer(customer._id);
+                  const alreadyThis = assigned.some(a => a._id === selectedAdmin);
+                  const isSelected = selectedCustomers.includes(customer._id);
+
+                  return (
+                    <div
+                      key={customer._id}
+                      className={`customer-item${isSelected ? ' selected' : ''}${customer.isActive === false ? ' inactive' : ''}`}
+                      onClick={() => toggleCustomer(customer._id)}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleCustomer(customer._id)}
+                        onClick={e => e.stopPropagation()}
+                      />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div className="customer-name">{customer.name}</div>
+                          {customer.isActive === false && (
+                            <span className="badge badge-red" style={{ fontSize: 10.5 }}>Inactive</span>
+                          )}
+                        </div>
+                        <div className="customer-email">
+                          <Mail size={11} />
+                          {customer.email}
+                        </div>
+                        {assigned.length > 0 && (
+                          <div className="customer-admins">
+                            {assigned.map(a => (
+                              <span
+                                key={a._id}
+                                className={`badge ${a._id === selectedAdmin ? 'badge-green' : 'badge-slate'}`}
+                              >
+                                <Crown size={10} />
+                                {a.name || a.email?.split('@')[0]}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        {alreadyThis && selectedAdmin && (
+                          <div style={{ marginTop: 6 }}>
+                            <span className="badge badge-green" style={{ fontSize: 11 }}>
+                              <UserCheck size={10} /> Already assigned
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        className={`btn ${customer.isActive === false ? 'btn-toggle-active' : 'btn-toggle-inactive'}`}
+                        style={{ padding: '5px 10px', fontSize: 11.5, flexShrink: 0 }}
+                        disabled={statusUpdating === customer._id}
+                        onClick={e => handleToggleStatus(e, customer)}
+                        title={customer.isActive === false ? 'Activate account' : 'Deactivate account'}
+                      >
+                        <Power size={12} />
+                        {statusUpdating === customer._id
+                          ? '…'
+                          : customer.isActive === false ? 'Activate' : 'Deactivate'
+                        }
+                      </button>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
         </div>
-      </div>
+
+        {/* ── Summary / Action Bar ── */}
+        <div className="summary-bar">
+          <div className="summary-info">
+            {selectedAdmin && selectedCustomers.length > 0 ? (
+              <>
+                Assigning <strong>{selectedCustomers.length} customer{selectedCustomers.length !== 1 ? 's' : ''}</strong> to{' '}
+                <strong>{selectedAdminObj?.name || selectedAdminObj?.email?.split('@')[0] || 'selected admin'}</strong>
+              </>
+            ) : (
+              'Select an admin and one or more customers to create an assignment.'
+            )}
+          </div>
+          <button
+            className="btn btn-primary btn-lg"
+            onClick={handleAssignment}
+            disabled={loading || !selectedAdmin || selectedCustomers.length === 0}
+          >
+            {loading
+              ? <><RefreshCw size={16} className="animate-spin" /> Assigning…</>
+              : <><UserPlus size={16} /> Assign Now <ArrowRight size={15} /></>
+            }
+          </button>
+        </div>
+
+        {/* Multi-admin note */}
+        <div className="summary-note" style={{ marginTop: 12 }}>
+          <AlertCircle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+          <span>
+            <strong>Multi-admin support:</strong> Customers can be assigned to multiple admins simultaneously.
+            Existing assignments are preserved when creating new ones.
+          </span>
+        </div>
+
+      </main>
     </div>
   );
 };

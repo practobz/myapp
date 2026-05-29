@@ -9,7 +9,7 @@ import {
   Facebook, Instagram, Linkedin, Youtube, Globe, CheckCircle,
   AlertCircle, Building2, User, Calendar, Eye, X, ArrowLeft,
   Filter, SlidersHorizontal, Heart, MessageSquare, Share2, Loader2,
-  BarChart3, Image as ImageIcon, Play, Pencil, Trash2
+  BarChart3, Image as ImageIcon, Play, Pencil, Trash2, Unlink
 } from 'lucide-react';
 
 // Platform config for colors and icons
@@ -73,7 +73,7 @@ const formatDate = (dateString) => {
 };
 
 // Account detail modal
-function AccountDetailModal({ account, customer, onClose }) {
+function AccountDetailModal({ account, customer, onClose, onDisconnect }) {
   if (!account) return null;
 
   const config = getPlatformConfig(account.platform);
@@ -599,9 +599,21 @@ function AccountDetailModal({ account, customer, onClose }) {
                   </p>
                 </div>
               </div>
-              <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-lg transition-colors">
-                <X className="h-5 w-5 text-white" />
-              </button>
+              <div className="flex items-center gap-2">
+                {onDisconnect && (
+                  <button
+                    onClick={() => onDisconnect(account, customer)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/80 hover:bg-red-600 rounded-lg text-white text-xs font-medium transition-colors"
+                    title="Disconnect this account"
+                  >
+                    <Unlink className="h-3.5 w-3.5" />
+                    Disconnect
+                  </button>
+                )}
+                <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-lg transition-colors">
+                  <X className="h-5 w-5 text-white" />
+                </button>
+              </div>
             </div>
           </div>
 
@@ -878,7 +890,7 @@ function PlatformBadge({ platform, count }) {
 }
 
 // Account card for grid view
-function AccountCard({ account, customer, onClick }) {
+function AccountCard({ account, customer, onClick, onDisconnect }) {
   const config = getPlatformConfig(account.platform);
   const Icon = config.icon;
 
@@ -924,17 +936,24 @@ function AccountCard({ account, customer, onClick }) {
         )}
       </div>
 
-      <div className="mt-2 flex justify-end">
+      <div className="mt-2 flex items-center justify-between">
         <span className="text-xs text-gray-400 flex items-center gap-1 hover:text-gray-600">
           <Eye className="h-3 w-3" /> View Details
         </span>
+        <button
+          onClick={(e) => { e.stopPropagation(); onDisconnect && onDisconnect(account, customer); }}
+          className="flex items-center gap-1 text-xs text-red-400 hover:text-red-600 hover:bg-red-50 px-2 py-1 rounded-lg transition-colors"
+          title="Disconnect account"
+        >
+          <Unlink className="h-3 w-3" /> Disconnect
+        </button>
       </div>
     </div>
   );
 }
 
 // Customer row with expandable accounts
-function CustomerRow({ customer, isExpanded, onToggle, onSelectAccount, searchQuery }) {
+function CustomerRow({ customer, isExpanded, onToggle, onSelectAccount, onDisconnectAccount, searchQuery }) {
   const platforms = {};
   customer.socialAccounts.forEach((acc) => {
     platforms[acc.platform] = (platforms[acc.platform] || 0) + 1;
@@ -1000,6 +1019,7 @@ function CustomerRow({ customer, isExpanded, onToggle, onSelectAccount, searchQu
                   account={account}
                   customer={customer}
                   onClick={() => onSelectAccount(account, customer)}
+                  onDisconnect={onDisconnectAccount}
                 />
               ))}
             </div>
@@ -1027,6 +1047,11 @@ function CustomerSocialAccounts() {
   const [expandAll, setExpandAll] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState(null);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
+
+  // Disconnect state
+  const [disconnectTarget, setDisconnectTarget] = useState(null); // { account, customer }
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
+  const [disconnectError, setDisconnectError] = useState('');
 
   const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 
@@ -1151,6 +1176,45 @@ function CustomerSocialAccounts() {
   const handleSelectAccount = (account, customer) => {
     setSelectedAccount(account);
     setSelectedCustomer(customer);
+  };
+
+  const handleDisconnectAccount = (account, customer) => {
+    setDisconnectError('');
+    setDisconnectTarget({ account, customer });
+  };
+
+  const confirmDisconnect = async () => {
+    if (!disconnectTarget) return;
+    const { account, customer } = disconnectTarget;
+    setIsDisconnecting(true);
+    setDisconnectError('');
+    try {
+      const res = await fetch(`${apiUrl}/api/customer-social-links/${encodeURIComponent(account._id)}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to disconnect account');
+      // Remove from local state
+      setCustomers(prev =>
+        prev
+          .map(c =>
+            c.customerId === customer.customerId
+              ? { ...c, socialAccounts: c.socialAccounts.filter(a => a._id !== account._id) }
+              : c
+          )
+          .filter(c => c.socialAccounts.length > 0)
+      );
+      // Close detail modal if the disconnected account is open
+      if (selectedAccount?._id === account._id) {
+        setSelectedAccount(null);
+        setSelectedCustomer(null);
+      }
+      setDisconnectTarget(null);
+    } catch (err) {
+      setDisconnectError(err.message || 'Failed to disconnect');
+    } finally {
+      setIsDisconnecting(false);
+    }
   };
 
   // Loading state
@@ -1352,6 +1416,7 @@ function CustomerSocialAccounts() {
                 isExpanded={expandedCustomers.has(customer.customerId)}
                 onToggle={() => toggleExpand(customer.customerId)}
                 onSelectAccount={handleSelectAccount}
+                onDisconnectAccount={handleDisconnectAccount}
                 searchQuery={platformFilter !== 'all' ? '' : searchQuery}
               />
             ))}
@@ -1368,7 +1433,48 @@ function CustomerSocialAccounts() {
             setSelectedAccount(null);
             setSelectedCustomer(null);
           }}
+          onDisconnect={handleDisconnectAccount}
         />
+      )}
+
+      {/* Disconnect confirm modal */}
+      {disconnectTarget && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60" onClick={() => { if (!isDisconnecting) { setDisconnectTarget(null); setDisconnectError(''); } }} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
+                <Unlink className="h-5 w-5 text-red-500" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">Disconnect account?</h3>
+                <p className="text-xs text-gray-500">{disconnectTarget.account.name} &middot; {getPlatformConfig(disconnectTarget.account.platform).label}</p>
+              </div>
+            </div>
+            {disconnectError ? (
+              <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2 mb-4">{disconnectError}</p>
+            ) : (
+              <p className="text-xs text-gray-500 mb-4">This will permanently remove the connection from the database. The social account itself will not be affected.</p>
+            )}
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setDisconnectTarget(null); setDisconnectError(''); }}
+                disabled={isDisconnecting}
+                className="flex-1 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDisconnect}
+                disabled={isDisconnecting}
+                className="flex-1 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-1.5"
+              >
+                {isDisconnecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Unlink className="w-4 h-4" />}
+                {isDisconnecting ? 'Disconnecting…' : 'Disconnect'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </AdminLayout>
   );

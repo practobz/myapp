@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { TrendingUp, Users, Activity, Calendar, ArrowLeft, RefreshCw } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { TrendingUp, Users, Activity, Calendar, RefreshCw } from 'lucide-react';
+import SuperAdminLayout from './SuperAdminLayout';
 
 const Analytics = () => {
-  const navigate = useNavigate();
   const [analyticsData, setAnalyticsData] = useState({
     totalCustomers: 0,
     totalAdmins: 0,
@@ -227,75 +226,32 @@ const Analytics = () => {
     return `${diffInDays} day${diffInDays > 1 ? 's' : ''} ago`;
   };
 
-  const handleRefresh = () => {
-    loadAnalyticsData();
-  };
+  const topbarRight = (
+    <button
+      onClick={loadAnalyticsData}
+      style={{ display:'inline-flex', alignItems:'center', gap:7, padding:'8px 16px', borderRadius:9, border:'1.5px solid #e2e8f0', background:'#fff', cursor:'pointer', fontSize:13, fontWeight:600, color:'#64748b', transition:'all .15s' }}
+    >
+      <RefreshCw size={14} style={loading ? { animation:'spin 1s linear infinite' } : {}} />
+      {loading ? 'Refreshing…' : 'Refresh'}
+    </button>
+  );
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        {/* Header */}
-        <div className="bg-white shadow-sm border-b">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center py-6">
-              <div className="flex items-center">
-                <button
-                  onClick={() => navigate('/superadmin/dashboard')}
-                  className="mr-4 p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  <ArrowLeft className="h-5 w-5" />
-                </button>
-                <div>
-                  <h1 className="text-3xl font-bold text-gray-900">Analytics & Reports</h1>
-                  <p className="mt-1 text-gray-600">Monitor system performance and user engagement metrics</p>
-                </div>
-              </div>
-            </div>
-          </div>
+      <SuperAdminLayout title="Analytics" subtitle="System performance & user engagement" topbarRight={topbarRight}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:300, flexDirection:'column', gap:12, color:'#64748b' }}>
+          <div style={{ width:40, height:40, border:'3px solid #e2e8f0', borderTopColor:'#6366f1', borderRadius:'50%', animation:'spin 1s linear infinite' }} />
+          Loading analytics data…
         </div>
-
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="flex items-center justify-center h-64">
-            <div className="flex flex-col items-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-              <p className="text-gray-500 font-medium">Loading analytics data...</p>
-            </div>
-          </div>
-        </div>
-      </div>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </SuperAdminLayout>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
-            <div className="flex items-center">
-              <button
-                onClick={() => navigate('/superadmin/dashboard')}
-                className="mr-4 p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <ArrowLeft className="h-5 w-5" />
-              </button>
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900">Analytics & Reports</h1>
-                <p className="mt-1 text-gray-600">Monitor system performance and user engagement metrics</p>
-              </div>
-            </div>
-            <button
-              onClick={handleRefresh}
-              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <RefreshCw className="h-4 w-4" />
-              <span>Refresh</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <SuperAdminLayout title="Analytics" subtitle="System performance & user engagement" topbarRight={topbarRight}>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <div>
         {/* Key Metrics */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
@@ -438,7 +394,7 @@ const Analytics = () => {
           </div>
         </div>
       </div>
-    </div>
+    </SuperAdminLayout>
   );
 };
 

@@ -1,64 +1,361 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Crown, Mail, User, Search, ArrowLeft, RefreshCw, UserMinus, AlertTriangle, CheckCircle, X, Shield, LayoutGrid, List } from 'lucide-react';
+import {
+  Users, Crown, Mail, User, Search, RefreshCw,
+  UserMinus, AlertTriangle, CheckCircle, X, Shield, ChevronDown
+} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import SuperAdminLayout from './SuperAdminLayout';
 
+/* ─────────────────────────────────────────────
+   Global Styles
+───────────────────────────────────────────── */
+const STYLES = `
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:          #f0f6fb;
+    --surface:     #ffffff;
+    --border:      #dde5ee;
+    --border-lt:   #eaf1f8;
+    --text:        #0f1924;
+    --muted:       #64748b;
+    --muted-lt:    #94a3b8;
+    --sky:         #0ea5e9;
+    --sky-dk:      #0284c7;
+    --sky-lt:      #e0f2fe;
+    --sky-mid:     #bae6fd;
+    --danger:      #dc2626;
+    --success:     #059669;
+    --warn:        #d97706;
+    --radius:      12px;
+    --radius-sm:   8px;
+    --shadow-sm:   0 1px 3px rgba(14,30,48,.06), 0 1px 2px rgba(14,30,48,.04);
+    --shadow-md:   0 4px 14px rgba(14,30,48,.09);
+    --shadow-lg:   0 10px 32px rgba(14,30,48,.12);
+    --header-h:    68px;
+  }
+
+  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); }
+
+  /* ── Shell ── */
+  .va-shell { min-height: 100vh; display: flex; flex-direction: column; }
+
+  /* ── Header ── */
+  .va-header {
+    height: var(--header-h);
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center;
+    padding: 0 32px; justify-content: space-between;
+    position: sticky; top: 0; z-index: 100;
+    box-shadow: var(--shadow-sm);
+  }
+  .va-header-left { display: flex; align-items: center; gap: 14px; }
+  .va-back-btn {
+    width: 34px; height: 34px; border-radius: var(--radius-sm);
+    background: var(--bg); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; color: var(--muted); transition: all .15s;
+  }
+  .va-back-btn:hover { background: var(--sky-lt); border-color: var(--sky-mid); color: var(--sky-dk); }
+  .va-header-title { font-size: 17px; font-weight: 700; letter-spacing: -.3px; }
+  .va-header-sub   { font-size: 12px; color: var(--muted); margin-top: 1px; }
+
+  /* ── Buttons ── */
+  .btn {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-family: 'DM Sans', sans-serif; font-size: 13.5px; font-weight: 600;
+    border: none; cursor: pointer; border-radius: var(--radius-sm);
+    padding: 8px 16px; transition: all .15s; white-space: nowrap;
+  }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn-ghost {
+    background: var(--surface); color: var(--muted);
+    border: 1px solid var(--border);
+  }
+  .btn-ghost:hover:not(:disabled) { background: var(--bg); color: var(--text); border-color: #b0c0d0; }
+  .btn-sky  { background: var(--sky); color: #fff; }
+  .btn-sky:hover:not(:disabled) { background: var(--sky-dk); }
+  .btn-danger { background: var(--danger); color: #fff; }
+  .btn-danger:hover:not(:disabled) { background: #b91c1c; }
+
+  /* ── Body ── */
+  .va-body { flex: 1; padding: 28px 32px; max-width: 1280px; margin: 0 auto; width: 100%; }
+
+  /* ── Stats ── */
+  .va-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 28px; }
+  .stat-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px 22px;
+    box-shadow: var(--shadow-sm);
+  }
+  .stat-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .stat-icon {
+    width: 36px; height: 36px; border-radius: var(--radius-sm);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .si-sky    { background: var(--sky-lt); color: var(--sky); }
+  .si-slate  { background: #f1f5f9; color: #475569; }
+  .si-green  { background: #ecfdf5; color: var(--success); }
+  .si-amber  { background: #fffbeb; color: var(--warn); }
+  .stat-value { font-size: 26px; font-weight: 700; letter-spacing: -.5px; }
+  .stat-label { font-size: 12px; color: var(--muted); font-weight: 500; margin-top: 2px; }
+  .stat-sub   { font-size: 11px; color: var(--muted-lt); margin-top: 5px; }
+
+  /* ── Toolbar ── */
+  .va-toolbar {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px 22px;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 16px; margin-bottom: 20px; box-shadow: var(--shadow-sm);
+    flex-wrap: wrap;
+  }
+  .va-toolbar-title { font-size: 14.5px; font-weight: 700; }
+  .va-toolbar-sub   { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .va-toolbar-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+  /* Toggle */
+  .toggle-group {
+    display: flex; background: var(--bg); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 3px; gap: 2px;
+  }
+  .toggle-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 14px; border-radius: 6px; border: none;
+    font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: all .15s; color: var(--muted); background: transparent;
+  }
+  .toggle-btn.active { background: var(--surface); color: var(--sky-dk); box-shadow: var(--shadow-sm); border: 1px solid var(--border); }
+  .toggle-btn:hover:not(.active) { color: var(--text); }
+
+  /* Search */
+  .search-wrap { position: relative; }
+  .search-wrap input {
+    width: 240px; padding: 8px 14px 8px 36px;
+    border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+    font-family: 'DM Sans', sans-serif; font-size: 13.5px;
+    background: var(--bg); color: var(--text); transition: all .15s;
+  }
+  .search-wrap input:focus { outline: none; border-color: var(--sky); background: var(--surface); width: 280px; }
+  .search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--muted-lt); }
+
+  /* ── Section label ── */
+  .section-label {
+    font-size: 11.5px; font-weight: 700; letter-spacing: .7px; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 12px;
+  }
+
+  /* ── Admin card ── */
+  .admin-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); box-shadow: var(--shadow-sm);
+    margin-bottom: 14px; overflow: hidden;
+    transition: box-shadow .15s;
+  }
+  .admin-card:hover { box-shadow: var(--shadow-md); }
+  .admin-card-header {
+    padding: 16px 22px; border-bottom: 1px solid var(--border-lt);
+    display: flex; align-items: center; justify-content: space-between;
+    background: linear-gradient(to right, #f8fafc, var(--surface));
+  }
+  .admin-card-left { display: flex; align-items: center; gap: 12px; }
+  .avatar {
+    width: 40px; height: 40px; border-radius: var(--radius-sm);
+    background: var(--sky); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 14px; flex-shrink: 0;
+  }
+  .avatar.green   { background: var(--success); }
+  .avatar.slate   { background: #64748b; }
+  .avatar.amber   { background: var(--warn); }
+  .avatar-name  { font-size: 14.5px; font-weight: 700; }
+  .avatar-email { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 4px; margin-top: 2px; }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11.5px; font-weight: 600; padding: 3px 10px; border-radius: 999px;
+  }
+  .badge-sky    { background: var(--sky-lt); color: var(--sky-dk); border: 1px solid var(--sky-mid); }
+  .badge-green  { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+  .badge-amber  { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+  .badge-slate  { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
+
+  /* ── Customer rows ── */
+  .customer-grid { padding: 16px 22px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .customer-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border-lt); background: var(--bg);
+    transition: all .15s; position: relative;
+  }
+  .customer-row:hover { border-color: var(--sky-mid); background: var(--sky-lt); }
+  .customer-row:hover .rm-btn { opacity: 1; }
+  .customer-name  { font-size: 13px; font-weight: 600; }
+  .customer-email { font-size: 11.5px; color: var(--muted); display: flex; align-items: center; gap: 3px; margin-top: 2px; }
+  .rm-btn {
+    margin-left: auto; flex-shrink: 0;
+    width: 28px; height: 28px; border-radius: 6px;
+    border: none; background: transparent; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--danger); opacity: 0; transition: all .15s;
+  }
+  .rm-btn:hover { background: #fef2f2; }
+  .rm-btn:disabled { opacity: .3; cursor: not-allowed; }
+
+  /* ── Unassigned section ── */
+  .unassigned-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); box-shadow: var(--shadow-sm);
+    overflow: hidden; margin-top: 24px;
+  }
+  .unassigned-header {
+    padding: 16px 22px; border-bottom: 1px solid var(--border-lt);
+    display: flex; align-items: center; justify-content: space-between;
+    background: #fffbeb;
+  }
+  .unassigned-grid {
+    padding: 16px 22px;
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+  }
+  .unassigned-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px; border-radius: var(--radius-sm);
+    border: 1px solid #fde68a; background: #fffbeb;
+  }
+  .avatar.sm { width: 30px; height: 30px; font-size: 11px; border-radius: 6px; }
+
+  /* ── Empty state ── */
+  .empty-state {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 56px 32px;
+    text-align: center; box-shadow: var(--shadow-sm);
+  }
+  .empty-icon { color: var(--muted-lt); margin: 0 auto 12px; display: block; }
+  .empty-title { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+  .empty-sub   { font-size: 13px; color: var(--muted); }
+
+  /* ── Loading ── */
+  .va-loading {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: 320px; gap: 14px;
+  }
+  .spinner {
+    width: 36px; height: 36px; border: 3px solid var(--sky-lt);
+    border-top-color: var(--sky); border-radius: 50%;
+    animation: spin .7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Toast ── */
+  .toast {
+    position: fixed; top: 20px; right: 24px;
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 18px; border-radius: 10px;
+    font-size: 13.5px; font-weight: 500;
+    box-shadow: var(--shadow-lg); z-index: 999; max-width: 380px;
+    animation: toast-in .2s ease;
+  }
+  .toast.success { background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; }
+  .toast.error   { background: #fef2f2; border: 1px solid #fca5a5; color: #7f1d1d; }
+  .toast.info    { background: var(--sky-lt); border: 1px solid var(--sky-mid); color: #075985; }
+  @keyframes toast-in { from { opacity:0; transform: translateX(16px); } to { opacity:1; transform: none; } }
+
+  /* ── Modal ── */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(10,20,40,.4);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 200; animation: fade-in .15s ease;
+  }
+  @keyframes fade-in { from { opacity:0; } to { opacity:1; } }
+  .modal {
+    background: var(--surface); border-radius: 14px;
+    padding: 28px; max-width: 420px; width: 90%;
+    box-shadow: var(--shadow-lg);
+  }
+  .modal-title  { font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .modal-detail { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px 16px; margin-bottom: 16px; }
+  .modal-detail p { font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+  .modal-detail p:last-child { margin-bottom: 0; }
+  .modal-detail strong { color: var(--text); font-weight: 600; }
+  .modal-body   { font-size: 13.5px; color: var(--muted); line-height: 1.6; margin-bottom: 22px; }
+  .modal-actions { display: flex; gap: 10px; }
+
+  /* ── Responsive ── */
+  @media (max-width: 900px) {
+    .va-stats { grid-template-columns: repeat(2,1fr); }
+    .customer-grid { grid-template-columns: 1fr; }
+    .unassigned-grid { grid-template-columns: repeat(2,1fr); }
+  }
+  @media (max-width: 560px) {
+    .va-body { padding: 20px 16px; }
+    .va-header { padding: 0 16px; }
+    .va-stats { grid-template-columns: repeat(2,1fr); }
+    .va-toolbar { flex-direction: column; align-items: flex-start; }
+    .unassigned-grid { grid-template-columns: 1fr; }
+    .search-wrap input { width: 100%; }
+    .search-wrap input:focus { width: 100%; }
+  }
+`;
+
+/* ─────────────────────────────────────────────
+   Helpers
+───────────────────────────────────────────── */
+const initials = (name, email) => (name || email || '?').slice(0, 2).toUpperCase();
+
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+
+/* ─────────────────────────────────────────────
+   Component
+───────────────────────────────────────────── */
 const ViewAssignments = () => {
-  const [customers, setCustomers] = useState([]);
-  const [admins, setAdmins] = useState([]);
-  const [assignments, setAssignments] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [removing, setRemoving] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [customers, setCustomers]       = useState([]);
+  const [admins, setAdmins]             = useState([]);
+  const [assignments, setAssignments]   = useState([]);
+  const [loading, setLoading]           = useState(true);
+  const [removing, setRemoving]         = useState(false);
+  const [searchTerm, setSearchTerm]     = useState('');
   const [removeConfirm, setRemoveConfirm] = useState(null);
   const [notification, setNotification] = useState(null);
-  const [viewMode, setViewMode] = useState('admin'); // 'admin' or 'customer'
+  const [viewMode, setViewMode]         = useState('admin');
   const navigate = useNavigate();
 
   useEffect(() => {
-    loadData();
+    const id = 'va-styles';
+    if (!document.getElementById(id)) {
+      const el = document.createElement('style');
+      el.id = id; el.textContent = STYLES;
+      document.head.appendChild(el);
+    }
   }, []);
+
+  useEffect(() => { loadData(); }, []);
 
   const loadData = async () => {
     setLoading(true);
-    try {
-      await Promise.all([
-        fetchCustomers(),
-        fetchAdmins()
-      ]);
-    } finally {
-      setLoading(false);
-    }
+    try { await Promise.all([fetchCustomers(), fetchAdmins()]); }
+    finally { setLoading(false); }
   };
 
   const fetchCustomers = async () => {
     try {
-      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:3001';
-      const response = await fetch(`${apiUrl}/customers`);
-      const data = await response.json();
-      setCustomers(data);
-    } catch (error) {
-      console.error('Error fetching customers:', error);
-    }
+      const res = await fetch(`${API_BASE_URL}/customers`);
+      setCustomers(await res.json());
+    } catch (e) { console.error(e); }
   };
 
   const fetchAdmins = async () => {
     try {
-      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:3001';
-      const response = await fetch(`${apiUrl}/users?role=admin`);
-      const data = await response.json();
+      const res = await fetch(`${API_BASE_URL}/users?role=admin`);
+      const data = await res.json();
       setAdmins(data);
-      
-      // Process assignments from admin data
-      const assignmentData = data
-        .filter(admin => admin.assignedCustomers && admin.assignedCustomers.length > 0)
-        .map(admin => ({
-          adminId: admin._id,
-          customerIds: admin.assignedCustomers
-        }));
-      setAssignments(assignmentData);
-    } catch (error) {
-      console.error('Error fetching admins:', error);
-    }
+      setAssignments(
+        data
+          .filter(a => a.assignedCustomers?.length > 0)
+          .map(a => ({ adminId: a._id, customerIds: a.assignedCustomers }))
+      );
+    } catch (e) { console.error(e); }
   };
 
   const showNotification = (message, type = 'info') => {
@@ -67,52 +364,36 @@ const ViewAssignments = () => {
   };
 
   const handleRemoveAssignment = async (adminId, customerId) => {
+    setRemoving(true);
     try {
-      setRemoving(true);
-      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:3001';
-      
-      const response = await fetch(`${apiUrl}/superadmin/remove-assignment`, {
+      const res = await fetch(`${API_BASE_URL}/superadmin/remove-assignment`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('superadminToken')}`
         },
-        body: JSON.stringify({
-          adminId,
-          customerId
-        })
+        body: JSON.stringify({ adminId, customerId })
       });
-
-      const responseText = await response.text();
-      let data;
-      try {
-        data = JSON.parse(responseText);
-      } catch (parseError) {
-        data = { error: 'Invalid response from server' };
-      }
-
-      if (response.ok) {
-        showNotification('Customer assignment removed successfully', 'success');
-        // Refresh the assignments data
+      const data = await res.json();
+      if (res.ok) {
+        showNotification('Assignment removed successfully', 'success');
         await fetchAdmins();
       } else {
         showNotification(data.error || 'Failed to remove assignment', 'error');
       }
-    } catch (error) {
-      console.error('Error removing assignment:', error);
-      showNotification('Network error: ' + error.message, 'error');
+    } catch (e) {
+      showNotification('Network error: ' + e.message, 'error');
     } finally {
       setRemoving(false);
     }
   };
 
   const handleRemoveClick = (adminId, customerId) => {
-    const admin = admins.find(a => a._id === adminId);
+    const admin    = admins.find(a => a._id === adminId);
     const customer = customers.find(c => c._id === customerId);
-    setRemoveConfirm({ 
-      adminId, 
-      customerId,
-      adminName: admin?.name || 'Unknown Admin',
+    setRemoveConfirm({
+      adminId, customerId,
+      adminName:    admin?.name    || admin?.email?.split('@')[0] || 'Unknown Admin',
       customerName: customer?.name || 'Unknown Customer'
     });
   };
@@ -124,482 +405,325 @@ const ViewAssignments = () => {
     }
   };
 
-  const getAdminName = (adminId) => {
-    const admin = admins.find(a => a._id === adminId);
-    if (!admin) return 'Unknown Admin';
-    // If no name field exists, use the email part before @
-    if (!admin.name) {
-      return admin.email ? admin.email.split('@')[0] : 'Unknown Admin';
-    }
-    return admin.name;
-  };
+  /* ── Lookup helpers ── */
+  const getAdmin    = id => admins.find(a => a._id === id);
+  const getCustomer = id => customers.find(c => c._id === id);
+  const getAdminName  = id => { const a = getAdmin(id); return a?.name || a?.email?.split('@')[0] || 'Unknown'; };
+  const getAdminEmail = id => getAdmin(id)?.email || '';
+  const getCustomerName  = id => getCustomer(id)?.name  || 'Unknown';
+  const getCustomerEmail = id => getCustomer(id)?.email || '';
+  const getAdminsForCustomer = cid => assignments
+    .filter(a => a.customerIds.includes(cid))
+    .map(a => getAdmin(a.adminId))
+    .filter(Boolean);
 
-  const getAdminEmail = (adminId) => {
-    const admin = admins.find(a => a._id === adminId);
-    return admin ? (admin.email || '') : '';
-  };
+  /* ── Derived data ── */
+  const assignedCustomers   = customers.filter(c => assignments.some(a => a.customerIds.includes(c._id)));
+  const unassignedCustomers = customers.filter(c => !assignments.some(a => a.customerIds.includes(c._id)));
+  const totalRelationships  = assignments.reduce((n, a) => n + a.customerIds.length, 0);
 
-  const getCustomerName = (customerId) => {
-    const customer = customers.find(c => c._id === customerId);
-    return customer ? (customer.name || 'Unknown Customer') : 'Unknown Customer';
-  };
+  const q = searchTerm.toLowerCase();
 
-  const getCustomerEmail = (customerId) => {
-    const customer = customers.find(c => c._id === customerId);
-    return customer ? (customer.email || '') : '';
-  };
-
-  const filteredAssignments = assignments.filter(assignment => {
-    const adminName = (getAdminName(assignment.adminId) || '').toLowerCase();
-    const customerNames = assignment.customerIds.map(id => (getCustomerName(id) || '').toLowerCase()).join(' ');
-    const search = (searchTerm || '').toLowerCase();
-    return adminName.includes(search) || customerNames.includes(search);
-  });
-
-  // Calculate total assignment relationships (can be more than unique customers)
-  const totalAssignedCustomers = assignments.reduce((total, assignment) => total + assignment.customerIds.length, 0);
-  
-  // Get unique customers that have at least one admin
-  const assignedCustomers = customers.filter(customer => 
-    assignments.some(assignment => assignment.customerIds.includes(customer._id))
-  );
-  
-  const unassignedCustomers = customers.filter(customer => 
-    !assignments.some(assignment => assignment.customerIds.includes(customer._id))
+  const filteredAssignments = assignments.filter(a =>
+    getAdminName(a.adminId).toLowerCase().includes(q) ||
+    a.customerIds.some(id => getCustomerName(id).toLowerCase().includes(q))
   );
 
-  // Get admins for a specific customer
-  const getAdminsForCustomer = (customerId) => {
-    return assignments
-      .filter(assignment => assignment.customerIds.includes(customerId))
-      .map(assignment => admins.find(a => a._id === assignment.adminId))
-      .filter(Boolean);
-  };
+  const filteredCustomers = assignedCustomers.filter(c =>
+    (c.name || '').toLowerCase().includes(q) ||
+    (c.email || '').toLowerCase().includes(q) ||
+    getAdminsForCustomer(c._id).some(a => (a.name || a.email || '').toLowerCase().includes(q))
+  );
 
-  // Filter customers by search
-  const filteredCustomers = assignedCustomers.filter(customer => {
-    const customerName = (customer.name || '').toLowerCase();
-    const customerEmail = (customer.email || '').toLowerCase();
-    const adminNames = getAdminsForCustomer(customer._id)
-      .map(admin => (admin.name || admin.email || '').toLowerCase())
-      .join(' ');
-    const search = (searchTerm || '').toLowerCase();
-    return customerName.includes(search) || customerEmail.includes(search) || adminNames.includes(search);
-  });
-
-  const getNotificationStyles = (type) => {
-    const baseStyles = "fixed top-4 right-4 p-4 rounded-lg shadow-lg z-50 flex items-center space-x-2 max-w-md";
-    switch (type) {
-      case 'success':
-        return `${baseStyles} bg-green-50 border border-green-200 text-green-800`;
-      case 'error':
-        return `${baseStyles} bg-red-50 border border-red-200 text-red-800`;
-      default:
-        return `${baseStyles} bg-blue-50 border border-blue-200 text-blue-800`;
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="flex items-center justify-center h-64">
-            <div className="flex flex-col items-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-              <p className="text-gray-500 font-medium">Loading assignments...</p>
-            </div>
-          </div>
-        </div>
+  if (loading) return (
+    <SuperAdminLayout title="View Assignments" subtitle="All customer-admin relationships">
+      <div className="va-loading">
+        <div className="spinner" />
+        <span style={{ fontSize: 13, color: 'var(--muted)' }}>Loading assignments…</span>
       </div>
-    );
-  }
+    </SuperAdminLayout>
+  );
+
+  const topbarRight = (
+    <button className="btn btn-ghost" onClick={loadData} disabled={loading}>
+      <RefreshCw size={14} style={loading ? { animation: 'spin .7s linear infinite' } : {}} />
+      Refresh
+    </button>
+  );
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Notification */}
+    <SuperAdminLayout title="View Assignments" subtitle="All customer-admin relationships" topbarRight={topbarRight}>
+
+      {/* ── Toast ── */}
       {notification && (
-        <div className={getNotificationStyles(notification.type)}>
-          {notification.type === 'success' && <CheckCircle size={20} />}
-          {notification.type === 'error' && <AlertTriangle size={20} />}
+        <div className={`toast ${notification.type}`}>
+          {notification.type === 'success' && <CheckCircle size={15} />}
+          {notification.type === 'error'   && <AlertTriangle size={15} />}
           <span>{notification.message}</span>
-          <button
-            onClick={() => setNotification(null)}
-            className="ml-2 hover:opacity-70"
-          >
-            <X size={16} />
+          <button onClick={() => setNotification(null)}
+            style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', opacity: .7 }}>
+            <X size={14} />
           </button>
         </div>
       )}
 
-      {/* Remove Confirmation Modal */}
+      {/* ── Confirm Modal ── */}
       {removeConfirm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 max-w-md mx-4 shadow-2xl">
-            <div className="flex items-center space-x-3 mb-4">
-              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
-                <AlertTriangle className="text-red-600" size={24} />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">Confirm Removal</h3>
-                <p className="text-gray-600 text-sm">This action cannot be undone</p>
-              </div>
+        <div className="modal-overlay">
+          <div className="modal">
+            <div className="modal-title">
+              <AlertTriangle size={17} style={{ color: 'var(--danger)' }} />
+              Remove Assignment
             </div>
-            
-            <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-              <p className="text-sm text-gray-700 mb-2">
-                <strong>Customer:</strong> {removeConfirm.customerName}
-              </p>
-              <p className="text-sm text-gray-700">
-                <strong>Admin:</strong> {removeConfirm.adminName}
-              </p>
+            <div className="modal-detail">
+              <p><strong>Customer:</strong> {removeConfirm.customerName}</p>
+              <p><strong>Admin:</strong> {removeConfirm.adminName}</p>
             </div>
-            
-            <p className="text-gray-600 mb-6">
-              Are you sure you want to remove this customer assignment? The customer will no longer be managed by this admin.
-            </p>
-            
-            <div className="flex space-x-3">
-              <button
-                onClick={confirmRemove}
-                disabled={removing}
-                className="flex-1 bg-red-600 text-white py-2 px-4 rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors font-medium"
-              >
-                {removing ? (
-                  <div className="flex items-center justify-center">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Removing...
-                  </div>
-                ) : (
-                  'Remove Assignment'
-                )}
+            <div className="modal-body">
+              The customer will no longer be managed by this admin. This action cannot be undone.
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-danger" onClick={confirmRemove} disabled={removing}>
+                {removing ? 'Removing…' : 'Remove Assignment'}
               </button>
-              <button
-                onClick={() => setRemoveConfirm(null)}
-                disabled={removing}
-                className="flex-1 bg-gray-300 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-400 transition-colors font-medium disabled:opacity-50"
-              >
-                Cancel
-              </button>
+              <button className="btn btn-ghost" onClick={() => setRemoveConfirm(null)}>Cancel</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
-            <div className="flex items-center">
+      <main className="va-body">
+        {/* ── Stats ── */}
+        <div className="va-stats">
+          <div className="stat-card">
+            <div className="stat-top">
+              <div className="stat-icon si-sky"><Users size={17} /></div>
+            </div>
+            <div className="stat-value">{customers.length}</div>
+            <div className="stat-label">Total Customers</div>
+          </div>
+
+          <div className="stat-card">
+            <div className="stat-top">
+              <div className="stat-icon si-slate"><Shield size={17} /></div>
+            </div>
+            <div className="stat-value">{admins.length}</div>
+            <div className="stat-label">Active Admins</div>
+          </div>
+
+          <div className="stat-card">
+            <div className="stat-top">
+              <div className="stat-icon si-green"><Crown size={17} /></div>
+            </div>
+            <div className="stat-value">{assignedCustomers.length}</div>
+            <div className="stat-label">Assigned Customers</div>
+            <div className="stat-sub">{totalRelationships} total relationships</div>
+          </div>
+
+          <div className="stat-card">
+            <div className="stat-top">
+              <div className="stat-icon si-amber"><User size={17} /></div>
+            </div>
+            <div className="stat-value">{unassignedCustomers.length}</div>
+            <div className="stat-label">Unassigned</div>
+            {unassignedCustomers.length > 0 && (
+              <div className="stat-sub">Need assignment</div>
+            )}
+          </div>
+        </div>
+
+        {/* ── Toolbar ── */}
+        <div className="va-toolbar">
+          <div>
+            <div className="va-toolbar-title">Assignment Overview</div>
+            <div className="va-toolbar-sub">
+              {viewMode === 'admin'
+                ? `${filteredAssignments.length} admin${filteredAssignments.length !== 1 ? 's' : ''} with assignments`
+                : `${filteredCustomers.length} assigned customer${filteredCustomers.length !== 1 ? 's' : ''}`
+              }
+            </div>
+          </div>
+          <div className="va-toolbar-right">
+            <div className="toggle-group">
               <button
-                onClick={() => navigate('/superadmin/dashboard')}
-                className="mr-4 p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                className={`toggle-btn${viewMode === 'admin' ? ' active' : ''}`}
+                onClick={() => setViewMode('admin')}
               >
-                <ArrowLeft className="h-5 w-5" />
+                <Crown size={13} /> By Admin
               </button>
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900">View Assignments</h1>
-                <p className="mt-1 text-gray-600">Overview of all customer-admin assignments</p>
-              </div>
+              <button
+                className={`toggle-btn${viewMode === 'customer' ? ' active' : ''}`}
+                onClick={() => setViewMode('customer')}
+              >
+                <Users size={13} /> By Customer
+              </button>
             </div>
-            <button
-              onClick={loadData}
-              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <RefreshCw className="h-4 w-4" />
-              <span>Refresh</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Statistics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-blue-600 text-white p-6 rounded-xl shadow-lg">
-            <Users className="w-8 h-8 mb-4" />
-            <h3 className="text-lg font-semibold mb-2">Total Customers</h3>
-            <p className="text-2xl font-bold">{customers.length}</p>
-          </div>
-
-          <div className="bg-purple-600 text-white p-6 rounded-xl shadow-lg">
-            <Crown className="w-8 h-8 mb-4" />
-            <h3 className="text-lg font-semibold mb-2">Total Admins</h3>
-            <p className="text-2xl font-bold">{admins.length}</p>
-          </div>
-
-          <div className="bg-green-600 text-white p-6 rounded-xl shadow-lg">
-            <Shield className="w-8 h-8 mb-4" />
-            <h3 className="text-lg font-semibold mb-2">Assigned Customers</h3>
-            <p className="text-2xl font-bold">{assignedCustomers.length}</p>
-            <p className="text-green-100 text-sm mt-1">{totalAssignedCustomers} total relationships</p>
-          </div>
-
-          <div className="bg-orange-600 text-white p-6 rounded-xl shadow-lg">
-            <User className="w-8 h-8 mb-4" />
-            <h3 className="text-lg font-semibold mb-2">Unassigned</h3>
-            <p className="text-2xl font-bold">{unassignedCustomers.length}</p>
-          </div>
-        </div>
-
-        {/* Search Section with View Toggle */}
-        <div className="bg-white rounded-xl shadow-sm border p-6 mb-8">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0 gap-4">
-            <div>
-              <h2 className="text-xl font-semibold text-gray-900">Assignment Overview</h2>
-              <p className="text-gray-600">Search and view all customer-admin relationships</p>
-            </div>
-            
-            <div className="flex flex-col sm:flex-row gap-3">
-              {/* View Mode Toggle */}
-              <div className="flex bg-gray-100 rounded-lg p-1">
-                <button
-                  onClick={() => setViewMode('admin')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-md transition-all ${
-                    viewMode === 'admin'
-                      ? 'bg-white text-blue-600 shadow-sm font-medium'
-                      : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                >
-                  <Crown size={16} />
-                  <span>By Admin</span>
-                </button>
-                <button
-                  onClick={() => setViewMode('customer')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-md transition-all ${
-                    viewMode === 'customer'
-                      ? 'bg-white text-blue-600 shadow-sm font-medium'
-                      : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                >
-                  <Users size={16} />
-                  <span>By Customer</span>
-                </button>
-              </div>
-
-              {/* Search Bar */}
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
-                <input
-                  type="text"
-                  placeholder={`Search ${viewMode === 'admin' ? 'admins' : 'customers'}...`}
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-64"
-                />
-              </div>
+            <div className="search-wrap">
+              <Search size={13} className="search-icon" />
+              <input
+                type="text"
+                placeholder={`Search ${viewMode === 'admin' ? 'admins or customers' : 'customers or admins'}…`}
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+              />
             </div>
           </div>
         </div>
 
-        {/* Assignments List - Admin View */}
+        {/* ── Admin View ── */}
         {viewMode === 'admin' && (
-          <div className="space-y-6">
+          <>
             {filteredAssignments.length === 0 ? (
-              <div className="bg-white rounded-xl shadow-sm border p-12 text-center">
-                <Crown className="mx-auto text-gray-400 mb-4" size={48} />
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">No assignments found</h3>
-                <p className="text-gray-600">
-                  {assignments.length === 0 
+              <div className="empty-state">
+                <Crown size={40} className="empty-icon" />
+                <div className="empty-title">No assignments found</div>
+                <div className="empty-sub" style={{ marginBottom: 18 }}>
+                  {assignments.length === 0
                     ? 'No customers have been assigned to admins yet.'
-                    : 'No assignments match your search criteria.'
-                  }
-                </p>
-                <button
-                  onClick={() => navigate('/superadmin/dashboard')}
-                  className="mt-4 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-                >
+                    : 'No results match your search.'}
+                </div>
+                <button className="btn btn-sky" onClick={() => navigate('/superadmin/dashboard')}>
                   Create Assignment
                 </button>
               </div>
             ) : (
-              filteredAssignments.map(assignment => (
-                <div key={assignment.adminId} className="bg-white rounded-xl shadow-sm border hover:shadow-md transition-shadow">
-                  <div className="p-6 border-b border-gray-100">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-4">
-                        <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-blue-600 rounded-full flex items-center justify-center shadow-md">
-                          <Crown className="text-white" size={20} />
-                        </div>
+              filteredAssignments.map(assignment => {
+                const admin = getAdmin(assignment.adminId);
+                return (
+                  <div key={assignment.adminId} className="admin-card">
+                    <div className="admin-card-header">
+                      <div className="admin-card-left">
+                        <div className="avatar">{initials(admin?.name, admin?.email)}</div>
                         <div>
-                          <h3 className="text-lg font-semibold text-gray-900">{getAdminName(assignment.adminId)}</h3>
-                          <div className="flex items-center space-x-1 text-gray-600">
-                            <Mail size={14} />
-                            <span className="text-sm">{getAdminEmail(assignment.adminId)}</span>
+                          <div className="avatar-name">{getAdminName(assignment.adminId)}</div>
+                          <div className="avatar-email">
+                            <Mail size={11} />{getAdminEmail(assignment.adminId)}
                           </div>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <span className="bg-green-100 text-green-800 text-sm font-medium px-3 py-1 rounded-full">
-                          {assignment.customerIds.length} customer{assignment.customerIds.length !== 1 ? 's' : ''}
-                        </span>
-                      </div>
+                      <span className="badge badge-sky">
+                        <Users size={11} />
+                        {assignment.customerIds.length} customer{assignment.customerIds.length !== 1 ? 's' : ''}
+                      </span>
                     </div>
-                  </div>
 
-                  <div className="p-6">
-                    <h4 className="text-md font-medium text-gray-900 mb-4">Assigned Customers</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {assignment.customerIds.map(customerId => (
-                        <div
-                          key={customerId}
-                          className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200 group hover:bg-gray-100 transition-colors"
-                        >
-                          <div className="flex items-center space-x-3 flex-1 min-w-0">
-                            <div className="w-8 h-8 bg-gradient-to-r from-green-500 to-teal-600 rounded-full flex items-center justify-center">
-                              <User className="text-white" size={14} />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <h5 className="font-medium text-gray-900 truncate">{getCustomerName(customerId)}</h5>
-                              <p className="text-sm text-gray-600 truncate">{getCustomerEmail(customerId)}</p>
-                            </div>
+                    <div className="customer-grid">
+                      {assignment.customerIds.map(cid => (
+                        <div key={cid} className="customer-row">
+                          <div className="avatar sm amber">{initials(getCustomerName(cid), getCustomerEmail(cid))}</div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div className="customer-name">{getCustomerName(cid)}</div>
+                            <div className="customer-email"><Mail size={10} />{getCustomerEmail(cid)}</div>
                           </div>
-                          
                           <button
-                            onClick={() => handleRemoveClick(assignment.adminId, customerId)}
+                            className="rm-btn"
+                            onClick={() => handleRemoveClick(assignment.adminId, cid)}
                             disabled={removing}
-                            className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 opacity-0 group-hover:opacity-100 ml-2"
-                            title="Remove customer from admin"
+                            title="Remove assignment"
                           >
-                            <UserMinus size={16} />
+                            <UserMinus size={14} />
                           </button>
                         </div>
                       ))}
                     </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
-          </div>
+          </>
         )}
 
-        {/* Assignments List - Customer View (NEW) */}
+        {/* ── Customer View ── */}
         {viewMode === 'customer' && (
-          <div className="space-y-6">
+          <>
             {filteredCustomers.length === 0 ? (
-              <div className="bg-white rounded-xl shadow-sm border p-12 text-center">
-                <Users className="mx-auto text-gray-400 mb-4" size={48} />
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">No customers found</h3>
-                <p className="text-gray-600">
-                  {assignedCustomers.length === 0 
+              <div className="empty-state">
+                <Users size={40} className="empty-icon" />
+                <div className="empty-title">No customers found</div>
+                <div className="empty-sub">
+                  {assignedCustomers.length === 0
                     ? 'No customers have been assigned yet.'
-                    : 'No customers match your search criteria.'
-                  }
-                </p>
+                    : 'No results match your search.'}
+                </div>
               </div>
             ) : (
               filteredCustomers.map(customer => {
-                const customerAdmins = getAdminsForCustomer(customer._id);
+                const custAdmins = getAdminsForCustomer(customer._id);
                 return (
-                  <div key={customer._id} className="bg-white rounded-xl shadow-sm border hover:shadow-md transition-shadow">
-                    <div className="p-6 border-b border-gray-100">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-4">
-                          <div className="w-12 h-12 bg-gradient-to-br from-blue-500 via-indigo-500 to-purple-600 rounded-full flex items-center justify-center shadow-md">
-                            <User className="text-white" size={20} />
-                          </div>
-                          <div>
-                            <h3 className="text-lg font-semibold text-gray-900">{customer.name}</h3>
-                            <div className="flex items-center space-x-1 text-gray-600">
-                              <Mail size={14} />
-                              <span className="text-sm">{customer.email}</span>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <span className="bg-purple-100 text-purple-800 text-sm font-medium px-3 py-1 rounded-full flex items-center gap-1.5">
-                            <Shield size={14} />
-                            {customerAdmins.length} admin{customerAdmins.length !== 1 ? 's' : ''}
-                          </span>
+                  <div key={customer._id} className="admin-card">
+                    <div className="admin-card-header">
+                      <div className="admin-card-left">
+                        <div className="avatar green">{initials(customer.name, customer.email)}</div>
+                        <div>
+                          <div className="avatar-name">{customer.name}</div>
+                          <div className="avatar-email"><Mail size={11} />{customer.email}</div>
                         </div>
                       </div>
+                      <span className="badge badge-slate">
+                        <Shield size={11} />
+                        {custAdmins.length} admin{custAdmins.length !== 1 ? 's' : ''}
+                      </span>
                     </div>
 
-                    <div className="p-6">
-                      <h4 className="text-md font-medium text-gray-900 mb-4 flex items-center gap-2">
-                        <Crown size={16} className="text-purple-600" />
-                        Assigned Admins
-                      </h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {customerAdmins.map(admin => (
-                          <div
-                            key={admin._id}
-                            className="flex items-center justify-between p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border-2 border-purple-200 group hover:border-purple-300 transition-all"
-                          >
-                            <div className="flex items-center space-x-3 flex-1 min-w-0">
-                              <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full flex items-center justify-center shadow-md">
-                                <Crown className="text-white" size={16} />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <h5 className="font-semibold text-gray-900 truncate">{admin.name || admin.email?.split('@')[0]}</h5>
-                                <p className="text-sm text-gray-600 truncate">{admin.email}</p>
-                              </div>
-                            </div>
-                            
-                            <button
-                              onClick={() => handleRemoveClick(admin._id, customer._id)}
-                              disabled={removing}
-                              className="p-2 text-red-600 hover:text-red-800 hover:bg-red-100 rounded-lg transition-colors disabled:opacity-50 opacity-0 group-hover:opacity-100 ml-2"
-                              title="Remove admin from customer"
-                            >
-                              <UserMinus size={16} />
-                            </button>
+                    <div className="customer-grid">
+                      {custAdmins.map(admin => (
+                        <div key={admin._id} className="customer-row">
+                          <div className="avatar sm">{initials(admin.name, admin.email)}</div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div className="customer-name">{admin.name || admin.email?.split('@')[0]}</div>
+                            <div className="customer-email"><Mail size={10} />{admin.email}</div>
                           </div>
-                        ))}
-                      </div>
+                          <button
+                            className="rm-btn"
+                            onClick={() => handleRemoveClick(admin._id, customer._id)}
+                            disabled={removing}
+                            title="Remove assignment"
+                          >
+                            <UserMinus size={14} />
+                          </button>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 );
               })
             )}
+          </>
+        )}
+
+        {/* ── Unassigned Section ── */}
+        {unassignedCustomers.length > 0 && (
+          <div className="unassigned-card">
+            <div className="unassigned-header">
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#92400e' }}>Unassigned Customers</div>
+                <div style={{ fontSize: 12, color: '#b45309', marginTop: 2 }}>These customers have no admin assigned</div>
+              </div>
+              <span className="badge badge-amber">
+                {unassignedCustomers.length} unassigned
+              </span>
+            </div>
+            <div className="unassigned-grid">
+              {unassignedCustomers.map(c => (
+                <div key={c._id} className="unassigned-row">
+                  <div className="avatar sm amber">{initials(c.name, c.email)}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="customer-name" style={{ fontSize: 12.5 }}>{c.name}</div>
+                    <div className="customer-email"><Mail size={10} />{c.email}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{ padding: '14px 22px', borderTop: '1px solid var(--border-lt)', textAlign: 'center' }}>
+              <button className="btn btn-sky" onClick={() => navigate('/superadmin/dashboard')}>
+                Assign These Customers
+              </button>
+            </div>
           </div>
         )}
 
-        {/* Unassigned Customers Section */}
-        {unassignedCustomers.length > 0 && (
-          <div className="mt-8 bg-white rounded-xl shadow-sm border">
-            <div className="p-6 border-b border-gray-100">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900">Unassigned Customers</h3>
-                  <p className="text-gray-600">These customers are not assigned to any admin</p>
-                </div>
-                <span className="bg-orange-100 text-orange-800 text-sm font-medium px-3 py-1 rounded-full">
-                  {unassignedCustomers.length} unassigned
-                </span>
-              </div>
-            </div>
-            
-            <div className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {unassignedCustomers.map(customer => (
-                  <div
-                    key={customer._id}
-                    className="flex items-center space-x-3 p-4 bg-orange-50 rounded-lg border border-orange-200"
-                  >
-                    <div className="w-8 h-8 bg-gradient-to-r from-orange-500 to-red-600 rounded-full flex items-center justify-center">
-                      <User className="text-white" size={14} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h5 className="font-medium text-gray-900 truncate">{customer.name}</h5>
-                      <p className="text-sm text-gray-600 truncate">{customer.email}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              
-              <div className="mt-4 text-center">
-                <button
-                  onClick={() => navigate('/superadmin/dashboard')}
-                  className="bg-orange-600 text-white px-6 py-2 rounded-lg hover:bg-orange-700 transition-colors"
-                >
-                  Assign These Customers
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
+      </main>
+    </SuperAdminLayout>
   );
 };
 

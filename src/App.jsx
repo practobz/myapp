@@ -34,6 +34,8 @@ import SuperAdminDashboard from './superadmin/Dashboard';
 import SuperAdminSignup from './superadmin/Signup';
 import ViewAssignments from './superadmin/ViewAssignments';
 import SuperAdminAnalytics from './superadmin/Analytics';
+import AdminManagement from './superadmin/AdminManagement';
+
 
 // Customer Integration: Instagram Ads
 import InstagramAdsIntegration from './customer/Integration/InstagramAdsIntegration';
@@ -285,6 +287,11 @@ function App() {
               <Route path="/superadmin/analytics" element={
                 <ProtectedRoutePortal role="superadmin">
                   <SuperAdminAnalytics />
+                </ProtectedRoutePortal>
+              } />
+               <Route path="/superadmin/admin-management" element={
+                <ProtectedRoutePortal role="superadmin">
+                  <AdminManagement />
                 </ProtectedRoutePortal>
               } />
               <Route path="/superadmin/qr-generator" element={

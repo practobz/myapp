@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../admin/contexts/AuthContext';
 
 const SuperAdminLogin = () => {
@@ -79,14 +79,7 @@ const SuperAdminLogin = () => {
               {loading ? 'Signing In...' : 'Sign In'}
             </button>
           </div>
-          <div className="text-center">
-            <p className="mt-2 text-sm text-gray-600">
-              Don't have an account?{' '}
-              <Link to="/superadmin/signup" className="font-medium text-blue-600 hover:text-blue-500">
-                Sign up
-              </Link>
-            </p>
-          </div>
+
         </form>
       </div>
     </div>

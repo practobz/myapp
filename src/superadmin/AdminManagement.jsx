@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { UserPlus, Edit, Trash2, Mail, Shield } from 'lucide-react';
+import SuperAdminLayout from './SuperAdminLayout';
 
 const AdminManagement = () => {
   const [admins, setAdmins] = useState([]);
@@ -32,21 +33,19 @@ const AdminManagement = () => {
     setNewAdmin({ name: '', email: '', password: '' });
   };
 
+  const topbarRight = (
+    <button
+      onClick={() => setShowCreateForm(true)}
+      style={{ display:'inline-flex', alignItems:'center', gap:7, padding:'9px 18px', borderRadius:9, border:'none', background:'linear-gradient(135deg,#6366f1,#4f46e5)', color:'#fff', cursor:'pointer', fontSize:13, fontWeight:600 }}
+    >
+      <UserPlus size={14} />
+      Add New Admin
+    </button>
+  );
+
   return (
-    <div className="p-8">
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Admin Management</h1>
-          <p className="text-gray-600">Manage admin users and their permissions.</p>
-        </div>
-        <button
-          onClick={() => setShowCreateForm(true)}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center space-x-2"
-        >
-          <UserPlus className="w-4 h-4" />
-          <span>Add New Admin</span>
-        </button>
-      </div>
+    <SuperAdminLayout title="Admin Management" subtitle="Manage admin users and their permissions" topbarRight={topbarRight}>
+      <div className="p-0">
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -204,7 +203,8 @@ const AdminManagement = () => {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </SuperAdminLayout>
   );
 };
 

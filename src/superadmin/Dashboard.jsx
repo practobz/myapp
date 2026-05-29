@@ -2,284 +2,259 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Users, UserPlus, BarChart3, RefreshCw, CheckCircle, AlertCircle,
-  X, Crown, Mail, User, AlertTriangle, Search, UserMinus, Shield,
-  UserCheck, ArrowRight, Filter, ChevronDown, Power
+  X, Crown, Mail, User, AlertTriangle, Search,
+  UserCheck, ArrowRight, Filter, ChevronDown, Power, TrendingUp
 } from 'lucide-react';
+import SuperAdminLayout from './SuperAdminLayout';
 
 /* ─────────────────────────────────────────────
-   Global styles injected once
+   Dashboard-scoped styles
 ───────────────────────────────────────────── */
 const STYLES = `
-  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
-
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
+  /* ── Dashboard vars ── */
   :root {
-    --bg:        #f4f5f7;
-    --surface:   #ffffff;
-    --border:    #e2e4e9;
-    --text:      #0f1117;
-    --muted:     #6b7280;
-    --accent:    #1a56db;
-    --accent-lt: #eff4ff;
-    --accent-dk: #1240a8;
-    --danger:    #dc2626;
-    --success:   #059669;
-    --warn:      #d97706;
-    --header-h:  72px;
-    --radius:    12px;
-    --shadow-sm: 0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
-    --shadow-md: 0 4px 12px rgba(0,0,0,.08);
-    --shadow-lg: 0 8px 28px rgba(0,0,0,.10);
+    --d-bg:        #f0f2f8;
+    --d-surface:   #ffffff;
+    --d-border:    #e2e8f0;
+    --d-text:      #0f172a;
+    --d-muted:     #64748b;
+    --d-accent:    #6366f1;
+    --d-accent-lt: #eef2ff;
+    --d-accent-dk: #4f46e5;
+    --d-danger:    #ef4444;
+    --d-success:   #10b981;
+    --d-warn:      #f59e0b;
+    --d-radius:    14px;
+    --d-shadow-sm: 0 1px 3px rgba(0,0,0,.05), 0 0 0 1px rgba(0,0,0,.03);
+    --d-shadow-md: 0 4px 14px rgba(0,0,0,.09);
+    --d-shadow-lg: 0 10px 32px rgba(0,0,0,.12);
   }
-
-  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); }
-
-  .sa-shell { min-height: 100vh; display: flex; flex-direction: column; }
-
-  /* ── Header ── */
-  .sa-header {
-    height: var(--header-h);
-    background: var(--surface);
-    border-bottom: 1px solid var(--border);
-    display: flex; align-items: center;
-    padding: 0 32px;
-    justify-content: space-between;
-    position: sticky; top: 0; z-index: 100;
-    box-shadow: var(--shadow-sm);
-  }
-  .sa-header-brand { display: flex; align-items: center; gap: 12px; }
-  .sa-header-icon {
-    width: 36px; height: 36px;
-    background: var(--accent);
-    border-radius: 8px;
-    display: flex; align-items: center; justify-content: center;
-  }
-  .sa-header-title { font-size: 17px; font-weight: 700; letter-spacing: -.3px; }
-  .sa-header-sub { font-size: 12px; color: var(--muted); margin-top: 1px; }
-  .sa-header-actions { display: flex; align-items: center; gap: 10px; }
 
   /* ── Buttons ── */
-  .btn {
+  .d-btn {
     display: inline-flex; align-items: center; gap: 7px;
-    font-family: 'DM Sans', sans-serif; font-size: 13.5px; font-weight: 600;
-    border: none; cursor: pointer; border-radius: 8px;
-    padding: 8px 16px; transition: all .15s ease;
-    white-space: nowrap;
+    font-family: 'Inter', 'DM Sans', sans-serif; font-size: 13px; font-weight: 600;
+    border: none; cursor: pointer; border-radius: 9px;
+    padding: 9px 18px; transition: all .15s ease;
+    white-space: nowrap; letter-spacing: -0.1px;
   }
-  .btn:disabled { opacity: .45; cursor: not-allowed; }
-  .btn-ghost {
-    background: transparent; color: var(--muted);
-    border: 1px solid var(--border);
+  .d-btn:disabled { opacity: .45; cursor: not-allowed; }
+  .d-btn-ghost {
+    background: var(--d-surface); color: var(--d-muted);
+    border: 1.5px solid var(--d-border);
   }
-  .btn-ghost:hover:not(:disabled) { background: var(--bg); color: var(--text); border-color: #c4c8d2; }
-  .btn-primary {
-    background: var(--accent); color: #fff;
+  .d-btn-ghost:hover:not(:disabled) { background: var(--d-bg); color: var(--d-text); border-color: #c4cdd8; }
+  .d-btn-primary {
+    background: linear-gradient(135deg, var(--d-accent), var(--d-accent-dk));
+    color: #fff; box-shadow: 0 2px 8px rgba(99,102,241,0.35);
   }
-  .btn-primary:hover:not(:disabled) { background: var(--accent-dk); }
-  .btn-danger { background: var(--danger); color: #fff; }
-  .btn-danger:hover:not(:disabled) { background: #b91c1c; }
-  .btn-lg { padding: 11px 24px; font-size: 14.5px; border-radius: 10px; }
+  .d-btn-primary:hover:not(:disabled) { background: linear-gradient(135deg, #5254cc, var(--d-accent-dk)); box-shadow: 0 4px 14px rgba(99,102,241,0.5); transform: translateY(-1px); }
+  .d-btn-danger { background: linear-gradient(135deg, #f87171, var(--d-danger)); color: #fff; }
+  .d-btn-danger:hover:not(:disabled) { background: linear-gradient(135deg, #ef4444, #b91c1c); }
+  .d-btn-lg { padding: 12px 26px; font-size: 14px; border-radius: 11px; }
+  .d-btn-sm { padding: 6px 12px; font-size: 12px; border-radius: 7px; }
 
-  /* ── Body layout ── */
-  .sa-body { flex: 1; padding: 28px 32px; max-width: 1280px; margin: 0 auto; width: 100%; }
+  /* ── Stats grid ── */
+  .d-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 28px; }
 
-  /* ── Stat cards ── */
-  .sa-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 28px; }
-  .stat-card {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius); padding: 20px 22px;
-    box-shadow: var(--shadow-sm); cursor: default;
-    transition: box-shadow .15s, transform .15s;
+  .d-stat {
+    border-radius: var(--d-radius); padding: 22px 22px 20px;
+    box-shadow: var(--d-shadow-sm);
+    transition: transform .18s, box-shadow .18s;
+    overflow: hidden; position: relative; cursor: default;
   }
-  .stat-card.clickable { cursor: pointer; }
-  .stat-card.clickable:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
-  .stat-card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; }
-  .stat-icon {
-    width: 38px; height: 38px; border-radius: 8px;
+  .d-stat.clickable { cursor: pointer; }
+  .d-stat.clickable:hover { transform: translateY(-3px); box-shadow: var(--d-shadow-md); }
+
+  .d-stat-indigo { background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); color: #fff; }
+  .d-stat-violet { background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); color: #fff; }
+  .d-stat-emerald{ background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #fff; }
+  .d-stat-amber  { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: #fff; }
+
+  .d-stat-icon {
+    width: 42px; height: 42px; border-radius: 10px;
+    background: rgba(255,255,255,0.2);
     display: flex; align-items: center; justify-content: center;
+    margin-bottom: 16px;
+    backdrop-filter: blur(4px);
   }
-  .stat-icon.blue   { background: #eff4ff; color: var(--accent); }
-  .stat-icon.slate  { background: #f1f2f4; color: #4b5563; }
-  .stat-icon.green  { background: #ecfdf5; color: var(--success); }
-  .stat-icon.amber  { background: #fffbeb; color: var(--warn); }
-  .stat-arrow { color: var(--muted); opacity: 0; transition: opacity .15s, transform .15s; }
-  .stat-card.clickable:hover .stat-arrow { opacity: 1; transform: translateX(3px); }
-  .stat-value { font-size: 28px; font-weight: 700; letter-spacing: -.5px; }
-  .stat-label { font-size: 12.5px; color: var(--muted); font-weight: 500; margin-top: 2px; }
-  .stat-sub { font-size: 11.5px; color: var(--muted); margin-top: 6px; }
+  .d-stat-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; }
+  .d-stat-arrow { opacity: 0; transition: opacity .15s, transform .15s; }
+  .d-stat.clickable:hover .d-stat-arrow { opacity: 0.8; transform: translateX(4px); }
+  .d-stat-val { font-size: 30px; font-weight: 800; letter-spacing: -1px; color: #fff; line-height: 1; }
+  .d-stat-lbl { font-size: 12.5px; font-weight: 600; color: rgba(255,255,255,0.75); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.4px; }
+  .d-stat-sub { font-size: 11.5px; color: rgba(255,255,255,0.55); margin-top: 8px; }
+  .d-stat-bg-icon {
+    position: absolute; right: -6px; bottom: -10px;
+    opacity: 0.07;
+  }
 
-  /* ── Divider ── */
-  .sa-section-title {
-    font-size: 13px; font-weight: 600; color: var(--muted); letter-spacing: .6px; text-transform: uppercase;
-    margin-bottom: 14px;
+  /* ── Section title ── */
+  .d-section-title {
+    font-size: 11.5px; font-weight: 700; color: var(--d-muted);
+    letter-spacing: 1px; text-transform: uppercase;
+    margin-bottom: 14px; display: flex; align-items: center; gap: 8px;
+  }
+  .d-section-title::after {
+    content: ''; flex: 1; height: 1px; background: var(--d-border);
   }
 
   /* ── Card ── */
-  .card {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius); box-shadow: var(--shadow-sm);
+  .d-card {
+    background: var(--d-surface); border: 1px solid var(--d-border);
+    border-radius: var(--d-radius); box-shadow: var(--d-shadow-sm);
     overflow: hidden;
   }
-  .card-header {
-    padding: 18px 22px;
-    border-bottom: 1px solid var(--border);
+  .d-card-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--d-border);
     display: flex; align-items: center; justify-content: space-between;
+    background: linear-gradient(to bottom, #fcfdff, var(--d-surface));
   }
-  .card-title { font-size: 14.5px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
-  .card-body { padding: 20px 22px; }
+  .d-card-title { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 8px; color: var(--d-text); }
+  .d-card-body { padding: 20px; }
 
   /* ── Two-col grid ── */
-  .sa-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+  .d-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 18px; }
 
   /* ── Select ── */
-  .sa-select-wrap { position: relative; }
-  .sa-select-wrap select {
-    width: 100%;
-    padding: 11px 40px 11px 14px;
-    border: 1.5px solid var(--border);
-    border-radius: 8px;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 14px; font-weight: 500;
-    color: var(--text);
-    background: var(--surface);
-    appearance: none;
-    cursor: pointer;
-    transition: border-color .15s;
+  .d-select-wrap { position: relative; }
+  .d-select-wrap select {
+    width: 100%; padding: 11px 40px 11px 14px;
+    border: 1.5px solid var(--d-border); border-radius: 9px;
+    font-family: 'Inter', 'DM Sans', sans-serif;
+    font-size: 13.5px; font-weight: 500; color: var(--d-text);
+    background: var(--d-bg); appearance: none; cursor: pointer;
+    transition: border-color .15s, box-shadow .15s;
   }
-  .sa-select-wrap select:focus { outline: none; border-color: var(--accent); }
-  .sa-select-chevron {
-    position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
-    color: var(--muted); pointer-events: none;
-  }
+  .d-select-wrap select:focus { outline: none; border-color: var(--d-accent); box-shadow: 0 0 0 3px rgba(99,102,241,0.12); background: #fff; }
+  .d-select-chevron { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--d-muted); pointer-events: none; }
 
-  /* ── Admin preview card ── */
-  .admin-preview {
+  /* ── Admin preview ── */
+  .d-admin-preview {
     margin-top: 14px; padding: 14px 16px;
-    border: 1.5px solid var(--border); border-radius: 10px;
-    background: var(--bg);
+    border: 1.5px solid var(--d-border); border-radius: 11px;
+    background: linear-gradient(135deg, #f8f9ff, var(--d-bg));
     display: flex; align-items: center; gap: 12px;
   }
-  .avatar {
-    width: 40px; height: 40px; border-radius: 8px;
-    background: var(--accent); color: #fff;
+  .d-avatar {
+    width: 40px; height: 40px; border-radius: 9px;
+    background: linear-gradient(135deg, var(--d-accent), var(--d-accent-dk));
+    color: #fff;
     display: flex; align-items: center; justify-content: center;
-    font-weight: 700; font-size: 15px; flex-shrink: 0;
+    font-weight: 700; font-size: 14px; flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(99,102,241,0.3);
   }
-  .avatar.sm { width: 32px; height: 32px; font-size: 12px; border-radius: 6px; }
-  .avatar-green { background: #059669; }
-  .admin-preview-name { font-size: 14px; font-weight: 700; }
-  .admin-preview-email { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 4px; margin-top: 2px; }
-  .badge {
+  .d-avatar-name { font-size: 13.5px; font-weight: 700; color: var(--d-text); }
+  .d-avatar-email { font-size: 11.5px; color: var(--d-muted); display: flex; align-items: center; gap: 4px; margin-top: 3px; }
+
+  /* ── Badge ── */
+  .d-badge {
     display: inline-flex; align-items: center; gap: 4px;
-    font-size: 11.5px; font-weight: 600; padding: 3px 9px;
+    font-size: 11px; font-weight: 600; padding: 3px 9px;
     border-radius: 999px;
   }
-  .badge-blue  { background: var(--accent-lt); color: var(--accent); }
-  .badge-green { background: #ecfdf5; color: var(--success); }
-  .badge-slate { background: #f1f2f4; color: #4b5563; border: 1px solid var(--border); }
+  .d-badge-indigo { background: var(--d-accent-lt); color: var(--d-accent); border: 1px solid rgba(99,102,241,0.2); }
+  .d-badge-green  { background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; }
+  .d-badge-slate  { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
+  .d-badge-red    { background: #fef2f2; color: #b91c1c; border: 1px solid #fca5a5; }
+  .d-badge-amber  { background: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
 
-  /* ── Search input ── */
-  .search-wrap { position: relative; }
-  .search-wrap input {
-    width: 100%;
-    padding: 10px 14px 10px 38px;
-    border: 1.5px solid var(--border);
-    border-radius: 8px;
-    font-family: 'DM Sans', sans-serif; font-size: 13.5px;
-    background: var(--bg); color: var(--text);
-    transition: border-color .15s, background .15s;
+  /* ── Search ── */
+  .d-search { position: relative; }
+  .d-search input {
+    width: 100%; padding: 10px 14px 10px 38px;
+    border: 1.5px solid var(--d-border); border-radius: 9px;
+    font-family: 'Inter', 'DM Sans', sans-serif; font-size: 13px;
+    background: var(--d-bg); color: var(--d-text);
+    transition: border-color .15s, box-shadow .15s;
   }
-  .search-wrap input:focus { outline: none; border-color: var(--accent); background: var(--surface); }
-  .search-icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--muted); }
+  .d-search input:focus { outline: none; border-color: var(--d-accent); background: #fff; box-shadow: 0 0 0 3px rgba(99,102,241,0.1); }
+  .d-search-icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--d-muted); }
 
   /* ── Customer list ── */
-  .customer-scroll { max-height: 360px; overflow-y: auto; }
-  .customer-scroll::-webkit-scrollbar { width: 4px; }
-  .customer-scroll::-webkit-scrollbar-track { background: transparent; }
-  .customer-scroll::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 999px; }
-  .customer-item {
+  .d-cust-scroll { max-height: 340px; overflow-y: auto; }
+  .d-cust-scroll::-webkit-scrollbar { width: 4px; }
+  .d-cust-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
+  .d-cust-item {
     display: flex; align-items: flex-start; gap: 12px;
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--border);
+    padding: 11px 18px; border-bottom: 1px solid var(--d-border);
     cursor: pointer; transition: background .1s;
   }
-  .customer-item:last-child { border-bottom: none; }
-  .customer-item:hover { background: var(--bg); }
-  .customer-item.selected { background: #f0f5ff; }
-  .customer-item input[type=checkbox] {
-    width: 16px; height: 16px; accent-color: var(--accent);
-    flex-shrink: 0; margin-top: 3px; cursor: pointer;
+  .d-cust-item:last-child { border-bottom: none; }
+  .d-cust-item:hover { background: #f8f9ff; }
+  .d-cust-item.selected { background: #eef2ff; }
+  .d-cust-item.inactive { opacity: .6; }
+  .d-cust-item input[type=checkbox] {
+    width: 15px; height: 15px; accent-color: var(--d-accent);
+    flex-shrink: 0; margin-top: 4px; cursor: pointer;
   }
-  .customer-name { font-size: 13.5px; font-weight: 600; }
-  .customer-email { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 4px; margin-top: 2px; }
-  .customer-admins { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
-  .badge-red   { background: #fef2f2; color: #b91c1c; border: 1px solid #fca5a5; }
-  .badge-amber { background: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
-  .customer-item.inactive { opacity: .65; background: #fafafa; }
-  .btn-toggle-active   { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
-  .btn-toggle-active:hover:not(:disabled)   { background: #d1fae5; }
-  .btn-toggle-inactive { background: #fef2f2; color: #991b1b; border: 1px solid #fca5a5; }
-  .btn-toggle-inactive:hover:not(:disabled) { background: #fee2e2; }
+  .d-cust-name { font-size: 13px; font-weight: 600; color: var(--d-text); }
+  .d-cust-email { font-size: 11.5px; color: var(--d-muted); display: flex; align-items: center; gap: 4px; margin-top: 2px; }
+  .d-cust-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
 
-  /* ── Assignment summary bar ── */
-  .summary-bar {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius); box-shadow: var(--shadow-sm);
+  .d-toggle-active   { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+  .d-toggle-active:hover:not(:disabled)   { background: #d1fae5; }
+  .d-toggle-inactive { background: #fef2f2; color: #991b1b; border: 1px solid #fca5a5; }
+  .d-toggle-inactive:hover:not(:disabled) { background: #fee2e2; }
+
+  /* ── Summary bar ── */
+  .d-summary {
+    background: var(--d-surface); border: 1px solid var(--d-border);
+    border-radius: var(--d-radius); box-shadow: var(--d-shadow-sm);
     padding: 18px 24px;
     display: flex; align-items: center; justify-content: space-between; gap: 20px;
   }
-  .summary-info { font-size: 13.5px; color: var(--muted); }
-  .summary-info strong { color: var(--text); font-weight: 700; }
-  .summary-note {
+  .d-summary-info { font-size: 13.5px; color: var(--d-muted); line-height: 1.5; }
+  .d-summary-info strong { color: var(--d-text); font-weight: 700; }
+
+  .d-note {
     margin-top: 12px; padding: 12px 16px;
-    background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px;
+    background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px;
     font-size: 12.5px; color: #92400e;
     display: flex; align-items: flex-start; gap: 8px;
   }
 
   /* ── Toast ── */
-  .toast {
-    position: fixed; top: 20px; right: 24px;
+  .d-toast {
+    position: fixed; top: 84px; right: 24px;
     display: flex; align-items: center; gap: 10px;
-    padding: 12px 18px; border-radius: 10px;
-    font-size: 13.5px; font-weight: 500;
-    box-shadow: var(--shadow-lg); z-index: 999;
-    animation: toast-in .2s ease;
-    max-width: 380px;
+    padding: 13px 18px; border-radius: 12px;
+    font-size: 13px; font-weight: 500;
+    box-shadow: var(--d-shadow-lg); z-index: 999;
+    animation: d-toast-in .22s ease;
+    max-width: 380px; backdrop-filter: blur(8px);
   }
-  .toast.success { background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; }
-  .toast.error   { background: #fef2f2; border: 1px solid #fca5a5; color: #7f1d1d; }
-  .toast.info    { background: var(--accent-lt); border: 1px solid #bfdbfe; color: #1e3a8a; }
-  @keyframes toast-in { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: none; } }
+  .d-toast.success { background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; }
+  .d-toast.error   { background: #fef2f2; border: 1px solid #fca5a5; color: #7f1d1d; }
+  .d-toast.info    { background: #eef2ff; border: 1px solid #c7d2fe; color: #3730a3; }
+  @keyframes d-toast-in { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: none; } }
 
   /* ── Modal ── */
-  .modal-overlay {
-    position: fixed; inset: 0;
-    background: rgba(15,17,23,.45);
+  .d-overlay {
+    position: fixed; inset: 0; background: rgba(15,17,23,.5);
     display: flex; align-items: center; justify-content: center;
-    z-index: 200; animation: fade-in .15s ease;
+    z-index: 200; animation: d-fade-in .15s ease;
+    backdrop-filter: blur(4px);
   }
-  @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
-  .modal {
-    background: var(--surface); border-radius: 14px;
+  @keyframes d-fade-in { from { opacity: 0; } to { opacity: 1; } }
+  .d-modal {
+    background: var(--d-surface); border-radius: 16px;
     padding: 28px; max-width: 420px; width: 90%;
-    box-shadow: var(--shadow-lg);
+    box-shadow: var(--d-shadow-lg); border: 1px solid var(--d-border);
   }
-  .modal-title { font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
-  .modal-body  { font-size: 13.5px; color: var(--muted); line-height: 1.6; margin-bottom: 22px; }
-  .modal-actions { display: flex; gap: 10px; }
+  .d-modal-title { font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 9px; margin-bottom: 10px; color: var(--d-text); }
+  .d-modal-body  { font-size: 13.5px; color: var(--d-muted); line-height: 1.6; margin-bottom: 22px; }
+  .d-modal-actions { display: flex; gap: 10px; }
 
   /* ── Responsive ── */
   @media (max-width: 900px) {
-    .sa-stats { grid-template-columns: repeat(2, 1fr); }
-    .sa-cols  { grid-template-columns: 1fr; }
+    .d-stats { grid-template-columns: repeat(2, 1fr); }
+    .d-cols  { grid-template-columns: 1fr; }
   }
   @media (max-width: 560px) {
-    .sa-body { padding: 20px 16px; }
-    .sa-header { padding: 0 16px; }
-    .sa-stats { grid-template-columns: 1fr 1fr; }
-    .summary-bar { flex-direction: column; align-items: flex-start; }
+    .d-stats { grid-template-columns: 1fr 1fr; }
+    .d-summary { flex-direction: column; align-items: flex-start; }
   }
 `;
 
@@ -324,6 +299,19 @@ const initials = (name, email) => {
   return src.slice(0, 2).toUpperCase();
 };
 
+const StatCard = ({ gradient, icon: Icon, bgIcon: BgIcon, value, label, sub, clickable, onClick }) => (
+  <div className={`d-stat d-stat-${gradient}${clickable ? ' clickable' : ''}`} onClick={onClick} role={clickable ? 'button' : undefined} tabIndex={clickable ? 0 : undefined}>
+    <div className="d-stat-top">
+      <div className="d-stat-icon"><Icon size={20} color="rgba(255,255,255,0.9)" /></div>
+      {clickable && <ArrowRight size={16} className="d-stat-arrow" color="rgba(255,255,255,0.8)" />}
+    </div>
+    <div className="d-stat-val">{value}</div>
+    <div className="d-stat-lbl">{label}</div>
+    {sub && <div className="d-stat-sub">{sub}</div>}
+    {BgIcon && <BgIcon size={80} className="d-stat-bg-icon" color="#fff" />}
+  </div>
+);
+
 /* ─────────────────────────────────────────────
    Main Component
 ───────────────────────────────────────────── */
@@ -340,9 +328,9 @@ const SuperAdminDashboard = () => {
   const [statusUpdating, setStatusUpdating] = useState(null);
   const navigate = useNavigate();
 
-  // Inject styles once
+  // Inject dashboard styles once
   useEffect(() => {
-    const id = 'sa-styles';
+    const id = 'sa-dashboard-styles';
     if (!document.getElementById(id)) {
       const el = document.createElement('style');
       el.id = id; el.textContent = STYLES;
@@ -441,15 +429,35 @@ const SuperAdminDashboard = () => {
 
   const selectedAdminObj = admins.find(a => a._id === selectedAdmin);
   const totalAssigned = admins.reduce((n, a) => n + (a.assignedCustomers?.length || 0), 0);
+  const activeCount = customers.filter(c => c.isActive !== false).length;
+  const inactiveCount = customers.filter(c => c.isActive === false).length;
+  const assignmentRate = customers.length > 0
+    ? Math.round((customers.filter(c => getAdminsForCustomer(c._id).length > 0).length / customers.length) * 100)
+    : 0;
+
+  const topbarRight = (
+    <button
+      className="d-btn d-btn-ghost"
+      onClick={loadInitialData}
+      disabled={refreshing}
+    >
+      <RefreshCw size={14} style={refreshing ? { animation: 'spin 1s linear infinite' } : {}} />
+      {refreshing ? 'Refreshing…' : 'Refresh'}
+    </button>
+  );
 
   return (
-    <div className="sa-shell">
+    <SuperAdminLayout
+      title="Dashboard"
+      subtitle="Customer assignment &amp; management overview"
+      topbarRight={topbarRight}
+    >
       {/* ── Toast ── */}
       {notification && (
-        <div className={`toast ${notification.type}`}>
-          {notification.type === 'success' && <CheckCircle size={16} />}
-          {notification.type === 'error'   && <AlertCircle size={16} />}
-          {notification.type === 'info'    && <AlertCircle size={16} />}
+        <div className={`d-toast ${notification.type}`}>
+          {notification.type === 'success' && <CheckCircle size={15} />}
+          {notification.type === 'error'   && <AlertCircle size={15} />}
+          {notification.type === 'info'    && <AlertCircle size={15} />}
           <span>{notification.message}</span>
           <button
             onClick={() => setNotification(null)}
@@ -462,314 +470,255 @@ const SuperAdminDashboard = () => {
 
       {/* ── Confirm Modal ── */}
       {removeConfirm && (
-        <div className="modal-overlay">
-          <div className="modal">
-            <div className="modal-title">
-              <AlertTriangle size={18} style={{ color: 'var(--danger)' }} />
+        <div className="d-overlay">
+          <div className="d-modal">
+            <div className="d-modal-title">
+              <AlertTriangle size={18} style={{ color: 'var(--d-danger)' }} />
               Remove Assignment
             </div>
-            <div className="modal-body">
+            <div className="d-modal-body">
               Are you sure you want to remove this customer assignment? This cannot be undone.
             </div>
-            <div className="modal-actions">
-              <button className="btn btn-danger" onClick={async () => { setRemoveConfirm(null); }}
-                disabled={loading}>
+            <div className="d-modal-actions">
+              <button className="d-btn d-btn-danger" onClick={() => setRemoveConfirm(null)} disabled={loading}>
                 {loading ? 'Removing…' : 'Remove'}
               </button>
-              <button className="btn btn-ghost" onClick={() => setRemoveConfirm(null)}>Cancel</button>
+              <button className="d-btn d-btn-ghost" onClick={() => setRemoveConfirm(null)}>Cancel</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── Header ── */}
-      <header className="sa-header">
-        <div className="sa-header-brand">
-          <div className="sa-header-icon">
-            <Crown size={18} color="#fff" />
-          </div>
-          <div>
-            <div className="sa-header-title">Super Admin</div>
-            <div className="sa-header-sub">Customer assignment dashboard</div>
-          </div>
-        </div>
-        <div className="sa-header-actions">
-          <button
-            className="btn btn-ghost"
-            onClick={loadInitialData}
-            disabled={refreshing}
-          >
-            <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
-            Refresh
-          </button>
-          <button className="btn btn-primary" onClick={() => navigate('/superadmin/analytics')}>
-            <BarChart3 size={14} />
-            Analytics
-          </button>
-        </div>
-      </header>
+      {/* ── Stat Row ── */}
+      <div className="d-stats">
+        <StatCard
+          gradient="indigo" icon={Users} bgIcon={Users}
+          value={customers.length} label="Total Customers"
+          sub={`${activeCount} active · ${inactiveCount} inactive`}
+        />
+        <StatCard
+          gradient="violet" icon={Crown} bgIcon={Crown}
+          value={admins.length} label="Active Admins"
+          sub="Managing customer accounts"
+        />
+        <StatCard
+          gradient="emerald" icon={BarChart3} bgIcon={BarChart3}
+          value={totalAssigned} label="Total Assignments"
+          sub="View analytics →"
+          clickable onClick={() => navigate('/superadmin/analytics')}
+        />
+        <StatCard
+          gradient="amber" icon={TrendingUp} bgIcon={TrendingUp}
+          value={customers.length > 0 ? `${assignmentRate}%` : '—'}
+          label="Assignment Rate"
+          sub="View all assignments →"
+          clickable onClick={() => navigate('/superadmin/view-assignments')}
+        />
+      </div>
 
-      {/* ── Body ── */}
-      <main className="sa-body">
+      {/* ── Assignment Section ── */}
+      <div className="d-section-title">New Assignment</div>
 
-        {/* ── Stat Row ── */}
-        <div className="sa-stats">
-          <div className="stat-card">
-            <div className="stat-card-top">
-              <div className="stat-icon blue"><Users size={18} /></div>
-            </div>
-            <div className="stat-value">{customers.length}</div>
-            <div className="stat-label">Total Customers</div>
-            <div className="stat-sub">{customers.filter(c => c.isActive !== false).length} active · {customers.filter(c => c.isActive === false).length} inactive</div>
-          </div>
-
-          <div className="stat-card">
-            <div className="stat-card-top">
-              <div className="stat-icon slate"><Shield size={18} /></div>
-            </div>
-            <div className="stat-value">{admins.length}</div>
-            <div className="stat-label">Active Admins</div>
-          </div>
-
-          <div
-            className="stat-card clickable"
-            onClick={() => navigate('/superadmin/analytics')}
-            role="button" tabIndex={0}
-          >
-            <div className="stat-card-top">
-              <div className="stat-icon green"><BarChart3 size={18} /></div>
-              <ArrowRight size={16} className="stat-arrow" />
-            </div>
-            <div className="stat-value">{totalAssigned}</div>
-            <div className="stat-label">Total Assignments</div>
-            <div className="stat-sub">View analytics →</div>
-          </div>
-
-          <div
-            className="stat-card clickable"
-            onClick={() => navigate('/superadmin/view-assignments')}
-            role="button" tabIndex={0}
-          >
-            <div className="stat-card-top">
-              <div className="stat-icon amber"><UserCheck size={18} /></div>
-              <ArrowRight size={16} className="stat-arrow" />
-            </div>
-            <div className="stat-value">
-              {customers.length > 0
-                ? `${Math.round((customers.filter(c => getAdminsForCustomer(c._id).length > 0).length / customers.length) * 100)}%`
-                : '—'}
-            </div>
-            <div className="stat-label">Assignment Rate</div>
-            <div className="stat-sub">View all assignments →</div>
-          </div>
-        </div>
-
-        {/* ── Assignment Section ── */}
-        <p className="sa-section-title">New Assignment</p>
-
-        <div className="sa-cols">
-          {/* Admin Selection */}
-          <div className="card">
-            <div className="card-header">
-              <span className="card-title">
-                <Crown size={15} style={{ color: 'var(--accent)' }} />
-                Admin
+      <div className="d-cols">
+        {/* Admin Selection */}
+        <div className="d-card">
+          <div className="d-card-header">
+            <span className="d-card-title">
+              <Crown size={15} style={{ color: 'var(--d-accent)' }} />
+              Select Admin
+            </span>
+            {selectedAdminObj && (
+              <span className="d-badge d-badge-indigo">
+                <Users size={10} />
+                {(selectedAdminObj.assignedCustomers || []).length} assigned
               </span>
-              {selectedAdminObj && (
-                <span className="badge badge-blue">
-                  <Users size={11} />
-                  {(selectedAdminObj.assignedCustomers || []).length} assigned
-                </span>
-              )}
-            </div>
-            <div className="card-body">
-              <div className="sa-select-wrap">
-                <select value={selectedAdmin} onChange={e => setSelectedAdmin(e.target.value)}>
-                  <option value="">Choose an admin…</option>
-                  {admins.map(a => (
-                    <option key={a._id} value={a._id}>
-                      {a.name || a.email?.split('@')[0]} — {a.email}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown size={15} className="sa-select-chevron" />
-              </div>
-
-              {selectedAdminObj && (
-                <div className="admin-preview">
-                  <div className="avatar">{initials(selectedAdminObj.name, selectedAdminObj.email)}</div>
-                  <div>
-                    <div className="admin-preview-name">
-                      {selectedAdminObj.name || selectedAdminObj.email?.split('@')[0]}
-                    </div>
-                    <div className="admin-preview-email">
-                      <Mail size={11} />
-                      {selectedAdminObj.email}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {!selectedAdminObj && (
-                <div style={{ marginTop: 16, fontSize: 12.5, color: 'var(--muted)', lineHeight: 1.6 }}>
-                  Select an admin from the dropdown to view their profile and current assignment count.
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Customer Selection */}
-          <div className="card">
-            <div className="card-header">
-              <span className="card-title">
-                <Users size={15} style={{ color: 'var(--accent)' }} />
-                Customers
-              </span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                {selectedCustomers.length > 0 && (
-                  <span className="badge badge-blue">
-                    <UserCheck size={11} />
-                    {selectedCustomers.length} selected
-                  </span>
-                )}
-                <button
-                  className="btn btn-ghost"
-                  style={{ padding: '4px 10px', fontSize: 12 }}
-                  onClick={handleSelectAll}
-                >
-                  <Filter size={12} />
-                  {selectedCustomers.length === filteredCustomers.length && filteredCustomers.length > 0
-                    ? 'Deselect all' : 'Select all'}
-                </button>
-              </div>
-            </div>
-
-            {/* Search */}
-            <div style={{ padding: '14px 22px', borderBottom: '1px solid var(--border)' }}>
-              <div className="search-wrap">
-                <Search size={14} className="search-icon" />
-                <input
-                  type="text"
-                  placeholder="Search by name or email…"
-                  value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
-                />
-              </div>
-            </div>
-
-            {/* List */}
-            <div className="customer-scroll">
-              {filteredCustomers.length === 0 ? (
-                <div style={{ padding: 32, textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>
-                  <User size={32} style={{ margin: '0 auto 8px', opacity: .3 }} />
-                  No customers found
-                </div>
-              ) : (
-                filteredCustomers.map(customer => {
-                  const assigned = getAdminsForCustomer(customer._id);
-                  const alreadyThis = assigned.some(a => a._id === selectedAdmin);
-                  const isSelected = selectedCustomers.includes(customer._id);
-
-                  return (
-                    <div
-                      key={customer._id}
-                      className={`customer-item${isSelected ? ' selected' : ''}${customer.isActive === false ? ' inactive' : ''}`}
-                      onClick={() => toggleCustomer(customer._id)}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => toggleCustomer(customer._id)}
-                        onClick={e => e.stopPropagation()}
-                      />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <div className="customer-name">{customer.name}</div>
-                          {customer.isActive === false && (
-                            <span className="badge badge-red" style={{ fontSize: 10.5 }}>Inactive</span>
-                          )}
-                        </div>
-                        <div className="customer-email">
-                          <Mail size={11} />
-                          {customer.email}
-                        </div>
-                        {assigned.length > 0 && (
-                          <div className="customer-admins">
-                            {assigned.map(a => (
-                              <span
-                                key={a._id}
-                                className={`badge ${a._id === selectedAdmin ? 'badge-green' : 'badge-slate'}`}
-                              >
-                                <Crown size={10} />
-                                {a.name || a.email?.split('@')[0]}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                        {alreadyThis && selectedAdmin && (
-                          <div style={{ marginTop: 6 }}>
-                            <span className="badge badge-green" style={{ fontSize: 11 }}>
-                              <UserCheck size={10} /> Already assigned
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                      <button
-                        className={`btn ${customer.isActive === false ? 'btn-toggle-active' : 'btn-toggle-inactive'}`}
-                        style={{ padding: '5px 10px', fontSize: 11.5, flexShrink: 0 }}
-                        disabled={statusUpdating === customer._id}
-                        onClick={e => handleToggleStatus(e, customer)}
-                        title={customer.isActive === false ? 'Activate account' : 'Deactivate account'}
-                      >
-                        <Power size={12} />
-                        {statusUpdating === customer._id
-                          ? '…'
-                          : customer.isActive === false ? 'Activate' : 'Deactivate'
-                        }
-                      </button>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* ── Summary / Action Bar ── */}
-        <div className="summary-bar">
-          <div className="summary-info">
-            {selectedAdmin && selectedCustomers.length > 0 ? (
-              <>
-                Assigning <strong>{selectedCustomers.length} customer{selectedCustomers.length !== 1 ? 's' : ''}</strong> to{' '}
-                <strong>{selectedAdminObj?.name || selectedAdminObj?.email?.split('@')[0] || 'selected admin'}</strong>
-              </>
-            ) : (
-              'Select an admin and one or more customers to create an assignment.'
             )}
           </div>
-          <button
-            className="btn btn-primary btn-lg"
-            onClick={handleAssignment}
-            disabled={loading || !selectedAdmin || selectedCustomers.length === 0}
-          >
-            {loading
-              ? <><RefreshCw size={16} className="animate-spin" /> Assigning…</>
-              : <><UserPlus size={16} /> Assign Now <ArrowRight size={15} /></>
-            }
-          </button>
+          <div className="d-card-body">
+            <div className="d-select-wrap">
+              <select value={selectedAdmin} onChange={e => setSelectedAdmin(e.target.value)}>
+                <option value="">Choose an admin…</option>
+                {admins.map(a => (
+                  <option key={a._id} value={a._id}>
+                    {a.name || a.email?.split('@')[0]} — {a.email}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown size={15} className="d-select-chevron" />
+            </div>
+
+            {selectedAdminObj ? (
+              <div className="d-admin-preview">
+                <div className="d-avatar">{initials(selectedAdminObj.name, selectedAdminObj.email)}</div>
+                <div>
+                  <div className="d-avatar-name">
+                    {selectedAdminObj.name || selectedAdminObj.email?.split('@')[0]}
+                  </div>
+                  <div className="d-avatar-email">
+                    <Mail size={11} />
+                    {selectedAdminObj.email}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div style={{ marginTop: 16, padding: '14px 16px', background: '#f8f9ff', borderRadius: 10, border: '1px dashed #c7d2fe', fontSize: 12.5, color: 'var(--d-muted)', lineHeight: 1.6 }}>
+                Select an admin from the dropdown to view their profile and current assignment count.
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Multi-admin note */}
-        <div className="summary-note" style={{ marginTop: 12 }}>
-          <AlertCircle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
-          <span>
-            <strong>Multi-admin support:</strong> Customers can be assigned to multiple admins simultaneously.
-            Existing assignments are preserved when creating new ones.
-          </span>
-        </div>
+        {/* Customer Selection */}
+        <div className="d-card">
+          <div className="d-card-header">
+            <span className="d-card-title">
+              <Users size={15} style={{ color: 'var(--d-accent)' }} />
+              Select Customers
+            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {selectedCustomers.length > 0 && (
+                <span className="d-badge d-badge-indigo">
+                  <UserCheck size={10} />
+                  {selectedCustomers.length} selected
+                </span>
+              )}
+              <button
+                className="d-btn d-btn-ghost d-btn-sm"
+                onClick={handleSelectAll}
+              >
+                <Filter size={11} />
+                {selectedCustomers.length === filteredCustomers.length && filteredCustomers.length > 0
+                  ? 'Deselect all' : 'Select all'}
+              </button>
+            </div>
+          </div>
 
-      </main>
-    </div>
+          {/* Search */}
+          <div style={{ padding: '12px 18px', borderBottom: '1px solid var(--d-border)' }}>
+            <div className="d-search">
+              <Search size={14} className="d-search-icon" />
+              <input
+                type="text"
+                placeholder="Search by name or email…"
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* List */}
+          <div className="d-cust-scroll">
+            {filteredCustomers.length === 0 ? (
+              <div style={{ padding: 32, textAlign: 'center', color: 'var(--d-muted)', fontSize: 13 }}>
+                <User size={32} style={{ margin: '0 auto 8px', opacity: .3, display: 'block' }} />
+                No customers found
+              </div>
+            ) : (
+              filteredCustomers.map(customer => {
+                const assigned = getAdminsForCustomer(customer._id);
+                const alreadyThis = assigned.some(a => a._id === selectedAdmin);
+                const isSelected = selectedCustomers.includes(customer._id);
+
+                return (
+                  <div
+                    key={customer._id}
+                    className={`d-cust-item${isSelected ? ' selected' : ''}${customer.isActive === false ? ' inactive' : ''}`}
+                    onClick={() => toggleCustomer(customer._id)}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleCustomer(customer._id)}
+                      onClick={e => e.stopPropagation()}
+                    />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                        <div className="d-cust-name">{customer.name}</div>
+                        {customer.isActive === false && (
+                          <span className="d-badge d-badge-red" style={{ fontSize: 10 }}>Inactive</span>
+                        )}
+                      </div>
+                      <div className="d-cust-email">
+                        <Mail size={10} />
+                        {customer.email}
+                      </div>
+                      {assigned.length > 0 && (
+                        <div className="d-cust-tags">
+                          {assigned.map(a => (
+                            <span
+                              key={a._id}
+                              className={`d-badge ${a._id === selectedAdmin ? 'd-badge-green' : 'd-badge-slate'}`}
+                            >
+                              <Crown size={9} />
+                              {a.name || a.email?.split('@')[0]}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {alreadyThis && selectedAdmin && (
+                        <div style={{ marginTop: 5 }}>
+                          <span className="d-badge d-badge-green" style={{ fontSize: 10.5 }}>
+                            <UserCheck size={9} /> Already assigned
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      className={`d-btn d-btn-sm ${customer.isActive === false ? 'd-toggle-active' : 'd-toggle-inactive'}`}
+                      style={{ flexShrink: 0 }}
+                      disabled={statusUpdating === customer._id}
+                      onClick={e => handleToggleStatus(e, customer)}
+                      title={customer.isActive === false ? 'Activate account' : 'Deactivate account'}
+                    >
+                      <Power size={11} />
+                      {statusUpdating === customer._id
+                        ? '…'
+                        : customer.isActive === false ? 'Activate' : 'Deactivate'
+                      }
+                    </button>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Summary / Action Bar ── */}
+      <div className="d-summary">
+        <div className="d-summary-info">
+          {selectedAdmin && selectedCustomers.length > 0 ? (
+            <>
+              Assigning <strong>{selectedCustomers.length} customer{selectedCustomers.length !== 1 ? 's' : ''}</strong> to{' '}
+              <strong>{selectedAdminObj?.name || selectedAdminObj?.email?.split('@')[0] || 'selected admin'}</strong>
+            </>
+          ) : (
+            'Select an admin and one or more customers to create an assignment.'
+          )}
+        </div>
+        <button
+          className="d-btn d-btn-primary d-btn-lg"
+          onClick={handleAssignment}
+          disabled={loading || !selectedAdmin || selectedCustomers.length === 0}
+        >
+          {loading
+            ? <><RefreshCw size={15} style={{ animation: 'spin 1s linear infinite' }} /> Assigning…</>
+            : <><UserPlus size={15} /> Assign Now <ArrowRight size={14} /></>
+          }
+        </button>
+      </div>
+
+      {/* Multi-admin note */}
+      <div className="d-note">
+        <AlertCircle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+        <span>
+          <strong>Multi-admin support:</strong> Customers can be assigned to multiple admins simultaneously.
+          Existing assignments are preserved when creating new ones.
+        </span>
+      </div>
+
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </SuperAdminLayout>
   );
 };
 

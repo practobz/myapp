@@ -35,7 +35,7 @@ import SuperAdminSignup from './superadmin/Signup';
 import ViewAssignments from './superadmin/ViewAssignments';
 import SuperAdminAnalytics from './superadmin/Analytics';
 import AdminManagement from './superadmin/AdminManagement';
-
+import SuperAdminBilling from './superadmin/Billing';
 
 // Customer Integration: Instagram Ads
 import InstagramAdsIntegration from './customer/Integration/InstagramAdsIntegration';
@@ -47,7 +47,7 @@ import CustomerSettings from './customer/Settings';
 import CustomerLayout from './customer/Layout';
 import CustomerSignup from './customer/auth/CustomerSignup';
 import CustomerLogin from './customer/auth/CustomerLogin';
-import Subscription from './customer/Subscription';
+import Billing from './customer/Subscription';
 import ContentReview from './customer/ContentReview';
 import ContentApproval from './customer/ContentApproval';
 import MediaLibrary from './customer/MediaLibrary';
@@ -292,6 +292,11 @@ function App() {
                <Route path="/superadmin/admin-management" element={
                 <ProtectedRoutePortal role="superadmin">
                   <AdminManagement />
+                </ProtectedRoutePortal>
+              } />
+              <Route path="/superadmin/billing" element={
+                <ProtectedRoutePortal role="superadmin">
+                  <SuperAdminBilling />
                 </ProtectedRoutePortal>
               } />
               <Route path="/superadmin/qr-generator" element={

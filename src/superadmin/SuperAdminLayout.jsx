@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, BarChart3, Users, Shield,
-  QrCode, LogOut, Crown, UserCog, RefreshCw
+  QrCode, LogOut, Crown, UserCog, RefreshCw, CreditCard
 } from 'lucide-react';
 
 /* ─────────────────────────────────────────────
@@ -170,6 +170,7 @@ const NAV_ITEMS = [
   { label: 'Dashboard',        path: '/superadmin/dashboard',          icon: LayoutDashboard },
   { label: 'Analytics',        path: '/superadmin/analytics',          icon: BarChart3       },
   { label: 'View Assignments', path: '/superadmin/view-assignments',   icon: Users           },
+  { label: 'Billing',          path: '/superadmin/billing',            icon: CreditCard      },
   { label: 'Admin Management', path: '/superadmin/admin-management',   icon: Shield          },
   { label: 'QR Generator',     path: '/superadmin/qr-generator',       icon: QrCode          },
 ];
@@ -228,7 +229,7 @@ const SuperAdminLayout = ({
         <nav className="sa2-nav">
           <div className="sa2-nav-label">Main Menu</div>
 
-          {NAV_ITEMS.slice(0, 3).map(({ label, path, icon: Icon }) => (
+          {NAV_ITEMS.slice(0, 4).map(({ label, path, icon: Icon }) => (
             <button
               key={path}
               className={`sa2-nav-item${isActive(path) ? ' active' : ''}`}
@@ -242,7 +243,7 @@ const SuperAdminLayout = ({
           <div className="sa2-nav-divider" />
           <div className="sa2-nav-label">Management</div>
 
-          {NAV_ITEMS.slice(3).map(({ label, path, icon: Icon }) => (
+          {NAV_ITEMS.slice(4).map(({ label, path, icon: Icon }) => (
             <button
               key={path}
               className={`sa2-nav-item${isActive(path) ? ' active' : ''}`}

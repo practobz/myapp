@@ -9,7 +9,7 @@ import SuperAdminLayout from './SuperAdminLayout';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const API_BASE = (typeof process !== 'undefined' && process.env?.REACT_APP_API_URL) || 'http://localhost:3001';
+const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 
 const PLATFORMS = [
   { id: 'facebook',  label: 'Facebook',  color: '#1877F2', Icon: Facebook  },

@@ -47,7 +47,7 @@ import CustomerSettings from './customer/Settings';
 import CustomerLayout from './customer/Layout';
 import CustomerSignup from './customer/auth/CustomerSignup';
 import CustomerLogin from './customer/auth/CustomerLogin';
-import Billing from './customer/Subscription';
+import Subscription from './customer/Subscription';
 import ContentReview from './customer/ContentReview';
 import ContentApproval from './customer/ContentApproval';
 import MediaLibrary from './customer/MediaLibrary';

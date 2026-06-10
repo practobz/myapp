@@ -197,8 +197,12 @@ function ScheduledPosts() {
     if (post.isStory || post.postType === 'story') {
       return { type: 'Story', color: 'bg-orange-100 text-orange-700', icon: '📖' };
     }
+    // Check if it's a reel
+    if (post.postType === 'reel') {
+      return { type: 'Reel', color: 'bg-pink-100 text-pink-700', icon: '🎬' };
+    }
     // Check if it's a carousel
-    if ((post.isCarousel || post.useCarouselService) && post.imageUrls?.length > 1) {
+    if (post.isCarousel || post.useCarouselService || (post.imageUrls?.length > 1)) {
       return { type: 'Carousel', color: 'bg-purple-100 text-purple-700', icon: '🎠' };
     }
     // Default to regular post
@@ -752,8 +756,11 @@ function ScheduledPosts() {
                                   <div className="text-xs text-blue-600 font-medium truncate">
                                     <span className="text-gray-500">Calendar:</span> {post.calendar_name || 'N/A'}
                                   </div>
-                                  <div className="text-xs text-purple-600 font-medium truncate mt-0.5">
-                                    <span className="text-gray-500">Item:</span> {post.item_name || 'N/A'}
+                                  <div className="flex items-center justify-between mt-0.5">
+                                    <div className="text-xs text-purple-600 font-medium truncate">
+                                      <span className="text-gray-500">Item:</span> {post.item_name || 'N/A'}
+                                    </div>
+                                    {(() => { const pt = getPostType(post); return <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ml-1 ${pt.color}`}>{pt.icon} {pt.type}</span>; })()}
                                   </div>
                                 </div>
 
@@ -914,8 +921,11 @@ function ScheduledPosts() {
                                 <div className="text-xs text-blue-600 font-medium truncate">
                                   <span className="text-gray-500">Calendar:</span> {post.calendar_name || 'N/A'}
                                 </div>
-                                <div className="text-xs text-purple-600 font-medium truncate mt-0.5">
-                                  <span className="text-gray-500">Item:</span> {post.item_name || 'N/A'}
+                                <div className="flex items-center justify-between mt-0.5">
+                                  <div className="text-xs text-purple-600 font-medium truncate">
+                                    <span className="text-gray-500">Item:</span> {post.item_name || 'N/A'}
+                                  </div>
+                                  {(() => { const pt = getPostType(post); return <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ml-1 ${pt.color}`}>{pt.icon} {pt.type}</span>; })()}
                                 </div>
                               </div>
 
@@ -1019,8 +1029,11 @@ function ScheduledPosts() {
                       <div className="text-xs text-blue-600 font-medium truncate">
                         <span className="text-gray-500">Calendar:</span> {post.calendar_name || 'N/A'}
                       </div>
-                      <div className="text-xs text-purple-600 font-medium truncate mt-0.5">
-                        <span className="text-gray-500">Item:</span> {post.item_name || 'N/A'}
+                      <div className="flex items-center justify-between mt-0.5">
+                        <div className="text-xs text-purple-600 font-medium truncate">
+                          <span className="text-gray-500">Item:</span> {post.item_name || 'N/A'}
+                        </div>
+                        {(() => { const pt = getPostType(post); return <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ml-1 ${pt.color}`}>{pt.icon} {pt.type}</span>; })()}
                       </div>
                     </div>
 

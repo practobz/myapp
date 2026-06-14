@@ -20,8 +20,15 @@ const PersonCard = React.memo(({ person, variant, href }) => {
   const isCustomer = variant === 'customer';
   const Icon = isCustomer ? Users : UserCheck;
   const displayName = person.name || `${person.firstName || ''} ${person.lastName || ''}`.trim() || 'Unnamed';
+
+  const handleOpen = () => {
+    const path = href.startsWith('/') ? href.slice(1) : href;
+    const targetUrl = `${window.location.origin}${window.location.pathname}${path}`;
+    window.open(targetUrl, '_blank');
+  };
+
   return (
-    <div onClick={() => window.open(href, '_blank')} className={`aur-card aur-card--${variant} group`}>
+    <div onClick={handleOpen} className={`aur-card aur-card--${variant} group`}>
       <div className="aur-avatar">
         {person.profileImage
           ? <img src={person.profileImage} alt={displayName} className="aur-avatar__img" />

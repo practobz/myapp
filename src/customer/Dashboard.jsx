@@ -67,10 +67,11 @@ function Dashboard() {
           (p.customerId === currentUser._id || p.customerId === currentUser.id) &&
           p.status === 'published'
         );
-        // Submissions for this customer
+        // Submissions for this customer (only admin-approved content visible to customer)
         const customerSubmissions = submissionsData.filter(s =>
-          s.customer_id === (currentUser._id || currentUser.id) ||
-          s.customer_email === currentUser.email
+          s.submission_stage === 'customer' &&
+          (s.customer_id === (currentUser._id || currentUser.id) ||
+            s.customer_email === currentUser.email)
         );
 
         // Helper: check if item is published (via scheduled posts OR manual publish)
@@ -106,19 +107,31 @@ function Dashboard() {
           underReviewContent
         });
 
-        // Recent activity: last 4 items, sorted by date descending
+        // Recent activity: last 6 items, sorted by date descending
         const recent = [...allItems]
           .filter(i => i.date)
           .sort((a, b) => new Date(b.date) - new Date(a.date))
-          .slice(0, 4)
-          .map(item => ({
-            id: item.id,
-            platform: item.title || item.description || item.creator || 'Content',
-            date: item.date,
-            status: isItemPublished(item)
-              ? 'Published'
-              : (item.status ? item.status.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'Unknown')
-          }));
+          .slice(0, 6)
+          .map(item => {
+            let statusStr = 'Pending';
+            if (isItemPublished(item)) {
+              statusStr = 'Published';
+            } else if (item.status === 'approved') {
+              statusStr = 'Approved';
+            } else if (item.status === 'under_review' || hasContentSubmitted(item)) {
+              statusStr = 'Under Review';
+            } else if (item.status) {
+              statusStr = item.status.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+            }
+
+            return {
+              id: item.id,
+              itemName: item.title || item.description || 'Untitled Content',
+              calendarName: item.calendarName || 'General Calendar',
+              date: item.date,
+              status: statusStr
+            };
+          });
         setRecentActivity(recent);
 
       } catch (err) {
@@ -158,59 +171,46 @@ function Dashboard() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       {/* Main Content */}
-      <div className="min-h-screen px-4 sm:px-6">
+      <div className="min-h-screen">
         <div className="w-full mx-auto py-0">
-          <div className="space-y-8">
+          <div className="space-y-5">
             {/* Welcome Section - Professional Header */}
-            <div className="relative overflow-hidden bg-gradient-to-r from-indigo-600 via-blue-600 to-cyan-500 rounded-2xl shadow-xl">
-              <div className="absolute inset-0 bg-black/10"></div>
-              <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZGVmcz48cGF0dGVybiBpZD0iYSIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSIgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBwYXR0ZXJuVHJhbnNmb3JtPSJyb3RhdGUoNDUpIj48cGF0aCBkPSJNLTEwIDMwaDYwIiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iMC41IiBvcGFjaXR5PSIwLjEiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjYSkiLz48L3N2Zz4=')] opacity-30"></div>
-              <div className="relative px-8 py-10">
+            <div
+              className="relative overflow-hidden bg-indigo-900 rounded-2xl shadow-xl bg-cover bg-center"
+              style={{ backgroundImage: "url('/banner.png')" }}
+            >
+              <div className="absolute inset-0 bg-slate-900/40"></div>
+              <div className="relative px-6 py-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h1 className="text-4xl font-bold text-white mb-3 tracking-tight">
+                    <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2 tracking-tight">
                       Welcome back{currentUser?.name ? `, ${currentUser.name}` : ''}!
                     </h1>
-                    <p className="text-blue-50 text-lg font-medium flex items-center gap-2">
+                    <p className="text-blue-50 text-base font-medium flex items-center gap-2">
                       <Activity className="h-5 w-5" />
                       Track and manage your social media content effectively
                     </p>
-                    <p className="text-blue-100/80 text-sm mt-2">
+                    <p className="text-blue-100/80 text-xs sm:text-sm mt-1.5">
                       {format(new Date(), 'EEEE, MMMM dd, yyyy')}
                     </p>
                   </div>
                   <div className="hidden lg:block">
-                    <div className="w-32 h-32 bg-white/10 backdrop-blur-sm rounded-full flex items-center justify-center border-4 border-white/20">
-                      <TrendingUp className="h-16 w-16 text-white" />
-                    </div>
+                    <button
+                      onClick={() => navigate('/customer/roi-dashboard')}
+                      title="View ROI Analytics Dashboard"
+                      className="w-16 h-16 bg-white/10 hover:bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center border-2 border-white/20 transition-all duration-300 transform hover:scale-105 cursor-pointer"
+                    >
+                      <ArrowUpRight className="h-8 w-8 text-white" />
+                    </button>
                   </div>
                 </div>
               </div>
             </div>
 
             {/* Stats Grid - Modern Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4">
-              {/* Total Posts */}
-              <div 
-                className="group relative bg-white rounded-xl shadow-md hover:shadow-2xl transition-all duration-300 cursor-pointer overflow-hidden border border-slate-200"
-                onClick={() => navigate('')}
-              >
-                <div className="absolute top-0 right-0 w-24 h-24 sm:w-32 sm:h-32 bg-gradient-to-br from-indigo-500/10 to-blue-500/10 rounded-full -mr-12 -mt-12 sm:-mr-16 sm:-mt-16 group-hover:scale-150 transition-transform duration-500"></div>
-                <div className="relative p-3 sm:p-5">
-                  <div className="flex items-start justify-between mb-2 sm:mb-3">
-                    <div className="w-9 h-9 sm:w-12 sm:h-12 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-lg sm:rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform duration-300 flex-shrink-0">
-                      <LayoutGrid className="h-4 w-4 sm:h-6 sm:w-6 text-white" />
-                    </div>
-                    <ArrowUpRight className="h-4 w-4 text-slate-400 group-hover:text-indigo-600 group-hover:translate-x-1 group-hover:-translate-y-1 transition-all duration-300" />
-                  </div>
-                  <p className="text-[9px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wider mb-0.5 truncate">Total Posts</p>
-                  <p className="text-xl sm:text-3xl font-bold text-slate-800 leading-none mb-0.5">{stats.totalPosts}</p>
-                  <p className="text-[9px] sm:text-xs text-slate-400 hidden sm:block">All content items</p>
-                </div>
-              </div>
-
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
               {/* Content Calendars */}
-              <div 
+              <div
                 className="group relative bg-white rounded-xl shadow-md hover:shadow-2xl transition-all duration-300 cursor-pointer overflow-hidden border border-slate-200"
                 onClick={() => navigate('/customer/calendar')}
               >
@@ -222,16 +222,16 @@ function Dashboard() {
                     </div>
                     <ArrowUpRight className="h-4 w-4 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-1 group-hover:-translate-y-1 transition-all duration-300" />
                   </div>
-                  <p className="text-[9px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wider mb-0.5 truncate">Calendars</p>
-                  <p className="text-xl sm:text-3xl font-bold text-slate-800 leading-none mb-0.5">{stats.contentCalendars}</p>
-                  <p className="text-[9px] sm:text-xs text-slate-400 hidden sm:block">Active calendars</p>
+                  <p className="text-xs sm:text-sm font-bold text-slate-500 uppercase tracking-wider mb-0.5 truncate">Calendars</p>
+                  <p className="text-2xl sm:text-4xl font-extrabold text-slate-800 leading-none mb-0.5">{stats.contentCalendars}</p>
+                  <p className="text-xs sm:text-sm text-slate-500 hidden sm:block">Active calendars</p>
                 </div>
               </div>
 
               {/* Published Content */}
-              <div 
+              <div
                 className="group relative bg-white rounded-xl shadow-md hover:shadow-2xl transition-all duration-300 cursor-pointer overflow-hidden border border-slate-200"
-                onClick={() => navigate('/customer/calendar')}
+                onClick={() => navigate('/customer/calendar?filter=published')}
               >
                 <div className="absolute top-0 right-0 w-24 h-24 sm:w-32 sm:h-32 bg-gradient-to-br from-emerald-500/10 to-teal-500/10 rounded-full -mr-12 -mt-12 sm:-mr-16 sm:-mt-16 group-hover:scale-150 transition-transform duration-500"></div>
                 <div className="relative p-3 sm:p-5">
@@ -241,16 +241,16 @@ function Dashboard() {
                     </div>
                     <ArrowUpRight className="h-4 w-4 text-slate-400 group-hover:text-emerald-600 group-hover:translate-x-1 group-hover:-translate-y-1 transition-all duration-300" />
                   </div>
-                  <p className="text-[9px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wider mb-0.5 truncate">Published</p>
-                  <p className="text-xl sm:text-3xl font-bold text-slate-800 leading-none mb-0.5">{stats.publishedContent}</p>
-                  <p className="text-[9px] sm:text-xs text-slate-400 hidden sm:block">Live posts</p>
+                  <p className="text-xs sm:text-sm font-bold text-slate-500 uppercase tracking-wider mb-0.5 truncate">Published</p>
+                  <p className="text-2xl sm:text-4xl font-extrabold text-slate-800 leading-none mb-0.5">{stats.publishedContent}</p>
+                  <p className="text-xs sm:text-sm text-slate-500 hidden sm:block">Live posts</p>
                 </div>
               </div>
 
               {/* Pending Content */}
-              <div 
+              <div
                 className="group relative bg-white rounded-xl shadow-md hover:shadow-2xl transition-all duration-300 cursor-pointer overflow-hidden border border-slate-200"
-                onClick={() => navigate('/customer/calendar')}
+                onClick={() => navigate('/customer/calendar?filter=pending')}
               >
                 <div className="absolute top-0 right-0 w-24 h-24 sm:w-32 sm:h-32 bg-gradient-to-br from-amber-500/10 to-orange-500/10 rounded-full -mr-12 -mt-12 sm:-mr-16 sm:-mt-16 group-hover:scale-150 transition-transform duration-500"></div>
                 <div className="relative p-3 sm:p-5">
@@ -260,14 +260,14 @@ function Dashboard() {
                     </div>
                     <ArrowUpRight className="h-4 w-4 text-slate-400 group-hover:text-amber-600 group-hover:translate-x-1 group-hover:-translate-y-1 transition-all duration-300" />
                   </div>
-                  <p className="text-[9px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wider mb-0.5 truncate">Pending</p>
-                  <p className="text-xl sm:text-3xl font-bold text-slate-800 leading-none mb-0.5">{stats.pendingContent}</p>
-                  <p className="text-[9px] sm:text-xs text-slate-400 hidden sm:block">Awaiting submission</p>
+                  <p className="text-xs sm:text-sm font-bold text-slate-500 uppercase tracking-wider mb-0.5 truncate">Pending</p>
+                  <p className="text-2xl sm:text-4xl font-extrabold text-slate-800 leading-none mb-0.5">{stats.pendingContent}</p>
+                  <p className="text-xs sm:text-sm text-slate-500 hidden sm:block">Awaiting submission</p>
                 </div>
               </div>
 
               {/* Under Review Content */}
-              <div 
+              <div
                 className="group relative bg-white rounded-xl shadow-md hover:shadow-2xl transition-all duration-300 cursor-pointer overflow-hidden border border-slate-200"
                 onClick={() => navigate('/customer/content-review?filter=under_review')}
               >
@@ -279,117 +279,102 @@ function Dashboard() {
                     </div>
                     <ArrowUpRight className="h-4 w-4 text-slate-400 group-hover:text-violet-600 group-hover:translate-x-1 group-hover:-translate-y-1 transition-all duration-300" />
                   </div>
-                  <p className="text-[9px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wider mb-0.5 truncate">Under Review</p>
-                  <p className="text-xl sm:text-3xl font-bold text-slate-800 leading-none mb-0.5">{stats.underReviewContent}</p>
-                  <p className="text-[9px] sm:text-xs text-slate-400 hidden sm:block">Being reviewed</p>
+                  <p className="text-xs sm:text-sm font-bold text-slate-500 uppercase tracking-wider mb-0.5 truncate">Under Review</p>
+                  <p className="text-2xl sm:text-4xl font-extrabold text-slate-800 leading-none mb-0.5">{stats.underReviewContent}</p>
+                  <p className="text-xs sm:text-sm text-slate-500 hidden sm:block">Being reviewed</p>
                 </div>
               </div>
             </div>
 
             {/* Bottom Section - Enhanced Layout */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div className="w-full">
               {/* Recent Activity */}
               <div className="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden">
-                <div className="bg-gradient-to-r from-slate-50 to-blue-50 px-6 py-5 border-b border-slate-200">
+                <div className="bg-gradient-to-r from-slate-50 to-blue-50 px-6 py-5 border-b border-slate-200 flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
                       <Clock className="h-5 w-5 text-indigo-600" />
                     </div>
                     <h2 className="text-xl font-bold text-slate-800">Recent Activity</h2>
                   </div>
-                </div>
-                <div className="p-6">
-                  <div className="space-y-3">
-                    {recentActivity.length === 0 ? (
-                      <div className="text-center py-12">
-                        <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                          <Activity className="h-8 w-8 text-slate-400" />
-                        </div>
-                        <p className="text-slate-500 font-medium">No recent activity</p>
-                        <p className="text-sm text-slate-400 mt-1">Your content activity will appear here</p>
-                      </div>
-                    ) : (
-                      recentActivity.map((activity) => (
-                        <div key={activity.id} onClick={() => navigate(`/customer/content-review?itemId=${activity.id}`)} className="group flex items-center justify-between p-4 bg-gradient-to-r from-slate-50 to-blue-50/50 hover:from-blue-50 hover:to-indigo-50 rounded-xl border border-slate-100 hover:border-indigo-200 transition-all duration-200 cursor-pointer">
-                          <div className="flex items-center gap-3 flex-1">
-                            <div className="w-10 h-10 bg-indigo-100 group-hover:bg-indigo-200 rounded-lg flex items-center justify-center transition-colors duration-200">
-                              <FileText className="h-5 w-5 text-indigo-600" />
-                            </div>
-                            <div>
-                              <p className="font-semibold text-slate-800 text-sm group-hover:text-indigo-700 transition-colors">{activity.platform}</p>
-                              <p className="text-xs text-slate-500 flex items-center gap-1">
-                                <CalendarIcon className="h-3 w-3" />
-                                {activity.date ? format(new Date(activity.date), 'MMM dd, yyyy') : 'N/A'}
-                              </p>
-                            </div>
-                          </div>
-                          {/* Status badge removed as per user request */}
-                        </div>
-                      ))
-                    )}
+                  <div className="text-xs text-slate-500 font-medium">
+                    Showing latest content updates
                   </div>
                 </div>
-              </div>
-
-              {/* Quick Actions */}
-              <div className="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden">
-                <div className="bg-gradient-to-r from-slate-50 to-blue-50 px-6 py-5 border-b border-slate-200">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                      <TrendingUp className="h-5 w-5 text-blue-600" />
+                <div className="p-6">
+                  {recentActivity.length === 0 ? (
+                    <div className="text-center py-12">
+                      <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <Activity className="h-8 w-8 text-slate-400" />
+                      </div>
+                      <p className="text-slate-500 font-medium">No recent activity</p>
+                      <p className="text-sm text-slate-400 mt-1">Your content activity will appear here</p>
                     </div>
-                    <h2 className="text-xl font-bold text-slate-800">Quick Actions</h2>
-                  </div>
-                </div>
-                <div className="p-6">
-                  <div className="space-y-3">
-                    <button 
-                      onClick={() => navigate('/customer/calendar')}
-                      className="group w-full flex items-center p-4 text-left bg-gradient-to-r from-indigo-50 to-blue-50 hover:from-indigo-100 hover:to-blue-100 rounded-xl transition-all duration-200 border border-indigo-100 hover:border-indigo-200 hover:shadow-md"
-                    >
-                      <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-blue-500 rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform duration-200">
-                        <CalendarIcon className="h-6 w-6 text-white" />
-                      </div>
-                      <span className="ml-4 font-semibold text-slate-800 group-hover:text-indigo-700 transition-colors">View Content Calendar</span>
-                      <ArrowUpRight className="ml-auto h-5 w-5 text-slate-400 group-hover:text-indigo-600 group-hover:translate-x-1 group-hover:-translate-y-1 transition-all duration-200" />
-                    </button>
-                    
-                    <button 
-                      onClick={() => navigate('/customer/content-review')}
-                      className="group w-full flex items-center p-4 text-left bg-gradient-to-r from-blue-50 to-cyan-50 hover:from-blue-100 hover:to-cyan-100 rounded-xl transition-all duration-200 border border-blue-100 hover:border-blue-200 hover:shadow-md"
-                    >
-                      <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform duration-200">
-                        <MessageSquare className="h-6 w-6 text-white" />
-                      </div>
-                      <span className="ml-4 font-semibold text-slate-800 group-hover:text-blue-700 transition-colors">Review Content</span>
-                      <ArrowUpRight className="ml-auto h-5 w-5 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-1 group-hover:-translate-y-1 transition-all duration-200" />
-                    </button>
-                    
-                    <button 
-                      onClick={() => navigate('/customer/media-library')}
-                      className="group w-full flex items-center p-4 text-left bg-gradient-to-r from-violet-50 to-purple-50 hover:from-violet-100 hover:to-purple-100 rounded-xl transition-all duration-200 border border-violet-100 hover:border-violet-200 hover:shadow-md"
-                    >
-                      <div className="w-12 h-12 bg-gradient-to-br from-violet-500 to-purple-500 rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform duration-200">
-                        <ImageIcon className="h-6 w-6 text-white" />
-                      </div>
-                      <span className="ml-4 font-semibold text-slate-800 group-hover:text-violet-700 transition-colors">Manage Media Library</span>
-                      <ArrowUpRight className="ml-auto h-5 w-5 text-slate-400 group-hover:text-violet-600 group-hover:translate-x-1 group-hover:-translate-y-1 transition-all duration-200" />
-                    </button>
-
-                    <button 
-                      onClick={() => navigate('/customer/roi-dashboard')}
-                      className="group w-full flex items-center p-4 text-left bg-gradient-to-r from-emerald-50 to-teal-50 hover:from-emerald-100 hover:to-teal-100 rounded-xl transition-all duration-200 border border-emerald-100 hover:border-emerald-200 hover:shadow-md"
-                    >
-                      <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform duration-200">
-                        <BarChart3 className="h-6 w-6 text-white" />
-                      </div>
-                      <div className="ml-4 flex flex-col flex-1">
-                        <span className="font-semibold text-slate-800 group-hover:text-emerald-700 transition-colors">ROI Analytics Dashboard</span>
-                        <span className="text-xs text-slate-500 mt-0.5">Comprehensive social media ROI tracking</span>
-                      </div>
-                      <ArrowUpRight className="ml-2 h-5 w-5 text-slate-400 group-hover:text-emerald-600 group-hover:translate-x-1 group-hover:-translate-y-1 transition-all duration-200" />
-                    </button>
-                  </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-slate-200">
+                        <thead>
+                          <tr className="text-left text-sm font-bold text-slate-700 uppercase tracking-wider">
+                            <th className="pb-4 pt-2">Content Item</th>
+                            <th className="pb-4 pt-2">Calendar Name</th>
+                            <th className="pb-4 pt-2">Scheduled Date</th>
+                            <th className="pb-4 pt-2 text-right">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {recentActivity.map((activity) => (
+                            <tr
+                              key={activity.id}
+                              onClick={() => navigate(`/customer/content-review?itemId=${activity.id}`)}
+                              className="group hover:bg-slate-50/80 cursor-pointer transition-colors duration-150"
+                            >
+                              <td className="py-4 whitespace-nowrap">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 bg-indigo-50 group-hover:bg-indigo-100 rounded-lg flex items-center justify-center transition-colors duration-150 flex-shrink-0">
+                                    <FileText className="h-5 w-5 text-indigo-600" />
+                                  </div>
+                                  <div className="font-bold text-slate-800 text-base group-hover:text-indigo-700 transition-colors truncate max-w-[240px] sm:max-w-xs md:max-w-md" title={activity.itemName}>
+                                    {activity.itemName}
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="py-4 whitespace-nowrap">
+                                <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-slate-100 text-slate-800">
+                                  {activity.calendarName}
+                                </span>
+                              </td>
+                              <td className="py-4 whitespace-nowrap text-base text-slate-600">
+                                <div className="flex items-center gap-2">
+                                  <CalendarIcon className="h-5 w-5 text-slate-400" />
+                                  {activity.date ? format(new Date(activity.date), 'MMM dd, yyyy') : 'N/A'}
+                                </div>
+                              </td>
+                              <td className="py-4 whitespace-nowrap text-right">
+                                <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-bold ${activity.status === 'Published'
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : activity.status === 'Approved'
+                                      ? 'bg-teal-100 text-teal-800'
+                                      : activity.status === 'Under Review'
+                                        ? 'bg-indigo-100 text-indigo-800'
+                                        : 'bg-amber-100 text-amber-800'
+                                  }`}>
+                                  <span className={`w-2 h-2 mr-2 rounded-full ${activity.status === 'Published'
+                                      ? 'bg-emerald-500'
+                                      : activity.status === 'Approved'
+                                        ? 'bg-teal-500'
+                                        : activity.status === 'Under Review'
+                                          ? 'bg-indigo-500'
+                                          : 'bg-amber-500'
+                                    }`}></span>
+                                  {activity.status}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -399,8 +384,8 @@ function Dashboard() {
 
       {/* Click outside to close menu */}
       {isUserMenuOpen && (
-        <div 
-          className="fixed inset-0 z-40" 
+        <div
+          className="fixed inset-0 z-40"
           onClick={() => setIsUserMenuOpen(false)}
         ></div>
       )}

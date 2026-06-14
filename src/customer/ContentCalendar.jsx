@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
 import { jsPDF } from 'jspdf';
-import { 
-  MessageSquare, CalendarIcon, Instagram, Facebook, Linkedin, Youtube, 
+import {
+  MessageSquare, CalendarIcon, Instagram, Facebook, Linkedin, Youtube,
   AlertCircle, Eye, CheckCircle, Video, ExternalLink, Clock, Filter,
   LayoutGrid, List, Search, X, ChevronRight, FileText, TrendingUp,
   Send, Image, Play, Calendar, User, Sparkles, BarChart3, Download,
@@ -16,42 +16,42 @@ const getDefaultPostUrl = (post) => {
   if (!post.platform || !post.postId) return null;
   switch (post.platform) {
     case 'instagram': return `https://www.instagram.com/p/${post.postId}`;
-    case 'facebook':  return `https://www.facebook.com/${post.postId}`;
-    case 'linkedin':  return `https://www.linkedin.com/feed/update/${post.postId}`;
-    case 'youtube':   return `https://www.youtube.com/watch?v=${post.postId}`;
-    default:          return null;
+    case 'facebook': return `https://www.facebook.com/${post.postId}`;
+    case 'linkedin': return `https://www.linkedin.com/feed/update/${post.postId}`;
+    case 'youtube': return `https://www.youtube.com/watch?v=${post.postId}`;
+    default: return null;
   }
 };
 
 const getPlatformIcon = (platform) => {
   switch (platform) {
     case 'instagram': return <Instagram className="h-5 w-5 text-pink-600" />;
-    case 'facebook':  return <Facebook  className="h-5 w-5 text-blue-600" />;
-    case 'linkedin':  return <Linkedin  className="h-5 w-5 text-blue-700" />;
-    case 'youtube':   return <Youtube   className="h-5 w-5 text-red-600"  />;
-    default:          return null;
+    case 'facebook': return <Facebook className="h-5 w-5 text-blue-600" />;
+    case 'linkedin': return <Linkedin className="h-5 w-5 text-blue-700" />;
+    case 'youtube': return <Youtube className="h-5 w-5 text-red-600" />;
+    default: return null;
   }
 };
 
 const getStatusColor = (status) => {
   switch (status) {
-    case 'published':   return 'bg-green-100 text-green-800';
-    case 'under_review':return 'bg-yellow-100 text-yellow-800';
-    case 'scheduled':   return 'bg-blue-100 text-blue-800';
-    case 'waiting_input':return 'bg-orange-100 text-orange-800';
-    default:            return 'bg-gray-100 text-gray-800';
+    case 'published': return 'bg-green-100 text-green-800';
+    case 'under_review': return 'bg-yellow-100 text-yellow-800';
+    case 'scheduled': return 'bg-blue-100 text-blue-800';
+    case 'waiting_input': return 'bg-orange-100 text-orange-800';
+    default: return 'bg-gray-100 text-gray-800';
   }
 };
 
 const getStatusLabel = (status) => {
   if (!status) return 'Pending';
   switch (status) {
-    case 'pending':      return 'Pending';
-    case 'published':    return 'Published';
+    case 'pending': return 'Pending';
+    case 'published': return 'Published';
     case 'under_review': return 'Under Review';
-    case 'scheduled':    return 'Scheduled';
-    case 'waiting_input':return 'Waiting Input';
-    default:             return status.replace('_', ' ').charAt(0).toUpperCase() + status.slice(1);
+    case 'scheduled': return 'Scheduled';
+    case 'waiting_input': return 'Waiting Input';
+    default: return status.replace('_', ' ').charAt(0).toUpperCase() + status.slice(1);
   }
 };
 
@@ -63,49 +63,58 @@ const isVideoUrl = (url) => {
 
 function ContentCalendar() {
   const navigate = useNavigate();
-  const [selectedContent, setSelectedContent]   = useState(null);
-  const [statusFilter, setStatusFilter]         = useState('all');
-  const [calendars, setCalendars]               = useState([]);
+  const [searchParams] = useSearchParams();
+  const initialFilter = searchParams.get('filter') || 'all';
+  const [selectedContent, setSelectedContent] = useState(null);
+  const [statusFilter, setStatusFilter] = useState(initialFilter);
+  const [calendars, setCalendars] = useState([]);
+
+  useEffect(() => {
+    const filter = searchParams.get('filter');
+    if (filter) {
+      setStatusFilter(filter);
+    }
+  }, [searchParams]);
   const [selectedCalendarId, setSelectedCalendarId] = useState(null);
-  const [customer, setCustomer]                 = useState(null);
-  const [loading, setLoading]                   = useState(true);
-  const [scheduledPosts, setScheduledPosts]     = useState([]);
-  const [submissions, setSubmissions]           = useState([]);
-  const [searchTerm, setSearchTerm]             = useState('');
-  const [viewMode, setViewMode]                 = useState('list');
+  const [customer, setCustomer] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [scheduledPosts, setScheduledPosts] = useState([]);
+  const [submissions, setSubmissions] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [viewMode, setViewMode] = useState('list');
 
   // ── Review comments panel ────────────────────────────────────
-  const [reviewPanel, setReviewPanel]             = useState(null);  // item | null
+  const [reviewPanel, setReviewPanel] = useState(null);  // item | null
   const [reviewPanelComments, setReviewPanelComments] = useState([]);
-  const [reviewPanelLoading, setReviewPanelLoading]   = useState(false);
+  const [reviewPanelLoading, setReviewPanelLoading] = useState(false);
 
   let user = null;
   try { user = JSON.parse(localStorage.getItem('user')); } catch { user = null; }
-  const customerId   = user?.id || user?._id;
+  const customerId = user?.id || user?._id;
   const customerName = user?.name;
 
   useEffect(() => {
     const fetchCustomerAndCalendars = async () => {
       setLoading(true);
       try {
-        const customerRes   = await fetch(`${process.env.REACT_APP_API_URL}/customer/${customerId}`);
-        const customerData  = await customerRes.json();
+        const customerRes = await fetch(`${process.env.REACT_APP_API_URL}/customer/${customerId}`);
+        const customerData = await customerRes.json();
         setCustomer(customerData);
 
-        const calendarsRes  = await fetch(`${process.env.REACT_APP_API_URL}/calendars`);
-        const allCalendars  = await calendarsRes.json();
+        const calendarsRes = await fetch(`${process.env.REACT_APP_API_URL}/calendars`);
+        const allCalendars = await calendarsRes.json();
         const customerCalendars = allCalendars
           .filter(c => c.customerId === customerId)
           .sort((a, b) => new Date(b.createdAt || b._id || 0) - new Date(a.createdAt || a._id || 0));
         setCalendars(customerCalendars);
 
-        const postsRes  = await fetch(`${process.env.REACT_APP_API_URL}/api/scheduled-posts`);
-        let postsData   = await postsRes.json();
+        const postsRes = await fetch(`${process.env.REACT_APP_API_URL}/api/scheduled-posts`);
+        let postsData = await postsRes.json();
         if (!Array.isArray(postsData)) postsData = [];
         setScheduledPosts(postsData.filter(p => p.customerId === customerId));
 
         const submissionsRes = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions`);
-        let submissionsData  = await submissionsRes.json();
+        let submissionsData = await submissionsRes.json();
         if (!Array.isArray(submissionsData)) submissionsData = [];
         setSubmissions(submissionsData.filter(s =>
           s.customer_id === customerId ||
@@ -134,8 +143,8 @@ function ContentCalendar() {
   const isItemScheduled = (item) =>
     scheduledPosts.some(post =>
       ((post.item_id && post.item_id === item.id) ||
-       (post.contentId && post.contentId === item.id) ||
-       (post.item_name && post.item_name === item.title)) &&
+        (post.contentId && post.contentId === item.id) ||
+        (post.item_name && post.item_name === item.title)) &&
       (post.status === 'scheduled' || post.status === 'pending' || (post.scheduledDate && !post.publishedAt))
     );
 
@@ -143,8 +152,8 @@ function ContentCalendar() {
     scheduledPosts
       .filter(post =>
         ((post.item_id && post.item_id === item.id) ||
-         (post.contentId && post.contentId === item.id) ||
-         (post.item_name && post.item_name === item.title)) &&
+          (post.contentId && post.contentId === item.id) ||
+          (post.item_name && post.item_name === item.title)) &&
         (post.status === 'published' || post.publishedAt)
       )
       .map(post => post.platform);
@@ -152,15 +161,15 @@ function ContentCalendar() {
   const isItemPublished = (item) =>
     scheduledPosts.some(post =>
       ((post.item_id && post.item_id === item.id) ||
-       (post.contentId && post.contentId === item.id) ||
-       (post.item_name && post.item_name === item.title)) &&
+        (post.contentId && post.contentId === item.id) ||
+        (post.item_name && post.item_name === item.title)) &&
       (post.status === 'published' || post.publishedAt)
     );
 
   const getItemStatus = (item) => {
     if (item.published === true) return 'published';
-    if (isItemPublished(item))   return 'published';
-    if (isItemScheduled(item))   return 'scheduled';
+    if (isItemPublished(item)) return 'published';
+    if (isItemScheduled(item)) return 'scheduled';
     if (hasContentSubmitted(item)) return 'under_review';
     return item.status || 'pending';
   };
@@ -171,7 +180,7 @@ function ContentCalendar() {
       if (!selectedCalendarId || calendar._id === selectedCalendarId || calendar.id === selectedCalendarId) {
         calendar.contentItems.forEach(item => {
           const itemStatus = getItemStatus(item);
-          const published  = item.published === true || isItemPublished(item);
+          const published = item.published === true || isItemPublished(item);
           allItems.push({
             ...item,
             calendarName: calendar.name || '',
@@ -186,7 +195,7 @@ function ContentCalendar() {
   });
 
   const filteredItems = statusFilter === 'all' ? allItems : allItems.filter(i => i.status === statusFilter);
-  const sortedItems   = [...filteredItems].sort((a, b) => {
+  const sortedItems = [...filteredItems].sort((a, b) => {
     if (statusFilter === 'all') return 0;
     if (a.status === statusFilter && b.status !== statusFilter) return -1;
     if (a.status !== statusFilter && b.status === statusFilter) return 1;
@@ -194,11 +203,11 @@ function ContentCalendar() {
   });
 
   const stats = useMemo(() => ({
-    total:       allItems.length,
-    published:   allItems.filter(i => i.status === 'published').length,
+    total: allItems.length,
+    published: allItems.filter(i => i.status === 'published').length,
     underReview: allItems.filter(i => i.status === 'under_review').length,
-    scheduled:   allItems.filter(i => i.status === 'scheduled').length,
-    pending:     allItems.filter(i => !i.status || i.status === 'pending').length,
+    scheduled: allItems.filter(i => i.status === 'scheduled').length,
+    pending: allItems.filter(i => !i.status || i.status === 'pending').length,
   }), [calendars, scheduledPosts, submissions, selectedCalendarId]);
 
   const displayedItems = useMemo(() => {
@@ -217,30 +226,30 @@ function ContentCalendar() {
   const downloadReport = () => {
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
-    const PAGE_W   = 210;
-    const PAGE_H   = 297;
-    const MARGIN   = 18;
+    const PAGE_W = 210;
+    const PAGE_H = 297;
+    const MARGIN = 18;
     const CONTENT_W = PAGE_W - MARGIN * 2;
     let y = 0;
 
     const C = {
-      primary:  [79,  70, 229],
-      success:  [16, 185, 129],
-      warning:  [245,158,  11],
-      info:     [59, 130, 246],
-      neutral:  [107,114, 128],
-      dark:     [17,  24,  39],
-      mid:      [75,  85,  99],
-      light:    [243,244, 246],
-      white:    [255,255, 255],
-      border:   [229,231, 235],
-      bgSoft:   [248,250, 252],
+      primary: [79, 70, 229],
+      success: [16, 185, 129],
+      warning: [245, 158, 11],
+      info: [59, 130, 246],
+      neutral: [107, 114, 128],
+      dark: [17, 24, 39],
+      mid: [75, 85, 99],
+      light: [243, 244, 246],
+      white: [255, 255, 255],
+      border: [229, 231, 235],
+      bgSoft: [248, 250, 252],
     };
 
-    const setFill   = (arr) => doc.setFillColor(...arr);
+    const setFill = (arr) => doc.setFillColor(...arr);
     const setStroke = (arr) => doc.setDrawColor(...arr);
-    const setColor  = (arr) => doc.setTextColor(...arr);
-    const setFont   = (style = 'normal', size = 10) => { doc.setFont('helvetica', style); doc.setFontSize(size); };
+    const setColor = (arr) => doc.setTextColor(...arr);
+    const setFont = (style = 'normal', size = 10) => { doc.setFont('helvetica', style); doc.setFontSize(size); };
 
     const drawPageBg = () => { setFill(C.bgSoft); doc.rect(0, 0, PAGE_W, PAGE_H, 'F'); };
     const hLine = (yPos) => { setStroke(C.border); doc.setLineWidth(0.3); doc.line(MARGIN, yPos, PAGE_W - MARGIN, yPos); };
@@ -274,7 +283,7 @@ function ContentCalendar() {
     setColor([199, 210, 254]);
     doc.text('Automated performance & status summary', MARGIN, 32);
 
-    const now     = new Date();
+    const now = new Date();
     const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     setFont('normal', 8);
     setColor([165, 180, 252]);
@@ -298,11 +307,11 @@ function ContentCalendar() {
     y += 7;
 
     const cards = [
-      { label: 'Total',        value: stats.total,       color: C.primary  },
-      { label: 'Published',    value: stats.published,   color: C.success  },
-      { label: 'Under Review', value: stats.underReview, color: C.warning  },
-      { label: 'Scheduled',    value: stats.scheduled,   color: C.info     },
-      { label: 'Pending',      value: stats.pending,     color: C.neutral  },
+      { label: 'Total', value: stats.total, color: C.primary },
+      { label: 'Published', value: stats.published, color: C.success },
+      { label: 'Under Review', value: stats.underReview, color: C.warning },
+      { label: 'Scheduled', value: stats.scheduled, color: C.info },
+      { label: 'Pending', value: stats.pending, color: C.neutral },
     ];
 
     const cW = (CONTENT_W - 8) / 5;
@@ -324,7 +333,7 @@ function ContentCalendar() {
 
     // ── Progress bar ─────────────────────────────────────────
     if (stats.total > 0) {
-      const pct  = stats.published / stats.total;
+      const pct = stats.published / stats.total;
       const barW = CONTENT_W;
       const barH = 7;
       setFont('bold', 9); setColor(C.dark);
@@ -346,10 +355,10 @@ function ContentCalendar() {
 
       calendars.forEach((cal, ci) => {
         newPageIfNeeded(14);
-        const items  = cal.contentItems || [];
-        const pub    = items.filter(i => getItemStatus(i) === 'published').length;
-        const pend   = items.filter(i => getItemStatus(i) === 'pending').length;
-        const rH     = 12;
+        const items = cal.contentItems || [];
+        const pub = items.filter(i => getItemStatus(i) === 'published').length;
+        const pend = items.filter(i => getItemStatus(i) === 'pending').length;
+        const rH = 12;
         setFill(ci % 2 === 0 ? C.white : C.light);
         setStroke(C.border); doc.setLineWidth(0.2);
         doc.roundedRect(MARGIN, y, CONTENT_W, rH, 2, 2, 'FD');
@@ -380,12 +389,12 @@ function ContentCalendar() {
 
     // Column defs
     const cols = [
-      { key: '#',          x: MARGIN,       w: 9   },
-      { key: 'Date',       x: MARGIN + 11,  w: 24  },
-      { key: 'Description',x: MARGIN + 37,  w: 66  },
-      { key: 'Calendar',   x: MARGIN + 105, w: 35  },
-      { key: 'Platforms',  x: MARGIN + 142, w: 22  },
-      { key: 'Status',     x: MARGIN + 166, w: 28  },
+      { key: '#', x: MARGIN, w: 9 },
+      { key: 'Date', x: MARGIN + 11, w: 24 },
+      { key: 'Description', x: MARGIN + 37, w: 66 },
+      { key: 'Calendar', x: MARGIN + 105, w: 35 },
+      { key: 'Platforms', x: MARGIN + 142, w: 22 },
+      { key: 'Status', x: MARGIN + 166, w: 28 },
     ];
 
     // Header row
@@ -396,23 +405,23 @@ function ContentCalendar() {
     y += 10;
 
     const STATUS_CFG = {
-      published:    { color: C.success, label: 'Published'    },
+      published: { color: C.success, label: 'Published' },
       under_review: { color: C.warning, label: 'Under Review' },
-      scheduled:    { color: C.info,    label: 'Scheduled'    },
-      pending:      { color: C.neutral, label: 'Pending'      },
-      draft:        { color: C.neutral, label: 'Draft'        },
+      scheduled: { color: C.info, label: 'Scheduled' },
+      pending: { color: C.neutral, label: 'Pending' },
+      draft: { color: C.neutral, label: 'Draft' },
     };
 
     displayedItems.forEach((item, idx) => {
-      const rH  = 11;
+      const rH = 11;
       newPageIfNeeded(rH + 4);
 
       setFill(idx % 2 === 0 ? C.white : C.bgSoft);
       setStroke(C.border); doc.setLineWidth(0.15);
       doc.rect(MARGIN, y, CONTENT_W, rH, 'FD');
 
-      const mid  = y + 7.5;
-      const cfg  = STATUS_CFG[item.status] || STATUS_CFG.pending;
+      const mid = y + 7.5;
+      const cfg = STATUS_CFG[item.status] || STATUS_CFG.pending;
 
       // Index
       setFont('normal', 7.5); setColor(C.mid);
@@ -420,12 +429,12 @@ function ContentCalendar() {
 
       // Date
       let dateLabel = '—';
-      try { dateLabel = new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }); } catch {}
+      try { dateLabel = new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }); } catch { }
       setColor(C.dark);
       doc.text(dateLabel, cols[1].x + 1, mid);
 
       // Description
-      const rawDesc  = item.description || item.title || 'No description';
+      const rawDesc = item.description || item.title || 'No description';
       const truncated = doc.splitTextToSize(rawDesc, cols[2].w - 2)[0] || rawDesc.substring(0, 48);
       doc.text(truncated, cols[2].x + 1, mid);
 
@@ -456,18 +465,18 @@ function ContentCalendar() {
     doc.text('Status Breakdown', MARGIN, y); y += 7;
 
     const breakdown = [
-      { label: 'Published',    count: stats.published,   color: C.success },
+      { label: 'Published', count: stats.published, color: C.success },
       { label: 'Under Review', count: stats.underReview, color: C.warning },
-      { label: 'Scheduled',    count: stats.scheduled,   color: C.info    },
-      { label: 'Pending',      count: stats.pending,     color: C.neutral },
+      { label: 'Scheduled', count: stats.scheduled, color: C.info },
+      { label: 'Pending', count: stats.pending, color: C.neutral },
     ];
 
     breakdown.forEach((row, i) => {
       newPageIfNeeded(14);
-      const rH       = 12;
-      const pctVal   = stats.total > 0 ? ((row.count / stats.total) * 100).toFixed(1) : '0.0';
-      const maxBarW  = CONTENT_W - 85;
-      const barFill  = stats.total > 0 ? (row.count / stats.total) * maxBarW : 0;
+      const rH = 12;
+      const pctVal = stats.total > 0 ? ((row.count / stats.total) * 100).toFixed(1) : '0.0';
+      const maxBarW = CONTENT_W - 85;
+      const barFill = stats.total > 0 ? (row.count / stats.total) * maxBarW : 0;
 
       setFill(i % 2 === 0 ? C.white : C.light);
       setStroke(C.border); doc.setLineWidth(0.2);
@@ -514,9 +523,9 @@ function ContentCalendar() {
 
   const getItemMedia = (item) => {
     if (item.submissionMedia) return { imageUrl: item.submissionMedia, imageUrls: [item.submissionMedia] };
-    if (item.imageUrl)        return { imageUrl: item.imageUrl, imageUrls: item.imageUrls || [item.imageUrl] };
-    if (item.thumbnail)       return { imageUrl: item.thumbnail, imageUrls: [item.thumbnail] };
-    if (item.aiGeneratedImage)return { imageUrl: item.aiGeneratedImage, imageUrls: [item.aiGeneratedImage] };
+    if (item.imageUrl) return { imageUrl: item.imageUrl, imageUrls: item.imageUrls || [item.imageUrl] };
+    if (item.thumbnail) return { imageUrl: item.thumbnail, imageUrls: [item.thumbnail] };
+    if (item.aiGeneratedImage) return { imageUrl: item.aiGeneratedImage, imageUrls: [item.aiGeneratedImage] };
     if (item.media?.length > 0) {
       const urls = item.media.map(m => typeof m === 'string' ? m : m?.url).filter(Boolean);
       return { imageUrl: urls[0], imageUrls: urls };
@@ -552,10 +561,10 @@ function ContentCalendar() {
       const all = await res.json();
       const matching = Array.isArray(all)
         ? all.filter(sub =>
-            (sub.item_id && sub.item_id === item.id) ||
-            (sub.assignment_id && sub.assignment_id === item.id) ||
-            (sub.item_name && sub.item_name === item.title)
-          )
+          (sub.item_id && sub.item_id === item.id) ||
+          (sub.assignment_id && sub.assignment_id === item.id) ||
+          (sub.item_name && sub.item_name === item.title)
+        )
         : [];
       // Sort submissions oldest → newest (version order)
       matching.sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));
@@ -565,7 +574,7 @@ function ContentCalendar() {
           allComments.push({
             ...c,
             _versionNumber: si + 1,
-            _submissionId:  sub._id,
+            _submissionId: sub._id,
           });
         });
       });
@@ -667,11 +676,11 @@ function ContentCalendar() {
         {/* Stats Overview */}
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-4 mb-6">
           {[
-            { value: stats.total,       label: 'Total Items',   icon: <FileText   className="h-5 w-5 text-gray-600"    />, from: 'from-gray-100',    to: 'to-gray-200',    text: 'text-gray-900'    },
-            { value: stats.published,   label: 'Published',     icon: <CheckCircle className="h-5 w-5 text-emerald-600"/>, from: 'from-emerald-50',  to: 'to-green-100',   text: 'text-emerald-600' },
-            { value: stats.underReview, label: 'Under Review',  icon: <Eye        className="h-5 w-5 text-amber-600"   />, from: 'from-amber-50',    to: 'to-yellow-100',  text: 'text-amber-600'   },
-            { value: stats.scheduled,   label: 'Scheduled',     icon: <Clock      className="h-5 w-5 text-blue-600"    />, from: 'from-blue-50',     to: 'to-indigo-100',  text: 'text-blue-600'    },
-            { value: stats.pending,     label: 'Pending',       icon: <Clock      className="h-5 w-5 text-gray-500"    />, from: 'from-gray-50',     to: 'to-slate-100',   text: 'text-gray-600',   hidden: true },
+            { value: stats.total, label: 'Total Items', icon: <FileText className="h-5 w-5 text-gray-600" />, from: 'from-gray-100', to: 'to-gray-200', text: 'text-gray-900' },
+            { value: stats.published, label: 'Published', icon: <CheckCircle className="h-5 w-5 text-emerald-600" />, from: 'from-emerald-50', to: 'to-green-100', text: 'text-emerald-600' },
+            { value: stats.underReview, label: 'Under Review', icon: <Eye className="h-5 w-5 text-amber-600" />, from: 'from-amber-50', to: 'to-yellow-100', text: 'text-amber-600' },
+            { value: stats.scheduled, label: 'Scheduled', icon: <Clock className="h-5 w-5 text-blue-600" />, from: 'from-blue-50', to: 'to-indigo-100', text: 'text-blue-600' },
+            { value: stats.pending, label: 'Pending', icon: <Clock className="h-5 w-5 text-gray-500" />, from: 'from-gray-50', to: 'to-slate-100', text: 'text-gray-600', hidden: true },
           ].map((s, i) => (
             <div key={i} className={`${s.hidden ? 'hidden lg:block' : ''} bg-white rounded-xl p-4 border border-gray-100 shadow-sm hover:shadow-md transition-shadow`}>
               <div className="flex items-center justify-between">
@@ -739,23 +748,22 @@ function ContentCalendar() {
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {[
-                    { key: 'all',          label: 'All',          count: stats.total,       color: '' },
-                    { key: 'published',    label: 'Published',    count: stats.published,   color: 'emerald' },
-                    { key: 'under_review', label: 'Under Review', count: stats.underReview, color: 'amber'   },
-                    { key: 'scheduled',    label: 'Scheduled',    count: stats.scheduled,   color: 'blue'    },
-                    { key: 'pending',      label: 'Pending',      count: stats.pending,     color: 'gray'    },
+                    { key: 'all', label: 'All', count: stats.total, color: '' },
+                    { key: 'published', label: 'Published', count: stats.published, color: 'emerald' },
+                    { key: 'under_review', label: 'Under Review', count: stats.underReview, color: 'amber' },
+                    { key: 'scheduled', label: 'Scheduled', count: stats.scheduled, color: 'blue' },
+                    { key: 'pending', label: 'Pending', count: stats.pending, color: 'gray' },
                   ].map(option => (
                     <button
                       key={option.key}
                       onClick={() => setStatusFilter(option.key)}
-                      className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                        statusFilter === option.key
+                      className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${statusFilter === option.key
                           ? option.color === 'emerald' ? 'bg-emerald-600 text-white'
-                          : option.color === 'amber'   ? 'bg-amber-500 text-white'
-                          : option.color === 'blue'    ? 'bg-blue-600 text-white'
-                          : 'bg-gray-800 text-white'
+                            : option.color === 'amber' ? 'bg-amber-500 text-white'
+                              : option.color === 'blue' ? 'bg-blue-600 text-white'
+                                : 'bg-gray-800 text-white'
                           : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}
+                        }`}
                     >
                       {option.label}
                       <span className={`text-xs px-1.5 py-0.5 rounded-full ${statusFilter === option.key ? 'bg-white/20' : 'bg-gray-200'}`}>{option.count}</span>
@@ -783,11 +791,10 @@ function ContentCalendar() {
                           <div className="w-full h-full flex items-center justify-center"><Image className="h-10 w-10 text-gray-300" /></div>
                         )}
                         <div className="absolute top-3 left-3">
-                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold shadow-sm ${
-                            item.status === 'published'    ? 'bg-emerald-500 text-white' :
-                            item.status === 'under_review' ? 'bg-amber-500 text-white'   :
-                            item.status === 'scheduled'    ? 'bg-blue-500 text-white'    : 'bg-gray-600 text-white'
-                          }`}>
+                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold shadow-sm ${item.status === 'published' ? 'bg-emerald-500 text-white' :
+                              item.status === 'under_review' ? 'bg-amber-500 text-white' :
+                                item.status === 'scheduled' ? 'bg-blue-500 text-white' : 'bg-gray-600 text-white'
+                            }`}>
                             {item.status === 'published' && <CheckCircle className="h-3 w-3" />}
                             {getStatusLabel(item.status)}
                           </span>
@@ -835,14 +842,13 @@ function ContentCalendar() {
                           <div className="flex-1 min-w-0">
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
                               <div className="flex items-center gap-3">
-                                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
-                                  item.status === 'published'    ? 'bg-emerald-100 text-emerald-700' :
-                                  item.status === 'under_review' ? 'bg-amber-100 text-amber-700'     :
-                                  item.status === 'scheduled'    ? 'bg-blue-100 text-blue-700'        : 'bg-gray-100 text-gray-600'
-                                }`}>
-                                  {item.status === 'published'    && <CheckCircle className="h-3 w-3" />}
-                                  {item.status === 'scheduled'    && <Clock        className="h-3 w-3" />}
-                                  {item.status === 'under_review' && <Eye          className="h-3 w-3" />}
+                                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${item.status === 'published' ? 'bg-emerald-100 text-emerald-700' :
+                                    item.status === 'under_review' ? 'bg-amber-100 text-amber-700' :
+                                      item.status === 'scheduled' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
+                                  }`}>
+                                  {item.status === 'published' && <CheckCircle className="h-3 w-3" />}
+                                  {item.status === 'scheduled' && <Clock className="h-3 w-3" />}
+                                  {item.status === 'under_review' && <Eye className="h-3 w-3" />}
                                   {getStatusLabel(item.status)}
                                 </span>
                                 <span className="text-sm text-gray-500 flex items-center gap-1.5">
@@ -1084,11 +1090,10 @@ function ContentCalendar() {
               <div className="min-w-0 flex-1">
                 <h3 className="text-base font-bold text-gray-900 truncate">{reviewPanel.title || reviewPanel.description || 'Content Review'}</h3>
                 <div className="flex items-center gap-2 mt-0.5">
-                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                    reviewPanel.status === 'published'    ? 'bg-emerald-100 text-emerald-700' :
-                    reviewPanel.status === 'under_review' ? 'bg-amber-100 text-amber-700'     :
-                    reviewPanel.status === 'scheduled'    ? 'bg-blue-100 text-blue-700'       : 'bg-gray-100 text-gray-600'
-                  }`}>{getStatusLabel(reviewPanel.status)}</span>
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${reviewPanel.status === 'published' ? 'bg-emerald-100 text-emerald-700' :
+                      reviewPanel.status === 'under_review' ? 'bg-amber-100 text-amber-700' :
+                        reviewPanel.status === 'scheduled' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
+                    }`}>{getStatusLabel(reviewPanel.status)}</span>
                   {reviewPanel.platform && <span className="text-[10px] text-gray-400 capitalize">{reviewPanel.platform}</span>}
                 </div>
               </div>
@@ -1135,10 +1140,10 @@ function ContentCalendar() {
                     reviewPanelComments
                       .filter(c => c.reviewType !== 'internal' && c.authorRole !== 'admin' && c.author !== 'Admin')
                       .forEach(c => {
-                      const key = c._versionNumber || 1;
-                      if (!byVersion[key]) byVersion[key] = [];
-                      byVersion[key].push(c);
-                    });
+                        const key = c._versionNumber || 1;
+                        if (!byVersion[key]) byVersion[key] = [];
+                        byVersion[key].push(c);
+                      });
                     return Object.keys(byVersion).sort((a, b) => Number(a) - Number(b)).map(vn => (
                       <div key={vn}>
                         <div className="flex items-center gap-2 mb-2">
@@ -1149,15 +1154,14 @@ function ContentCalendar() {
                         <div className="space-y-2">
                           {byVersion[vn].map((comment, idx) => {
                             const isInternal = comment.reviewType === 'internal' || comment.authorRole === 'admin' || comment.author === 'Admin';
-                            const isDone     = comment.done || comment.status === 'completed';
+                            const isDone = comment.done || comment.status === 'completed';
                             return (
                               <div
                                 key={comment.id || `${vn}-${idx}`}
-                                className={`rounded-xl border overflow-hidden ${
-                                  isDone     ? 'bg-emerald-50/60 border-emerald-100' :
-                                  isInternal ? 'bg-purple-50/60 border-purple-100'  :
-                                               'bg-blue-50/60   border-blue-100'
-                                }`}
+                                className={`rounded-xl border overflow-hidden ${isDone ? 'bg-emerald-50/60 border-emerald-100' :
+                                    isInternal ? 'bg-purple-50/60 border-purple-100' :
+                                      'bg-blue-50/60   border-blue-100'
+                                  }`}
                               >
                                 <div className="p-3">
                                   {/* Header row */}
@@ -1168,12 +1172,11 @@ function ContentCalendar() {
                                     >
                                       {idx + 1}
                                     </span>
-                                    <span className={`inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
-                                      isInternal ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
-                                    }`}>
+                                    <span className={`inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full ${isInternal ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                                      }`}>
                                       {isInternal
                                         ? <><UserCog className="h-2 w-2" />&nbsp;Internal Review</>
-                                        : <><User    className="h-2 w-2" />&nbsp;External Review</>
+                                        : <><User className="h-2 w-2" />&nbsp;External Review</>
                                       }
                                     </span>
                                     {isDone && (

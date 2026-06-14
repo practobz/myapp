@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Logo from '../admin/components/layout/Logo';
 import Footer from '../admin/components/layout/Footer';
-import { Bell, ChevronDown, LogOut, Settings, User, ArrowLeft } from 'lucide-react';
+import { Bell, ChevronDown, LogOut, Settings, User, ArrowLeft, CreditCard } from 'lucide-react';
 import { useAuth } from '../admin/contexts/AuthContext';
 
 function getDisplayName(user) {
@@ -129,6 +129,16 @@ function Layout({ children }) {
                     My Subscription
                   </button>
                   <button
+                    onClick={() => {
+                      handleNavigation('/customer/billing');
+                      setIsUserMenuOpen(false);
+                    }}
+                    className="flex items-center w-full px-4 py-3 text-sm text-[#0a2342] hover:bg-[#bae6fd] transition-colors"
+                  >
+                    <CreditCard className="h-4 w-4 mr-3" />
+                    Billing & Payments
+                  </button>
+                  <button
                     onClick={handleLogout}
                     className="flex items-center w-full px-4 py-3 text-sm text-red-600 hover:bg-red-50 transition-colors"
                   >
@@ -142,7 +152,7 @@ function Layout({ children }) {
         </div>
       </header>
       {/* Main content */}
-      <main className="flex-1 sm:p-6 lg:p-8 bg-transparent">
+      <main className="flex-1 bg-transparent">
         {children}
       </main>
       <Footer />

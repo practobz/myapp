@@ -112,17 +112,39 @@ function Dashboard() {
         fetch(`${apiUrl}/calendars`, opts)
           .then(r => r.json())
           .then(d => {
-            const items = Array.isArray(d) ? d.flatMap(c => Array.isArray(c.contentItems) ? c.contentItems : []) : [];
+            const items = [];
+            if (Array.isArray(d)) {
+              d.forEach(c => {
+                if (Array.isArray(c.contentItems)) {
+                  c.contentItems.forEach(item => {
+                    items.push({
+                      ...item,
+                      customerId: c.customerId
+                    });
+                  });
+                }
+              });
+            }
             return { type: 'content', data: items };
           })
           .catch(e => { if (e?.name === 'AbortError') throw e; return { type: 'content', data: [] }; })
       );
       const results = await Promise.all(ps);
+      let customers = [];
+      let creators = [];
+      let content = [];
       results.forEach(r => {
-        if (r.type === 'customers') setAssignedCustomers(r.data);
-        if (r.type === 'creators') setContentCreators(r.data);
-        if (r.type === 'content') setContentItems(r.data);
+        if (r.type === 'customers') customers = r.data;
+        if (r.type === 'creators') creators = r.data;
+        if (r.type === 'content') content = r.data;
       });
+
+      const assignedCustomerIds = new Set(customers.map(c => c._id || c.id).filter(Boolean));
+      const filteredContent = content.filter(item => assignedCustomerIds.has(item.customerId));
+
+      setAssignedCustomers(customers);
+      setContentCreators(creators);
+      setContentItems(filteredContent);
     } catch (e) {
       if (e?.name === 'AbortError') return;
       setError('Unable to load dashboard data. Please try again.');

@@ -4,7 +4,6 @@ import { ChevronDown, Settings, LogOut, ArrowLeft } from 'lucide-react';
 import Footer from './Footer';
 import Logo from './Logo';
 import { useAuth } from '../../contexts/AuthContext';
-import { NotificationProvider } from '../../contexts/NotificationContext';
 
 function AdminLayoutInner({ children, title }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -117,11 +116,7 @@ function AdminLayoutInner({ children, title }) {
 }
 
 function AdminLayout({ children, title }) {
-  return (
-    <NotificationProvider>
-      <AdminLayoutInner title={title}>{children}</AdminLayoutInner>
-    </NotificationProvider>
-  );
+  return <AdminLayoutInner title={title}>{children}</AdminLayoutInner>;
 }
 
 export default AdminLayout;

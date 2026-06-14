@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
 import AdminLayout from './components/layout/AdminLayout';
 
-function ScheduledPosts() {
+function ScheduledPosts({ embedded = false, customerId = null }) {
   const navigate = useNavigate();
   const { currentUser } = useAuth();
 
@@ -13,7 +13,7 @@ function ScheduledPosts() {
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState('all'); // 'all', 'pending', 'published', 'failed'
   const [customers, setCustomers] = useState({}); // Store customer details by ID
-  const [viewMode, setViewMode] = useState('grouped'); // 'grouped', 'platform', or 'list'
+  const [viewMode, setViewMode] = useState(embedded ? 'list' : 'grouped'); // 'grouped', 'platform', or 'list'
   const [expandedCustomers, setExpandedCustomers] = useState(new Set());
   const [expandedPlatforms, setExpandedPlatforms] = useState(new Set());
   const [errorMessage, setErrorMessage] = useState(null); // User-friendly error message
@@ -30,12 +30,13 @@ function ScheduledPosts() {
   }, [currentUser]);
 
   const fetchCustomers = async () => {
+    if (embedded) return;
     if (!currentUser || currentUser.role !== 'admin') return;
 
     try {
       // Use the same endpoint as CustomersList.jsx for consistency
       const response = await fetch(`${process.env.REACT_APP_API_URL}/admin/assigned-customers?adminId=${currentUser._id || currentUser.id}`);
-      
+
       if (response.ok) {
         const customerData = await response.json();
         const customerMap = {};
@@ -53,6 +54,27 @@ function ScheduledPosts() {
   };
 
   const fetchScheduledPosts = async (showLoading = true) => {
+    if (embedded && customerId) {
+      if (showLoading) setLoading(true);
+      try {
+        const response = await fetch(`${process.env.REACT_APP_API_URL}/api/scheduled-posts?customerId=${encodeURIComponent(customerId)}`);
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        const data = await response.json();
+        const posts = Array.isArray(data)
+          ? data
+          : (Array.isArray(data?.posts) ? data.posts : (Array.isArray(data?.data) ? data.data : []));
+        setScheduledPosts(posts.filter(post => (post.customerId || post.userId) === customerId));
+        setErrorMessage(null);
+      } catch (error) {
+        console.error('Failed to fetch customer scheduled posts:', error);
+        setScheduledPosts([]);
+        setErrorMessage('Unable to load scheduled posts. Please check your connection and try again.');
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
     if (!currentUser || currentUser.role !== 'admin') {
       console.error('Admin authentication required');
       setScheduledPosts([]);
@@ -64,10 +86,10 @@ function ScheduledPosts() {
     }
     try {
       console.log('📡 Fetching scheduled posts for admin:', currentUser._id || currentUser.id);
-      
+
       // First, get the admin's assigned customers
       const customersResponse = await fetch(`${process.env.REACT_APP_API_URL}/admin/assigned-customers?adminId=${currentUser._id || currentUser.id}`);
-      
+
       let assignedCustomerIds = [];
       if (customersResponse.ok) {
         const assignedCustomers = await customersResponse.json();
@@ -85,19 +107,19 @@ function ScheduledPosts() {
         setScheduledPosts([]);
         return;
       }
-      
+
       // Fetch all scheduled posts
       const response = await fetch(`${process.env.REACT_APP_API_URL}/api/scheduled-posts`);
-      
+
       console.log('📡 Response status:', response.status);
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
+
       const data = await response.json();
       console.log('📋 Received all posts data:', data);
-      
+
       // Handle both array and object responses
       let allPosts = [];
       if (Array.isArray(data)) {
@@ -107,7 +129,7 @@ function ScheduledPosts() {
       } else if (data && data.success && Array.isArray(data.data)) {
         allPosts = data.data;
       }
-      
+
       // Filter posts to only include those from assigned customers
       const filteredPosts = allPosts.filter(post => {
         const postCustomerId = post.customerId || post.userId;
@@ -117,11 +139,11 @@ function ScheduledPosts() {
         }
         return isAssigned;
       });
-      
+
       console.log('📋 Total posts:', allPosts.length);
       console.log('📋 Posts from assigned customers:', filteredPosts.length);
       setScheduledPosts(filteredPosts);
-      
+
     } catch (error) {
       console.error('❌ Failed to fetch scheduled posts:', error);
       setScheduledPosts([]);
@@ -153,7 +175,7 @@ function ScheduledPosts() {
 
   // Handle post updates from SocialActionManager
   const handlePostUpdate = useCallback((postId, updates) => {
-    setScheduledPosts(prev => prev.map(post => 
+    setScheduledPosts(prev => prev.map(post =>
       post._id === postId ? { ...post, ...updates } : post
     ));
   }, []);
@@ -183,6 +205,8 @@ function ScheduledPosts() {
     if (filter === 'all') return scheduledPosts;
     return scheduledPosts.filter(post => post.status === filter);
   }, [scheduledPosts, filter]);
+
+  const effectiveViewMode = embedded ? 'list' : viewMode;
 
   // Helper to detect video URLs
   const isVideoUrl = useCallback((url) => {
@@ -214,41 +238,41 @@ function ScheduledPosts() {
     if (!post.error && !post.errorMessage && !post.failureReason) {
       return 'Publishing failed. Please try again.';
     }
-    
+
     const errorText = post.error || post.errorMessage || post.failureReason || '';
     const lowerError = errorText.toLowerCase();
-    
+
     // Map technical errors to user-friendly messages
-    
+
     // Token/Authentication errors - most common
-    if (lowerError.includes('access token') || lowerError.includes('accesstoken') || 
-        lowerError.includes('invalid token') || lowerError.includes('token expired') ||
-        lowerError.includes('token invalid') || lowerError.includes('oauth') ||
-        lowerError.includes('session expired') || lowerError.includes('session invalid') ||
-        lowerError.includes('auth') || lowerError.includes('unauthorized') ||
-        lowerError.includes('401') || lowerError.includes('not authenticated') ||
-        lowerError.includes('login required') || lowerError.includes('credentials')) {
+    if (lowerError.includes('access token') || lowerError.includes('accesstoken') ||
+      lowerError.includes('invalid token') || lowerError.includes('token expired') ||
+      lowerError.includes('token invalid') || lowerError.includes('oauth') ||
+      lowerError.includes('session expired') || lowerError.includes('session invalid') ||
+      lowerError.includes('auth') || lowerError.includes('unauthorized') ||
+      lowerError.includes('401') || lowerError.includes('not authenticated') ||
+      lowerError.includes('login required') || lowerError.includes('credentials')) {
       return 'Your social account connection has expired. Please reconnect your account in Settings.';
     }
-    
+
     // Permission/Access errors
     if (lowerError.includes('permission') || lowerError.includes('403') ||
-        lowerError.includes('forbidden') || lowerError.includes('not allowed') ||
-        lowerError.includes('insufficient') || lowerError.includes('denied')) {
+      lowerError.includes('forbidden') || lowerError.includes('not allowed') ||
+      lowerError.includes('insufficient') || lowerError.includes('denied')) {
       return 'Permission issue. Your account may need additional permissions. Please reconnect in Settings.';
     }
-    
+
     // Rate limiting
     if (lowerError.includes('rate limit') || lowerError.includes('too many') ||
-        lowerError.includes('throttle') || lowerError.includes('quota') ||
-        lowerError.includes('limit exceeded') || lowerError.includes('429')) {
+      lowerError.includes('throttle') || lowerError.includes('quota') ||
+      lowerError.includes('limit exceeded') || lowerError.includes('429')) {
       return 'Posting limit reached. Please wait a few minutes and try again.';
     }
-    
+
     // Media/File errors
     if (lowerError.includes('image') || lowerError.includes('photo') ||
-        lowerError.includes('video') || lowerError.includes('media') ||
-        lowerError.includes('file') || lowerError.includes('upload')) {
+      lowerError.includes('video') || lowerError.includes('media') ||
+      lowerError.includes('file') || lowerError.includes('upload')) {
       if (lowerError.includes('size') || lowerError.includes('large') || lowerError.includes('big')) {
         return 'The file is too large. Please use a smaller image or video.';
       }
@@ -260,63 +284,63 @@ function ScheduledPosts() {
       }
       return 'There was an issue with the media file. Please try a different image or video.';
     }
-    
+
     // Network/Connection errors
     if (lowerError.includes('network') || lowerError.includes('connection') ||
-        lowerError.includes('timeout') || lowerError.includes('timed out') ||
-        lowerError.includes('econnrefused') || lowerError.includes('enotfound') ||
-        lowerError.includes('socket') || lowerError.includes('dns')) {
+      lowerError.includes('timeout') || lowerError.includes('timed out') ||
+      lowerError.includes('econnrefused') || lowerError.includes('enotfound') ||
+      lowerError.includes('socket') || lowerError.includes('dns')) {
       return 'Connection issue. Please check your internet and try again.';
     }
-    
+
     // Account/Page not found
     if (lowerError.includes('page not found') || lowerError.includes('account not found') ||
-        lowerError.includes('user not found') || lowerError.includes('404') ||
-        lowerError.includes('does not exist') || lowerError.includes('no longer available')) {
+      lowerError.includes('user not found') || lowerError.includes('404') ||
+      lowerError.includes('does not exist') || lowerError.includes('no longer available')) {
       return 'Social account not found. The page may have been removed or disconnected.';
     }
-    
+
     // Content policy violations
     if (lowerError.includes('policy') || lowerError.includes('violation') ||
-        lowerError.includes('community') || lowerError.includes('guidelines') ||
-        lowerError.includes('spam') || lowerError.includes('blocked') ||
-        lowerError.includes('restricted') || lowerError.includes('banned')) {
+      lowerError.includes('community') || lowerError.includes('guidelines') ||
+      lowerError.includes('spam') || lowerError.includes('blocked') ||
+      lowerError.includes('restricted') || lowerError.includes('banned')) {
       return 'Content not allowed. Please review your post for policy violations.';
     }
-    
+
     // Caption/Text issues
     if (lowerError.includes('caption') || lowerError.includes('text') ||
-        lowerError.includes('character') || lowerError.includes('length') ||
-        lowerError.includes('hashtag') || lowerError.includes('mention')) {
+      lowerError.includes('character') || lowerError.includes('length') ||
+      lowerError.includes('hashtag') || lowerError.includes('mention')) {
       return 'Caption issue. Please check your text length and formatting.';
     }
-    
+
     // Server errors
     if (lowerError.includes('500') || lowerError.includes('502') || lowerError.includes('503') ||
-        lowerError.includes('server error') || lowerError.includes('internal error') ||
-        lowerError.includes('service unavailable') || lowerError.includes('temporarily')) {
+      lowerError.includes('server error') || lowerError.includes('internal error') ||
+      lowerError.includes('service unavailable') || lowerError.includes('temporarily')) {
       return 'The social platform is temporarily unavailable. Please try again later.';
     }
-    
+
     // Duplicate content
     if (lowerError.includes('duplicate') || lowerError.includes('already posted') ||
-        lowerError.includes('same content')) {
+      lowerError.includes('same content')) {
       return 'This content was already posted. Please try different content.';
     }
-    
+
     // Scheduling specific
     if (lowerError.includes('schedule') || lowerError.includes('time') ||
-        lowerError.includes('past') || lowerError.includes('future')) {
+      lowerError.includes('past') || lowerError.includes('future')) {
       return 'Scheduling issue. Please check the scheduled date and time.';
     }
-    
+
     // API/Integration errors
     if (lowerError.includes('api') || lowerError.includes('endpoint') ||
-        lowerError.includes('request') || lowerError.includes('response') ||
-        lowerError.includes('json') || lowerError.includes('parse')) {
+      lowerError.includes('request') || lowerError.includes('response') ||
+      lowerError.includes('json') || lowerError.includes('parse')) {
       return 'Technical issue with the social platform. Please try again later.';
     }
-    
+
     // If we can't map it, return a generic message
     return 'Publishing failed. Please try again or contact support.';
   }, []);
@@ -535,8 +559,12 @@ function ScheduledPosts() {
     };
   }, []);
 
+  const Wrapper = ({ children }) => (
+    embedded ? <>{children}</> : <AdminLayout title="Scheduled Posts">{children}</AdminLayout>
+  );
+
   return (
-    <AdminLayout title="Scheduled Posts">
+    <Wrapper>
       <div className="min-h-screen bg-white">
         <div className="max-w-7xl mx-auto px-2 sm:px-3 py-3 sm:py-4">
           {/* Filters and View Mode Toggle */}
@@ -551,11 +579,10 @@ function ScheduledPosts() {
                 <button
                   key={status}
                   onClick={() => setFilter(status)}
-                  className={`px-3 py-1 rounded-full text-sm font-medium transition-all ${
-                    filter === status 
-                      ? 'bg-gradient-to-r from-[#00E5FF] to-[#0066CC] text-white shadow-sm' 
+                  className={`px-3 py-1 rounded-full text-sm font-medium transition-all ${filter === status
+                      ? 'bg-gradient-to-r from-[#00E5FF] to-[#0066CC] text-white shadow-sm'
                       : 'bg-[#F4F9FF] text-[#475569] hover:bg-[#0066CC] hover:text-white'
-                  }`}
+                    }`}
                 >
                   {status.charAt(0).toUpperCase() + status.slice(1)}
                 </button>
@@ -563,43 +590,40 @@ function ScheduledPosts() {
             </div>
 
             {/* View Mode Toggle */}
-            <div className="flex items-center space-x-2 sm:space-x-4">
+            {!embedded && <div className="flex items-center space-x-2 sm:space-x-4">
               <span className="text-xs sm:text-sm font-medium text-[#0F172A]">View:</span>
               <div className="flex bg-[#F4F9FF] rounded-lg p-1">
                 <button
                   onClick={() => setViewMode('grouped')}
-                  className={`px-2 sm:px-3 py-1 rounded-md text-xs sm:text-sm font-medium transition-colors ${
-                    viewMode === 'grouped'
+                  className={`px-2 sm:px-3 py-1 rounded-md text-xs sm:text-sm font-medium transition-colors ${viewMode === 'grouped'
                       ? 'bg-white text-[#0F172A] shadow-sm'
                       : 'text-[#475569] hover:text-[#0F172A]'
-                  }`}
+                    }`}
                 >
                   <Users className="h-3 w-3 sm:h-4 sm:w-4 inline mr-1" />
                   Customers
                 </button>
                 <button
                   onClick={() => setViewMode('platform')}
-                  className={`px-2 sm:px-3 py-1 rounded-md text-xs sm:text-sm font-medium transition-colors ${
-                    viewMode === 'platform'
+                  className={`px-2 sm:px-3 py-1 rounded-md text-xs sm:text-sm font-medium transition-colors ${viewMode === 'platform'
                       ? 'bg-white text-[#0F172A] shadow-sm'
                       : 'text-[#475569] hover:text-[#0F172A]'
-                  }`}
+                    }`}
                 >
                   <Send className="h-3 w-3 sm:h-4 sm:w-4 inline mr-1" />
                   Platforms
                 </button>
                 <button
                   onClick={() => setViewMode('list')}
-                  className={`px-2 sm:px-3 py-1 rounded-md text-xs sm:text-sm font-medium transition-colors ${
-                    viewMode === 'list'
+                  className={`px-2 sm:px-3 py-1 rounded-md text-xs sm:text-sm font-medium transition-colors ${viewMode === 'list'
                       ? 'bg-white text-[#0F172A] shadow-sm'
                       : 'text-[#475569] hover:text-[#0F172A]'
-                  }`}
+                    }`}
                 >
                   List
                 </button>
               </div>
-            </div>
+            </div>}
           </div>
 
           {/* Error Message Banner */}
@@ -620,15 +644,15 @@ function ScheduledPosts() {
           )}
 
           {/* Add Customer Overview Header */}
-          <div className="bg-[#F4F9FF] backdrop-blur-sm rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-3 sm:mb-4">
+          {!embedded && <div className="bg-[#F4F9FF] backdrop-blur-sm rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-3 sm:mb-4">
             <div className="px-4 sm:px-6 py-2 sm:py-3 border-b border-gray-100">
               <h2 className="text-lg sm:text-xl font-bold text-[#0F172A]">Customer Overview</h2>
               <p className="text-xs sm:text-sm text-[#475569] mt-1">Track content schedules and deadlines</p>
             </div>
-          </div>
+          </div>}
 
           {/* Expand/Collapse All (for grouped and platform modes) */}
-          {viewMode === 'grouped' && sortedCustomerIds.length > 0 && (
+          {!embedded && effectiveViewMode === 'grouped' && sortedCustomerIds.length > 0 && (
             <div className="flex items-center space-x-2 mb-3">
               <button
                 onClick={expandAllCustomers}
@@ -645,7 +669,7 @@ function ScheduledPosts() {
               </button>
             </div>
           )}
-          {viewMode === 'platform' && sortedPlatforms.length > 0 && (
+          {!embedded && effectiveViewMode === 'platform' && sortedPlatforms.length > 0 && (
             <div className="flex items-center space-x-2 mb-3">
               <button
                 onClick={expandAllPlatforms}
@@ -668,7 +692,7 @@ function ScheduledPosts() {
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-[#0066CC]" />
             </div>
-          ) : viewMode === 'platform' ? (
+          ) : effectiveViewMode === 'platform' ? (
             /* Platform View */
             <div className="space-y-4">
               {sortedPlatforms.map(platform => {
@@ -680,7 +704,7 @@ function ScheduledPosts() {
                 return (
                   <div key={platform} className="bg-white rounded-lg shadow-sm border overflow-hidden">
                     {/* Platform Header */}
-                    <div 
+                    <div
                       className={`p-3 sm:p-6 border-b cursor-pointer hover:bg-opacity-50 transition-all ${platformInfo.bgColor}`}
                       onClick={() => togglePlatformExpansion(platform)}
                     >
@@ -705,7 +729,7 @@ function ScheduledPosts() {
                             </p>
                           </div>
                         </div>
-                        
+
                         {/* Summary Stats */}
                         <div className="flex items-center space-x-2 sm:space-x-6">
                           <div className="text-center">
@@ -748,7 +772,7 @@ function ScheduledPosts() {
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                           {platformPosts.map(post => {
                             const customerInfo = getCustomerDisplayInfo(post);
-                            
+
                             return (
                               <div key={post._id} className="bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow overflow-hidden flex flex-col h-[420px]">
                                 {/* Header with Calendar/Item info */}
@@ -842,7 +866,7 @@ function ScheduledPosts() {
                 );
               })}
             </div>
-          ) : viewMode === 'grouped' ? (
+          ) : effectiveViewMode === 'grouped' ? (
             /* Grouped View */
             <div className="space-y-2 sm:space-y-4">
               {sortedCustomerIds.map(customerId => {
@@ -854,7 +878,7 @@ function ScheduledPosts() {
                 return (
                   <div key={customerId} className="bg-white rounded-lg shadow-sm">
                     {/* Customer Header */}
-                    <div 
+                    <div
                       className="p-3 sm:p-6 border-b cursor-pointer hover:bg-[#F4F9FF] transition-colors"
                       onClick={() => toggleCustomerExpansion(customerId)}
                     >
@@ -877,7 +901,7 @@ function ScheduledPosts() {
                             </p>
                           </div>
                         </div>
-                        
+
                         {/* Summary Stats */}
                         <div className="flex items-center space-x-2 sm:space-x-4">
                           <div className="text-center">
@@ -1018,7 +1042,7 @@ function ScheduledPosts() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredPosts.map(post => {
                 const customerInfo = getCustomerDisplayInfo(post);
-                
+
                 return (
                   <div
                     key={post._id}
@@ -1129,7 +1153,7 @@ function ScheduledPosts() {
           )}
         </div>
       </div>
-    </AdminLayout>
+    </Wrapper>
   );
 }
 

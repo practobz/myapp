@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Bell, Search, ChevronDown, Settings, LogOut, ArrowLeft } from 'lucide-react';
+import { ChevronDown, Settings, LogOut, ArrowLeft } from 'lucide-react';
 import Footer from './Footer';
 import Logo from './Logo';
 import { useAuth } from '../../contexts/AuthContext';
+import { NotificationProvider } from '../../contexts/NotificationContext';
 
-function AdminLayout({ children, title }) {
+function AdminLayoutInner({ children, title }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const { logout, currentUser } = useAuth();
   const navigate = useNavigate();
@@ -62,20 +63,7 @@ function AdminLayout({ children, title }) {
             </div>
 
             <div className="flex items-center space-x-4">
-              <div className="hidden md:flex items-center space-x-3">
-                <div className="relative">
-                  <Search className="h-5 w-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    placeholder="Search..."
-                    className="pl-10 pr-4 py-2 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-[#0066CC] w-64"
-                  />
-                </div>
-                <button className="p-2 hover:bg-[#F4F9FF] rounded-lg relative">
-                  <Bell className="h-5 w-5 text-[#475569]" />
-                  <span className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full"></span>
-                </button>
-              </div>
+
 
               {/* Profile */}
               <div className="relative">
@@ -93,16 +81,16 @@ function AdminLayout({ children, title }) {
 
                 {dropdownOpen && (
                   <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg border py-2">
-                      <button
-                        onClick={() => {
-                          setDropdownOpen(false);
-                          navigate('/admin/settings');
-                        }}
-                        className="flex w-full px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-100"
-                      >
-                        <Settings className="h-4 w-4 mr-3" />
-                        Settings
-                      </button>
+                    <button
+                      onClick={() => {
+                        setDropdownOpen(false);
+                        navigate('/admin/settings');
+                      }}
+                      className="flex w-full px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-100"
+                    >
+                      <Settings className="h-4 w-4 mr-3" />
+                      Settings
+                    </button>
                     <button
                       onClick={handleLogout}
                       className="flex w-full px-4 py-3 text-sm text-red-600 hover:bg-red-50"
@@ -119,12 +107,20 @@ function AdminLayout({ children, title }) {
       </header>
 
       {/* MAIN CONTENT (FIXED) */}
-      <main className="p-2 sm:p-4 lg:p-6">
+      <main>
         {children}
       </main>
 
       <Footer />
     </div>
+  );
+}
+
+function AdminLayout({ children, title }) {
+  return (
+    <NotificationProvider>
+      <AdminLayoutInner title={title}>{children}</AdminLayoutInner>
+    </NotificationProvider>
   );
 }
 

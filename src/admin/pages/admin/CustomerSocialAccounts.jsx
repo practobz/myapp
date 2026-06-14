@@ -1030,7 +1030,7 @@ function CustomerRow({ customer, isExpanded, onToggle, onSelectAccount, onDiscon
   );
 }
 
-function CustomerSocialAccounts() {
+function CustomerSocialAccounts({ embedded = false, customerId = null }) {
   const { currentUser } = useAuth();
   const navigate = useNavigate();
   const abortControllerRef = useRef(null);
@@ -1092,7 +1092,10 @@ function CustomerSocialAccounts() {
         const assignedIds = new Set((assignedCustomers || []).map(c => c._id || c.id));
 
         // Filter social accounts to only assigned customers
-        const filtered = (socialData.data || []).filter(c => assignedIds.has(c.customerId));
+        let filtered = (socialData.data || []).filter(c => assignedIds.has(c.customerId));
+        if (customerId) {
+          filtered = filtered.filter(c => c.customerId === customerId);
+        }
         setCustomers(filtered);
       } catch (err) {
         if (err.name === 'AbortError') return;
@@ -1142,6 +1145,13 @@ function CustomerSocialAccounts() {
 
     return result;
   }, [customers, searchQuery, platformFilter]);
+
+  const embeddedAccounts = useMemo(() => {
+    if (!embedded) return [];
+    return filteredCustomers.flatMap((customer) =>
+      (customer.socialAccounts || []).map((account) => ({ account, customer }))
+    );
+  }, [embedded, filteredCustomers]);
 
   // Stats
   const stats = useMemo(() => {
@@ -1217,10 +1227,14 @@ function CustomerSocialAccounts() {
     }
   };
 
+  const Wrapper = ({ children }) => (
+    embedded ? <>{children}</> : <AdminLayout title="Social Accounts">{children}</AdminLayout>
+  );
+
   // Loading state
   if (loading) {
     return (
-      <AdminLayout title="Social Accounts">
+      <Wrapper>
         <div className="space-y-4">
           <div className="bg-white rounded-xl border border-gray-200 p-6 animate-pulse">
             <div className="h-6 bg-gray-200 rounded w-48 mb-4" />
@@ -1242,14 +1256,14 @@ function CustomerSocialAccounts() {
             </div>
           ))}
         </div>
-      </AdminLayout>
+      </Wrapper>
     );
   }
 
   // Error state
   if (error && customers.length === 0) {
     return (
-      <AdminLayout title="Social Accounts">
+      <Wrapper>
         <div className="flex flex-col items-center justify-center h-96 space-y-4">
           <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
             <AlertCircle className="h-8 w-8 text-red-500" />
@@ -1264,12 +1278,12 @@ function CustomerSocialAccounts() {
             Try Again
           </button>
         </div>
-      </AdminLayout>
+      </Wrapper>
     );
   }
 
   return (
-    <AdminLayout title="Social Accounts">
+    <Wrapper>
       <div className="space-y-4 sm:space-y-6">
         {/* Stats banner */}
         <div className="bg-gradient-to-r from-slate-900 via-blue-900 to-indigo-900 rounded-xl sm:rounded-2xl shadow-xl p-4 sm:p-6 relative overflow-hidden">
@@ -1353,12 +1367,14 @@ function CustomerSocialAccounts() {
               </select>
 
               {/* Expand / Collapse */}
-              <button
-                onClick={handleExpandAll}
-                className="px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm hover:bg-gray-100 transition-colors whitespace-nowrap"
-              >
-                {expandAll ? 'Collapse All' : 'Expand All'}
-              </button>
+              {!embedded && (
+                <button
+                  onClick={handleExpandAll}
+                  className="px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm hover:bg-gray-100 transition-colors whitespace-nowrap"
+                >
+                  {expandAll ? 'Collapse All' : 'Expand All'}
+                </button>
+              )}
 
               {/* Refresh */}
               <button
@@ -1395,7 +1411,7 @@ function CustomerSocialAccounts() {
         </div>
 
         {/* Customer list */}
-        {filteredCustomers.length === 0 ? (
+        {(embedded ? embeddedAccounts.length === 0 : filteredCustomers.length === 0) ? (
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-12 text-center">
             <Users className="h-12 w-12 mx-auto mb-4 text-gray-300" />
             <h3 className="text-lg font-semibold text-gray-700 mb-2">
@@ -1408,19 +1424,33 @@ function CustomerSocialAccounts() {
             </p>
           </div>
         ) : (
-          <div className="space-y-3">
-            {filteredCustomers.map((customer) => (
-              <CustomerRow
-                key={customer.customerId}
-                customer={customer}
-                isExpanded={expandedCustomers.has(customer.customerId)}
-                onToggle={() => toggleExpand(customer.customerId)}
-                onSelectAccount={handleSelectAccount}
-                onDisconnectAccount={handleDisconnectAccount}
-                searchQuery={platformFilter !== 'all' ? '' : searchQuery}
-              />
-            ))}
-          </div>
+          embedded ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {embeddedAccounts.map(({ account, customer }) => (
+                <AccountCard
+                  key={`${customer.customerId}-${account._id}`}
+                  account={account}
+                  customer={customer}
+                  onClick={() => handleSelectAccount(account, customer)}
+                  onDisconnect={handleDisconnectAccount}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {filteredCustomers.map((customer) => (
+                <CustomerRow
+                  key={customer.customerId}
+                  customer={customer}
+                  isExpanded={expandedCustomers.has(customer.customerId)}
+                  onToggle={() => toggleExpand(customer.customerId)}
+                  onSelectAccount={handleSelectAccount}
+                  onDisconnectAccount={handleDisconnectAccount}
+                  searchQuery={platformFilter !== 'all' ? '' : searchQuery}
+                />
+              ))}
+            </div>
+          )
         )}
       </div>
 
@@ -1476,7 +1506,7 @@ function CustomerSocialAccounts() {
           </div>
         </div>
       )}
-    </AdminLayout>
+    </Wrapper>
   );
 }
 

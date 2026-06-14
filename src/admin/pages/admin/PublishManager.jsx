@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef, memo, startTransition } from 'react';
-import { 
-  Calendar, Clock, CheckCircle, XCircle, Loader2, Filter, 
+import {
+  Calendar, Clock, CheckCircle, XCircle, Loader2, Filter,
   Search, ChevronDown, ChevronRight, ExternalLink, Image,
   Facebook, Instagram, Youtube, Linkedin, Twitter, Globe,
   Check, X, AlertCircle, RefreshCw, Users, User, BarChart3
@@ -110,12 +110,11 @@ const isVideoUrl = (url) => url && /\.(mp4|mov|webm)|video/i.test(url);
 const ContentItem = memo(({ item, index, onOpenModal, calendar }) => {
   const itemImage = useMemo(() => getItemImage(item), [item]);
   const isVideo = useMemo(() => isVideoUrl(itemImage), [itemImage]);
-  
+
   return (
-    <div 
-      className={`flex items-center justify-between px-5 py-3.5 border-b border-gray-50 last:border-b-0 transition-colors ${
-        item.isPublished ? 'bg-emerald-50/50' : 'hover:bg-gray-50'
-      }`}
+    <div
+      className={`flex items-center justify-between px-5 py-3.5 border-b border-gray-50 last:border-b-0 transition-colors ${item.isPublished ? 'bg-emerald-50/50' : 'hover:bg-gray-50'
+        }`}
     >
       <div className="flex items-center gap-3.5 flex-1 min-w-0">
         <div className="h-10 w-10 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0 overflow-hidden">
@@ -123,9 +122,9 @@ const ContentItem = memo(({ item, index, onOpenModal, calendar }) => {
             isVideo ? (
               <video src={itemImage} className="h-full w-full object-cover" muted preload="metadata" />
             ) : (
-              <img 
-                src={itemImage} 
-                alt="" 
+              <img
+                src={itemImage}
+                alt=""
                 className="h-full w-full object-cover"
                 loading="lazy"
                 decoding="async"
@@ -136,7 +135,7 @@ const ContentItem = memo(({ item, index, onOpenModal, calendar }) => {
             <Image className="h-4 w-4 text-gray-400" />
           )}
         </div>
-        
+
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="font-medium text-gray-800 text-sm truncate">
@@ -165,7 +164,7 @@ const ContentItem = memo(({ item, index, onOpenModal, calendar }) => {
           </div>
         </div>
       </div>
-      
+
       <div className="flex items-center gap-2 ml-4">
         {item.isPublished ? (
           <button
@@ -192,15 +191,15 @@ ContentItem.displayName = 'ContentItem';
 
 // Memoized Calendar Section
 const CalendarSection = memo(({ calendar, isExpanded, onToggle, onOpenModal }) => {
-  const publishedCount = useMemo(() => 
-    calendar.filteredItems.filter(i => i.isPublished).length, 
+  const publishedCount = useMemo(() =>
+    calendar.filteredItems.filter(i => i.isPublished).length,
     [calendar.filteredItems]
   );
-  const progressWidth = useMemo(() => 
+  const progressWidth = useMemo(() =>
     calendar.filteredItems.length > 0 ? (publishedCount / calendar.filteredItems.length) * 100 : 0,
     [publishedCount, calendar.filteredItems.length]
   );
-  
+
   return (
     <div className="border-b border-gray-100 last:border-b-0">
       <button
@@ -226,20 +225,20 @@ const CalendarSection = memo(({ calendar, isExpanded, onToggle, onOpenModal }) =
             {publishedCount}/{calendar.filteredItems.length}
           </span>
           <div className="w-16 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-            <div 
+            <div
               className="h-full bg-emerald-500 rounded-full transition-all"
               style={{ width: `${progressWidth}%` }}
             />
           </div>
         </div>
       </button>
-      
+
       {isExpanded && (
         <div className="bg-white border-t border-gray-100">
           {calendar.filteredItems.map((item, index) => (
-            <ContentItem 
-              key={item.id || index} 
-              item={item} 
+            <ContentItem
+              key={item.id || index}
+              item={item}
               index={index}
               calendar={calendar}
               onOpenModal={onOpenModal}
@@ -253,29 +252,29 @@ const CalendarSection = memo(({ calendar, isExpanded, onToggle, onOpenModal }) =
 CalendarSection.displayName = 'CalendarSection';
 
 // Memoized Customer Group
-const CustomerGroup = memo(({ 
-  customerGroup, 
-  isExpanded, 
+const CustomerGroup = memo(({
+  customerGroup,
+  isExpanded,
   expandedCalendars,
-  onToggleCustomer, 
+  onToggleCustomer,
   onToggleCalendar,
-  onOpenModal 
+  onOpenModal
 }) => {
-  const progressPercent = useMemo(() => 
-    customerGroup.filteredTotalItems > 0 
+  const progressPercent = useMemo(() =>
+    customerGroup.filteredTotalItems > 0
       ? Math.round((customerGroup.filteredPublishedItems / customerGroup.filteredTotalItems) * 100)
       : 0,
     [customerGroup.filteredPublishedItems, customerGroup.filteredTotalItems]
   );
-  const progressWidth = useMemo(() => 
-    customerGroup.filteredTotalItems > 0 
-      ? (customerGroup.filteredPublishedItems / customerGroup.filteredTotalItems) * 100 
+  const progressWidth = useMemo(() =>
+    customerGroup.filteredTotalItems > 0
+      ? (customerGroup.filteredPublishedItems / customerGroup.filteredTotalItems) * 100
       : 0,
     [customerGroup.filteredPublishedItems, customerGroup.filteredTotalItems]
   );
   const avatarColor = useMemo(() => getCustomerColor(customerGroup.name), [customerGroup.name]);
   const initials = useMemo(() => getCustomerInitials(customerGroup.name), [customerGroup.name]);
-  
+
   return (
     <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
       <div className="border-b border-gray-50">
@@ -306,14 +305,14 @@ const CustomerGroup = memo(({
               </div>
             </div>
           </div>
-          
+
           <div className="flex items-center gap-4">
             <div className="hidden sm:flex items-center gap-2">
               <span className="text-xs font-medium text-gray-600 min-w-[40px] text-right tabular-nums">
                 {progressPercent}%
               </span>
               <div className="w-24 h-2 bg-gray-100 rounded-full overflow-hidden">
-                <div 
+                <div
                   className="h-full bg-emerald-500 rounded-full transition-all duration-300"
                   style={{ width: `${progressWidth}%` }}
                 />
@@ -327,7 +326,7 @@ const CustomerGroup = memo(({
           </div>
         </button>
       </div>
-      
+
       {isExpanded && (
         <div className="bg-gray-50/50">
           {customerGroup.calendars.map(calendar => (
@@ -346,7 +345,7 @@ const CustomerGroup = memo(({
 });
 CustomerGroup.displayName = 'CustomerGroup';
 
-function PublishManager() {
+function PublishManager({ embedded = false, customerId = null }) {
   const navigate = useNavigate();
   const { currentUser } = useAuth();
 
@@ -375,26 +374,26 @@ function PublishManager() {
   // Fetch data with abort controller
   const fetchData = useCallback(async (isRefresh = false) => {
     if (!currentUser) return;
-    
+
     // Cancel any pending requests
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
     abortControllerRef.current = new AbortController();
     const { signal } = abortControllerRef.current;
-    
+
     if (isRefresh) {
       setIsRefreshing(true);
     } else {
       setLoading(true);
     }
     setError('');
-    
+
     try {
       const apiUrl = process.env.REACT_APP_API_URL;
       const fetchOptions = { signal };
       const calendarsUrl = `${apiUrl}/calendars`;
-      
+
       // Parallel fetch for better performance - include submissions for media
       if (currentUser.role === 'admin') {
         const [customersRes, calendarsRes, postsRes, submissionsRes] = await Promise.all([
@@ -403,27 +402,30 @@ function PublishManager() {
           fetch(`${apiUrl}/api/scheduled-posts`, fetchOptions),
           fetch(`${apiUrl}/api/content-submissions`, fetchOptions)
         ]);
-        
+
         if (customersRes.ok) {
           const assignedCustomers = await customersRes.json();
           const customerIds = assignedCustomers.map(c => c._id);
           const allCalendars = await calendarsRes.json();
-          
-          const filteredCalendars = allCalendars.filter(cal => 
+
+          let filteredCalendars = allCalendars.filter(cal =>
             customerIds.includes(cal.customerId)
           );
-          
+          if (customerId) {
+            filteredCalendars = filteredCalendars.filter(cal => cal.customerId === customerId);
+          }
+
           const calendarsWithCustomer = filteredCalendars.map(cal => ({
             ...cal,
             customerName: assignedCustomers.find(c => c._id === cal.customerId)?.name || 'Unknown Customer'
           }));
-          
+
           setCalendars(calendarsWithCustomer);
         }
-        
+
         const posts = await postsRes.json();
         setScheduledPosts(Array.isArray(posts) ? posts : []);
-        
+
         const submissionsData = await submissionsRes.json();
         setSubmissions(Array.isArray(submissionsData) ? submissionsData : []);
       } else {
@@ -432,13 +434,13 @@ function PublishManager() {
           fetch(`${apiUrl}/api/scheduled-posts`, fetchOptions),
           fetch(`${apiUrl}/api/content-submissions`, fetchOptions)
         ]);
-        
+
         const allCalendars = await calendarsRes.json();
         setCalendars(allCalendars);
-        
+
         const posts = await postsRes.json();
         setScheduledPosts(Array.isArray(posts) ? posts : []);
-        
+
         const submissionsData = await submissionsRes.json();
         setSubmissions(Array.isArray(submissionsData) ? submissionsData : []);
       }
@@ -466,6 +468,12 @@ function PublishManager() {
     fetchData();
   }, [fetchData, refreshKey]);
 
+  useEffect(() => {
+    if (customerId) {
+      setSelectedCustomer(customerId);
+    }
+  }, [customerId]);
+
   // Refresh handler
   const handleRefresh = useCallback(() => {
     if (!isRefreshing) {
@@ -477,12 +485,12 @@ function PublishManager() {
   const isItemPublished = useCallback((item) => {
     // Check manual publish flag
     if (item.published === true) return true;
-    
+
     // Check scheduled posts
     return scheduledPosts.some(post =>
       ((post.item_id && post.item_id === item.id) ||
-       (post.contentId && post.contentId === item.id) ||
-       (post.item_name && post.item_name === item.title)) &&
+        (post.contentId && post.contentId === item.id) ||
+        (post.item_name && post.item_name === item.title)) &&
       (post.status === 'published' || post.publishedAt)
     );
   }, [scheduledPosts]);
@@ -490,24 +498,24 @@ function PublishManager() {
   // Get published platforms for an item
   const getPublishedPlatforms = useCallback((item) => {
     const platforms = new Set();
-    
+
     // From manual publish
     if (item.publishedPlatforms && Array.isArray(item.publishedPlatforms)) {
       item.publishedPlatforms.forEach(p => platforms.add(p));
     }
-    
+
     // From scheduled posts
     scheduledPosts
       .filter(post =>
         ((post.item_id && post.item_id === item.id) ||
-         (post.contentId && post.contentId === item.id) ||
-         (post.item_name && post.item_name === item.title)) &&
+          (post.contentId && post.contentId === item.id) ||
+          (post.item_name && post.item_name === item.title)) &&
         (post.status === 'published' || post.publishedAt)
       )
       .forEach(post => {
         if (post.platform) platforms.add(post.platform);
       });
-    
+
     return Array.from(platforms);
   }, [scheduledPosts]);
 
@@ -521,23 +529,23 @@ function PublishManager() {
       // Match by item title/name
       if (sub.assignment_title === item.title || sub.item_name === item.title) return true;
       // Match by customer and approximate title
-      if ((sub.customer_id === customerId || sub.customerId === customerId) && 
-          sub.assignment_title && item.title && 
-          sub.assignment_title.toLowerCase().includes(item.title.toLowerCase())) return true;
+      if ((sub.customer_id === customerId || sub.customerId === customerId) &&
+        sub.assignment_title && item.title &&
+        sub.assignment_title.toLowerCase().includes(item.title.toLowerCase())) return true;
       return false;
     });
-    
+
     if (matchingSubmissions.length === 0) return null;
-    
+
     // Get the latest submission
-    const latestSubmission = matchingSubmissions.sort((a, b) => 
+    const latestSubmission = matchingSubmissions.sort((a, b) =>
       new Date(b.created_at || b.createdAt || 0) - new Date(a.created_at || a.createdAt || 0)
     )[0];
-    
+
     // Extract media from submission
     const media = latestSubmission.media || latestSubmission.images || [];
     if (media.length === 0) return null;
-    
+
     const firstMedia = media[0];
     // Handle both string URLs and object with url property
     return typeof firstMedia === 'string' ? firstMedia : firstMedia?.url;
@@ -556,7 +564,7 @@ function PublishManager() {
         // Add media from submissions
         submissionMedia: getMediaForItem(item, calendar._id, calendar.customerId)
       }));
-      
+
       return {
         ...calendar,
         processedItems: items,
@@ -569,11 +577,11 @@ function PublishManager() {
   // Group calendars by customer
   const customerGroups = useMemo(() => {
     const groups = {};
-    
+
     processedCalendars.forEach(calendar => {
       const customerName = calendar.customerName || 'Unknown Customer';
       const customerId = calendar.customerId || 'unknown';
-      
+
       if (!groups[customerId]) {
         groups[customerId] = {
           id: customerId,
@@ -583,53 +591,53 @@ function PublishManager() {
           publishedItems: 0
         };
       }
-      
+
       groups[customerId].calendars.push(calendar);
       groups[customerId].totalItems += calendar.totalCount;
       groups[customerId].publishedItems += calendar.publishedCount;
     });
-    
+
     return Object.values(groups).sort((a, b) => a.name.localeCompare(b.name));
   }, [processedCalendars]);
 
   // Filtered customer groups - use debounced search for performance
   const filteredCustomerGroups = useMemo(() => {
     const searchLower = debouncedSearch.trim().toLowerCase();
-    
+
     return customerGroups.map(customerGroup => {
       const filteredCalendars = customerGroup.calendars.map(calendar => {
         let items = calendar.processedItems;
-        
+
         // Filter by publish status
         if (filter === 'published') {
           items = items.filter(i => i.isPublished);
         } else if (filter === 'unpublished') {
           items = items.filter(i => !i.isPublished);
         }
-        
+
         // Search filter (debounced)
         if (searchLower) {
-          items = items.filter(i => 
+          items = items.filter(i =>
             i.title?.toLowerCase().includes(searchLower) ||
             i.description?.toLowerCase().includes(searchLower) ||
             i.calendarName?.toLowerCase().includes(searchLower) ||
             i.customerName?.toLowerCase().includes(searchLower)
           );
         }
-        
+
         return { ...calendar, filteredItems: items };
       }).filter(cal => cal.filteredItems.length > 0);
-      
+
       return {
         ...customerGroup,
         calendars: filteredCalendars,
         filteredTotalItems: filteredCalendars.reduce((sum, cal) => sum + cal.filteredItems.length, 0),
-        filteredPublishedItems: filteredCalendars.reduce((sum, cal) => 
+        filteredPublishedItems: filteredCalendars.reduce((sum, cal) =>
           sum + cal.filteredItems.filter(item => item.isPublished).length, 0
         )
       };
-    }).filter(group => 
-      (selectedCustomer === 'all' || group.id === selectedCustomer) && 
+    }).filter(group =>
+      (selectedCustomer === 'all' || group.id === selectedCustomer) &&
       group.calendars.length > 0
     );
   }, [customerGroups, filter, debouncedSearch, selectedCustomer]);
@@ -735,15 +743,15 @@ function PublishManager() {
           })
         }
       );
-      
+
       if (!response.ok) {
         throw new Error('Failed to update publish status');
       }
-      
+
       // Refresh data
       setRefreshKey(prev => prev + 1);
       closePublishModal();
-      
+
     } catch (error) {
       console.error('Error marking item as published:', error);
       alert('Failed to update publish status. Please try again.');
@@ -769,15 +777,15 @@ function PublishManager() {
           })
         }
       );
-      
+
       if (!response.ok) {
         throw new Error('Failed to bulk update publish status');
       }
-      
+
       // Refresh data and clear selection
       setSelectedItems(new Set());
       setRefreshKey(prev => prev + 1);
-      
+
     } catch (error) {
       console.error('Error bulk marking items as published:', error);
       alert('Failed to update publish status. Please try again.');
@@ -792,16 +800,16 @@ function PublishManager() {
     let published = 0;
     let customers = customerGroups.length;
     let activeCustomers = 0;
-    
+
     customerGroups.forEach(group => {
       total += group.totalItems;
       published += group.publishedItems;
       if (group.totalItems > 0) activeCustomers++;
     });
-    
-    return { 
-      total, 
-      published, 
+
+    return {
+      total,
+      published,
       unpublished: total - published,
       customers,
       activeCustomers,
@@ -818,10 +826,18 @@ function PublishManager() {
     }));
   }, [customerGroups]);
 
+  const embeddedCalendars = useMemo(() => {
+    return filteredCustomerGroups.flatMap(group => group.calendars || []);
+  }, [filteredCustomerGroups]);
+
+  const Wrapper = ({ children }) => (
+    embedded ? <>{children}</> : <AdminLayout title="Publish Manager">{children}</AdminLayout>
+  );
+
   // Loading state with skeleton UI
   if (loading) {
     return (
-      <AdminLayout title="Publish Manager">
+      <Wrapper>
         <div className="space-y-6">
           {/* Header Skeleton */}
           <div className="bg-white rounded-xl border border-gray-100 p-6 animate-pulse">
@@ -839,7 +855,7 @@ function PublishManager() {
               {[...Array(5)].map((_, i) => <StatCardSkeleton key={i} />)}
             </div>
           </div>
-          
+
           {/* Filters Skeleton */}
           <div className="bg-white rounded-xl border border-gray-100 p-5 animate-pulse">
             <div className="flex gap-4">
@@ -848,20 +864,20 @@ function PublishManager() {
               <div className="h-10 w-28 bg-gray-100 rounded-lg" />
             </div>
           </div>
-          
+
           {/* Content Skeleton */}
           <div className="space-y-4">
             {[...Array(3)].map((_, i) => <CustomerGroupSkeleton key={i} />)}
           </div>
         </div>
-      </AdminLayout>
+      </Wrapper>
     );
   }
 
   // Error state
   if (error && !calendars.length) {
     return (
-      <AdminLayout title="Publish Manager">
+      <Wrapper>
         <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
           <div className="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center">
             <AlertCircle className="h-7 w-7 text-red-500" />
@@ -878,12 +894,12 @@ function PublishManager() {
             Try Again
           </button>
         </div>
-      </AdminLayout>
+      </Wrapper>
     );
   }
 
   return (
-    <AdminLayout title="Publish Manager">
+    <Wrapper>
       <div className="space-y-5">
         {/* Header & Stats */}
         <div className="bg-white rounded-xl border border-gray-100 p-6">
@@ -900,7 +916,7 @@ function PublishManager() {
                 </p>
               </div>
             </div>
-            
+
             {/* Action Button */}
             <button
               onClick={handleRefresh}
@@ -911,7 +927,7 @@ function PublishManager() {
               Refresh
             </button>
           </div>
-          
+
           {/* Stats Grid - Clean flat design */}
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
             <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
@@ -923,7 +939,7 @@ function PublishManager() {
                 <Calendar className="h-7 w-7 text-gray-400" />
               </div>
             </div>
-            
+
             <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-100">
               <div className="flex items-center justify-between">
                 <div>
@@ -933,7 +949,7 @@ function PublishManager() {
                 <CheckCircle className="h-7 w-7 text-emerald-500" />
               </div>
             </div>
-            
+
             <div className="bg-amber-50 rounded-xl p-4 border border-amber-100">
               <div className="flex items-center justify-between">
                 <div>
@@ -943,7 +959,7 @@ function PublishManager() {
                 <Clock className="h-7 w-7 text-amber-500" />
               </div>
             </div>
-            
+
             <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
               <div className="flex items-center justify-between">
                 <div>
@@ -953,7 +969,7 @@ function PublishManager() {
                 <Users className="h-7 w-7 text-gray-400" />
               </div>
             </div>
-            
+
             <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
               <div className="flex items-center justify-between">
                 <div>
@@ -980,22 +996,24 @@ function PublishManager() {
                 className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-gray-900 focus:border-gray-900 focus:bg-white transition-all"
               />
             </div>
-            
+
             <div className="flex flex-col sm:flex-row gap-3">
               {/* Customer Filter */}
-              <select
-                value={selectedCustomer}
-                onChange={(e) => setSelectedCustomer(e.target.value)}
-                className="px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-gray-900 min-w-[150px]"
-              >
-                <option value="all">All Customers</option>
-                {uniqueCustomers.map(customer => (
-                  <option key={customer.id} value={customer.id}>
-                    {customer.name} ({customer.count})
-                  </option>
-                ))}
-              </select>
-              
+              {!embedded && (
+                <select
+                  value={selectedCustomer}
+                  onChange={(e) => setSelectedCustomer(e.target.value)}
+                  className="px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-gray-900 min-w-[150px]"
+                >
+                  <option value="all">All Customers</option>
+                  {uniqueCustomers.map(customer => (
+                    <option key={customer.id} value={customer.id}>
+                      {customer.name} ({customer.count})
+                    </option>
+                  ))}
+                </select>
+              )}
+
               {/* Status Filter */}
               <select
                 value={filter}
@@ -1012,7 +1030,7 @@ function PublishManager() {
 
         {/* Customer Groups & Content */}
         <div className="space-y-4">
-          {filteredCustomerGroups.length === 0 ? (
+          {(embedded ? embeddedCalendars.length === 0 : filteredCustomerGroups.length === 0) ? (
             <div className="bg-white rounded-xl border border-gray-100 p-12 text-center">
               <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
                 <AlertCircle className="h-7 w-7 text-gray-400" />
@@ -1025,17 +1043,31 @@ function PublishManager() {
               </p>
             </div>
           ) : (
-            filteredCustomerGroups.map(customerGroup => (
-              <CustomerGroup
-                key={customerGroup.id}
-                customerGroup={customerGroup}
-                isExpanded={expandedCustomers.has(customerGroup.id)}
-                expandedCalendars={expandedCalendars}
-                onToggleCustomer={toggleCustomer}
-                onToggleCalendar={toggleCalendar}
-                onOpenModal={openPublishModal}
-              />
-            ))
+            embedded ? (
+              <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                {embeddedCalendars.map(calendar => (
+                  <CalendarSection
+                    key={calendar._id}
+                    calendar={calendar}
+                    isExpanded={true}
+                    onToggle={() => { }}
+                    onOpenModal={openPublishModal}
+                  />
+                ))}
+              </div>
+            ) : (
+              filteredCustomerGroups.map(customerGroup => (
+                <CustomerGroup
+                  key={customerGroup.id}
+                  customerGroup={customerGroup}
+                  isExpanded={expandedCustomers.has(customerGroup.id)}
+                  expandedCalendars={expandedCalendars}
+                  onToggleCustomer={toggleCustomer}
+                  onToggleCalendar={toggleCalendar}
+                  onOpenModal={openPublishModal}
+                />
+              ))
+            )
           )}
         </div>
       </div>
@@ -1043,7 +1075,7 @@ function PublishManager() {
       {/* Publish Modal */}
       {publishModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div 
+          <div
             className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
@@ -1056,7 +1088,7 @@ function PublishManager() {
                 {publishModal.item.title || publishModal.item.description || 'Untitled Item'}
               </p>
             </div>
-            
+
             {/* Modal Content */}
             <div className="px-5 py-4 space-y-4">
               {/* Platform Selection */}
@@ -1069,11 +1101,10 @@ function PublishManager() {
                     <button
                       key={platform.id}
                       onClick={() => togglePlatform(platform.id)}
-                      className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border transition-all ${
-                        selectedPlatforms.includes(platform.id)
+                      className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border transition-all ${selectedPlatforms.includes(platform.id)
                           ? `${platform.color} border-current`
                           : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
-                      }`}
+                        }`}
                     >
                       <PlatformIcon platform={platform.id} size={16} />
                       <span className="text-sm font-medium">{platform.name}</span>
@@ -1084,7 +1115,7 @@ function PublishManager() {
                   ))}
                 </div>
               </div>
-              
+
               {/* Notes */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
@@ -1108,28 +1139,26 @@ function PublishManager() {
                 <button
                   type="button"
                   onClick={() => setSendEmailNotification(prev => !prev)}
-                  className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${
-                    sendEmailNotification ? 'bg-gray-900' : 'bg-gray-200'
-                  }`}
+                  className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${sendEmailNotification ? 'bg-gray-900' : 'bg-gray-200'
+                    }`}
                 >
                   <span
-                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ${
-                      sendEmailNotification ? 'translate-x-5' : 'translate-x-0'
-                    }`}
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ${sendEmailNotification ? 'translate-x-5' : 'translate-x-0'
+                      }`}
                   />
                 </button>
               </div>
             </div>
-            
+
             {/* Modal Footer */}
             <div className="px-5 py-4 bg-gray-50 border-t border-gray-100 flex items-center justify-between gap-3">
               {publishModal.item.isPublished && (
                 <button
                   onClick={() => markAsPublished(
-                    publishModal.calendarId, 
-                    publishModal.item.id, 
-                    [], 
-                    '', 
+                    publishModal.calendarId,
+                    publishModal.item.id,
+                    [],
+                    '',
                     false
                   )}
                   disabled={saving}
@@ -1147,9 +1176,9 @@ function PublishManager() {
                 </button>
                 <button
                   onClick={() => markAsPublished(
-                    publishModal.calendarId, 
-                    publishModal.item.id, 
-                    selectedPlatforms, 
+                    publishModal.calendarId,
+                    publishModal.item.id,
+                    selectedPlatforms,
                     publishNotes,
                     true,
                     sendEmailNotification
@@ -1174,7 +1203,7 @@ function PublishManager() {
           </div>
         </div>
       )}
-    </AdminLayout>
+    </Wrapper>
   );
 }
 

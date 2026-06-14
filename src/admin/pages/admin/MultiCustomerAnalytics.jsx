@@ -50,20 +50,19 @@ const SelectionSteps = memo(({ currentStep }) => {
     { id: 2, label: 'Choose Account', icon: Globe },
     { id: 3, label: 'View Analytics', icon: BarChart3 }
   ];
-  
+
   return (
     <div className="flex items-center justify-center gap-2 sm:gap-4 py-3">
       {steps.map((step, index) => {
         const isCompleted = currentStep > step.id;
         const isActive = currentStep === step.id;
         const Icon = step.icon;
-        
+
         return (
           <React.Fragment key={step.id}>
             {index > 0 && (
-              <div className={`hidden sm:block w-8 lg:w-12 h-0.5 transition-colors duration-300 ${
-                isCompleted ? 'bg-green-500' : 'bg-gray-200'
-              }`} />
+              <div className={`hidden sm:block w-8 lg:w-12 h-0.5 transition-colors duration-300 ${isCompleted ? 'bg-green-500' : 'bg-gray-200'
+                }`} />
             )}
             <div className="flex items-center gap-2">
               <div className={`
@@ -82,9 +81,8 @@ const SelectionSteps = memo(({ currentStep }) => {
                   </span>
                 )}
               </div>
-              <span className={`hidden lg:block text-sm font-medium transition-colors ${
-                isActive ? 'text-blue-700' : isCompleted ? 'text-green-600' : 'text-gray-400'
-              }`}>
+              <span className={`hidden lg:block text-sm font-medium transition-colors ${isActive ? 'text-blue-700' : isCompleted ? 'text-green-600' : 'text-gray-400'
+                }`}>
                 {step.label}
               </span>
             </div>
@@ -115,7 +113,7 @@ const QuickStatBadge = memo(({ icon: Icon, value, label, color = 'blue' }) => {
     purple: 'bg-purple-50 text-purple-700 border-purple-100',
     amber: 'bg-amber-50 text-amber-700 border-amber-100'
   };
-  
+
   return (
     <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border ${colorClasses[color]}`}>
       <Icon className="w-3.5 h-3.5" />
@@ -156,17 +154,15 @@ const CustomerCard = memo(({ customer, isSelected, onSelect, socialAccounts, ind
   return (
     <button
       onClick={() => onSelect(customer)}
-      className={`w-full text-left p-3 sm:p-4 rounded-xl border-2 transition-all duration-300 transform hover:scale-[1.02] ${
-        isSelected
+      className={`w-full text-left p-3 sm:p-4 rounded-xl border-2 transition-all duration-300 transform hover:scale-[1.02] ${isSelected
           ? 'border-blue-500 bg-gradient-to-r from-blue-50 to-indigo-50 shadow-lg shadow-blue-100/50'
           : 'border-gray-200 bg-white hover:border-blue-300 hover:shadow-md'
-      }`}
+        }`}
       style={{ animationDelay: `${index * 50}ms` }}
     >
       <div className="flex items-center gap-3">
-        <div className={`h-10 w-10 sm:h-12 sm:w-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-300 ${
-          isSelected ? 'bg-gradient-to-br from-blue-500 to-indigo-600 shadow-md' : 'bg-gradient-to-br from-gray-400 to-gray-500'
-        }`}>
+        <div className={`h-10 w-10 sm:h-12 sm:w-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-300 ${isSelected ? 'bg-gradient-to-br from-blue-500 to-indigo-600 shadow-md' : 'bg-gradient-to-br from-gray-400 to-gray-500'
+          }`}>
           <span className="text-white font-bold text-base sm:text-lg">
             {customer.name?.charAt(0)?.toUpperCase() || '?'}
           </span>
@@ -178,11 +174,10 @@ const CustomerCard = memo(({ customer, isSelected, onSelect, socialAccounts, ind
           <p className="text-xs text-gray-500 truncate">{customer.email}</p>
         </div>
         <div className="flex flex-col items-end gap-1.5">
-          <span className={`text-xs font-medium px-2.5 py-1 rounded-full transition-all ${
-            accountCount > 0 
-              ? isSelected ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700' 
+          <span className={`text-xs font-medium px-2.5 py-1 rounded-full transition-all ${accountCount > 0
+              ? isSelected ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'
               : 'bg-gray-100 text-gray-500'
-          }`}>
+            }`}>
             {accountCount} {accountCount === 1 ? 'account' : 'accounts'}
           </span>
           <div className="flex -space-x-1.5">
@@ -190,8 +185,8 @@ const CustomerCard = memo(({ customer, isSelected, onSelect, socialAccounts, ind
               const config = PLATFORM_ICONS[platform?.toLowerCase()] || {};
               const IconComp = config.icon || Globe;
               return (
-                <div 
-                  key={platform} 
+                <div
+                  key={platform}
                   className={`w-5 h-5 rounded-full flex items-center justify-center ring-2 ring-white ${config.bgColor || 'bg-gray-100'}`}
                   title={formatPlatformName(platform)}
                 >
@@ -215,7 +210,7 @@ const CustomerCard = memo(({ customer, isSelected, onSelect, socialAccounts, ind
 const SocialAccountCard = memo(({ account, isSelected, onSelect }) => {
   const config = PLATFORM_ICONS[account.platform?.toLowerCase()] || {};
   const IconComp = config.icon || Globe;
-  
+
   // Get page/channel name from various fields
   const accountName = account.name || account.pageName || account.channelName || account.platformUserId;
   const pageCount = account.pages?.length || account.channels?.length || 0;
@@ -224,23 +219,21 @@ const SocialAccountCard = memo(({ account, isSelected, onSelect }) => {
   return (
     <button
       onClick={() => onSelect(account)}
-      className={`w-full text-left p-3 sm:p-4 rounded-xl border-2 transition-all duration-300 transform hover:scale-[1.01] ${
-        isSelected
+      className={`w-full text-left p-3 sm:p-4 rounded-xl border-2 transition-all duration-300 transform hover:scale-[1.01] ${isSelected
           ? 'border-blue-500 bg-gradient-to-r from-blue-50 via-indigo-50 to-blue-50 shadow-lg shadow-blue-100/50'
           : 'border-gray-200 bg-white hover:border-blue-300 hover:shadow-md'
-      }`}
+        }`}
     >
       <div className="flex items-center gap-3">
-        <div 
-          className={`p-2.5 sm:p-3 rounded-xl flex-shrink-0 transition-all duration-300 ${
-            isSelected ? 'shadow-md' : ''
-          }`}
-          style={{ 
+        <div
+          className={`p-2.5 sm:p-3 rounded-xl flex-shrink-0 transition-all duration-300 ${isSelected ? 'shadow-md' : ''
+            }`}
+          style={{
             backgroundColor: isSelected ? `${config.color}20` : `${config.color}10`,
             border: isSelected ? `2px solid ${config.color}40` : 'none'
           }}
         >
-          <IconComp 
+          <IconComp
             className="h-5 w-5 sm:h-6 sm:w-6"
             style={{ color: config.color || '#6B7280' }}
           />
@@ -250,11 +243,10 @@ const SocialAccountCard = memo(({ account, isSelected, onSelect }) => {
             <h4 className={`font-semibold truncate text-sm sm:text-base ${isSelected ? 'text-blue-900' : 'text-gray-900'}`}>
               {formatPlatformName(account.platform)}
             </h4>
-            <span className={`flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
-              isConnected 
-                ? 'bg-green-100 text-green-700' 
+            <span className={`flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${isConnected
+                ? 'bg-green-100 text-green-700'
                 : 'bg-red-100 text-red-600'
-            }`}>
+              }`}>
               {isConnected ? (
                 <>
                   <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
@@ -276,12 +268,10 @@ const SocialAccountCard = memo(({ account, isSelected, onSelect }) => {
             </p>
           )}
         </div>
-        <div className={`p-2 rounded-lg transition-all duration-300 ${
-          isSelected ? 'bg-blue-100' : 'bg-gray-50 group-hover:bg-gray-100'
-        }`}>
-          <ChevronRight className={`h-5 w-5 transition-transform duration-300 ${
-            isSelected ? 'text-blue-600 translate-x-0.5' : 'text-gray-400'
-          }`} />
+        <div className={`p-2 rounded-lg transition-all duration-300 ${isSelected ? 'bg-blue-100' : 'bg-gray-50 group-hover:bg-gray-100'
+          }`}>
+          <ChevronRight className={`h-5 w-5 transition-transform duration-300 ${isSelected ? 'text-blue-600 translate-x-0.5' : 'text-gray-400'
+            }`} />
         </div>
       </div>
     </button>
@@ -292,7 +282,7 @@ const SocialAccountCard = memo(({ account, isSelected, onSelect }) => {
 const PageSelector = memo(({ pages, selectedPageId, onSelectPage, platform }) => {
   const config = PLATFORM_ICONS[platform?.toLowerCase()] || {};
   const isInstagram = platform?.toLowerCase() === 'instagram';
-  
+
   return (
     <div className="bg-gradient-to-br from-gray-50 via-white to-slate-50 rounded-2xl p-4 sm:p-5 border border-gray-200/80 shadow-sm">
       <h4 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
@@ -305,8 +295,8 @@ const PageSelector = memo(({ pages, selectedPageId, onSelectPage, platform }) =>
       <div className="grid gap-2 sm:grid-cols-2">
         {pages.map(page => {
           // For Instagram, use instagramBusinessAccount.id, otherwise use regular page id
-          const pageId = isInstagram && page.instagramBusinessAccount 
-            ? page.instagramBusinessAccount.id 
+          const pageId = isInstagram && page.instagramBusinessAccount
+            ? page.instagramBusinessAccount.id
             : (page.id || page.platformUserId || page.channelId);
           const pageName = isInstagram && page.instagramBusinessAccount
             ? (page.instagramBusinessAccount.name || page.instagramBusinessAccount.username || page.name)
@@ -315,26 +305,25 @@ const PageSelector = memo(({ pages, selectedPageId, onSelectPage, platform }) =>
             ? page.instagramBusinessAccount.profile_picture_url
             : (page.picture?.data?.url || page.profilePicture);
           const isActive = selectedPageId === pageId;
-          
+
           return (
             <button
               key={pageId}
               onClick={() => onSelectPage(page)}
-              className={`w-full text-left p-3 rounded-xl border-2 transition-all duration-200 ${
-                isActive
+              className={`w-full text-left p-3 rounded-xl border-2 transition-all duration-200 ${isActive
                   ? 'border-blue-400 bg-white shadow-md shadow-blue-50'
                   : 'border-gray-100 bg-white/80 hover:bg-white hover:border-gray-200 hover:shadow-sm'
-              }`}
+                }`}
             >
               <div className="flex items-center gap-3">
                 {profilePic ? (
-                  <img 
+                  <img
                     src={profilePic}
                     alt={pageName}
                     className="w-10 h-10 rounded-xl object-cover ring-2 ring-white shadow-sm"
                   />
                 ) : (
-                  <div 
+                  <div
                     className="w-10 h-10 rounded-xl flex items-center justify-center shadow-sm"
                     style={{ backgroundColor: `${config.color}15` }}
                   >
@@ -368,21 +357,21 @@ const PageSelector = memo(({ pages, selectedPageId, onSelectPage, platform }) =>
   );
 });
 
-function MultiCustomerAnalytics() {
+function MultiCustomerAnalytics({ embedded = false, customerId = null }) {
   const { currentUser } = useAuth();
-  
+
   // Data states
   const [customers, setCustomers] = useState([]);
   const [socialAccountsMap, setSocialAccountsMap] = useState({}); // customerId -> accounts[]
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
-  
+
   // Selection states
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [selectedAccount, setSelectedAccount] = useState(null);
   const [selectedPage, setSelectedPage] = useState(null);
-  
+
   // UI states
   const [searchQuery, setSearchQuery] = useState('');
   const [platformFilter, setPlatformFilter] = useState('all');
@@ -399,27 +388,27 @@ function MultiCustomerAnalytics() {
   // Fetch assigned customers
   const fetchCustomers = useCallback(async (isRefresh = false) => {
     if (!currentUser) return;
-    
+
     if (isRefresh) {
       setRefreshing(true);
     } else {
       setLoading(true);
     }
     setError('');
-    
+
     try {
       const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:3001';
       const response = await fetch(
         `${apiUrl}/admin/assigned-customers?adminId=${currentUser._id || currentUser.id}`
       );
-      
+
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      
+
       const data = await response.json();
       const customerList = Array.isArray(data) ? data : (data.customers || []);
-      
+
       setCustomers(customerList);
-      
+
       // Fetch social accounts for all customers in parallel
       if (customerList.length > 0) {
         const accountsPromises = customerList.map(async (customer) => {
@@ -429,8 +418,8 @@ function MultiCustomerAnalytics() {
             const accountsData = await accountsRes.json();
             return {
               customerId,
-              accounts: accountsData.success && Array.isArray(accountsData.accounts) 
-                ? accountsData.accounts 
+              accounts: accountsData.success && Array.isArray(accountsData.accounts)
+                ? accountsData.accounts
                 : []
             };
           } catch (err) {
@@ -438,7 +427,7 @@ function MultiCustomerAnalytics() {
             return { customerId, accounts: [] };
           }
         });
-        
+
         const accountsResults = await Promise.all(accountsPromises);
         const accountsMap = {};
         accountsResults.forEach(({ customerId, accounts }) => {
@@ -446,7 +435,7 @@ function MultiCustomerAnalytics() {
         });
         setSocialAccountsMap(accountsMap);
       }
-      
+
     } catch (err) {
       console.error('Error fetching customers:', err);
       setError('Failed to load customers. Please try again.');
@@ -460,22 +449,38 @@ function MultiCustomerAnalytics() {
     fetchCustomers();
   }, [fetchCustomers]);
 
+  useEffect(() => {
+    if (!customerId || !customers.length) return;
+    const matched = customers.find((c) => (c._id || c.id) === customerId);
+    if (!matched) return;
+    const currentId = selectedCustomer ? (selectedCustomer._id || selectedCustomer.id) : null;
+    if (currentId !== customerId) {
+      setSelectedCustomer(matched);
+      setSelectedAccount(null);
+      setSelectedPage(null);
+      setPlatformFilter('all');
+    }
+  }, [customerId, customers, selectedCustomer]);
+
   // Filter customers based on search
   const filteredCustomers = useMemo(() => {
-    if (!searchQuery.trim()) return customers;
+    const scopedCustomers = customerId
+      ? customers.filter((customer) => (customer._id || customer.id) === customerId)
+      : customers;
+    if (!searchQuery.trim()) return scopedCustomers;
     const query = searchQuery.toLowerCase();
-    return customers.filter(customer => 
+    return scopedCustomers.filter(customer =>
       customer.name?.toLowerCase().includes(query) ||
       customer.email?.toLowerCase().includes(query)
     );
-  }, [customers, searchQuery]);
+  }, [customers, searchQuery, customerId]);
 
   // Get social accounts for selected customer
   const customerAccounts = useMemo(() => {
     if (!selectedCustomer) return [];
     const customerId = selectedCustomer._id || selectedCustomer.id;
     const accounts = socialAccountsMap[customerId] || [];
-    
+
     if (platformFilter === 'all') return accounts;
     return accounts.filter(acc => acc.platform?.toLowerCase() === platformFilter);
   }, [selectedCustomer, socialAccountsMap, platformFilter]);
@@ -499,7 +504,7 @@ function MultiCustomerAnalytics() {
   // Handle account selection
   const handleSelectAccount = useCallback((account) => {
     setSelectedAccount(account);
-    
+
     // Auto-select first page if available
     const pages = account.pages || account.channels || [];
     if (pages.length > 0) {
@@ -538,7 +543,7 @@ function MultiCustomerAnalytics() {
     const totalAccounts = Object.values(socialAccountsMap).flat().length;
     const uniquePlatforms = new Set(Object.values(socialAccountsMap).flat().map(a => a.platform?.toLowerCase())).size;
     const customersWithAccounts = Object.values(socialAccountsMap).filter(accounts => accounts.length > 0).length;
-    
+
     return {
       totalCustomers: customers.length,
       totalAccounts,
@@ -547,17 +552,21 @@ function MultiCustomerAnalytics() {
     };
   }, [customers, socialAccountsMap]);
 
+  const Wrapper = ({ children }) => (
+    embedded ? <>{children}</> : <AdminLayout title="Customer Analytics">{children}</AdminLayout>
+  );
+
   return (
-    <AdminLayout title="Customer Analytics">
+    <Wrapper>
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20">
         <div className="max-w-[1920px] mx-auto p-3 sm:p-4 lg:p-6 space-y-4 sm:space-y-6">
-          
+
           {/* Header Section */}
           <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-2xl p-4 sm:p-6 lg:p-8 text-white shadow-xl relative overflow-hidden">
             {/* Background decoration */}
             <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-32 translate-x-32" />
             <div className="absolute bottom-0 left-0 w-48 h-48 bg-black/10 rounded-full translate-y-24 -translate-x-24" />
-            
+
             <div className="relative flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
               <div>
                 <div className="flex items-center gap-3 mb-2">
@@ -669,7 +678,7 @@ function MultiCustomerAnalytics() {
             </div>
           ) : (
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 sm:gap-6">
-              
+
               {/* Left Panel - Customer Selection */}
               <div className={`${customersPanelCollapsed ? 'xl:col-span-1' : 'xl:col-span-3'} space-y-4 transition-all duration-300`}>
                 {/* Customer List */}
@@ -687,7 +696,7 @@ function MultiCustomerAnalytics() {
                         {customersPanelCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                       </button>
                     </div>
-                    
+
                     {!customersPanelCollapsed && (
                       <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -701,7 +710,7 @@ function MultiCustomerAnalytics() {
                       </div>
                     )}
                   </div>
-                  
+
                   {!customersPanelCollapsed && (
                     <div className="max-h-[400px] overflow-y-auto p-3 space-y-2 scrollbar-thin scrollbar-thumb-gray-200 scrollbar-track-transparent">
                       {filteredCustomers.length === 0 ? (
@@ -743,17 +752,16 @@ function MultiCustomerAnalytics() {
                           {customerAccounts.length} total
                         </span>
                       </div>
-                      
+
                       {/* Platform Filter */}
                       {availablePlatforms.length > 1 && (
                         <div className="flex flex-wrap gap-1.5 mt-3">
                           <button
                             onClick={() => setPlatformFilter('all')}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${
-                              platformFilter === 'all'
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${platformFilter === 'all'
                                 ? 'bg-blue-600 text-white shadow-md shadow-blue-200'
                                 : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
-                            }`}
+                              }`}
                           >
                             All Platforms
                           </button>
@@ -764,11 +772,10 @@ function MultiCustomerAnalytics() {
                               <button
                                 key={platform}
                                 onClick={() => setPlatformFilter(platform)}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 flex items-center gap-1.5 ${
-                                  platformFilter === platform
+                                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 flex items-center gap-1.5 ${platformFilter === platform
                                     ? 'text-white shadow-md'
                                     : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
-                                }`}
+                                  }`}
                                 style={platformFilter === platform ? { backgroundColor: config.color } : {}}
                               >
                                 <IconComp className="h-3.5 w-3.5" />
@@ -779,7 +786,7 @@ function MultiCustomerAnalytics() {
                         </div>
                       )}
                     </div>
-                    
+
                     <div className="max-h-[350px] overflow-y-auto p-3 space-y-2 scrollbar-thin scrollbar-thumb-gray-200 scrollbar-track-transparent">
                       {customerAccounts.length === 0 ? (
                         <div className="text-center py-8 text-gray-500">
@@ -808,7 +815,7 @@ function MultiCustomerAnalytics() {
 
               {/* Right Panel - Analytics */}
               <div className={`${customersPanelCollapsed ? 'xl:col-span-11' : 'xl:col-span-9'} space-y-4 transition-all duration-300`}>
-                
+
                 {/* Selection Summary / Breadcrumb */}
                 {selectedCustomer && (
                   <div className="bg-white rounded-2xl border border-gray-200/50 shadow-sm p-4 sm:p-5 hover:shadow-md transition-shadow">
@@ -830,7 +837,7 @@ function MultiCustomerAnalytics() {
                           <p className="text-sm text-gray-500">{selectedCustomer.email}</p>
                         </div>
                       </div>
-                      
+
                       {selectedAccount && (
                         <div className="flex items-center gap-3">
                           <ArrowRight className="h-5 w-5 text-gray-300 hidden sm:block" />
@@ -840,7 +847,7 @@ function MultiCustomerAnalytics() {
                               const IconComp = config.icon || Globe;
                               return (
                                 <>
-                                  <div 
+                                  <div
                                     className="p-2 rounded-xl shadow-sm"
                                     style={{ backgroundColor: `${config.color}15` }}
                                   >
@@ -896,11 +903,10 @@ function MultiCustomerAnalytics() {
                     <TimePeriodChart
                       platform={selectedAccount.platform?.toLowerCase()}
                       accountId={chartAccountId}
-                      title={`${formatPlatformName(selectedAccount.platform)} Analytics - ${
-                        selectedAccount.platform?.toLowerCase() === 'instagram' && selectedPage?.instagramBusinessAccount
+                      title={`${formatPlatformName(selectedAccount.platform)} Analytics - ${selectedAccount.platform?.toLowerCase() === 'instagram' && selectedPage?.instagramBusinessAccount
                           ? (selectedPage.instagramBusinessAccount.name || selectedPage.instagramBusinessAccount.username)
                           : (selectedPage?.name || selectedAccount.name || 'Account')
-                      }`}
+                        }`}
                       defaultMetric="followers"
                     />
                   </div>
@@ -912,7 +918,7 @@ function MultiCustomerAnalytics() {
                       <div className="absolute inset-0 bg-gradient-to-br from-gray-50 via-white to-blue-50/30" />
                       <div className="absolute top-0 right-0 w-64 h-64 bg-blue-100/30 rounded-full -translate-y-32 translate-x-32 blur-3xl" />
                       <div className="absolute bottom-0 left-0 w-48 h-48 bg-purple-100/30 rounded-full translate-y-24 -translate-x-24 blur-3xl" />
-                      
+
                       <div className="relative z-10">
                         {!selectedCustomer ? (
                           <>
@@ -953,7 +959,7 @@ function MultiCustomerAnalytics() {
                               {customerAccounts.length > 0 ? 'Choose a Social Account' : 'No Accounts Connected'}
                             </h3>
                             <p className="text-gray-500 max-w-md mb-6 leading-relaxed">
-                              {customerAccounts.length > 0 
+                              {customerAccounts.length > 0
                                 ? `Select one of ${customerAccounts.length} connected account${customerAccounts.length > 1 ? 's' : ''} to view detailed analytics and performance metrics.`
                                 : 'This customer hasn\'t connected any social media accounts yet. Once they connect their accounts, you\'ll be able to view their analytics here.'}
                             </p>
@@ -963,7 +969,7 @@ function MultiCustomerAnalytics() {
                                   const config = PLATFORM_ICONS[platform] || {};
                                   const IconComp = config.icon || Globe;
                                   return (
-                                    <span 
+                                    <span
                                       key={platform}
                                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium"
                                       style={{ backgroundColor: `${config.color}15`, color: config.color }}
@@ -998,7 +1004,7 @@ function MultiCustomerAnalytics() {
           )}
         </div>
       </div>
-    </AdminLayout>
+    </Wrapper>
   );
 }
 

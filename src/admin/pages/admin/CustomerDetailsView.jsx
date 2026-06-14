@@ -603,6 +603,26 @@ const getCombinedTrendData = (platformData) => {
   return Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date));
 };
 
+const instagramMediaIdToUrl = (mediaId, postType) => {
+  if (!mediaId) return null;
+  const type = (postType || '').toLowerCase();
+  if (type === 'story') return null;
+  try {
+    const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+    let shortcode = '';
+    let n = BigInt(String(mediaId));
+    while (n > 0n) {
+      shortcode = ALPHABET[Number(n % 64n)] + shortcode;
+      n = n / 64n;
+    }
+    if (!shortcode) return null;
+    const path = type === 'reel' ? 'reel' : 'p';
+    return `https://www.instagram.com/${path}/${shortcode}/`;
+  } catch {
+    return null;
+  }
+};
+
 // Mini sparkline trend charts shown inline on published calendar items
 const MiniTrendCharts = memo(({ platformData }) => {
   const combined = getCombinedTrendData(platformData).slice(-14);
@@ -1243,6 +1263,10 @@ function CustomerDetailsView() {
         published: publishedStatus,
         publishedPlatforms: [],
       };
+    }).sort((a, b) => {
+      const dateA = a.lastUpdated ? new Date(a.lastUpdated).getTime() : 0;
+      const dateB = b.lastUpdated ? new Date(b.lastUpdated).getTime() : 0;
+      return dateB - dateA;
     });
   }, [allSubmissions, id, calendars, isItemPublished]);
 
@@ -1607,8 +1631,15 @@ function CustomerDetailsView() {
           : `https://www.facebook.com/${fbId}`;
         if (!links.find(l => l.url === fbUrl)) links.push({ url: fbUrl, label: 'Facebook', platform: 'facebook' });
       }
-      if (post.instagramPermalink) {
-        if (!links.find(l => l.url === post.instagramPermalink)) links.push({ url: post.instagramPermalink, label: 'Instagram', platform: 'instagram' });
+      if (post.instagramPostId) {
+        const igUrl = post.instagramPermalink || instagramMediaIdToUrl(post.instagramPostId, post.postType);
+        if (igUrl && !links.find(l => l.url === igUrl)) {
+          links.push({ url: igUrl, label: 'Instagram', platform: 'instagram' });
+        }
+      } else if (post.instagramPermalink) {
+        if (!links.find(l => l.url === post.instagramPermalink)) {
+          links.push({ url: post.instagramPermalink, label: 'Instagram', platform: 'instagram' });
+        }
       }
       if (post.youtubePostId) {
         const ytUrl = `https://www.youtube.com/watch?v=${post.youtubePostId}`;

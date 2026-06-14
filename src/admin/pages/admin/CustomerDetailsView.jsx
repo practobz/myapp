@@ -894,13 +894,46 @@ function CustomerDetailsView() {
       const response = await fetch(`${API_URL}/api/scheduled-posts?customerId=${encodeURIComponent(id)}`);
       if (response.ok) {
         const data = await response.json();
-        setScheduledPosts(Array.isArray(data) ? data.filter(p => p.customerId === id) : []);
+        const posts = Array.isArray(data) ? data.filter(p => p.customerId === id) : [];
+        setScheduledPosts(posts);
+
+        // Fetch live metrics for published posts to resolve the true permalink
+        const publishedPosts = posts.filter(p => p.status === 'published' || p.publishedAt);
+        if (publishedPosts.length > 0) {
+          try {
+            const res = await fetch(`${API_URL}/api/admin/post-metrics/live`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ customerId: id, posts: publishedPosts }),
+            });
+            if (res.ok) {
+              const json = await res.json();
+              const enriched = json.posts || [];
+              setScheduledPosts(currentPosts => {
+                return currentPosts.map(p => {
+                  const match = enriched.find(ep => ep._id === p._id);
+                  if (match) {
+                    return {
+                      ...p,
+                      ...match,
+                      instagramPermalink: match.metrics?.permalink || match.instagramPermalink || p.instagramPermalink
+                    };
+                  }
+                  return p;
+                });
+              });
+            }
+          } catch (liveErr) {
+            console.warn('Failed to fetch live metrics in CustomerDetailsView:', liveErr);
+          }
+        }
       }
     } catch (error) {
       console.error('Error fetching scheduled posts:', error);
       setScheduledPosts([]);
     }
   };
+
 
   const fetchSocialAccounts = async () => {
     try {
@@ -1612,10 +1645,12 @@ function CustomerDetailsView() {
     }
   };
 
+  const isIdValid = (id) => id && id !== 'null' && id !== 'undefined' && id !== 'none' && id !== 'N/A';
+
   // Find the matching scheduled post(s) for a calendar item and build platform links
   const getItemPublishedLinks = useCallback((item) => {
     const links = [];
-    if (item.postUrl) {
+    if (item.postUrl && isIdValid(item.postUrl)) {
       links.push({ url: item.postUrl, label: 'View Post', platform: null });
     }
     for (const post of scheduledPosts) {
@@ -1624,34 +1659,39 @@ function CustomerDetailsView() {
         (post.contentId && post.contentId === item.id) ||
         (post.item_name && post.item_name === (item.title || item.description));
       if (!matches || !(post.status === 'published' || post.publishedAt)) continue;
-      if (post.facebookPostId && !post.facebookPostId.startsWith('fb_shared_from_')) {
+      if (isIdValid(post.facebookPostId) && !post.facebookPostId.startsWith('fb_shared_from_')) {
         const fbId = post.facebookPostId;
         const fbUrl = fbId.includes('_')
           ? `https://www.facebook.com/permalink.php?story_fbid=${fbId.split('_')[1]}&id=${fbId.split('_')[0]}`
           : `https://www.facebook.com/${fbId}`;
         if (!links.find(l => l.url === fbUrl)) links.push({ url: fbUrl, label: 'Facebook', platform: 'facebook' });
       }
-      if (post.instagramPostId) {
+      if (isIdValid(post.instagramPostId)) {
         const igUrl = post.instagramPermalink || instagramMediaIdToUrl(post.instagramPostId, post.postType);
         if (igUrl && !links.find(l => l.url === igUrl)) {
-          links.push({ url: igUrl, label: 'Instagram', platform: 'instagram' });
+          // If we have live metrics source but no permalink, it means the post was not found/available on Instagram
+          const isLiveButUnavailable = post.metricsSource === 'live' && !post.instagramPermalink;
+          if (!isLiveButUnavailable) {
+            links.push({ url: igUrl, label: 'Instagram', platform: 'instagram' });
+          }
         }
-      } else if (post.instagramPermalink) {
+      } else if (isIdValid(post.instagramPermalink)) {
         if (!links.find(l => l.url === post.instagramPermalink)) {
           links.push({ url: post.instagramPermalink, label: 'Instagram', platform: 'instagram' });
         }
       }
-      if (post.youtubePostId) {
+      if (isIdValid(post.youtubePostId)) {
         const ytUrl = `https://www.youtube.com/watch?v=${post.youtubePostId}`;
         if (!links.find(l => l.url === ytUrl)) links.push({ url: ytUrl, label: 'YouTube', platform: 'youtube' });
       }
-      if (post.linkedinPostId) {
+      if (isIdValid(post.linkedinPostId)) {
         const liUrl = `https://www.linkedin.com/feed/update/${post.linkedinPostId}`;
         if (!links.find(l => l.url === liUrl)) links.push({ url: liUrl, label: 'LinkedIn', platform: 'linkedin' });
       }
     }
     return links;
   }, [scheduledPosts]);
+
 
   const getCustomerName = useCallback(() => customer?.name || '', [customer]);
 

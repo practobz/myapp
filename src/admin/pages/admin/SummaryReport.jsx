@@ -878,7 +878,8 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
         a.versions?.some(v => ['approved', 'published'].includes((v.status || '').toLowerCase()))
       ).length;
       const pdfPublishedCount = report.assignments.filter(a =>
-        a.versions?.some(v => (v.status || '').toLowerCase() === 'published')
+        a.versions?.some(v => (v.status || '').toLowerCase() === 'published') ||
+        getPdfPosts(a).some(p => p.status === 'published' || p.publishedAt)
       ).length;
       const pdfApprovalRate = totalItems > 0 ? Math.round((pdfApprovedCount / totalItems) * 100) : 0;
       const pdfTotalVersions = report.assignments.reduce((s, a) => s + (a.totalVersions || 1), 0);
@@ -887,7 +888,8 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
         report.assignments.flatMap(a => [
           ...(Array.isArray(a.platforms) ? a.platforms.flat() : []),
           ...(a.platform ? [a.platform] : []),
-        ].filter(p => p && typeof p === 'string').map(p => p.toLowerCase()))
+          ...getPdfPosts(a).map(p => Array.isArray(p.platform) ? p.platform[0] : p.platform),
+        ].filter(p => p && typeof p === 'string').map(p => p.toLowerCase().trim()))
       );
       const platformCount = platformsSet.size;
       const periodVal = (report.filters?.fromDate && report.filters?.toDate)
@@ -922,7 +924,7 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
       ];
       rightMeta.forEach((rm, i) => {
         sans('normal', 7); sc(C.muted);
-        doc.text(rm.label + ':', PW - M - 30, y + i * 5);
+        doc.text(rm.label + ':', PW - M - 50, y + i * 5);
         sans('bold', 7); sc(C.body);
         doc.text(rm.value, PW - M, y + i * 5, { align: 'right' });
       });
@@ -1274,7 +1276,7 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
             const avgRev = c.assigned > 0 ? (c.totalV / c.assigned).toFixed(1) : '—';
 
             sans('bold', 7); sc(C.body);
-            doc.text(sanitize(c.name).slice(0, 20), colRX, hry);
+            doc.text(sanitize(c.name).slice(0, 30), colRX, hry);
             sans('normal', 7); sc(C.body);
             doc.text(String(c.assigned), colRX + 40, hry);
             doc.text(`${c.approved} (${apprPct}%)`, colRX + 58, hry);

@@ -607,10 +607,6 @@ function ContentDetailView({
               </div>
             )}
 
-            {/* Title */}
-            {selectedContent.title && (
-              <h1 className="text-base font-bold text-gray-900 leading-tight">{selectedContent.title}</h1>
-            )}
 
             {/* Meta chips row */}
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">

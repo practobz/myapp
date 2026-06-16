@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import AdminLayout from '../../components/layout/AdminLayout';
 import FacebookPostInsights from '../../../customer/Integration/FacebookPostInsights';
 import InstagramPostInsights from '../../../customer/Integration/InstagramPostInsights';
+import MultiCustomerAnalytics from './MultiCustomerAnalytics';
 import {
   Users, Search, RefreshCw, ChevronDown, ChevronUp, ExternalLink,
   Facebook, Instagram, Linkedin, Youtube, Globe, CheckCircle,
@@ -78,6 +79,10 @@ function AccountDetailModal({ account, customer, onClose, onDisconnect }) {
 
   const config = getPlatformConfig(account.platform);
   const PlatformIcon = config.icon;
+
+  // Accordion state
+  const [isPostsOpen, setIsPostsOpen] = useState(false);
+  const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
 
   // Posts state
   const [posts, setPosts] = useState([]);
@@ -665,65 +670,116 @@ function AccountDetailModal({ account, customer, onClose, onDisconnect }) {
             )}
           </div>
 
-          {/* Posts section */}
-          <div className="px-5 sm:px-6 py-4">
-            <div className="flex items-center justify-between mb-4">
-              <h4 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                <ImageIcon className="h-4 w-4 text-gray-500" />
-                Posts
-                {posts.length > 0 && <span className="text-xs text-gray-400 font-normal">({posts.length})</span>}
-              </h4>
-              <button
-                onClick={fetchPosts}
-                disabled={loadingPosts}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
-              >
-                <RefreshCw className={`h-3 w-3 ${loadingPosts ? 'animate-spin' : ''}`} />
-                Refresh
-              </button>
-            </div>
+          {/* Accordion 1: Posts Feed */}
+          <div className="border-b border-gray-100">
+            <button
+              onClick={() => setIsPostsOpen(!isPostsOpen)}
+              className="w-full flex items-center justify-between px-5 sm:px-6 py-4 hover:bg-gray-50 transition-colors text-left"
+            >
+              <div className="flex items-center gap-2">
+                <ImageIcon className="h-5 w-5 text-gray-500" />
+                <span className="text-sm font-semibold text-gray-950">Posts Feed</span>
+                {posts.length > 0 && (
+                  <span className="text-xs font-normal text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+                    {posts.length}
+                  </span>
+                )}
+              </div>
+              <div>
+                {isPostsOpen ? (
+                  <ChevronUp className="h-5 w-5 text-gray-400" />
+                ) : (
+                  <ChevronDown className="h-5 w-5 text-gray-400" />
+                )}
+              </div>
+            </button>
 
-            {loadingPosts ? (
-              <div className="flex flex-col items-center justify-center py-12">
-                <Loader2 className="h-8 w-8 text-gray-400 animate-spin mb-3" />
-                <p className="text-sm text-gray-500">Loading posts from {config.label}...</p>
-              </div>
-            ) : postsError ? (
-              <div className="text-center py-8">
-                <AlertCircle className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-                <p className="text-sm text-gray-500 mb-2">{postsError}</p>
-                <button
-                  onClick={fetchPosts}
-                  className="text-xs text-blue-600 hover:text-blue-700 font-medium"
-                >
-                  Try Again
-                </button>
-              </div>
-            ) : posts.length === 0 ? (
-              <div className="text-center py-8">
-                <ImageIcon className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-                <p className="text-sm text-gray-500">No posts found for this account</p>
-              </div>
-            ) : (
-              <>
-                <div className="grid grid-cols-3 gap-1 sm:gap-1.5">
-                  {posts.map((post, idx) => renderPostCard(post, idx))}
+            {isPostsOpen && (
+              <div className="px-5 sm:px-6 pb-6 pt-2">
+                <div className="flex items-center justify-end mb-4">
+                  <button
+                    onClick={fetchPosts}
+                    disabled={loadingPosts}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
+                  >
+                    <RefreshCw className={`h-3 w-3 ${loadingPosts ? 'animate-spin' : ''}`} />
+                    Refresh Feed
+                  </button>
                 </div>
-                {account.platform === 'instagram' && postsNextCursor && (
-                  <div className="flex items-center justify-center py-4 border-t border-gray-100 mt-2">
+
+                {loadingPosts ? (
+                  <div className="flex flex-col items-center justify-center py-12">
+                    <Loader2 className="h-8 w-8 text-gray-400 animate-spin mb-3" />
+                    <p className="text-sm text-gray-500">Loading posts from {config.label}...</p>
+                  </div>
+                ) : postsError ? (
+                  <div className="text-center py-8">
+                    <AlertCircle className="h-10 w-10 text-gray-300 mx-auto mb-3" />
+                    <p className="text-sm text-gray-500 mb-2">{postsError}</p>
                     <button
-                      onClick={loadMoreInstagramPosts}
-                      disabled={loadingMorePosts}
-                      className="flex items-center gap-2 text-sm font-medium text-pink-600 hover:text-pink-700 transition-colors disabled:opacity-50"
+                      onClick={fetchPosts}
+                      className="text-xs text-blue-600 hover:text-blue-700 font-medium"
                     >
-                      {loadingMorePosts
-                        ? <Loader2 className="h-4 w-4 animate-spin" />
-                        : <ChevronDown className="h-4 w-4" />}
-                      {loadingMorePosts ? 'Loading...' : 'Load More Posts'}
+                      Try Again
                     </button>
                   </div>
+                ) : posts.length === 0 ? (
+                  <div className="text-center py-8">
+                    <ImageIcon className="h-10 w-10 text-gray-300 mx-auto mb-3" />
+                    <p className="text-sm text-gray-500">No posts found for this account</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-3 gap-1 sm:gap-1.5">
+                      {posts.map((post, idx) => renderPostCard(post, idx))}
+                    </div>
+                    {account.platform === 'instagram' && postsNextCursor && (
+                      <div className="flex items-center justify-center py-4 border-t border-gray-100 mt-2">
+                        <button
+                          onClick={loadMoreInstagramPosts}
+                          disabled={loadingMorePosts}
+                          className="flex items-center gap-2 text-sm font-medium text-pink-600 hover:text-pink-700 transition-colors disabled:opacity-50"
+                        >
+                          {loadingMorePosts
+                            ? <Loader2 className="h-4 w-4 animate-spin" />
+                            : <ChevronDown className="h-4 w-4" />}
+                          {loadingMorePosts ? 'Loading...' : 'Load More Posts'}
+                        </button>
+                      </div>
+                    )}
+                  </>
                 )}
-              </>
+              </div>
+            )}
+          </div>
+
+          {/* Accordion 2: Real-time Analytics */}
+          <div>
+            <button
+              onClick={() => setIsAnalyticsOpen(!isAnalyticsOpen)}
+              className="w-full flex items-center justify-between px-5 sm:px-6 py-4 hover:bg-gray-50 transition-colors text-left"
+            >
+              <div className="flex items-center gap-2">
+                <BarChart3 className="h-5 w-5 text-gray-500" />
+                <span className="text-sm font-semibold text-gray-950">Real-time Analytics</span>
+              </div>
+              <div>
+                {isAnalyticsOpen ? (
+                  <ChevronUp className="h-5 w-5 text-gray-400" />
+                ) : (
+                  <ChevronDown className="h-5 w-5 text-gray-400" />
+                )}
+              </div>
+            </button>
+
+            {isAnalyticsOpen && (
+              <div className="px-5 sm:px-6 pb-6 pt-2 border-t border-gray-100">
+                <MultiCustomerAnalytics
+                  embedded={true}
+                  customerId={customer.customerId}
+                  accountId={account._id}
+                />
+              </div>
             )}
           </div>
         </div>
@@ -902,47 +958,68 @@ function AccountCard({ account, customer, onClick, onDisconnect }) {
   return (
     <div
       onClick={onClick}
-      className={`border ${config.border} rounded-xl p-4 cursor-pointer hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 ${config.bg}`}
+      className={`border ${config.border} rounded-xl p-4 cursor-pointer hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 ${config.bg} flex flex-col justify-between h-full`}
     >
-      <div className="flex items-start gap-3">
-        {account.profilePicture ? (
-          <img
-            src={account.profilePicture}
-            alt=""
-            className="w-10 h-10 rounded-full border-2 border-white shadow-sm flex-shrink-0"
-          />
-        ) : (
-          <div className={`w-10 h-10 bg-gradient-to-br ${config.gradient} rounded-full flex items-center justify-center flex-shrink-0`}>
-            <Icon className="h-5 w-5 text-white" />
+      <div>
+        <div className="flex items-start gap-3">
+          {account.profilePicture ? (
+            <img
+              src={account.profilePicture}
+              alt=""
+              className="w-10 h-10 rounded-full border-2 border-white shadow-sm flex-shrink-0"
+            />
+          ) : (
+            <div className={`w-10 h-10 bg-gradient-to-br ${config.gradient} rounded-full flex items-center justify-center flex-shrink-0`}>
+              <Icon className="h-5 w-5 text-white" />
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-gray-900 text-sm truncate">{account.name || 'Unnamed'}</p>
+            <p className={`text-xs ${config.color} font-medium`}>{config.label}</p>
+            {account.email && <p className="text-xs text-gray-500 truncate mt-0.5">{account.email}</p>}
+          </div>
+        </div>
+
+        {subItemCount > 0 && (
+          <div className="mt-3 text-xs text-gray-500 flex items-center gap-1">
+            <Building2 className="h-3 w-3" />
+            <span>{subItemCount} {subItemCount === 1 ? 'page' : 'pages'} connected</span>
           </div>
         )}
-        <div className="flex-1 min-w-0">
-          <p className="font-semibold text-gray-900 text-sm truncate">{account.name || 'Unnamed'}</p>
-          <p className={`text-xs ${config.color} font-medium`}>{config.label}</p>
-          {account.email && <p className="text-xs text-gray-500 truncate mt-0.5">{account.email}</p>}
+
+        {/* Metadata dates */}
+        <div className="mt-3 pt-3 border-t border-black/5 space-y-1 text-[11px] text-gray-505">
+          <div className="flex justify-between items-center">
+            <span className="font-medium text-gray-400">Connected:</span>
+            <span className="font-mono text-gray-700">{formatDate(account.connectedAt || account.createdAt)}</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="font-medium text-gray-400">Token Created:</span>
+            <span className="font-mono text-gray-700">{formatDate(account.tokenCreatedAt || account.connectedAt || account.createdAt)}</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="font-medium text-gray-400">Token Expires:</span>
+            <span className={`font-mono ${account.tokenExpiresAt && new Date(account.tokenExpiresAt) < new Date()
+                ? 'text-red-500 font-bold'
+                : 'text-gray-750'
+              }`}>
+              {account.tokenExpiresAt
+                ? (new Date(account.tokenExpiresAt) < new Date()
+                  ? `Expired (${formatDate(account.tokenExpiresAt)})`
+                  : formatDate(account.tokenExpiresAt))
+                : 'Never'}
+            </span>
+          </div>
         </div>
       </div>
 
-      <div className="mt-3 flex items-center justify-between text-xs text-gray-500">
-        <span className="flex items-center gap-1">
-          <Calendar className="h-3 w-3" />
-          {formatDate(account.connectedAt || account.createdAt)}
-        </span>
-        {subItemCount > 0 && (
-          <span className="flex items-center gap-1">
-            <Building2 className="h-3 w-3" />
-            {subItemCount} {subItemCount === 1 ? 'page' : 'pages'}
-          </span>
-        )}
-      </div>
-
-      <div className="mt-2 flex items-center justify-between">
-        <span className="text-xs text-gray-400 flex items-center gap-1 hover:text-gray-600">
+      <div className="mt-4 pt-3 border-t border-black/5 flex items-center justify-between">
+        <span className="text-xs text-gray-450 flex items-center gap-1 hover:text-gray-650">
           <Eye className="h-3 w-3" /> View Details
         </span>
         <button
           onClick={(e) => { e.stopPropagation(); onDisconnect && onDisconnect(account, customer); }}
-          className="flex items-center gap-1 text-xs text-red-400 hover:text-red-600 hover:bg-red-50 px-2 py-1 rounded-lg transition-colors"
+          className="flex items-center gap-1 text-xs text-red-400 hover:text-red-650 hover:bg-red-50 px-2 py-1 rounded-lg transition-colors"
           title="Disconnect account"
         >
           <Unlink className="h-3 w-3" /> Disconnect
@@ -1286,129 +1363,133 @@ function CustomerSocialAccounts({ embedded = false, customerId = null }) {
     <Wrapper>
       <div className="space-y-4 sm:space-y-6">
         {/* Stats banner */}
-        <div className="bg-gradient-to-r from-slate-900 via-blue-900 to-indigo-900 rounded-xl sm:rounded-2xl shadow-xl p-4 sm:p-6 relative overflow-hidden">
-          <div className="absolute inset-0 opacity-10">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-white rounded-full -translate-y-1/2 translate-x-1/2" />
-            <div className="absolute bottom-0 left-0 w-48 h-48 bg-white rounded-full translate-y-1/2 -translate-x-1/2" />
-          </div>
-          <div className="relative z-10">
-            <h2 className="text-lg sm:text-xl font-bold text-white mb-4 flex items-center gap-2">
-              <Globe className="h-5 w-5 sm:h-6 sm:w-6" />
-              Customer Social Accounts Overview
-            </h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3">
-              <div className="bg-white/10 rounded-xl p-3 border border-white/20">
-                <div className="flex items-center gap-2">
-                  <Users className="h-4 w-4 text-blue-300" />
-                  <span className="text-blue-100 text-xs">Customers</span>
-                </div>
-                <p className="text-white text-xl font-bold mt-1">{stats.totalCustomers}</p>
-              </div>
-              <div className="bg-white/10 rounded-xl p-3 border border-white/20">
-                <div className="flex items-center gap-2">
-                  <Globe className="h-4 w-4 text-green-300" />
-                  <span className="text-blue-100 text-xs">Total Accounts</span>
-                </div>
-                <p className="text-white text-xl font-bold mt-1">{stats.totalAccounts}</p>
-              </div>
-              {Object.entries(stats.platformCounts).map(([platform, count]) => {
-                const config = getPlatformConfig(platform);
-                const Icon = config.icon;
-                return (
-                  <div key={platform} className="bg-white/10 rounded-xl p-3 border border-white/20">
-                    <div className="flex items-center gap-2">
-                      <Icon className="h-4 w-4 text-white/80" />
-                      <span className="text-blue-100 text-xs">{config.label}</span>
-                    </div>
-                    <p className="text-white text-xl font-bold mt-1">{count}</p>
+        {!embedded && (
+          <div className="bg-gradient-to-r from-slate-900 via-blue-900 to-indigo-900 rounded-xl sm:rounded-2xl shadow-xl p-4 sm:p-6 relative overflow-hidden">
+            <div className="absolute inset-0 opacity-10">
+              <div className="absolute top-0 right-0 w-64 h-64 bg-white rounded-full -translate-y-1/2 translate-x-1/2" />
+              <div className="absolute bottom-0 left-0 w-48 h-48 bg-white rounded-full translate-y-1/2 -translate-x-1/2" />
+            </div>
+            <div className="relative z-10">
+              <h2 className="text-lg sm:text-xl font-bold text-white mb-4 flex items-center gap-2">
+                <Globe className="h-5 w-5 sm:h-6 sm:w-6" />
+                Customer Social Accounts Overview
+              </h2>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3">
+                <div className="bg-white/10 rounded-xl p-3 border border-white/20">
+                  <div className="flex items-center gap-2">
+                    <Users className="h-4 w-4 text-blue-300" />
+                    <span className="text-blue-100 text-xs">Customers</span>
                   </div>
-                );
-              })}
+                  <p className="text-white text-xl font-bold mt-1">{stats.totalCustomers}</p>
+                </div>
+                <div className="bg-white/10 rounded-xl p-3 border border-white/20">
+                  <div className="flex items-center gap-2">
+                    <Globe className="h-4 w-4 text-green-300" />
+                    <span className="text-blue-100 text-xs">Total Accounts</span>
+                  </div>
+                  <p className="text-white text-xl font-bold mt-1">{stats.totalAccounts}</p>
+                </div>
+                {Object.entries(stats.platformCounts).map(([platform, count]) => {
+                  const config = getPlatformConfig(platform);
+                  const Icon = config.icon;
+                  return (
+                    <div key={platform} className="bg-white/10 rounded-xl p-3 border border-white/20">
+                      <div className="flex items-center gap-2">
+                        <Icon className="h-4 w-4 text-white/80" />
+                        <span className="text-blue-100 text-xs">{config.label}</span>
+                      </div>
+                      <p className="text-white text-xl font-bold mt-1">{count}</p>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Search + filters */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-            {/* Search */}
-            <div className="relative flex-1">
-              <Search className="h-4 w-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Search customers or accounts..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+        {!embedded && (
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              {/* Search */}
+              <div className="relative flex-1">
+                <Search className="h-4 w-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Search customers or accounts..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+
+              {/* Platform filter */}
+              <div className="flex items-center gap-2">
+                <SlidersHorizontal className="h-4 w-4 text-gray-400 hidden sm:block" />
+                <select
+                  value={platformFilter}
+                  onChange={(e) => setPlatformFilter(e.target.value)}
+                  className="px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                 >
-                  <X className="h-4 w-4" />
+                  <option value="all">All Platforms</option>
+                  <option value="facebook">Facebook</option>
+                  <option value="instagram">Instagram</option>
+                  <option value="linkedin">LinkedIn</option>
+                  <option value="youtube">YouTube</option>
+                </select>
+
+                {/* Expand / Collapse */}
+                {!embedded && (
+                  <button
+                    onClick={handleExpandAll}
+                    className="px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm hover:bg-gray-100 transition-colors whitespace-nowrap"
+                  >
+                    {expandAll ? 'Collapse All' : 'Expand All'}
+                  </button>
+                )}
+
+                {/* Refresh */}
+                <button
+                  onClick={() => fetchData(true)}
+                  disabled={isRefreshing}
+                  className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-50"
+                  title="Refresh"
+                >
+                  <RefreshCw className={`h-4 w-4 text-gray-600 ${isRefreshing ? 'animate-spin' : ''}`} />
                 </button>
-              )}
+              </div>
             </div>
 
-            {/* Platform filter */}
-            <div className="flex items-center gap-2">
-              <SlidersHorizontal className="h-4 w-4 text-gray-400 hidden sm:block" />
-              <select
-                value={platformFilter}
-                onChange={(e) => setPlatformFilter(e.target.value)}
-                className="px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-              >
-                <option value="all">All Platforms</option>
-                <option value="facebook">Facebook</option>
-                <option value="instagram">Instagram</option>
-                <option value="linkedin">LinkedIn</option>
-                <option value="youtube">YouTube</option>
-              </select>
-
-              {/* Expand / Collapse */}
-              {!embedded && (
-                <button
-                  onClick={handleExpandAll}
-                  className="px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm hover:bg-gray-100 transition-colors whitespace-nowrap"
-                >
-                  {expandAll ? 'Collapse All' : 'Expand All'}
-                </button>
-              )}
-
-              {/* Refresh */}
-              <button
-                onClick={() => fetchData(true)}
-                disabled={isRefreshing}
-                className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-50"
-                title="Refresh"
-              >
-                <RefreshCw className={`h-4 w-4 text-gray-600 ${isRefreshing ? 'animate-spin' : ''}`} />
-              </button>
-            </div>
+            {/* Active filters indicator */}
+            {(searchQuery || platformFilter !== 'all') && (
+              <div className="mt-3 flex items-center gap-2 text-xs text-gray-500">
+                <Filter className="h-3 w-3" />
+                <span>
+                  Showing {filteredCustomers.length} of {customers.length} customers
+                </span>
+                {(searchQuery || platformFilter !== 'all') && (
+                  <button
+                    onClick={() => {
+                      setSearchQuery('');
+                      setPlatformFilter('all');
+                    }}
+                    className="text-blue-600 hover:text-blue-700 font-medium"
+                  >
+                    Clear filters
+                  </button>
+                )}
+              </div>
+            )}
           </div>
-
-          {/* Active filters indicator */}
-          {(searchQuery || platformFilter !== 'all') && (
-            <div className="mt-3 flex items-center gap-2 text-xs text-gray-500">
-              <Filter className="h-3 w-3" />
-              <span>
-                Showing {filteredCustomers.length} of {customers.length} customers
-              </span>
-              {(searchQuery || platformFilter !== 'all') && (
-                <button
-                  onClick={() => {
-                    setSearchQuery('');
-                    setPlatformFilter('all');
-                  }}
-                  className="text-blue-600 hover:text-blue-700 font-medium"
-                >
-                  Clear filters
-                </button>
-              )}
-            </div>
-          )}
-        </div>
+        )}
 
         {/* Customer list */}
         {(embedded ? embeddedAccounts.length === 0 : filteredCustomers.length === 0) ? (

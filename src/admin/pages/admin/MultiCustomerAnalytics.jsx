@@ -357,7 +357,7 @@ const PageSelector = memo(({ pages, selectedPageId, onSelectPage, platform }) =>
   );
 });
 
-function MultiCustomerAnalytics({ embedded = false, customerId = null }) {
+function MultiCustomerAnalytics({ embedded = false, customerId = null, accountId = null }) {
   const { currentUser } = useAuth();
 
   // Data states
@@ -462,6 +462,25 @@ function MultiCustomerAnalytics({ embedded = false, customerId = null }) {
     }
   }, [customerId, customers, selectedCustomer]);
 
+  useEffect(() => {
+    if (!accountId || !selectedCustomer) return;
+    const customerIdVal = selectedCustomer._id || selectedCustomer.id;
+    const accounts = socialAccountsMap[customerIdVal] || [];
+    const matchedAccount = accounts.find(acc => acc._id === accountId || acc.id === accountId);
+    if (matchedAccount) {
+      const currentAccId = selectedAccount ? (selectedAccount._id || selectedAccount.id) : null;
+      if (currentAccId !== accountId) {
+        setSelectedAccount(matchedAccount);
+        const pages = matchedAccount.pages || matchedAccount.channels || [];
+        if (pages.length > 0) {
+          setSelectedPage(pages[0]);
+        } else {
+          setSelectedPage(null);
+        }
+      }
+    }
+  }, [accountId, selectedCustomer, socialAccountsMap, selectedAccount]);
+
   // Filter customers based on search
   const filteredCustomers = useMemo(() => {
     const scopedCustomers = customerId
@@ -555,6 +574,68 @@ function MultiCustomerAnalytics({ embedded = false, customerId = null }) {
   const Wrapper = ({ children }) => (
     embedded ? <>{children}</> : <AdminLayout title="Customer Analytics">{children}</AdminLayout>
   );
+
+  if (accountId) {
+    if (loading) {
+      return (
+        <div className="bg-white rounded-2xl border border-gray-200/50 p-6 flex flex-col items-center justify-center min-h-[200px]">
+          <RefreshCw className="h-6 w-6 text-blue-500 animate-spin mb-3" />
+          <p className="text-xs text-gray-500">Loading platform analytics...</p>
+        </div>
+      );
+    }
+
+    if (error) {
+      return (
+        <div className="bg-red-50 border-l-4 border-red-500 rounded-xl p-4 flex items-center justify-between shadow-sm">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="h-5 w-5 text-red-500" />
+            <p className="text-red-800 text-xs font-medium">Failed to load analytics: {error}</p>
+          </div>
+          <button
+            onClick={() => fetchCustomers(false)}
+            className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-medium hover:bg-red-700 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      );
+    }
+
+    if (!selectedAccount || !chartAccountId) {
+      return (
+        <div className="bg-white rounded-2xl border border-gray-200/50 p-6 text-center text-gray-500">
+          <Globe className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+          <p className="text-xs font-medium">Platform account not found or not loaded.</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-4">
+        {/* Page Selector (if account has multiple pages) */}
+        {(selectedAccount.pages?.length > 1 || selectedAccount.channels?.length > 1) && (
+          <PageSelector
+            pages={selectedAccount.pages || selectedAccount.channels || []}
+            selectedPageId={
+              selectedAccount.platform?.toLowerCase() === 'instagram' && selectedPage?.instagramBusinessAccount
+                ? selectedPage.instagramBusinessAccount.id
+                : (selectedPage?.id || selectedPage?.platformUserId || selectedPage?.channelId)
+            }
+            onSelectPage={handleSelectPage}
+            platform={selectedAccount.platform}
+          />
+        )}
+
+        <TimePeriodChart
+          platform={selectedAccount.platform?.toLowerCase()}
+          accountId={chartAccountId}
+          title={`${formatPlatformName(selectedAccount.platform)} Analytics`}
+          defaultMetric="followers"
+        />
+      </div>
+    );
+  }
 
   return (
     <Wrapper>

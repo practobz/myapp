@@ -16,7 +16,7 @@ const CardSkeleton = () => (
 );
 
 /* ─── Person Card ──────────────────────────────────────────────────── */
-const PersonCard = React.memo(({ person, variant, href }) => {
+const PersonCard = React.memo(({ person, variant, href, contentCount }) => {
   const isCustomer = variant === 'customer';
   const Icon = isCustomer ? Users : UserCheck;
   const displayName = person.name || `${person.firstName || ''} ${person.lastName || ''}`.trim() || 'Unnamed';
@@ -38,6 +38,12 @@ const PersonCard = React.memo(({ person, variant, href }) => {
         <p className="aur-card__name">{displayName}</p>
         <p className="aur-card__email">{person.email}</p>
         {person.companyName && <p className="aur-card__company">{person.companyName}</p>}
+        {variant === 'customer' && typeof contentCount === 'number' && (
+          <div className="aur-card__count">
+            <span className="aur-card__count-num">{contentCount}</span>
+            <span className="aur-card__count-label">{contentCount === 1 ? 'Content Item' : 'Content Items'}</span>
+          </div>
+        )}
       </div>
       <ArrowUpRight className="aur-card__arrow" />
     </div>
@@ -224,10 +230,6 @@ function Dashboard() {
               <span className="aur-pill__num">{stats.creators}</span>
               <span className="aur-pill__label">Creators</span>
             </div>
-            <div className="aur-pill">
-              <span className="aur-pill__num">{stats.content}</span>
-              <span className="aur-pill__label">Content</span>
-            </div>
             <button onClick={handleRefresh} disabled={isRefreshing} className="aur-refresh" title="Refresh">
               <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'aur-spin' : ''}`} />
             </button>
@@ -237,11 +239,20 @@ function Dashboard() {
         {/* ── Body ── */}
         <div className="aur-body">
           <Section icon={Users} label="Customers" count={stats.customers} variant="customer" empty="No customers assigned yet.">
-            {assignedCustomers.map((c, i) => (
-              <div key={c._id || c.id} className="aur-enter" style={{ animationDelay: `${i * 35}ms` }}>
-                <PersonCard person={c} variant="customer" href={`/#/admin/customer-details/${c._id || c.id}`} />
-              </div>
-            ))}
+            {assignedCustomers.map((c, i) => {
+              const customerId = c._id || c.id;
+              const count = contentItems.filter(item => item.customerId === customerId).length;
+              return (
+                <div key={customerId} className="aur-enter" style={{ animationDelay: `${i * 35}ms` }}>
+                  <PersonCard
+                    person={c}
+                    variant="customer"
+                    href={`/#/admin/customer-details/${customerId}`}
+                    contentCount={count}
+                  />
+                </div>
+              );
+            })}
           </Section>
 
           <Section icon={UserCheck} label="Content Creators" count={stats.creators} variant="creator" empty="No content creators found.">
@@ -513,6 +524,26 @@ const CSS = `
 .aur-card--creator:hover .aur-card__name { color: var(--c-olive); }
 .aur-card__email   { font-size: 13px; color: var(--c-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px; }
 .aur-card__company { font-size: 11.5px; color: #A9A79F; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px; }
+
+/* ── Customer Content Count Pill ── */
+.aur-card__count {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 2px 6px;
+  background: var(--c-terra-light);
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--c-terra);
+  width: fit-content;
+  transition: background-color 0.15s, color 0.15s;
+}
+.aur-card:hover .aur-card__count {
+  background: var(--c-terra);
+  color: var(--c-white);
+}
 
 /* ── Arrow ── */
 .aur-card__arrow {

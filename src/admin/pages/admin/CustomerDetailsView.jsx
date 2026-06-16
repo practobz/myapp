@@ -11,11 +11,10 @@ import ContentCalendarModal from '../../components/modals/ContentCalendarModal';
 import AssignCreatorModal from '../../components/modals/AssignCreatorModal';
 import ReportModal from '../../components/modals/ReportModal';
 import SchedulePostModal from '../../components/modals/SchedulePostModal';
-import PublishManager from './PublishManager';
+import ManualPublishModal from '../../components/modals/ManualPublishModal';
 import SummaryReport from './SummaryReport';
 import CustomerSocialAccounts from './CustomerSocialAccounts';
 import MultiCustomerAnalytics from './MultiCustomerAnalytics';
-import ScheduledPosts from '../../ScheduledPosts';
 import {
   ArrowLeft,
   User,
@@ -96,10 +95,8 @@ SocialBadge.displayName = 'SocialBadge';
 const TABS_CONFIG = [
   { id: 'overview', label: 'Overview', icon: LayoutGrid },
   { id: 'portfolio', label: 'Portfolio', icon: Briefcase },
-  { id: 'scheduled', label: 'Scheduled', icon: Send },
   { id: 'qr', label: 'QR Codes', icon: QrCode },
   { id: 'social', label: 'Social', icon: BarChart3 },
-  { id: 'publish', label: 'Publish', icon: CheckCircle },
   { id: 'report', label: 'Report', icon: FileText },
 ];
 
@@ -767,6 +764,10 @@ function CustomerDetailsView() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isEditCalendarModalOpen, setIsEditCalendarModalOpen] = useState(false);
   const [calendarToEdit, setCalendarToEdit] = useState(null);
+  const [isManualPublishModalOpen, setIsManualPublishModalOpen] = useState(false);
+  const [manualPublishItem, setManualPublishItem] = useState(null);
+  const [manualPublishCalendarId, setManualPublishCalendarId] = useState(null);
+  const [manualPublishSaving, setManualPublishSaving] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [selectedCalendar, setSelectedCalendar] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
@@ -795,11 +796,11 @@ function CustomerDetailsView() {
   const [timeRemaining, setTimeRemaining] = useState(null);
   const [qrError, setQrError] = useState('');
   const [qrSuccess, setQrSuccess] = useState('');
+  const [emailSending, setEmailSending] = useState(false);
   // Scheduled tab
   const [scheduledPostsFilter, setScheduledPostsFilter] = useState('all');
   // Social tab
   const [selectedSocialAccount, setSelectedSocialAccount] = useState(null);
-  const [isAnalyticsPopupOpen, setIsAnalyticsPopupOpen] = useState(false);
   // Publish Manager tab
   const [publishModalData, setPublishModalData] = useState(null); // {calendar, item}
   const [scheduleModalData, setScheduleModalData] = useState(null); // selectedContent for SchedulePostModal
@@ -934,6 +935,23 @@ function CustomerDetailsView() {
     }
   };
 
+  const handleDeleteScheduledPost = useCallback(async (postId) => {
+    if (!window.confirm('Are you sure you want to delete this scheduled post?')) return;
+    try {
+      const response = await fetch(`${API_URL}/api/scheduled-posts/${postId}`, {
+        method: 'DELETE'
+      });
+      if (response.ok) {
+        setScheduledPosts(prev => prev.filter(post => post._id !== postId));
+      } else {
+        alert('Could not delete the post. Please try again.');
+      }
+    } catch (error) {
+      console.error('Delete post error:', error);
+      alert('Could not delete the post. Please check your connection.');
+    }
+  }, [API_URL]);
+
 
   const fetchSocialAccounts = async () => {
     try {
@@ -1021,6 +1039,44 @@ function CustomerDetailsView() {
     link.href = qrResult.qrDataUrl;
     link.click();
   }, [qrResult, customer]);
+
+  const handleSendQrEmail = useCallback(async () => {
+    if (!qrResult.qrCodeUrl || !qrResult.qrDataUrl || !customer?.email) return;
+
+    const confirmSend = window.confirm('Are you sure you want to send this to customer?');
+    if (!confirmSend) return;
+
+    setEmailSending(true);
+    setQrError('');
+    setQrSuccess('');
+
+    try {
+      const res = await fetch(`${API_URL}/api/send-qr-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerId: id,
+          customerEmail: customer.email,
+          customerName: customer.name,
+          platform: qrResult.platform,
+          qrCodeUrl: qrResult.qrCodeUrl,
+          qrDataUrl: qrResult.qrDataUrl
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setQrSuccess(`Successfully sent integration QR code to ${customer.email}!`);
+        setTimeout(() => setQrSuccess(''), 4000);
+      } else {
+        setQrError(data.error || 'Failed to send email to customer');
+      }
+    } catch (err) {
+      setQrError('Network error. Failed to send email.');
+    } finally {
+      setEmailSending(false);
+    }
+  }, [qrResult, customer, id, API_URL]);
 
   // ── Publish Manager helpers ───────────────────────────────────────────────
   // Check if item is published (manual or via scheduled post)
@@ -1565,6 +1621,47 @@ function CustomerDetailsView() {
     }
   };
 
+  const openManualPublishModal = useCallback((item, calendarId) => {
+    setManualPublishItem(item);
+    setManualPublishCalendarId(calendarId);
+    setIsManualPublishModalOpen(true);
+  }, []);
+
+  const handleSaveManualPublish = async (platforms, manualUrls, notes, notifyEmail) => {
+    if (!manualPublishCalendarId || !manualPublishItem?.id) return;
+    setManualPublishSaving(true);
+    try {
+      const hasManuallyPublished = platforms.length > 0;
+      const response = await fetch(
+        `${API_URL}/calendars/item/${manualPublishCalendarId}/mark-published`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            itemId: manualPublishItem.id,
+            published: hasManuallyPublished,
+            publishedPlatforms: platforms,
+            publishedNotes: notes,
+            manualPlatformUrls: manualUrls,
+            publishedAt: new Date().toISOString(),
+            sendEmailNotification: notifyEmail
+          })
+        }
+      );
+
+      if (!response.ok) throw new Error('Failed to save manual publish status');
+      fetchCalendars();
+      setIsManualPublishModalOpen(false);
+      setManualPublishItem(null);
+      setManualPublishCalendarId(null);
+    } catch (err) {
+      console.error('Error saving manual publish status:', err);
+      alert('Failed to save publish status. Please try again.');
+    } finally {
+      setManualPublishSaving(false);
+    }
+  };
+
   // Delete content item handler
   const handleDeleteItem = async (calendarId, item) => {
     if (!window.confirm('Are you sure you want to delete this content item?')) return;
@@ -1650,8 +1747,25 @@ function CustomerDetailsView() {
   // Find the matching scheduled post(s) for a calendar item and build platform links
   const getItemPublishedLinks = useCallback((item) => {
     const links = [];
+
+    // Manual platform URLs first
+    if (item.manualPlatformUrls) {
+      Object.entries(item.manualPlatformUrls).forEach(([platform, url]) => {
+        if (url && isIdValid(url)) {
+          links.push({
+            url: url,
+            label: PLATFORM_META[platform.toLowerCase()]?.title || platform,
+            platform: platform.toLowerCase(),
+            isManual: true
+          });
+        }
+      });
+    }
+
     if (item.postUrl && isIdValid(item.postUrl)) {
-      links.push({ url: item.postUrl, label: 'View Post', platform: null });
+      if (!links.some(l => l.platform === null)) {
+        links.push({ url: item.postUrl, label: 'View Post', platform: null });
+      }
     }
     for (const post of scheduledPosts) {
       const matches =
@@ -1664,11 +1778,13 @@ function CustomerDetailsView() {
         const fbUrl = fbId.includes('_')
           ? `https://www.facebook.com/permalink.php?story_fbid=${fbId.split('_')[1]}&id=${fbId.split('_')[0]}`
           : `https://www.facebook.com/${fbId}`;
-        if (!links.find(l => l.url === fbUrl)) links.push({ url: fbUrl, label: 'Facebook', platform: 'facebook' });
+        if (!links.some(l => l.platform === 'facebook')) {
+          links.push({ url: fbUrl, label: 'Facebook', platform: 'facebook' });
+        }
       }
       if (isIdValid(post.instagramPostId)) {
         const igUrl = post.instagramPermalink || instagramMediaIdToUrl(post.instagramPostId, post.postType);
-        if (igUrl && !links.find(l => l.url === igUrl)) {
+        if (igUrl && !links.some(l => l.platform === 'instagram')) {
           // If we have live metrics source but no permalink, it means the post was not found/available on Instagram
           const isLiveButUnavailable = post.metricsSource === 'live' && !post.instagramPermalink;
           if (!isLiveButUnavailable) {
@@ -1676,17 +1792,21 @@ function CustomerDetailsView() {
           }
         }
       } else if (isIdValid(post.instagramPermalink)) {
-        if (!links.find(l => l.url === post.instagramPermalink)) {
+        if (!links.some(l => l.platform === 'instagram')) {
           links.push({ url: post.instagramPermalink, label: 'Instagram', platform: 'instagram' });
         }
       }
       if (isIdValid(post.youtubePostId)) {
         const ytUrl = `https://www.youtube.com/watch?v=${post.youtubePostId}`;
-        if (!links.find(l => l.url === ytUrl)) links.push({ url: ytUrl, label: 'YouTube', platform: 'youtube' });
+        if (!links.some(l => l.platform === 'youtube')) {
+          links.push({ url: ytUrl, label: 'YouTube', platform: 'youtube' });
+        }
       }
       if (isIdValid(post.linkedinPostId)) {
         const liUrl = `https://www.linkedin.com/feed/update/${post.linkedinPostId}`;
-        if (!links.find(l => l.url === liUrl)) links.push({ url: liUrl, label: 'LinkedIn', platform: 'linkedin' });
+        if (!links.some(l => l.platform === 'linkedin')) {
+          links.push({ url: liUrl, label: 'LinkedIn', platform: 'linkedin' });
+        }
       }
     }
     return links;
@@ -1908,7 +2028,6 @@ function CustomerDetailsView() {
               // Badge counts
               let badge = null;
               if (tab.id === 'portfolio') badge = portfolioItemsMapped.length || null;
-              if (tab.id === 'scheduled') badge = scheduledPosts.length || null;
               if (tab.id === 'social') badge = socialAccounts.length || null;
               return (
                 <button
@@ -2217,9 +2336,10 @@ function CustomerDetailsView() {
                                                     rel="noopener noreferrer"
                                                     className="flex-shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-100 transition-colors"
                                                     onClick={e => e.stopPropagation()}
-                                                    title={`Open on ${link.label}`}
+                                                    title={`Open on ${link.label}${link.isManual ? ' (Manual)' : ''}`}
                                                   >
                                                     <PlatformIcon platform={link.platform || link.label} />
+                                                    {link.isManual && <span className="text-[9px] font-bold text-emerald-600 bg-emerald-100/50 px-0.5 rounded ml-0.5 scale-90">m</span>}
                                                     <ExternalLink className="h-2.5 w-2.5 ml-0.5" />
                                                   </a>
                                                 ))}
@@ -2269,6 +2389,17 @@ function CustomerDetailsView() {
                                               {itemStatus.replace('_', ' ')}
                                             </span>
                                             <button
+                                              className={`p-1.5 rounded transition-colors touch-manipulation ${itemStatus === 'published'
+                                                  ? 'text-emerald-650 hover:bg-emerald-50'
+                                                  : 'text-gray-400 hover:text-emerald-650 hover:bg-emerald-50'
+                                                }`}
+                                              onClick={(e) => { e.stopPropagation(); openManualPublishModal(item, calendar._id); }}
+                                              onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); openManualPublishModal(item, calendar._id); }}
+                                              title="Publish Status"
+                                            >
+                                              <CheckCircle className="h-3.5 w-3.5" />
+                                            </button>
+                                            <button
                                               className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors touch-manipulation"
                                               onClick={(e) => { e.stopPropagation(); handleEditItem(item, calendar._id); }}
                                               onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleEditItem(item, calendar._id); }}
@@ -2309,7 +2440,7 @@ function CustomerDetailsView() {
                                               className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-600 border border-blue-100"
                                               onClick={e => e.stopPropagation()}
                                             >
-                                              <ExternalLink className="h-2.5 w-2.5" /> {link.label}
+                                              <ExternalLink className="h-2.5 w-2.5" /> {link.label} {link.isManual ? '(m)' : ''}
                                             </a>
                                           ))}
                                           {itemStatus === 'published' && (
@@ -2477,10 +2608,6 @@ function CustomerDetailsView() {
           </div>
         )}
 
-        {/* ══════════ TAB: SCHEDULED POSTS ══════════ */}
-        {activeTab === 'scheduled' && (
-          <ScheduledPosts embedded={true} customerId={id} />
-        )}
 
         {/* ══════════ TAB: QR CODES ══════════ */}
         {activeTab === 'qr' && (
@@ -2570,6 +2697,18 @@ function CustomerDetailsView() {
                         <Download className="h-4 w-4" />
                         Download QR
                       </button>
+                      <button
+                        onClick={handleSendQrEmail}
+                        disabled={emailSending}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50"
+                      >
+                        {emailSending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Send className="h-4 w-4" />
+                        )}
+                        Send to Customer
+                      </button>
                       {qrResult.configUrl && (
                         <a
                           href={qrResult.configUrl}
@@ -2592,22 +2731,8 @@ function CustomerDetailsView() {
         {/* ══════════ TAB: SOCIAL & ANALYTICS ══════════ */}
         {activeTab === 'social' && (
           <div className="space-y-3">
-            <div className="flex items-center justify-end">
-              <button
-                onClick={() => setIsAnalyticsPopupOpen(true)}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                <BarChart3 className="h-4 w-4" />
-                Open Analytics
-              </button>
-            </div>
             <CustomerSocialAccounts embedded={true} customerId={id} />
           </div>
-        )}
-
-        {/* ══════════ TAB: PUBLISH MANAGER ══════════ */}
-        {activeTab === 'publish' && (
-          <PublishManager embedded={true} customerId={id} />
         )}
 
         {/* ══════════ TAB: SUMMARY REPORT ══════════ */}
@@ -2631,31 +2756,7 @@ function CustomerDetailsView() {
           onRefreshScheduledPosts={fetchScheduledPosts}
         />
       )}
-      {isAnalyticsPopupOpen && (
-        <div
-          className="fixed inset-0 z-[10000] bg-black/60 flex items-center justify-center p-2 sm:p-4"
-          onClick={() => setIsAnalyticsPopupOpen(false)}
-        >
-          <div
-            className="w-full max-w-[1400px] h-[92vh] bg-white rounded-2xl overflow-hidden shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="h-14 border-b border-gray-200 flex items-center justify-between px-4 sm:px-5">
-              <h3 className="text-sm sm:text-base font-semibold text-gray-900">Customer Analytics</h3>
-              <button
-                onClick={() => setIsAnalyticsPopupOpen(false)}
-                className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
-                aria-label="Close analytics"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <div className="h-[calc(92vh-56px)] overflow-auto">
-              <MultiCustomerAnalytics embedded={true} customerId={id} />
-            </div>
-          </div>
-        </div>
-      )}
+
       {mobileMenuCalendar && (
         <div className="fixed inset-0 z-[9999] sm:hidden">
           {/* Backdrop */}
@@ -2769,6 +2870,19 @@ function CustomerDetailsView() {
         multiPlatform={true}
       />
 
+      <ManualPublishModal
+        isOpen={isManualPublishModalOpen}
+        onClose={() => {
+          setIsManualPublishModalOpen(false);
+          setManualPublishItem(null);
+          setManualPublishCalendarId(null);
+        }}
+        onSave={handleSaveManualPublish}
+        item={manualPublishItem}
+        scheduledPosts={scheduledPosts}
+        saving={manualPublishSaving}
+      />
+
       {/* Edit Calendar Modal with prefilled values */}
       <ContentCalendarModal
         isOpen={isEditCalendarModalOpen}
@@ -2832,6 +2946,8 @@ function CustomerDetailsView() {
               calendarName={selectedContentDetail.calendarName}
               itemName={selectedContentDetail.itemName}
               onDeleteVersion={handleDeleteVersion}
+              scheduledPosts={scheduledPosts}
+              onDeleteScheduledPost={handleDeleteScheduledPost}
             />
           </div>
         </div>

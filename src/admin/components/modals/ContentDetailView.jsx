@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo, useCallback, useRef, memo } from '
 import { v4 as uuidv4 } from 'uuid';
 import {
   Send, Image, FileText, MessageSquare, Calendar, ChevronLeft, ChevronRight,
-  Trash2, Check, X, CornerDownRight, UserCog, User, MessageCircle
+  Trash2, Check, X, CornerDownRight, UserCog, User, MessageCircle,
+  Clock, CheckCircle, XCircle, Loader2, Facebook, Instagram, Video
 } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_API_URL;
@@ -10,14 +11,14 @@ const API_URL = process.env.REACT_APP_API_URL;
 // Helper: human-readable status label
 const getStatusLabel = (status) => {
   switch (status) {
-    case 'approved_admin':    return 'Approved by Admin';
+    case 'approved_admin': return 'Approved by Admin';
     case 'approved_customer': return 'Approved by Customer';
-    case 'approved_both':     return 'Approved by Admin & Customer';
-    case 'under_review':      return 'Under Review';
+    case 'approved_both': return 'Approved by Admin & Customer';
+    case 'under_review': return 'Under Review';
     case 'revision_requested': return 'Revision Requested';
-    case 'published':         return 'Published';
-    case 'submitted':         return 'Submitted';
-    case 'rejected':          return 'Rejected';
+    case 'published': return 'Published';
+    case 'submitted': return 'Submitted';
+    case 'rejected': return 'Rejected';
     default: return (status || '').replace(/_/g, ' ');
   }
 };
@@ -56,7 +57,7 @@ const CommentMarker = memo(({
   adminUser,
 }) => {
   const isAdmin = comment.authorRole === 'admin';
-  const dotBg   = isAdmin ? '#7c3aed' : (comment.done ? '#10b981' : '#ef4444');
+  const dotBg = isAdmin ? '#7c3aed' : (comment.done ? '#10b981' : '#ef4444');
   const dotBorder = isAdmin ? '#a78bfa' : '#fff';
   const isReplying = replyingTo === comment.id;
 
@@ -98,7 +99,7 @@ const CommentMarker = memo(({
       {/* ── NEW COMMENT editing popup ── */}
       {comment.editing && (
         <div style={{ ...popupStyle, border: '2px solid #7c3aed', boxShadow: '0 6px 24px rgba(124,58,237,0.18)' }}
-             onClick={(e) => e.stopPropagation()}>
+          onClick={(e) => e.stopPropagation()}>
           <div className="flex items-center gap-1.5 mb-2">
             <div className="w-4 h-4 rounded-full bg-purple-600 flex items-center justify-center">
               <UserCog className="h-2.5 w-2.5 text-white" />
@@ -132,7 +133,7 @@ const CommentMarker = memo(({
       {/* ── VIEW popup ── */}
       {!comment.editing && (active || hovered) && (
         <div style={{ ...popupStyle, border: `2px solid ${isAdmin ? '#7c3aed' : '#3b82f6'}`, boxShadow: '0 4px 20px rgba(0,0,0,0.12)' }}
-             onClick={(e) => e.stopPropagation()}>
+          onClick={(e) => e.stopPropagation()}>
           <AuthorBadge comment={comment} />
           <p className="text-xs font-medium text-gray-900 leading-relaxed break-words">
             {comment.message || comment.comment}
@@ -215,6 +216,8 @@ function ContentDetailView({
   itemName,
   onDeleteVersion,
   onRefresh,
+  scheduledPosts,
+  onDeleteScheduledPost,
 }) {
   // ── Admin user from localStorage ─────────────────────────────────────────
   const adminUser = useMemo(() => {
@@ -222,6 +225,92 @@ function ContentDetailView({
       const u = JSON.parse(localStorage.getItem('user') || 'null');
       return u || { name: 'Admin', email: '' };
     } catch { return { name: 'Admin', email: '' }; }
+  }, []);
+
+  const itemScheduledPosts = useMemo(() => {
+    if (!scheduledPosts || !selectedContent) return [];
+    return scheduledPosts.filter(post =>
+      (post.item_id && post.item_id === selectedContent.id) ||
+      (post.contentId && post.contentId === selectedContent.id) ||
+      (post.item_name && post.item_name === (selectedContent.title || selectedContent.description || selectedContent.itemName))
+    );
+  }, [scheduledPosts, selectedContent]);
+
+  const getPlatformIcon = useCallback((platform) => {
+    switch ((platform || '').toLowerCase()) {
+      case 'facebook':
+        return <Facebook className="h-4 w-4 text-[#0066CC]" />;
+      case 'instagram':
+        return <Instagram className="h-4 w-4 text-pink-600" />;
+      case 'both':
+        return (
+          <div className="flex space-x-0.5">
+            <Facebook className="h-3.5 w-3.5 text-[#0066CC]" />
+            <Instagram className="h-3.5 w-3.5 text-pink-600" />
+          </div>
+        );
+      case 'youtube':
+        return <div className="h-4 w-4 bg-red-600 text-white rounded text-[9px] flex items-center justify-center font-bold">YT</div>;
+      case 'twitter':
+      case 'x':
+        return <div className="h-4 w-4 bg-black text-white rounded text-[9px] flex items-center justify-center font-bold">X</div>;
+      case 'linkedin':
+        return <div className="h-4 w-4 bg-blue-700 text-white rounded text-[9px] flex items-center justify-center font-bold">In</div>;
+      default:
+        return <div className="h-4 w-4 bg-gray-400 text-white rounded text-[9px] flex items-center justify-center">?</div>;
+    }
+  }, []);
+
+  const getScheduledStatusColor = useCallback((status) => {
+    switch (status) {
+      case 'pending': return 'bg-yellow-50 text-yellow-800 border-yellow-250';
+      case 'published': return 'bg-green-50 text-green-800 border-green-250';
+      case 'failed': return 'bg-red-50 text-red-800 border-red-250';
+      case 'processing': return 'bg-blue-50 text-blue-800 border-blue-250';
+      default: return 'bg-gray-50 text-gray-800 border-gray-250';
+    }
+  }, []);
+
+  const getScheduledStatusIcon = useCallback((status) => {
+    switch (status) {
+      case 'pending': return <Clock className="h-3 w-3" />;
+      case 'published': return <CheckCircle className="h-3 w-3" />;
+      case 'failed': return <XCircle className="h-3 w-3 text-red-500" />;
+      case 'processing': return <Loader2 className="h-3 w-3 animate-spin text-blue-500" />;
+      default: return <Clock className="h-3 w-3" />;
+    }
+  }, []);
+
+  const getFailureReason = useCallback((post) => {
+    if (!post.error && !post.errorMessage && !post.failureReason) {
+      return 'Publishing failed. Please try again.';
+    }
+    const errorText = post.error || post.errorMessage || post.failureReason || '';
+    const lowerError = errorText.toLowerCase();
+
+    if (lowerError.includes('access token') || lowerError.includes('accesstoken') ||
+      lowerError.includes('invalid token') || lowerError.includes('token expired') ||
+      lowerError.includes('auth') || lowerError.includes('unauthorized') ||
+      lowerError.includes('401') || lowerError.includes('login required')) {
+      return 'Your social account connection has expired. Please reconnect in Settings.';
+    }
+    if (lowerError.includes('permission') || lowerError.includes('403') ||
+      lowerError.includes('forbidden') || lowerError.includes('not allowed')) {
+      return 'Permission issue. Please reconnect your account in Settings.';
+    }
+    if (lowerError.includes('rate limit') || lowerError.includes('too many') ||
+      lowerError.includes('limit exceeded') || lowerError.includes('429')) {
+      return 'Posting limit reached. Please wait a few minutes and try again.';
+    }
+    if (lowerError.includes('image') || lowerError.includes('photo') ||
+      lowerError.includes('video') || lowerError.includes('media') ||
+      lowerError.includes('file')) {
+      if (lowerError.includes('size') || lowerError.includes('large')) {
+        return 'The file is too large. Please use a smaller file.';
+      }
+      return 'There was an issue with the media file.';
+    }
+    return errorText || 'Publishing failed. Please try again.';
   }, []);
 
   // ── Core UI state ────────────────────────────────────────────────────────
@@ -252,13 +341,13 @@ function ContentDetailView({
 
   const platformColor = useCallback((p) => {
     switch ((p || '').toLowerCase()) {
-      case 'facebook':  return 'bg-blue-100 text-blue-800';
+      case 'facebook': return 'bg-blue-100 text-blue-800';
       case 'instagram': return 'bg-pink-100 text-pink-800';
-      case 'youtube':   return 'bg-red-100 text-red-800';
-      case 'linkedin':  return 'bg-blue-50 text-blue-800';
-      case 'twitter':   return 'bg-sky-100 text-sky-800';
-      case 'tiktok':    return 'bg-black text-white';
-      default:          return 'bg-gray-100 text-gray-800';
+      case 'youtube': return 'bg-red-100 text-red-800';
+      case 'linkedin': return 'bg-blue-50 text-blue-800';
+      case 'twitter': return 'bg-sky-100 text-sky-800';
+      case 'tiktok': return 'bg-black text-white';
+      default: return 'bg-gray-100 text-gray-800';
     }
   }, []);
 
@@ -496,46 +585,44 @@ function ContentDetailView({
     <div className="space-y-3 sm:space-y-4">
       {/* ── HEADER ── */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200/50 p-3 sm:p-4">
-        <div className="flex flex-col gap-3">
-          {(calendarName || itemName) && (
-            <div className="flex flex-col sm:flex-row gap-1 sm:gap-3 text-xs">
-              {calendarName && (
-                <div className="flex items-center gap-1">
-                  <span className="font-medium text-blue-600">📅</span>
-                  <span className="text-gray-600">{calendarName}</span>
-                </div>
-              )}
-              {itemName && (
-                <div className="flex items-center gap-1">
-                  <span className="font-medium text-cyan-600">📝</span>
-                  <span className="text-gray-600">{itemName}</span>
-                </div>
-              )}
-            </div>
-          )}
+        <div className="flex flex-col sm:flex-row gap-3">
 
-          <div>
+          {/* ── LEFT: Meta ── */}
+          <div className="flex flex-col gap-2 flex-1 min-w-0">
+            {/* Breadcrumb */}
+            {(calendarName || itemName) && (
+              <div className="flex flex-wrap gap-2 text-xs">
+                {calendarName && (
+                  <div className="flex items-center gap-1">
+                    <span className="font-medium text-blue-600">📅</span>
+                    <span className="text-gray-600">{calendarName}</span>
+                  </div>
+                )}
+                {itemName && (
+                  <div className="flex items-center gap-1">
+                    <span className="font-medium text-cyan-600">📝</span>
+                    <span className="text-gray-600">{itemName}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Title */}
             {selectedContent.title && (
-              <h1 className="text-lg sm:text-xl font-bold text-gray-900 mb-1">{selectedContent.title}</h1>
+              <h1 className="text-base font-bold text-gray-900 leading-tight">{selectedContent.title}</h1>
             )}
-            {selectedContent.description && (
-              <p className="text-xs sm:text-sm text-gray-600 line-clamp-2">{selectedContent.description}</p>
-            )}
-          </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
-            <div className="flex items-center gap-1.5">
-              <div className="w-1.5 h-1.5 bg-blue-600 rounded-full" />
-              <div>
-                <span className="text-gray-500 block">Customer</span>
+            {/* Meta chips row */}
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+              <div className="flex items-center gap-1">
+                <div className="w-1.5 h-1.5 bg-blue-600 rounded-full flex-shrink-0" />
+                <span className="text-gray-500">Customer:</span>
                 <span className="font-medium text-gray-900">{getCustomerName(selectedContent.customerId)}</span>
               </div>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-1.5 h-1.5 bg-cyan-600 rounded-full" />
-              <div>
-                <span className="text-gray-500 block">Platform</span>
-                <div className="flex flex-wrap gap-1 mt-0.5">
+              <div className="flex items-center gap-1">
+                <div className="w-1.5 h-1.5 bg-cyan-600 rounded-full flex-shrink-0" />
+                <span className="text-gray-500">Platform:</span>
+                <div className="flex flex-wrap gap-1">
                   {parsePlatforms(selectedContent.platform).map((p, i) => (
                     <span key={i} className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${platformColor(p)}`}>
                       {p.charAt(0).toUpperCase() + p.slice(1)}
@@ -543,40 +630,104 @@ function ContentDetailView({
                   ))}
                 </div>
               </div>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-1.5 h-1.5 bg-blue-600 rounded-full" />
-              <div>
-                <span className="text-gray-500 block">Versions</span>
+              <div className="flex items-center gap-1">
+                <div className="w-1.5 h-1.5 bg-blue-600 rounded-full flex-shrink-0" />
+                <span className="text-gray-500">Versions:</span>
                 <span className="font-medium text-gray-900">{selectedContent.totalVersions}</span>
               </div>
             </div>
+
+            {/* Status + Action */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`inline-flex items-center px-2 py-1 rounded-lg text-xs font-medium ${getStatusColor(isPublished ? 'published' : selectedContent.status)}`}>
+                {getStatusIcon(isPublished ? 'published' : selectedContent.status)}
+                <span className="ml-1">
+                  {isPublished ? 'Published' : getStatusLabel(selectedContent.status)}
+                </span>
+                {isPublished && (
+                  <span className="ml-1 flex flex-wrap gap-1">
+                    {getPublishedPlatformsForContent(selectedContent.id, selectedContent).map((p, idx) => (
+                      <span key={idx} className={`px-1 py-0.5 rounded text-[10px] ${platformColor(p)}`}>
+                        {p.charAt(0).toUpperCase() + p.slice(1)}
+                      </span>
+                    ))}
+                  </span>
+                )}
+              </span>
+              <button
+                onClick={() => handleScheduleContent(selectedContent)}
+                className="inline-flex items-center justify-center px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <Send className="h-3 w-3 mr-1" />
+                Post Content
+              </button>
+            </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-2">
-            <span className={`inline-flex items-center px-2 py-1.5 rounded-lg text-xs font-medium ${getStatusColor(isPublished ? 'published' : selectedContent.status)}`}>
-              {getStatusIcon(isPublished ? 'published' : selectedContent.status)}
-              <span className="ml-1">
-                {isPublished ? 'Published' : getStatusLabel(selectedContent.status)}
-              </span>
-              {isPublished && (
-                <span className="ml-1 flex flex-wrap gap-1">
-                  {getPublishedPlatformsForContent(selectedContent.id, selectedContent).map((p, idx) => (
-                    <span key={idx} className={`px-1 py-0.5 rounded text-[10px] ${platformColor(p)}`}>
-                      {p.charAt(0).toUpperCase() + p.slice(1)}
-                    </span>
-                  ))}
-                </span>
-              )}
-            </span>
-            <button
-              onClick={() => handleScheduleContent(selectedContent)}
-              className="inline-flex items-center justify-center px-4 py-2 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <Send className="h-3.5 w-3.5 mr-1.5" />
-              Post Content
-            </button>
-          </div>
+          {/* ── RIGHT: Scheduled Posts ── */}
+          {itemScheduledPosts.length > 0 && (
+            <div className="sm:w-56 flex-shrink-0 border-t sm:border-t-0 sm:border-l border-gray-100 sm:pl-3 pt-2 sm:pt-0 flex flex-col gap-1">
+              <div className="flex items-center gap-1.5 mb-1">
+                <Send className="h-3.5 w-3.5 text-blue-600" />
+                <span className="text-xs font-bold text-gray-800">Scheduled</span>
+                <span className="ml-auto bg-blue-100 text-blue-700 text-[9px] font-bold px-1.5 py-0.5 rounded-full">{itemScheduledPosts.length}</span>
+              </div>
+              <div className="flex flex-col gap-1 max-h-36 overflow-y-auto pr-0.5">
+                {itemScheduledPosts.map((post) => {
+                  const thumb = post.imageUrls?.[0] || post.imageUrl || null;
+                  const isVid = thumb && isVideoUrl && isVideoUrl(thumb);
+                  return (
+                    <div key={post._id} className="flex items-center gap-2 p-1.5 rounded-lg bg-gray-50 border border-gray-100 hover:bg-blue-50/40 transition-colors">
+                      {/* Thumbnail */}
+                      <div className="w-8 h-8 flex-shrink-0 rounded-md overflow-hidden bg-gray-200 border border-gray-200">
+                        {isVid ? (
+                          <div className="w-full h-full bg-gray-800 flex items-center justify-center">
+                            <Video className="h-3.5 w-3.5 text-white" />
+                          </div>
+                        ) : thumb ? (
+                          <img src={thumb} alt="" className="w-full h-full object-cover" loading="lazy" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <Image className="h-3.5 w-3.5 text-gray-300" />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Platform + Date */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1">
+                          {getPlatformIcon(post.platform)}
+                          <span className="text-[10px] font-semibold text-gray-800 truncate">
+                            {post.pageName || post.channelName || post.platform || 'Post'}
+                          </span>
+                        </div>
+                        <div className="text-[9px] text-gray-400 mt-0.5">
+                          {new Date(post.scheduledAt).toLocaleDateString()} · {new Date(post.scheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                      </div>
+
+                      {/* Status dot + Delete */}
+                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                        <span className={`px-1.5 py-0.5 rounded-full text-[8px] font-bold border ${getScheduledStatusColor(post.status)}`}>
+                          {post.status}
+                        </span>
+                        {onDeleteScheduledPost && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); onDeleteScheduledPost(post._id); }}
+                            className="text-gray-300 hover:text-red-500 transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
         </div>
       </div>
 
@@ -599,11 +750,10 @@ function ContentDetailView({
                     <button
                       key={v.id || idx}
                       onClick={() => { setSelectedVersionIndex(idx); setSelectedMediaIndex(0); }}
-                      className={`px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors ${
-                        selectedVersionIndex === idx
+                      className={`px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors ${selectedVersionIndex === idx
                           ? 'bg-blue-600 text-white border-blue-600'
                           : 'bg-white text-blue-600 border-blue-200 hover:bg-blue-50'
-                      }`}
+                        }`}
                     >
                       V{v.versionNumber}
                     </button>
@@ -645,11 +795,10 @@ function ContentDetailView({
                         </p>
                         <button
                           onClick={() => setAddingComment(v => !v)}
-                          className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors ${
-                            addingComment
+                          className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors ${addingComment
                               ? 'bg-purple-600 text-white border-purple-600 hover:bg-purple-700'
                               : 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100'
-                          }`}
+                            }`}
                         >
                           <MessageCircle className="h-3 w-3" />
                           {addingComment ? 'Cancel' : 'Add Comment'}
@@ -674,9 +823,8 @@ function ContentDetailView({
                                 ref={imgRef}
                                 src={currentMedia.url}
                                 alt={`V${currentVersion.versionNumber} M${selectedMediaIndex + 1}`}
-                                className={`max-w-full h-auto max-h-[50vh] sm:max-h-[60vh] lg:max-h-[70vh] rounded-lg shadow border border-gray-200 object-contain transition-all ${
-                                  addingComment ? 'cursor-crosshair ring-2 ring-purple-400 ring-offset-1' : ''
-                                }`}
+                                className={`max-w-full h-auto max-h-[50vh] sm:max-h-[60vh] lg:max-h-[70vh] rounded-lg shadow border border-gray-200 object-contain transition-all ${addingComment ? 'cursor-crosshair ring-2 ring-purple-400 ring-offset-1' : ''
+                                  }`}
                                 loading="lazy"
                                 onLoad={handleImgLoad}
                                 onClick={handleImageClick}
@@ -783,11 +931,10 @@ function ContentDetailView({
                   <div className="relative" key={version.id}>
                     <button
                       onClick={() => { setSelectedVersionIndex(index); setSelectedMediaIndex(0); }}
-                      className={`w-full text-left px-3 py-2 flex flex-col border-l-2 transition-colors ${
-                        selectedVersionIndex === index
+                      className={`w-full text-left px-3 py-2 flex flex-col border-l-2 transition-colors ${selectedVersionIndex === index
                           ? 'bg-purple-50 border-l-purple-600'
                           : 'bg-white border-l-transparent hover:bg-gray-50'
-                      }`}
+                        }`}
                     >
                       <span className="font-semibold text-gray-900 text-xs">V{version.versionNumber}</span>
                       <div className="flex items-center text-[10px] text-gray-500 gap-2 mt-0.5">
@@ -856,33 +1003,29 @@ function ContentDetailView({
                     return (
                       <div
                         key={comment.id || idx}
-                        className={`rounded-lg border transition-colors overflow-hidden cursor-pointer ${
-                          isActive
+                        className={`rounded-lg border transition-colors overflow-hidden cursor-pointer ${isActive
                             ? isAdminComment ? 'bg-purple-50 border-purple-200' : 'bg-blue-50 border-blue-200'
                             : isAdminComment ? 'bg-white border-purple-100 hover:bg-purple-50/40' : 'bg-gray-50 border-gray-200 hover:bg-blue-50/40'
-                        }`}
+                          }`}
                         onClick={() => setActiveComment(isActive ? null : comment.id)}
                       >
                         <div className="p-2 flex items-start gap-2">
                           {/* Index badge */}
-                          <span className={`font-bold rounded-full w-5 h-5 flex items-center justify-center text-[10px] flex-shrink-0 border ${
-                            isAdminComment ? 'text-purple-700 bg-purple-100 border-purple-200' : 'text-blue-700 bg-blue-100 border-blue-200'
-                          }`}>{idx + 1}</span>
+                          <span className={`font-bold rounded-full w-5 h-5 flex items-center justify-center text-[10px] flex-shrink-0 border ${isAdminComment ? 'text-purple-700 bg-purple-100 border-purple-200' : 'text-blue-700 bg-blue-100 border-blue-200'
+                            }`}>{idx + 1}</span>
                           <div className="flex-1 min-w-0">
                             {/* Author row */}
                             <div className="flex items-center gap-1 mb-0.5 flex-wrap">
-                              <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold ${
-                                isAdminComment ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
-                              }`}>
+                              <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold ${isAdminComment ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                                }`}>
                                 {isAdminComment ? <UserCog className="h-2 w-2" /> : <User className="h-2 w-2" />}
                                 {isAdminComment ? 'Admin' : 'Customer'}
                               </span>
                               {comment.authorEmail && (
                                 <span className="text-[9px] text-gray-400 truncate max-w-[110px]">{comment.authorEmail}</span>
                               )}
-                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ml-auto ${
-                                (isAdminComment || comment.reviewType === 'internal') ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
-                              }`}>
+                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ml-auto ${(isAdminComment || comment.reviewType === 'internal') ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                                }`}>
                                 {(isAdminComment || comment.reviewType === 'internal') ? 'Internal' : 'External'}
                               </span>
                             </div>

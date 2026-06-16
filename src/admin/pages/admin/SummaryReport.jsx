@@ -6,7 +6,7 @@ import {
   ChevronDown, ChevronUp, RefreshCw, AlertCircle, Loader2,
   ThumbsUp, MessageSquare, Share2, Eye, BarChart2, RotateCcw,
   PlayCircle, Layers, Heart, TrendingUp, Sliders, AlignJustify,
-  Clock, CheckCircle, FileText, ExternalLink,
+  Clock, CheckCircle, FileText, ExternalLink, Mail,
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 
@@ -606,6 +606,7 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [emailLoading, setEmailLoading] = useState(false);
   const [error, setError] = useState('');
   const [expandedItems, setExpandedItems] = useState({});
   const [visibleCount, setVisibleCount] = useState(5);
@@ -662,6 +663,49 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
       .catch(() => setContentItems([]));
   }, [selectedCalendar]);
 
+  const filteredCalendars = useMemo(() => {
+    if (!fromDate && !toDate) return calendars;
+    const from = fromDate ? new Date(fromDate) : null;
+    const to = toDate ? new Date(toDate + 'T23:59:59.999Z') : null;
+    return calendars.filter(cal => {
+      if (!Array.isArray(cal.contentItems) || cal.contentItems.length === 0) return false;
+      return cal.contentItems.some(item => {
+        if (!item.date) return false;
+        const d = new Date(item.date);
+        if (from && d < from) return false;
+        if (to && d > to) return false;
+        return true;
+      });
+    });
+  }, [calendars, fromDate, toDate]);
+
+  const filteredContentItems = useMemo(() => {
+    if (!fromDate && !toDate) return contentItems;
+    const from = fromDate ? new Date(fromDate) : null;
+    const to = toDate ? new Date(toDate + 'T23:59:59.999Z') : null;
+    return contentItems.filter(item => {
+      if (!item.date) return false;
+      const d = new Date(item.date);
+      if (from && d < from) return false;
+      if (to && d > to) return false;
+      return true;
+    });
+  }, [contentItems, fromDate, toDate]);
+
+  useEffect(() => {
+    if (selectedCalendar && !filteredCalendars.some(c => c._id === selectedCalendar)) {
+      setSelectedCalendar('');
+      setReport(null);
+    }
+  }, [filteredCalendars, selectedCalendar]);
+
+  useEffect(() => {
+    if (selectedItem && !filteredContentItems.some((item, i) => String(item.id || i) === String(selectedItem))) {
+      setSelectedItem('');
+      setReport(null);
+    }
+  }, [filteredContentItems, selectedItem]);
+
   const handleGenerate = useCallback(async () => {
     if (!selectedCustomer) { setError('Please select a customer.'); return; }
     setError('');
@@ -697,9 +741,8 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
   }, [selectedCustomer, fromDate, toDate, selectedCalendar, selectedItem]);
 
   // ── Download PDF ─────────────────────────────────────────────────────────────
-  const handleDownloadPDF = useCallback(async () => {
-    if (!report) return;
-    setPdfLoading(true);
+  const generatePDFDoc = useCallback(async () => {
+    if (!report) return null;
     try {
       const customerObj = customers.find(c => (c._id || c.id) === selectedCustomer);
       const customerName = customerObj?.businessName || customerObj?.name || 'Customer';
@@ -1746,15 +1789,65 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
       const safeCustomer = sanitize(customerName).replace(/[^a-z0-9]/gi, '_');
       const safeCalendar = sanitize(calendarName || 'Report').replace(/[^a-z0-9]/gi, '_');
       const dateStr = new Date().toISOString().slice(0, 10);
-      doc.save(`Content_Performance_Report_${safeCustomer}_${safeCalendar}_${dateStr}.pdf`);
-
+      const filename = `Content_Performance_Report_${safeCustomer}_${safeCalendar}_${dateStr}.pdf`;
+      return { doc, filename, customerName, calendarName };
     } catch (err) {
-      console.error('PDF generation failed:', err);
+      console.error('PDF generation failed inside helper:', err);
+      throw err;
+    }
+  }, [customers, selectedCustomer, selectedCalendar, calendars, report, liveMetricsCache]);
+
+  const handleDownloadPDF = useCallback(async () => {
+    if (!report) return;
+    setPdfLoading(true);
+    try {
+      const result = await generatePDFDoc();
+      if (result) {
+        result.doc.save(result.filename);
+      }
+    } catch (err) {
       alert(`Failed to generate PDF: ${err?.message || err}`);
     } finally {
       setPdfLoading(false);
     }
-  }, [customers, selectedCustomer, selectedCalendar, calendars, report, liveMetricsCache]);
+  }, [report, generatePDFDoc]);
+
+  const handleSendToCustomer = useCallback(async () => {
+    if (!report) return;
+    const confirmSend = window.confirm("Are you sure you want to send this report to the customer via email?");
+    if (!confirmSend) return;
+
+    setEmailLoading(true);
+    try {
+      const result = await generatePDFDoc();
+      if (!result) {
+        throw new Error("Could not generate report PDF");
+      }
+      const pdfBase64 = result.doc.output('datauristring').split(',')[1];
+
+      const res = await fetch(`${API_URL}/api/admin/summary-report/send-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerId: selectedCustomer,
+          pdfBase64,
+          filename: result.filename
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        alert("Report sent successfully to the customer's email!");
+      } else {
+        throw new Error(data.error || "Failed to send email");
+      }
+    } catch (err) {
+      console.error('Failed to send email to customer:', err);
+      alert(`Failed to send email: ${err?.message || err}`);
+    } finally {
+      setEmailLoading(false);
+    }
+  }, [report, generatePDFDoc, selectedCustomer]);
 
 
   const handleClearFilters = useCallback(() => {
@@ -2102,14 +2195,24 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
                 Reset
               </button>
               {report && (
-                <button
-                  onClick={handleDownloadPDF}
-                  disabled={pdfLoading}
-                  className="flex items-center gap-1.5 bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-60 transition-colors"
-                >
-                  {pdfLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                  Export PDF
-                </button>
+                <>
+                  <button
+                    onClick={handleDownloadPDF}
+                    disabled={pdfLoading}
+                    className="flex items-center gap-1.5 bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-60 transition-colors"
+                  >
+                    {pdfLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                    Export PDF
+                  </button>
+                  <button
+                    onClick={handleSendToCustomer}
+                    disabled={emailLoading}
+                    className="flex items-center gap-1.5 bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-sm font-semibold hover:bg-emerald-700 disabled:opacity-60 transition-colors"
+                  >
+                    {emailLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Mail className="w-3.5 h-3.5" />}
+                    Send to Customer
+                  </button>
+                </>
               )}
             </div>
           </div>
@@ -2163,7 +2266,7 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
                   className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-400"
                 >
                   <option value="">All calendars</option>
-                  {calendars.map(cal => (
+                  {filteredCalendars.map(cal => (
                     <option key={cal._id} value={cal._id}>{cal.name}</option>
                   ))}
                 </select>
@@ -2174,11 +2277,11 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
                 <select
                   value={selectedItem}
                   onChange={e => { setSelectedItem(e.target.value); setReport(null); }}
-                  disabled={!selectedCalendar || contentItems.length === 0}
+                  disabled={!selectedCalendar || filteredContentItems.length === 0}
                   className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-400"
                 >
                   <option value="">All items</option>
-                  {contentItems.map((item, i) => (
+                  {filteredContentItems.map((item, i) => (
                     <option key={item.id || i} value={item.id || i}>
                       {item.title || item.description || `Item ${i + 1}`}
                       {item.date ? ` (${new Date(item.date).toLocaleDateString()})` : ''}

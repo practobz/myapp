@@ -1,605 +1,346 @@
-import React, { useState, useEffect, useMemo, useCallback, memo, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { format } from 'date-fns';
-import {
-  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line
-} from 'recharts';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import AdminLayout from '../../components/layout/AdminLayout';
-import ContentDetailView from '../../components/modals/ContentDetailView';
-import ContentItemModal from '../../components/modals/ContentItemModal';
-import ContentCalendarModal from '../../components/modals/ContentCalendarModal';
-import AssignCreatorModal from '../../components/modals/AssignCreatorModal';
-import ReportModal from '../../components/modals/ReportModal';
-import SchedulePostModal from '../../components/modals/SchedulePostModal';
-import ManualPublishModal from '../../components/modals/ManualPublishModal';
-import SummaryReport from './SummaryReport';
-import CustomerSocialAccounts from './CustomerSocialAccounts';
-import MultiCustomerAnalytics from './MultiCustomerAnalytics';
+import { useAuth } from '../../contexts/AuthContext';
 import {
-  ArrowLeft,
-  User,
-  Mail,
-  Phone,
-  MapPin,
-  FileText,
-  Calendar,
-  Plus,
-  AlertCircle,
-  Building,
-  Hash,
-  ChevronRight,
-  ChevronDown,
-  Edit,
-  Trash2,
-  MoreVertical,
-  Upload,
-  CheckCircle,
-  X,
-  Clock,
-  Download,
-  TrendingUp,
-  ArrowUpDown,
-  ExternalLink,
-  Heart,
-  Share2,
-  MessageCircle,
-  QrCode,
-  BarChart3,
-  Briefcase,
-  Globe,
-  Send,
-  Play,
-  Image as ImageIcon,
-  Facebook,
-  Instagram,
-  Linkedin,
-  Youtube,
-  Loader2,
-  RefreshCw,
-  Video,
-  LayoutGrid,
-  Layers,
-  Unlink,
+  Filter, Download, Calendar, User, Image as ImageIcon,
+  ChevronDown, ChevronUp, RefreshCw, AlertCircle, Loader2,
+  ThumbsUp, MessageSquare, Share2, Eye, BarChart2, RotateCcw,
+  PlayCircle, Layers, Heart, TrendingUp, Sliders, AlignJustify,
+  Clock, CheckCircle, FileText, ExternalLink, Mail,
 } from 'lucide-react';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
-// ── Social platform badges ───────────────────────────────────────────────────
-const PLATFORM_META = {
-  facebook:  { abbr: 'FB', cls: 'bg-blue-600',                                   title: 'Facebook'  },
-  instagram: { abbr: 'IG', cls: 'bg-gradient-to-br from-purple-600 to-pink-500', title: 'Instagram' },
-  youtube:   { abbr: 'YT', cls: 'bg-red-600',                                    title: 'YouTube'   },
-  linkedin:  { abbr: 'LI', cls: 'bg-blue-800',                                   title: 'LinkedIn'  },
-  twitter:   { abbr: 'TW', cls: 'bg-sky-500',                                    title: 'Twitter'   },
-  x:         { abbr: 'X',  cls: 'bg-gray-900',                                   title: 'X'         },
-  tiktok:    { abbr: 'TK', cls: 'bg-gray-800',                                   title: 'TikTok'    },
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const fmtNumUI = n => {
+  if (n === null || n === undefined || n === '—' || n === '') return '—';
+  const v = Number(n);
+  if (isNaN(v)) return String(n);
+  if (v >= 1_000_000) return (v / 1_000_000).toFixed(1) + 'M';
+  if (v >= 1_000) return (v / 1_000).toFixed(1) + 'K';
+  return v.toLocaleString();
 };
 
-const SocialBadge = memo(({ platform }) => {
-  const key = platform?.toLowerCase();
-  const meta = PLATFORM_META[key] || {
-    abbr: (key?.[0] || '?').toUpperCase(),
-    cls: 'bg-gray-400',
-    title: platform,
-  };
+const getInitials = (name = '') => {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  return name.slice(0, 2).toUpperCase() || '??';
+};
+
+const AVATAR_COLORS = [
+  'bg-blue-500', 'bg-emerald-500', 'bg-violet-500', 'bg-rose-500',
+  'bg-amber-500', 'bg-teal-500', 'bg-indigo-500', 'bg-pink-500',
+];
+const getAvatarColor = (name = '') => {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h);
+  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
+};
+
+// ── Platform pill ─────────────────────────────────────────────────────────────
+const PlatformPill = ({ platform }) => {
+  const cfg = {
+    instagram: { label: 'Instagram', cls: 'bg-pink-50 text-pink-600 border-pink-200' },
+    facebook:  { label: 'Facebook',  cls: 'bg-blue-50 text-blue-600 border-blue-200' },
+    linkedin:  { label: 'LinkedIn',  cls: 'bg-sky-50 text-sky-700 border-sky-200' },
+    twitter:   { label: 'Twitter/X', cls: 'bg-gray-50 text-gray-600 border-gray-200' },
+    youtube:   { label: 'YouTube',   cls: 'bg-red-50 text-red-600 border-red-200' },
+  }[(platform || '').toLowerCase()] || { label: platform || '—', cls: 'bg-gray-50 text-gray-500 border-gray-200' };
   return (
-    <span
-      title={meta.title}
-      className={`inline-flex items-center justify-center w-6 h-6 rounded text-white text-[10px] font-bold flex-shrink-0 ${meta.cls}`}
-    >
-      {meta.abbr}
+    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${cfg.cls}`}>
+      {cfg.label}
     </span>
   );
-});
-SocialBadge.displayName = 'SocialBadge';
-
-// ── Tab config ────────────────────────────────────────────────────────────────
-const TABS_CONFIG = [
-  { id: 'overview',  label: 'Overview',  icon: LayoutGrid },
-  { id: 'portfolio', label: 'Total Posts', icon: Briefcase  },
-  { id: 'qr',        label: 'QR Codes',  icon: QrCode     },
-  { id: 'social',    label: 'Social',    icon: BarChart3  },
-  { id: 'report',    label: 'Report',    icon: FileText    },
-];
-
-// ── QR platform config ─────────────────────────────────────────────────────────
-const PLATFORMS_QR = [
-  { key: 'fb',       label: 'Facebook',  color: 'bg-blue-600 hover:bg-blue-700',  Icon: Facebook  },
-  { key: 'insta',    label: 'Instagram', color: 'bg-pink-600 hover:bg-pink-700',  Icon: Instagram },
-  { key: 'linkedin', label: 'LinkedIn',  color: 'bg-blue-700 hover:bg-blue-800',  Icon: Linkedin  },
-  { key: 'yt',       label: 'YouTube',   color: 'bg-red-600 hover:bg-red-700',    Icon: Youtube   },
-];
-
-// ── Portfolio status helpers ───────────────────────────────────────────────────
-const getPortfolioStatusColor = (status) => {
-  switch (status) {
-    case 'under_review':       return 'bg-yellow-100 text-yellow-800';
-    case 'approved_admin':     return 'bg-orange-100 text-orange-800';
-    case 'approved_customer':  return 'bg-green-100 text-green-800';
-    case 'approved_both':      return 'bg-teal-100 text-teal-800';
-    case 'approved':           return 'bg-green-100 text-green-800';
-    case 'published':          return 'bg-blue-100 text-blue-800';
-    case 'revision_requested': return 'bg-orange-100 text-orange-800';
-    case 'rejected':           return 'bg-red-100 text-red-800';
-    default:                   return 'bg-gray-100 text-gray-800';
-  }
 };
 
-const getPortfolioStatusLabel = (status) => {
-  switch (status) {
-    case 'approved_admin':     return 'Admin Approved';
-    case 'approved_customer':  return 'Customer Approved';
-    case 'approved_both':      return 'Fully Approved';
-    case 'under_review':       return 'Under Review';
-    case 'revision_requested': return 'Revision Needed';
-    case 'published':          return 'Published';
-    case 'submitted':          return 'Submitted';
-    case 'rejected':           return 'Rejected';
-    default: return (status || '').replace(/_/g, ' ');
-  }
+// ── Status badge ──────────────────────────────────────────────────────────────
+const StatusBadge = ({ status }) => {
+  const s = (status || '').toLowerCase();
+  const map = {
+    submitted:          'bg-amber-50 text-amber-700 border-amber-200',
+    approved:           'bg-green-50 text-green-700 border-green-200',
+    rejected:           'bg-red-50 text-red-700 border-red-200',
+    revision_requested: 'bg-orange-50 text-orange-700 border-orange-200',
+    published:          'bg-emerald-50 text-emerald-700 border-emerald-200',
+    pending:            'bg-gray-50 text-gray-600 border-gray-200',
+    publishing:         'bg-blue-50 text-blue-700 border-blue-200',
+    under_review:       'bg-purple-50 text-purple-700 border-purple-200',
+    in_review:          'bg-amber-50 text-amber-700 border-amber-200',
+  };
+  const cls = map[s] || 'bg-gray-50 text-gray-600 border-gray-200';
+  const label = s === 'submitted' ? 'In review'
+    : (status || '—').replace(/_/g, ' ');
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded border text-xs font-semibold capitalize ${cls}`}>
+      {label}
+    </span>
+  );
 };
 
-// Platform icon used in Social tab
-const PlatformIconLarge = ({ platform, className = 'w-5 h-5' }) => {
-  const p = (platform || '').toLowerCase();
-  if (p === 'facebook')  return <Facebook  className={className} style={{ color: '#1877F2' }} />;
-  if (p === 'instagram') return <Instagram className={className} style={{ color: '#E4405F' }} />;
-  if (p === 'linkedin')  return <Linkedin  className={className} style={{ color: '#0A66C2' }} />;
-  if (p === 'youtube')   return <Youtube   className={className} style={{ color: '#FF0000' }} />;
-  return <Globe className={className + ' text-gray-500'} />;
+// ── Thumbnail ─────────────────────────────────────────────────────────────────
+const Thumbnail = ({ url }) => {
+  if (!url) {
+    return (
+      <div className="w-14 h-14 rounded-xl bg-gray-100 flex items-center justify-center flex-shrink-0">
+        <ImageIcon className="w-5 h-5 text-gray-400" />
+      </div>
+    );
+  }
+  const isVideo = /\.(mp4|mov|webm|avi|mkv)/i.test(url);
+  return isVideo ? (
+    <div className="w-14 h-14 rounded-xl bg-gray-900 flex items-center justify-center flex-shrink-0 relative overflow-hidden">
+      <video src={url} className="w-full h-full object-cover opacity-80" muted preload="metadata" />
+      <PlayCircle className="absolute w-6 h-6 text-white" />
+    </div>
+  ) : (
+    <img src={url} alt="thumbnail"
+      className="w-14 h-14 rounded-xl object-cover flex-shrink-0 bg-gray-100"
+      onError={e => { e.target.style.display = 'none'; }} />
+  );
 };
 
-const PLATFORM_BG = {
-  facebook:  'bg-blue-50 border-blue-200',
-  instagram: 'bg-pink-50 border-pink-200',
-  linkedin:  'bg-sky-50 border-sky-200',
-  youtube:   'bg-red-50 border-red-200',
+// ── Media type badge ──────────────────────────────────────────────────────────
+const MediaTypeBadge = ({ mediaType, slideCount }) => {
+  const t = (mediaType || '').toLowerCase();
+  const label = t === 'carousel' ? `Carousel · ${slideCount || '?'} slides`
+    : t === 'video' ? 'Video'
+    : `Image · ${slideCount || 1} slide`;
+  return (
+    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200">
+      {label}
+    </span>
+  );
 };
 
-// ── Trend helpers ─────────────────────────────────────────────────────────────
-function buildTrend(calendars, rangeMonths) {
-  const allItems = calendars.flatMap(cal => cal.contentItems || []);
-  const now = new Date();
+// ── Version row (inline) ──────────────────────────────────────────────────────
+const isVersionVideoUrl = url => /\.(mp4|mov|webm|avi|mkv)/i.test(url);
 
-  // 1M → daily buckets (last 30 days)
-  if (rangeMonths === 1) {
-    const buckets = [];
-    for (let i = 29; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
-      const dayKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      buckets.push({ dayKey, label: d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }), published: 0, pending: 0 });
-    }
-    const map = Object.fromEntries(buckets.map(b => [b.dayKey, b]));
-    allItems.forEach(item => {
-      const key = (item.date || '').slice(0, 10);
-      if (map[key]) { if (item.published) map[key].published++; else map[key].pending++; }
-    });
-    return buckets;
-  }
+const VersionRow = ({ version }) => {
+  const latestComment = version.comments?.[version.comments.length - 1];
+  const feedback = version.rejectionReason || version.approvalNotes || latestComment?.comment || latestComment?.text;
+  const feedbackAuthor = latestComment?.authorName || latestComment?.authorEmail;
 
-  // 3M → weekly buckets (12 weeks)
-  if (rangeMonths === 3) {
-    const buckets = [];
-    for (let i = 11; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i * 7);
-      const weekStart = new Date(d.getFullYear(), d.getMonth(), d.getDate() - d.getDay());
-      const weekEnd = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + 6);
-      const weekKey = `${weekStart.getFullYear()}-${String(weekStart.getMonth() + 1).padStart(2, '0')}-${String(weekStart.getDate()).padStart(2, '0')}`;
-      buckets.push({ weekKey, weekEnd, label: weekStart.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }), published: 0, pending: 0 });
-    }
-    allItems.forEach(item => {
-      if (!item.date) return;
-      const itemDate = new Date(item.date);
-      for (const bucket of buckets) {
-        if (itemDate >= new Date(bucket.weekKey) && itemDate <= bucket.weekEnd) {
-          if (item.published) bucket.published++; else bucket.pending++;
-          break;
-        }
-      }
-    });
-    return buckets;
-  }
-
-  // 6M, 1Y, All → monthly buckets (always show year)
-  const buckets = [];
-  for (let i = rangeMonths - 1; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    buckets.push({ monthKey, label: d.toLocaleDateString(undefined, { month: 'short', year: '2-digit' }), published: 0, pending: 0 });
-  }
-  const map = Object.fromEntries(buckets.map(b => [b.monthKey, b]));
-  allItems.forEach(item => {
-    const key = (item.date || '').slice(0, 7);
-    if (map[key]) { if (item.published) map[key].published++; else map[key].pending++; }
-  });
-  return buckets;
-}
-
-const RANGE_OPTIONS = [
-  { label: '1M', months: 1 },
-  { label: '3M', months: 3 },
-  { label: '6M', months: 6 },
-  { label: '1Y', months: 12 },
-  { label: 'All', months: 24 },
-];
-
-const TrendChart = memo(({ calendars, onClose }) => {
-  const [range, setRange] = useState(6);
-  const data = useMemo(() => buildTrend(calendars, range), [calendars, range]);
+  const mediaUrls = (version.media || [])
+    .map(m => typeof m === 'string' ? m : (m?.url || m?.publicUrl || ''))
+    .filter(Boolean);
+  const showCount  = Math.min(mediaUrls.length, 5);
+  const extraCount = mediaUrls.length - showCount;
 
   return (
-    <div className="bg-white rounded-xl border border-gray-100 p-4">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <TrendingUp className="h-4 w-4 text-blue-500" />
-          <span className="text-sm font-semibold text-gray-700">Publishing Trend</span>
+    <div className="pb-3 border-b border-gray-100 last:border-b-0 last:pb-0 space-y-2">
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-bold flex-shrink-0">
+          {version.versionNumber}
         </div>
-        <div className="flex items-center gap-1">
-          {RANGE_OPTIONS.map(opt => (
-            <button
-              key={opt.label}
-              onClick={() => setRange(opt.months)}
-              className={`px-2.5 py-0.5 rounded-md text-xs font-medium transition-colors ${
-                range === opt.months
-                  ? 'bg-emerald-600 text-white'
-                  : 'text-gray-500 hover:bg-gray-100'
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-          <button
-            onClick={onClose}
-            className="ml-1 p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-        </div>
+        <span className="text-xs font-semibold text-gray-600">Version {version.versionNumber}</span>
+        <StatusBadge status={version.status} />
+        {version.submittedAt && (
+          <span className="text-[10px] text-gray-400 ml-auto">
+            {new Date(version.submittedAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short' })}
+          </span>
+        )}
       </div>
 
-      <div className="h-48">
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={data} margin={{ top: 5, right: 5, bottom: 0, left: -20 }}>
-            <defs>
-              <linearGradient id="cdvGreen" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#10b981" stopOpacity={0.25} />
-                <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-              </linearGradient>
-              <linearGradient id="cdvAmber" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.25} />
-                <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <XAxis dataKey="label" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} interval={range === 1 ? 4 : range === 3 ? 1 : 0} />
-            <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
-            <Tooltip
-              contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb', background: '#fff' }}
-              formatter={(value, name) => [value, name === 'published' ? 'Published' : 'Pending']}
-            />
-            <Area type="monotone" dataKey="published" stroke="#10b981" strokeWidth={2} fill="url(#cdvGreen)" dot={false} activeDot={{ r: 4 }} />
-            <Area type="monotone" dataKey="pending"   stroke="#f59e0b" strokeWidth={2} fill="url(#cdvAmber)" dot={false} activeDot={{ r: 4 }} />
-          </AreaChart>
-        </ResponsiveContainer>
-      </div>
-
-      <div className="flex items-center gap-4 mt-2">
-        <div className="flex items-center gap-1.5">
-          <div className="w-3 h-1.5 bg-emerald-500 rounded-full" />
-          <span className="text-xs text-gray-500">Published</span>
+      {showCount > 0 && (
+        <div className="grid grid-cols-3 gap-1.5 pl-7">
+          {mediaUrls.slice(0, showCount).map((url, i) =>
+            isVersionVideoUrl(url) ? (
+              <div key={i} className="aspect-square rounded-lg bg-gray-900 flex items-center justify-center relative overflow-hidden">
+                <video src={url} className="w-full h-full object-cover opacity-60" muted preload="metadata" />
+                <PlayCircle className="absolute w-5 h-5 text-white" />
+              </div>
+            ) : (
+              <img
+                key={i}
+                src={url}
+                alt={`v${version.versionNumber} slide ${i + 1}`}
+                className="aspect-square w-full rounded-lg object-cover bg-gray-100 border border-gray-200"
+                onError={e => { e.target.style.display = 'none'; }}
+              />
+            )
+          )}
+          {extraCount > 0 && (
+            <div className="aspect-square rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center text-[10px] font-bold text-gray-400">
+              +{extraCount}
+            </div>
+          )}
         </div>
-        <div className="flex items-center gap-1.5">
-          <div className="w-3 h-1.5 bg-amber-500 rounded-full" />
-          <span className="text-xs text-gray-500">Pending</span>
-        </div>
-      </div>
-    </div>
-  );
-});
-TrendChart.displayName = 'TrendChart';
+      )}
 
-// Status configuration helper
-const getStatusConfig = (status) => {
-  const configs = {
-    published: { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' },
-    approved: { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' },
-    under_review: { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200' },
-    in_progress: { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200' },
-    pending: { bg: 'bg-gray-50', text: 'text-gray-600', border: 'border-gray-200' }
-  };
-  return configs[status] || configs.pending;
-};
-
-// Memoized info item component for performance
-const InfoItem = memo(({ icon: Icon, iconBg, iconColor, label, value, mono }) => (
-  <div className="flex items-center gap-1.5 p-1.5 bg-gray-50/50 rounded-lg">
-    <div className={`p-1 ${iconBg} rounded-md flex-shrink-0`}>
-      <Icon className={`h-5 w-5 ${iconColor}`} />
-    </div>
-    <div className="flex-1 min-w-0">
-      <p className="text-sm font-medium text-gray-400 uppercase">{label}</p>
-      <p className={`text-base text-gray-900 font-medium truncate ${mono ? 'font-mono' : ''}`}>
-        {value || 'N/A'}
-      </p>
-    </div>
-  </div>
-));
-
-InfoItem.displayName = 'InfoItem';
-
-// Memoized content item component
-const ContentItemCard = memo(({ item, status, statusConfig, formatDate, onTogglePublished, onEdit, onDelete, onUpload, isPublished, calendarId, index }) => (
-  <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-100 hover:border-gray-200 transition-colors">
-    <div className="flex items-center gap-3 min-w-0 flex-1">
-      <div className="h-9 w-9 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
-        <FileText className="h-4 w-4 text-gray-400" />
-      </div>
-      <div className="min-w-0 flex-1">
-        {item.title && <p className="text-sm font-medium text-blue-800 truncate">{item.title}</p>}
-        <p className="text-sm text-gray-900 truncate">{item.description || 'Untitled'}</p>
-        <div className="flex items-center gap-2 mt-1 flex-wrap">
-          <p className="text-xs text-gray-500 flex items-center gap-1">
-            <Clock className="h-3 w-3" />
-            Due: {formatDate(item.date)}
+      {version.caption && (
+        <p className="text-xs text-gray-700 leading-relaxed line-clamp-2 pl-7">{version.caption}</p>
+      )}
+      {version.hashtags && (
+        <p className="text-[10px] text-blue-500 pl-7 line-clamp-1">{version.hashtags}</p>
+      )}
+      {feedback && (
+        <div className="flex items-start gap-1 pl-7">
+          <CheckCircle className="w-3 h-3 text-gray-400 flex-shrink-0 mt-0.5" />
+          <p className="text-[10px] text-gray-500 italic line-clamp-2">
+            "{feedback}"{feedbackAuthor && !version.rejectionReason && !version.approvalNotes ? ` — ${feedbackAuthor}` : ''}
           </p>
-          {item.type && (
-            <>
-              {(Array.isArray(item.type) ? item.type : 
-                (typeof item.type === 'string' ? item.type.split(',').map(p => p.trim()) : [item.type])
-              ).map((platform, idx) => (
-                <span 
-                  key={idx}
-                  className="inline-flex px-1.5 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700 capitalize"
-                >
-                  {platform}
-                </span>
-              ))}
-            </>
-          )}
         </div>
-      </div>
+      )}
     </div>
-    <div className="flex items-center gap-1 ml-2">
-      <span className={`px-2 py-1 rounded-md text-xs font-medium ${statusConfig.bg} ${statusConfig.text} border ${statusConfig.border} hidden sm:inline-flex`}>
-        {status.replace('_', ' ')}
-      </span>
-      <button
-        className={`p-1.5 rounded transition-colors touch-manipulation ${isPublished ? 'text-green-600 bg-green-50 hover:bg-green-100' : 'text-gray-400 hover:text-green-600 hover:bg-green-50'}`}
-        onClick={(e) => { e.stopPropagation(); onTogglePublished(); }}
-        onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onTogglePublished(); }}
-        title={isPublished ? 'Mark as unpublished' : 'Mark as published'}
-      >
-        <CheckCircle className="h-3.5 w-3.5" />
-      </button>
-      <button
-        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors touch-manipulation"
-        onClick={(e) => { e.stopPropagation(); onEdit(); }}
-        onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onEdit(); }}
-        title="Edit"
-      >
-        <Edit className="h-3.5 w-3.5" />
-      </button>
-      <button
-        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors touch-manipulation"
-        onClick={(e) => { e.stopPropagation(); onDelete(); }}
-        onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onDelete(); }}
-        title="Delete"
-      >
-        <Trash2 className="h-3.5 w-3.5" />
-      </button>
-      <button
-        className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors touch-manipulation"
-        onClick={(e) => { e.stopPropagation(); onUpload(); }}
-        onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onUpload(); }}
-        title="Upload"
-      >
-        <Upload className="h-3.5 w-3.5" />
-      </button>
-    </div>
+  );
+};
+
+// ── Platform metrics section ──────────────────────────────────────────────────
+const MetricTile = ({ label, value, highlight }) => (
+  <div className="text-center">
+    <p className={`text-sm font-bold ${highlight ? 'text-emerald-600' : 'text-gray-800'}`}>{fmtNumUI(value)}</p>
+    <p className="text-[9px] text-gray-400 leading-tight mt-0.5">{label}</p>
   </div>
-));
-ContentItemCard.displayName = 'ContentItemCard';
+);
 
-// Platform logo icon component
-const PlatformIcon = ({ platform }) => {
-  const p = (platform || '').toLowerCase().trim();
-  if (p === 'facebook') return (
-    <svg viewBox="0 0 24 24" className="w-4 h-4 flex-shrink-0" fill="#1877F2" aria-label="Facebook">
-      <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-    </svg>
-  );
-  if (p === 'instagram') return (
-    <svg viewBox="0 0 24 24" className="w-4 h-4 flex-shrink-0" fill="#E1306C" aria-label="Instagram">
-      <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/>
-    </svg>
-  );
-  if (p === 'linkedin') return (
-    <svg viewBox="0 0 24 24" className="w-4 h-4 flex-shrink-0" fill="#0A66C2" aria-label="LinkedIn">
-      <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
-    </svg>
-  );
-  if (p === 'youtube') return (
-    <svg viewBox="0 0 24 24" className="w-4 h-4 flex-shrink-0" fill="#FF0000" aria-label="YouTube">
-      <path d="M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
-    </svg>
-  );
-  if (p === 'twitter' || p === 'x') return (
-    <svg viewBox="0 0 24 24" className="w-4 h-4 flex-shrink-0" fill="#000000" aria-label="X (Twitter)">
-      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.73-8.835L1.254 2.25H8.08l4.253 5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-    </svg>
-  );
-  return <span className="text-[10px] font-medium text-gray-600 capitalize">{platform}</span>;
-};
+const PlatformMetricsSection = ({ post }) => {
+  const platform = (post.platform || '').toLowerCase();
+  const PI = {
+    instagram: { color: 'text-pink-600',  label: 'Instagram' },
+    facebook:  { color: 'text-blue-600',  label: 'Facebook'  },
+    linkedin:  { color: 'text-blue-700',  label: 'LinkedIn'  },
+    twitter:   { color: 'text-sky-500',   label: 'Twitter/X' },
+    youtube:   { color: 'text-red-600',   label: 'YouTube'   },
+  }[platform] || { color: 'text-gray-600', label: post.platform || 'Unknown' };
 
-// Timeline component showing item lifecycle stages with dates
-const ItemTimeline = ({ item, itemStatus, scheduledPosts = [], submissions = [] }) => {
-  const nowTs = Date.now();
+  const m = post.metrics || {};
 
-  const matchedPost = scheduledPosts.find(post =>
-    ((post.item_id && post.item_id === item.id) ||
-     (post.contentId && post.contentId === item.id) ||
-     (post.item_name && post.item_name === (item.title || item.description))) &&
-    (post.status === 'published' || post.publishedAt)
-  );
-
-  const fmtDate = (d) => {
-    if (!d) return null;
-    try {
-      const dt = new Date(d);
-      if (isNaN(dt.getTime())) return null;
-      return `${dt.getDate()}/${dt.getMonth() + 1} ${dt.getHours().toString().padStart(2, '0')}:${dt.getMinutes().toString().padStart(2, '0')}`;
-    } catch { return null; }
-  };
-
-  const hasReachedDate = (d) => {
-    if (!d) return false;
-    const dt = new Date(d);
-    if (isNaN(dt.getTime())) return false;
-    return dt.getTime() <= nowTs;
-  };
-
-  // Version steps — one node per submission, shown between Due and Reviewed
-  // Each version also gets a "→ Admin" step if admins were notified
-  const versionSteps = [];
-  submissions.forEach((s, idx) => {
-    // The upload/version node
-    versionSteps.push({
-      key: `v${idx + 1}`,
-      label: `V${idx + 1}`,
-      done: hasReachedDate(s.created_at || s.createdAt),
-      date: fmtDate(s.created_at || s.createdAt),
-      tone: 'blue',
-    });
-    // If admins were notified, add a "Sent" node right after
-    const notifiedAdmins = Array.isArray(s.notify_admins) ? s.notify_admins : [];
-    if (notifiedAdmins.length > 0) {
-      const adminLabel = notifiedAdmins.length === 1
-        ? notifiedAdmins[0].name || 'Admin'
-        : `${notifiedAdmins.length} Admins`;
-      versionSteps.push({
-        key: `v${idx + 1}_admin`,
-        label: `→ ${adminLabel}`,
-        done: hasReachedDate(s.sent_to_admin_at || s.created_at || s.createdAt),
-        date: fmtDate(s.sent_to_admin_at || s.created_at || s.createdAt),
-        tone: 'purple',
-      });
-    }
-  });
-
-  // Derive review date from the approved submission if not stored on item
-  const approvedSub = submissions.find(s => s.status === 'approved');
-  const reviewedAt = item.reviewedAt || approvedSub?.approvedAt || approvedSub?.updatedAt;
-  const reviewedDate = fmtDate(reviewedAt);
-  const publishedAt = matchedPost?.publishedAt || item.publishedAt;
-
-  // Order: Created → Assigned → Due → V1 → V2 → ... → Reviewed → Published
-  const steps = [
-    { key: 'created',   label: 'Created',   done: hasReachedDate(item.createdAt),   date: fmtDate(item.createdAt),   tone: 'blue' },
-    { key: 'assigned',  label: 'Assigned',  done: hasReachedDate(item.assignedAt),  date: fmtDate(item.assignedAt),  tone: 'blue' },
-    { key: 'due',       label: 'Due',       done: hasReachedDate(item.date),        date: fmtDate(item.date),        tone: 'orange' },
-    ...versionSteps,
-    { key: 'reviewed',  label: 'Reviewed',  done: hasReachedDate(reviewedAt),        date: reviewedDate,              tone: 'blue' },
-    { key: 'published', label: 'Published', done: hasReachedDate(publishedAt),       date: fmtDate(publishedAt),      tone: 'green' },
-  ];
-
-  const toneClasses = {
-    blue: {
-      dotDone: 'bg-blue-500',
-      dotTodo: 'bg-blue-100',
-      labelDone: 'text-blue-700 font-medium',
-      labelTodo: 'text-blue-300',
-      dateDone: 'text-blue-500',
-      dateTodo: 'text-blue-200',
-      lineDone: 'bg-blue-400',
-      lineTodo: 'bg-blue-100',
-    },
-    orange: {
-      dotDone: 'bg-amber-500',
-      dotTodo: 'bg-amber-100',
-      labelDone: 'text-amber-700 font-medium',
-      labelTodo: 'text-amber-300',
-      dateDone: 'text-amber-500',
-      dateTodo: 'text-amber-200',
-      lineDone: 'bg-amber-400',
-      lineTodo: 'bg-amber-100',
-    },
-    green: {
-      dotDone: 'bg-emerald-500',
-      dotTodo: 'bg-emerald-100',
-      labelDone: 'text-emerald-700 font-medium',
-      labelTodo: 'text-emerald-300',
-      dateDone: 'text-emerald-500',
-      dateTodo: 'text-emerald-200',
-      lineDone: 'bg-emerald-400',
-      lineTodo: 'bg-emerald-100',
-    },
-    purple: {
-      dotDone: 'bg-purple-500',
-      dotTodo: 'bg-purple-100',
-      labelDone: 'text-purple-700 font-medium',
-      labelTodo: 'text-purple-300',
-      dateDone: 'text-purple-500',
-      dateTodo: 'text-purple-200',
-      lineDone: 'bg-purple-400',
-      lineTodo: 'bg-purple-100',
-    },
-  };
-
-  return (
-    <div className="flex items-start mt-2 overflow-x-auto pb-0.5">
-      {steps.map((step, idx) => (
-        <React.Fragment key={step.key}>
-          <div className="flex flex-col items-center flex-shrink-0">
-            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${step.done ? (toneClasses[step.tone || 'blue']?.dotDone || 'bg-blue-500') : (toneClasses[step.tone || 'blue']?.dotTodo || 'bg-blue-100')}`} />
-            <span className={`text-[9px] leading-none mt-0.5 whitespace-nowrap ${step.done ? (toneClasses[step.tone || 'blue']?.labelDone || 'text-blue-700 font-medium') : (toneClasses[step.tone || 'blue']?.labelTodo || 'text-blue-300')}`}>
-              {step.label}
-            </span>
-            <span className={`text-[8px] leading-none mt-0.5 whitespace-nowrap ${step.date ? (step.done ? (toneClasses[step.tone || 'blue']?.dateDone || 'text-blue-500') : (toneClasses[step.tone || 'blue']?.dateTodo || 'text-blue-200')) : 'text-transparent select-none'}`}>
-              {step.date || '—'}
-            </span>
+  if (platform === 'instagram') {
+    const cells = [
+      { label: 'Likes',        value: m.likes      },
+      { label: 'Comments',     value: m.comments   },
+      { label: 'Views',        value: m.views      },
+      { label: 'Shares',       value: m.shares     },
+      { label: 'Saved',        value: m.saves ?? m.saved },
+      { label: 'Reach',        value: m.reach      },
+      { label: 'Interactions', value: m.total_interactions },
+    ].filter(c => c.value != null);
+    const engRaw  = (m.likes || 0) + (m.comments || 0) + (m.shares || 0);
+    const engRate = m.reach && engRaw ? ((engRaw / m.reach) * 100).toFixed(1) : null;
+    const mediaTypeLabel = m.media_type ? m.media_type.replace(/_/g, ' ') : null;
+    const postDate = m.timestamp
+      ? new Date(m.timestamp).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })
+      : null;
+    const permalink = m.permalink || post.instagramPermalink || null;
+    const hasAny = cells.length > 0;
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className={`flex items-center gap-1.5 text-xs font-bold ${PI.color}`}><BarChart2 className="w-3 h-3" />{PI.label}</span>
+          {mediaTypeLabel && <span className="text-[10px] bg-pink-50 text-pink-500 border border-pink-100 px-1.5 py-0.5 rounded-full font-medium">{mediaTypeLabel}</span>}
+          {postDate && <span className="text-[10px] text-gray-400">{postDate}</span>}
+          {permalink && <a href={permalink} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-[10px] text-blue-500 hover:underline flex items-center gap-0.5">View post <ExternalLink className="w-2.5 h-2.5" /></a>}
+        </div>
+        {hasAny ? (
+          <div className="grid grid-cols-4 gap-1">
+            {cells.map(c => <MetricTile key={c.label} label={c.label} value={c.value} />)}
+            {engRate && <MetricTile label="Eng. Rate" value={`${engRate}%`} highlight />}
           </div>
-          {idx < steps.length - 1 && (
-            <div
-              className={`flex-1 h-px mt-1 mx-0.5 ${step.done && steps[idx + 1].done ? (toneClasses[steps[idx + 1].tone || 'blue']?.lineDone || 'bg-blue-400') : (toneClasses[steps[idx + 1].tone || 'blue']?.lineTodo || 'bg-blue-100')}`}
-              style={{ minWidth: '8px' }}
-            />
-          )}
-        </React.Fragment>
-      ))}
+        ) : <p className="text-[10px] text-gray-400 italic">Metrics not yet available</p>}
+      </div>
+    );
+  }
+
+  if (platform === 'facebook') {
+    const mainCells = [
+      { label: 'Likes',       value: m.likes       },
+      { label: 'Comments',    value: m.comments    },
+      { label: 'Shares',      value: m.shares      },
+      { label: 'Clicks',      value: m.clicks      },
+      { label: 'Impressions', value: m.impressions },
+      { label: 'Reach',       value: m.reach       },
+      { label: 'Video Views', value: m.videoViews  },
+    ].filter(c => c.value != null);
+    const er = typeof m.engagementRate === 'number'
+      ? (m.engagementRate * (m.engagementRate > 1 ? 1 : 100)).toFixed(1)
+      : null;
+    const reactions = m.reactions || {};
+    const reactionEntries = Object.entries(reactions).filter(([, v]) => v > 0);
+    const postDate = m.created_time
+      ? new Date(m.created_time).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })
+      : null;
+    const hasAny = mainCells.some(c => c.value != null);
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className={`flex items-center gap-1.5 text-xs font-bold ${PI.color}`}><BarChart2 className="w-3 h-3" />{PI.label}</span>
+          {postDate && <span className="text-[10px] text-gray-400">{postDate}</span>}
+        </div>
+        {hasAny ? (
+          <>
+            <div className="grid grid-cols-4 gap-1">
+              {mainCells.map(c => <MetricTile key={c.label} label={c.label} value={c.value} />)}
+              {er && <MetricTile label="Eng. Rate" value={`${er}%`} highlight />}
+            </div>
+            {reactionEntries.length > 0 && (
+              <div className="flex items-center gap-3 pt-0.5 flex-wrap">
+                <span className="text-[9px] text-gray-400 font-semibold uppercase tracking-wide">Reactions</span>
+                {reactionEntries.map(([k, v]) => (
+                  <span key={k} className="text-[10px] text-gray-600">
+                    <span className="font-semibold">{v}</span> <span className="text-gray-400">{k}</span>
+                  </span>
+                ))}
+              </div>
+            )}
+          </>
+        ) : <p className="text-[10px] text-gray-400 italic">Metrics not yet available</p>}
+      </div>
+    );
+  }
+
+  if (platform === 'linkedin') {
+    const cells = [
+      { label: 'Likes',            value: m.likeCount              ?? m.likes    },
+      { label: 'Comments',         value: m.commentCount           ?? m.comments },
+      { label: 'Shares',           value: m.shareCount             ?? m.shares   },
+      { label: 'Clicks',           value: m.clickCount             ?? m.clicks   },
+      { label: 'Impressions',      value: m.impressionCount        ?? m.impressions ?? m.reach },
+      { label: 'Unique Imp.',      value: m.uniqueImpressionsCount },
+    ].filter(c => c.value != null);
+    const engRate = m.engagement != null
+      ? (m.engagement * (m.engagement > 1 ? 1 : 100)).toFixed(2)
+      : null;
+    const hasAny = cells.length > 0;
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-1.5 text-xs font-bold">
+          <BarChart2 className={`w-3 h-3 ${PI.color}`} />
+          <span className={PI.color}>{PI.label}</span>
+        </div>
+        {hasAny ? (
+          <div className="grid grid-cols-4 gap-1">
+            {cells.map(c => <MetricTile key={c.label} label={c.label} value={c.value} />)}
+            {engRate && <MetricTile label="Eng. Rate" value={`${engRate}%`} highlight />}
+          </div>
+        ) : <p className="text-[10px] text-gray-400 italic">Metrics not yet available</p>}
+      </div>
+    );
+  }
+
+  const genCells = [
+    { label: 'Likes',       value: m.likes       },
+    { label: 'Comments',    value: m.comments    },
+    { label: 'Shares',      value: m.shares      },
+    { label: 'Impressions', value: m.impressions ?? m.reach },
+  ].filter(c => c.value != null);
+  const genReach  = m.reach || m.impressions;
+  const genEngRaw = (m.likes || 0) + (m.comments || 0) + (m.shares || 0);
+  const genEngRate = genReach && genEngRaw ? ((genEngRaw / genReach) * 100).toFixed(1) : null;
+  return (
+    <div className="space-y-2">
+      <div className={`flex items-center gap-1.5 text-xs font-bold ${PI.color}`}>
+        <BarChart2 className="w-3 h-3" /><span>{PI.label}</span>
+      </div>
+      {genCells.length > 0 ? (
+        <div className="grid grid-cols-4 gap-1">
+          {genCells.map(c => <MetricTile key={c.label} label={c.label} value={c.value} />)}
+          {genEngRate && <MetricTile label="Eng. Rate" value={`${genEngRate}%`} highlight />}
+        </div>
+      ) : <p className="text-[10px] text-gray-400 italic">Metrics not yet available</p>}
     </div>
   );
-};
-
-// Trend button shown on published items — triggers per-post analytics fetch on click
-const PostTrendButton = memo(({ isLoading, isActive, onClick }) => (
-  <button
-    className={`flex items-center gap-1 px-1.5 py-0.5 rounded border transition-colors flex-shrink-0 ${
-      isActive
-        ? 'bg-blue-100 border-blue-300 text-blue-700'
-        : 'bg-blue-50 hover:bg-blue-100 border-blue-100 text-blue-600'
-    }`}
-    onClick={onClick}
-    title="View post engagement trend"
-  >
-    {isLoading
-      ? <div className="w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
-      : <TrendingUp className="h-3 w-3" />
-    }
-    <span className="text-[10px] font-medium hidden sm:inline">Trend</span>
-  </button>
-));
-PostTrendButton.displayName = 'PostTrendButton';
-
-// Helper to combine per-platform trend data by date
-const getCombinedTrendData = (platformData) => {
-  if (!platformData || typeof platformData !== 'object') return [];
-  const byDate = {};
-  Object.values(platformData).forEach(arr => {
-    (arr || []).forEach(d => {
-      if (!byDate[d.date]) byDate[d.date] = { date: d.date, likes: 0, comments: 0, shares: 0 };
-      byDate[d.date].likes += d.likes || 0;
-      byDate[d.date].comments += d.comments || 0;
-      byDate[d.date].shares += d.shares || 0;
-    });
-  });
-  return Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date));
 };
 
 const instagramMediaIdToUrl = (mediaId, postType) => {
@@ -622,1989 +363,250 @@ const instagramMediaIdToUrl = (mediaId, postType) => {
   }
 };
 
-// Mini sparkline trend charts shown inline on published calendar items
-const MiniTrendCharts = memo(({ platformData }) => {
-  const combined = getCombinedTrendData(platformData).slice(-14);
-  if (!combined.length) return null;
-  const metrics = [
-    { key: 'likes', color: '#EF4444', Icon: Heart, label: 'Likes' },
-    { key: 'comments', color: '#3B82F6', Icon: MessageCircle, label: 'Comments' },
-    { key: 'shares', color: '#22C55E', Icon: Share2, label: 'Shares' },
-  ];
-  return (
-    <div className="flex items-center gap-3 mt-1.5">
-      {metrics.map(m => {
-        const total = combined.length > 0 ? (combined[combined.length - 1][m.key] || 0) : 0;
-        return (
-          <div key={m.key} className="flex items-center gap-1">
-            <m.Icon className="h-2.5 w-2.5 flex-shrink-0" style={{ color: m.color }} />
-            <div className="w-14 h-5">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={combined}>
-                  <Line type="monotone" dataKey={m.key} stroke={m.color} strokeWidth={1} dot={false} isAnimationActive={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-            <span className="text-[9px] text-gray-500 tabular-nums">{total}</span>
-          </div>
-        );
-      })}
-    </div>
-  );
-});
-MiniTrendCharts.displayName = 'MiniTrendCharts';
-
-// Expanded per-post trend chart with date range selector — per platform
-const ExpandedTrendChart = memo(({ platformData, dateRange, onDateRangeChange, onClose }) => {
-  const ranges = [
-    { label: '7D', value: 7 },
-    { label: '14D', value: 14 },
-    { label: '30D', value: 30 },
-    { label: '90D', value: 90 },
-  ];
-  const platforms = Object.keys(platformData || {});
-  const hasData = platforms.some(p => (platformData[p] || []).length > 0);
-  const gridClass = platforms.length >= 3 ? 'grid grid-cols-1 sm:grid-cols-3 gap-3'
-    : platforms.length === 2 ? 'grid grid-cols-1 sm:grid-cols-2 gap-3'
-    : '';
-
-  return (
-    <div className="mt-3 bg-blue-50/50 rounded-lg border border-blue-100 p-3" onClick={e => e.stopPropagation()}>
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-3">
-          <span className="text-xs font-semibold text-gray-700">Post Engagement Trend</span>
-          <div className="flex gap-1">
-            {ranges.map(r => (
-              <button
-                key={r.value}
-                onClick={() => onDateRangeChange(r.value)}
-                className={`px-2 py-0.5 text-[10px] rounded-full font-medium transition-colors ${
-                  dateRange === r.value
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-white text-gray-500 hover:bg-gray-100 border border-gray-200'
-                }`}
-              >
-                {r.label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 rounded">
-          <X className="h-3.5 w-3.5" />
-        </button>
-      </div>
-
-      {!hasData && platforms.length === 0 ? (
-        <div className="h-24 flex items-center justify-center">
-          <p className="text-xs text-gray-400">No analytics snapshots found for this post yet.</p>
-        </div>
-      ) : (
-        <div className={gridClass}>
-          {platforms.map(platform => {
-            const data = (platformData[platform] || []).slice(-dateRange);
-            const totalLikes    = data.length > 0 ? (data[data.length - 1].likes    || 0) : 0;
-            const totalComments = data.length > 0 ? (data[data.length - 1].comments || 0) : 0;
-            const totalShares   = data.length > 0 ? (data[data.length - 1].shares   || 0) : 0;
-            return (
-              <div key={platform} className="bg-white rounded-lg border border-gray-100 p-2.5">
-                <div className="flex items-center gap-1.5 mb-1.5">
-                  <PlatformIcon platform={platform} />
-                  <span className="text-[10px] font-semibold text-gray-700 capitalize">{platform}</span>
-                </div>
-                <div className="flex items-center gap-3 mb-1.5">
-                  <span className="flex items-center gap-1 text-[10px] text-gray-600"><Heart className="h-2.5 w-2.5 text-red-500" />{totalLikes.toLocaleString()}</span>
-                  <span className="flex items-center gap-1 text-[10px] text-gray-600"><MessageCircle className="h-2.5 w-2.5 text-blue-500" />{totalComments.toLocaleString()}</span>
-                  <span className="flex items-center gap-1 text-[10px] text-gray-600"><Share2 className="h-2.5 w-2.5 text-green-500" />{totalShares.toLocaleString()}</span>
-                </div>
-                {data.length === 0 ? (
-                  <div className="h-20 flex items-center justify-center">
-                    <p className="text-[10px] text-gray-400">No data yet</p>
-                  </div>
-                ) : (
-                  <div className="h-24 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={data} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
-                        <XAxis
-                          dataKey="date"
-                          tick={{ fontSize: 8 }}
-                          tickFormatter={v => { const d = new Date(v); return `${d.getDate()}/${d.getMonth() + 1}`; }}
-                          stroke="#9CA3AF"
-                          axisLine={false}
-                          tickLine={false}
-                        />
-                        <Tooltip
-                          contentStyle={{ fontSize: 10, borderRadius: 8, border: '1px solid #e5e7eb' }}
-                          labelFormatter={v => new Date(v).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
-                        />
-                        <Line type="monotone" dataKey="likes"    stroke="#EF4444" strokeWidth={1.5} dot={false} name="Likes" />
-                        <Line type="monotone" dataKey="comments" stroke="#3B82F6" strokeWidth={1.5} dot={false} name="Comments" />
-                        <Line type="monotone" dataKey="shares"   stroke="#22C55E" strokeWidth={1.5} dot={false} name="Shares" />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-});
-ExpandedTrendChart.displayName = 'ExpandedTrendChart';
-
-function CustomerDetailsView() {
-  const { id } = useParams();
-  const navigate = useNavigate();
-  const [customer, setCustomer] = useState(null);
-  const [calendars, setCalendars] = useState([]);
-  const [creators, setCreators] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
-  const [isContentModalOpen, setIsContentModalOpen] = useState(false);
-  const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isEditCalendarModalOpen, setIsEditCalendarModalOpen] = useState(false);
-  const [calendarToEdit, setCalendarToEdit] = useState(null);
-  const [isManualPublishModalOpen, setIsManualPublishModalOpen] = useState(false);
-  const [manualPublishItem, setManualPublishItem] = useState(null);
-  const [manualPublishCalendarId, setManualPublishCalendarId] = useState(null);
-  const [manualPublishSaving, setManualPublishSaving] = useState(false);
-  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
-  const [selectedCalendar, setSelectedCalendar] = useState(null);
-  const [selectedItem, setSelectedItem] = useState(null);
-  const [expandedCalendars, setExpandedCalendars] = useState(new Set());
-  const [mobileMenuCalendar, setMobileMenuCalendar] = useState(null);
-  const [scheduledPosts, setScheduledPosts] = useState([]);
-  const [socialAccounts, setSocialAccounts] = useState([]);
-  const [showTrend, setShowTrend] = useState(false);
-  const [itemSortOrder, setItemSortOrder] = useState('desc');
-  // Per-post trend cache: itemKey → {platform: [...]} | null (loading) | undefined (not fetched)
-  const [postTrendCache, setPostTrendCache] = useState({});
-  const fetchedTrendItemsRef = useRef(new Set());
-  const [expandedTrendItem, setExpandedTrendItem] = useState(null);
-  const [trendDateRange, setTrendDateRange] = useState(7);
-  const [selectedContentDetail, setSelectedContentDetail] = useState(null);
-  const [contentDetailLoading, setContentDetailLoading] = useState(false);
-  // All content submissions fetched once — used for version nodes in timeline
-  const [allSubmissions, setAllSubmissions] = useState([]);
-
-  // ── New tab / section state ────────────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState('overview');
-  // QR tab
-  const [qrResult, setQrResult] = useState({});
-  const [qrLoading, setQrLoading] = useState(false);
-  const [qrExpiration, setQrExpiration] = useState(null);
-  const [timeRemaining, setTimeRemaining] = useState(null);
-  const [qrError, setQrError] = useState('');
-  const [qrSuccess, setQrSuccess] = useState('');
-  const [emailSending, setEmailSending] = useState(false);
-  // Scheduled tab
-  const [scheduledPostsFilter, setScheduledPostsFilter] = useState('all');
-  // Social tab
-  const [selectedSocialAccount, setSelectedSocialAccount] = useState(null);
-  // Publish Manager tab
-  const [publishModalData, setPublishModalData] = useState(null); // {calendar, item}
-  const [scheduleModalData, setScheduleModalData] = useState(null); // selectedContent for SchedulePostModal
-  const [pmExpandedCalendars, setPmExpandedCalendars] = useState(new Set());
-  const [pmFilter, setPmFilter] = useState('all'); // 'all' | 'published' | 'pending'
-  // Summary Report tab
-  const [reportFromDate, setReportFromDate] = useState('');
-  const [reportToDate, setReportToDate] = useState('');
-  const [reportCalendarId, setReportCalendarId] = useState('');
-  const [summaryReport, setSummaryReport] = useState(null);
-  const [summaryLoading, setSummaryLoading] = useState(false);
-  const [summaryError, setSummaryError] = useState('');
-  const [summaryLiveScheduled, setSummaryLiveScheduled] = useState([]);
-  const [summaryExpandedItems, setSummaryExpandedItems] = useState({});
-
-  const API_URL = process.env.REACT_APP_API_URL;
-
-  // Memoize format functions
-  const formatDate = useCallback((dateString) => {
-    if (!dateString) return 'N/A';
-    try {
-      return format(new Date(dateString), "MMM dd, yyyy 'at' HH:mm");
-    } catch {
-      return 'Invalid';
-    }
-  }, []);
-
-  const formatSimpleDate = useCallback((dateString) => {
-    if (!dateString) return 'N/A';
-    try {
-      return format(new Date(dateString), "MMM dd, yyyy");
-    } catch {
-      return 'Invalid';
-    }
-  }, []);
-
-  useEffect(() => {
-    if (id) {
-      fetchCustomer();
-      fetchCalendars();
-      fetchCreators();
-      fetchScheduledPosts();
-      fetchSocialAccounts();
-      fetchSubmissions();
-    }
-  }, [id]);
-
-  const fetchCustomer = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch(`${API_URL}/customer/${id}`);
-      if (!response.ok) throw new Error('Failed to fetch customer');
-      const data = await response.json();
-      setCustomer(data);
-    } catch (err) {
-      setError('Failed to load customer details');
-      console.error('Error fetching customer:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchCalendars = async () => {
-    try {
-      const response = await fetch(`${API_URL}/calendars`);
-      if (!response.ok) throw new Error('Failed to fetch calendars');
-      const allCalendars = await response.json();
-      
-      // Filter calendars for this customer
-      const customerCalendars = allCalendars.filter(calendar => calendar.customerId === id);
-      setCalendars(customerCalendars);
-    } catch (err) {
-      console.error('Error fetching calendars:', err);
-      setCalendars([]);
-    }
-  };
-
-  // Fetch content creators for dropdown
-  const fetchCreators = async () => {
-    try {
-      const response = await fetch(`${API_URL}/users?role=content_creator`);
-      if (!response.ok) throw new Error('Failed to fetch content creators');
-      const data = await response.json();
-      setCreators(Array.isArray(data) ? data : (data.creators || []));
-    } catch (err) {
-      setCreators([]);
-    }
-  };
-
-  const fetchScheduledPosts = async () => {
-    try {
-      const response = await fetch(`${API_URL}/api/scheduled-posts?customerId=${encodeURIComponent(id)}`);
-      if (response.ok) {
-        const data = await response.json();
-        const posts = Array.isArray(data) ? data.filter(p => p.customerId === id) : [];
-        setScheduledPosts(posts);
-
-        // Fetch live metrics for published posts to resolve the true permalink
-        const publishedPosts = posts.filter(p => p.status === 'published' || p.publishedAt);
-        if (publishedPosts.length > 0) {
-          try {
-            const res = await fetch(`${API_URL}/api/admin/post-metrics/live`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ customerId: id, posts: publishedPosts }),
-            });
-            if (res.ok) {
-              const json = await res.json();
-              const enriched = json.posts || [];
-              setScheduledPosts(currentPosts => {
-                return currentPosts.map(p => {
-                  const match = enriched.find(ep => ep._id === p._id);
-                  if (match) {
-                    return {
-                      ...p,
-                      ...match,
-                      instagramPermalink: match.metrics?.permalink || match.instagramPermalink || p.instagramPermalink
-                    };
-                  }
-                  return p;
-                });
-              });
-            }
-          } catch (liveErr) {
-            console.warn('Failed to fetch live metrics in CustomerDetailsView:', liveErr);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching scheduled posts:', error);
-      setScheduledPosts([]);
-    }
-  };
-
-  const handleDeleteScheduledPost = useCallback(async (postId) => {
-    if (!window.confirm('Are you sure you want to delete this scheduled post?')) return;
-    try {
-      const response = await fetch(`${API_URL}/api/scheduled-posts/${postId}`, {
-        method: 'DELETE'
-      });
-      if (response.ok) {
-        setScheduledPosts(prev => prev.filter(post => post._id !== postId));
-      } else {
-        alert('Could not delete the post. Please try again.');
-      }
-    } catch (error) {
-      console.error('Delete post error:', error);
-      alert('Could not delete the post. Please check your connection.');
-    }
-  }, [API_URL]);
-
-
-  const fetchSocialAccounts = async () => {
-    try {
-      const response = await fetch(`${API_URL}/api/customer-social-links/${encodeURIComponent(id)}`);
-      if (response.ok) {
-        const data = await response.json();
-        setSocialAccounts(data.accounts || []);
-      }
-    } catch {
-      setSocialAccounts([]);
-    }
-  };
-
-  const fetchSubmissions = async () => {
-    try {
-      const response = await fetch(`${API_URL}/api/content-submissions`);
-      if (response.ok) {
-        const data = await response.json();
-        setAllSubmissions(Array.isArray(data) ? data : []);
-      }
-    } catch {
-      setAllSubmissions([]);
-    }
-  };
-
-  // ── QR Codes helpers ──────────────────────────────────────────────────────
-  // Countdown timer for QR expiry
-  useEffect(() => {
-    if (!qrResult.expiresAt) return;
-    const timer = setInterval(() => {
-      const remaining = new Date(qrResult.expiresAt).getTime() - Date.now();
-      if (remaining <= 0) {
-        setTimeRemaining('Expired');
-        setQrExpiration('expired');
-        clearInterval(timer);
-      } else {
-        const h = Math.floor(remaining / 3600000);
-        const m = Math.floor((remaining % 3600000) / 60000);
-        const s = Math.floor((remaining % 60000) / 1000);
-        setTimeRemaining(`${h}h ${m}m ${s}s`);
-        setQrExpiration(remaining < 1800000 ? 'warning' : 'valid');
-      }
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [qrResult.expiresAt]);
-
-  const handleGenerateQr = useCallback(async (platform) => {
-    const validPlatforms = ['fb', 'insta', 'linkedin', 'yt'];
-    if (!validPlatforms.includes(platform)) return;
-    setQrLoading(true);
-    setQrError('');
-    setQrSuccess('');
-    setQrResult({});
-    setQrExpiration(null);
-    setTimeRemaining(null);
-    try {
-      const res = await fetch(`${API_URL}/api/generate-qr`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ customerId: id, platform, customerName: customer?.name, source: 'admin-qr-generator' }),
-      });
-      const data = await res.json();
-      if (res.ok && data.customerId === id) {
-        const isProd = process.env.NODE_ENV === 'production';
-        const qrCodeUrl = isProd
-          ? `https://airspark.storage.googleapis.com/index.html#/configure?customerId=${id}&platform=${platform}&source=admin-qr-generator&autoConnect=1&t=${Date.now()}`
-          : `https://localhost:3000/#/configure?customerId=${id}&platform=${platform}&source=admin-qr-generator&autoConnect=1&t=${Date.now()}`;
-        setQrResult({ ...data, qrCodeUrl, platform, customerName: customer?.name, customerId: id });
-        setQrExpiration('valid');
-        setQrSuccess(`QR code generated for ${customer?.name}!`);
-        setTimeout(() => setQrSuccess(''), 3000);
-      } else {
-        setQrError(data.error || 'Failed to generate QR code');
-      }
-    } catch {
-      setQrError('Network error. Please try again.');
-    }
-    setQrLoading(false);
-  }, [id, customer, API_URL]);
-
-  const downloadQrCode = useCallback(async () => {
-    if (!qrResult.qrDataUrl) return;
-    const link = document.createElement('a');
-    link.download = `qr-${customer?.name || 'customer'}-${qrResult.platform}.png`;
-    link.href = qrResult.qrDataUrl;
-    link.click();
-  }, [qrResult, customer]);
-
-  const handleSendQrEmail = useCallback(async () => {
-    if (!qrResult.qrCodeUrl || !qrResult.qrDataUrl || !customer?.email) return;
-
-    const confirmSend = window.confirm('Are you sure you want to send this to customer?');
-    if (!confirmSend) return;
-
-    setEmailSending(true);
-    setQrError('');
-    setQrSuccess('');
-
-    try {
-      const res = await fetch(`${API_URL}/api/send-qr-email`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          customerId: id,
-          customerEmail: customer.email,
-          customerName: customer.name,
-          platform: qrResult.platform,
-          qrCodeUrl: qrResult.qrCodeUrl,
-          qrDataUrl: qrResult.qrDataUrl
-        })
-      });
-
-      const data = await res.json();
-      if (res.ok) {
-        setQrSuccess(`Successfully sent integration QR code to ${customer.email}!`);
-        setTimeout(() => setQrSuccess(''), 4000);
-      } else {
-        setQrError(data.error || 'Failed to send email to customer');
-      }
-    } catch (err) {
-      setQrError('Network error. Failed to send email.');
-    } finally {
-      setEmailSending(false);
-    }
-  }, [qrResult, customer, id, API_URL]);
-
-  // ── Publish Manager helpers ───────────────────────────────────────────────
-  // Check if item is published (manual or via scheduled post)
-  const isItemPublished = useCallback((item) => {
-    // Check manual publish flag
-    if (item.published === true) return true;
-    // Check scheduled posts
-    return scheduledPosts.some(post =>
-      ((post.item_id && post.item_id === item.id) ||
-       (post.contentId && post.contentId === item.id) ||
-       (post.item_name && post.item_name === (item.title || item.description))) &&
-      (post.status === 'published' || post.publishedAt)
-    );
-  }, [scheduledPosts]);
-
-  const togglePmCalendar = useCallback((calId) => {
-    setPmExpandedCalendars(prev => {
-      const next = new Set(prev);
-      if (next.has(calId)) next.delete(calId); else next.add(calId);
-      return next;
-    });
-  }, []);
-
-  const handleMarkPublished = useCallback(async (calendarId, item) => {
-    const newState = !isItemPublished(item);
-    try {
-      const res = await fetch(`${API_URL}/calendars/item/${calendarId}/publish`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          itemId: item.id,
-          published: newState,
-          publishedAt: newState ? new Date().toISOString() : null,
-          publishedPlatforms: item.platforms || item.type || []
-        })
-      });
-      if (!res.ok) throw new Error('Failed');
-      fetchCalendars();
-    } catch (err) {
-      console.error('Mark published error:', err);
-    }
-  }, [isItemPublished, API_URL, fetchCalendars]);
-
-  // Filtered calendars for Publish Manager tab
-  const pmCalendars = useMemo(() => {
-    return calendars.map(cal => {
-      const items = (cal.contentItems || []).map(item => ({
-        ...item,
-        isPublished: isItemPublished(item),
-        calendarId: cal._id,
-      }));
-      const filtered = pmFilter === 'published' ? items.filter(i => i.isPublished)
-        : pmFilter === 'pending' ? items.filter(i => !i.isPublished)
-        : items;
-      return { ...cal, filteredItems: filtered, publishedCount: items.filter(i => i.isPublished).length, totalCount: items.length };
-    }).filter(cal => cal.filteredItems.length > 0);
-  }, [calendars, isItemPublished, pmFilter]);
-
-  // ── Summary Report helpers ────────────────────────────────────────────────
-  const handleGenerateSummaryReport = useCallback(async () => {
-    setSummaryError('');
-    setSummaryLoading(true);
-    setSummaryReport(null);
-    try {
-      const params = new URLSearchParams({ customerId: id });
-      if (reportFromDate) params.set('fromDate', reportFromDate);
-      if (reportToDate)   params.set('toDate', reportToDate);
-      if (reportCalendarId) params.set('calendarId', reportCalendarId);
-      const [reportRes, postsRes] = await Promise.all([
-        fetch(`${API_URL}/api/admin/summary-report?${params.toString()}`),
-        fetch(`${API_URL}/api/scheduled-posts?customerId=${encodeURIComponent(id)}`).catch(() => null),
-      ]);
-      if (!reportRes.ok) throw new Error(`HTTP ${reportRes.status}`);
-      const [data, postsData] = await Promise.all([
-        reportRes.json(),
-        postsRes?.ok ? postsRes.json().catch(() => null) : Promise.resolve(null),
-      ]);
-      setSummaryReport(data);
-      setSummaryLiveScheduled(Array.isArray(postsData) ? postsData : []);
-    } catch {
-      setSummaryError('Failed to generate report. Please try again.');
-    } finally {
-      setSummaryLoading(false);
-    }
-  }, [id, API_URL, reportFromDate, reportToDate, reportCalendarId]);
-
-  // Fetch per-post trend data from analytics snapshots (on-demand, cached by itemKey, per-platform)
-  const fetchPostTrend = useCallback(async (itemKey, item) => {
-    if (fetchedTrendItemsRef.current.has(itemKey)) return;
-    fetchedTrendItemsRef.current.add(itemKey);
-    setPostTrendCache(prev => ({ ...prev, [itemKey]: null }));
-
-    const itemPlatforms = item.type
-      ? (Array.isArray(item.type) ? item.type : (typeof item.type === 'string' ? item.type.split(',').map(p => p.trim()) : []))
-      : [];
-    const platformResult = {};
-    itemPlatforms.forEach(p => { platformResult[p.toLowerCase()] = []; });
-
-    const matchedPosts = scheduledPosts.filter(post =>
-      ((post.item_id && post.item_id === item.id) ||
-       (post.contentId && post.contentId === item.id) ||
-       (post.item_name && post.item_name === (item.title || item.description))) &&
-      (post.status === 'published' || post.publishedAt)
-    );
-
-    for (const matchedPost of matchedPosts) {
-      // ── Instagram ──────────────────────────────────────────────────────────
-      const instagramId = matchedPost?.instagramId;
-      const postMediaId = matchedPost?.instagramPostId;
-      if (instagramId && postMediaId) {
-        try {
-          const res = await fetch(`${API_URL}/api/analytics/data?platform=instagram&accountId=${encodeURIComponent(instagramId)}`);
-          if (res.ok) {
-            const json = await res.json();
-            const allDocs = Array.isArray(json) ? json : (json.docs || json.data || []);
-            const snapshots = allDocs
-              .filter(doc => doc.type === 'analytics_data' && doc.platform === 'instagram' && (doc.accountId === instagramId || doc.instagramId === instagramId))
-              .sort((a, b) => new Date(a.collectedAt) - new Date(b.collectedAt));
-            const dataByDate = {};
-            snapshots.forEach(snap => {
-              const found = (snap.media || []).find(m => m.id === postMediaId || m.id === String(postMediaId));
-              if (found) {
-                const date = snap.collectedAt.slice(0, 10);
-                dataByDate[date] = { date, likes: found.likes ?? found.like_count ?? 0, comments: found.comments ?? found.comments_count ?? 0, shares: found.shares ?? 0 };
-              }
-            });
-            platformResult['instagram'] = Object.values(dataByDate).sort((a, b) => a.date.localeCompare(b.date));
-          }
-        } catch { /* skip */ }
-      }
-
-      // ── Facebook ───────────────────────────────────────────────────────────
-      const fbPostId = matchedPost?.facebookPostId;
-      if (fbPostId && !fbPostId.startsWith('fb_shared_from_')) {
-        const fbAccountId = matchedPost?.pageId || fbPostId.split('_')[0];
-        try {
-          const res = await fetch(`${API_URL}/api/analytics/data?platform=facebook&accountId=${encodeURIComponent(fbAccountId)}`);
-          if (res.ok) {
-            const json = await res.json();
-            const allDocs = Array.isArray(json) ? json : (json.docs || json.data || []);
-            const snapshots = allDocs
-              .filter(doc => doc.type === 'analytics_data' && doc.platform === 'facebook')
-              .sort((a, b) => new Date(a.collectedAt) - new Date(b.collectedAt));
-            const dataByDate = {};
-            snapshots.forEach(snap => {
-              const found = (snap.posts || []).find(p => p.id === fbPostId || p.id === String(fbPostId));
-              if (found) {
-                const date = snap.collectedAt.slice(0, 10);
-                dataByDate[date] = { date, likes: found.likes ?? found.reactionsTotal ?? 0, comments: found.comments ?? 0, shares: found.shares ?? 0 };
-              }
-            });
-            platformResult['facebook'] = Object.values(dataByDate).sort((a, b) => a.date.localeCompare(b.date));
-          }
-        } catch { /* skip */ }
-      }
-
-      // ── LinkedIn ───────────────────────────────────────────────────────────
-      const liPostId = matchedPost?.linkedinPostId;
-      if (liPostId) {
-        const liAccountId = matchedPost?.linkedinAccountId || matchedPost?.organizationId;
-        const liQuery = liAccountId
-          ? `platform=linkedin&accountId=${encodeURIComponent(liAccountId)}`
-          : `platform=linkedin&customerId=${encodeURIComponent(id)}`;
-        try {
-          const res = await fetch(`${API_URL}/api/analytics/data?${liQuery}`);
-          if (res.ok) {
-            const json = await res.json();
-            const allDocs = Array.isArray(json) ? json : (json.docs || json.data || []);
-            const snapshots = allDocs
-              .filter(doc => doc.type === 'analytics_data' && doc.platform === 'linkedin')
-              .sort((a, b) => new Date(a.collectedAt) - new Date(b.collectedAt));
-            const dataByDate = {};
-            snapshots.forEach(snap => {
-              const found = (snap.posts || []).find(p => p.id === liPostId || p.id === String(liPostId));
-              if (found) {
-                const date = snap.collectedAt.slice(0, 10);
-                dataByDate[date] = { date, likes: found.likes ?? 0, comments: found.comments ?? 0, shares: found.shares ?? 0 };
-              }
-            });
-            platformResult['linkedin'] = Object.values(dataByDate).sort((a, b) => a.date.localeCompare(b.date));
-          }
-        } catch { /* skip */ }
-      }
-    }
-
-    setPostTrendCache(prev => ({ ...prev, [itemKey]: platformResult }));
-  }, [scheduledPosts, id]);
-
-  // Auto-fetch trend data for published items in expanded calendars (for mini charts)
-  useEffect(() => {
-    if (scheduledPosts.length === 0) return;
-    expandedCalendars.forEach(calId => {
-      const cal = calendars.find(c => c._id === calId);
-      if (!cal?.contentItems) return;
-      cal.contentItems.forEach((item, index) => {
-        if (isItemPublished(item)) {
-          const itemKey = item.id || `${cal._id}_${index}`;
-          fetchPostTrend(itemKey, item);
-        }
-      });
-    });
-  }, [expandedCalendars, calendars, scheduledPosts, fetchPostTrend]);
-
-  const socialPlatforms = useMemo(() => (
-    [...new Set(socialAccounts.map(a => a.platform?.toLowerCase()).filter(Boolean))]
-  ), [socialAccounts]);
-
-  // ── Portfolio items mapped from submissions for this customer ──────────────
-  const portfolioItemsMapped = useMemo(() => {
-    if (!allSubmissions.length) return [];
-    const normalizeMedia = (media) => {
-      if (!Array.isArray(media)) return [];
-      return media.map(m => typeof m === 'string'
-        ? { url: m, type: /\.(mp4|webm|ogg|mov|avi)$/i.test(m) ? 'video' : 'image' }
-        : m
-      ).filter(Boolean);
-    };
-    // Only include submissions belonging to this customer
-    const customerSubs = allSubmissions.filter(s => {
-      const cid = s.customer_id || s.customerId;
-      if (cid === id) return true;
-      // fallback: check if assignment_id matches a calendar item for this customer
-      return calendars.some(cal =>
-        cal.customerId === id &&
-        (cal.contentItems || []).some(ci => ci.id === s.assignment_id || ci.id === s.item_id)
-      );
-    });
-    const groups = {};
-    customerSubs.forEach(sub => {
-      const key = sub.assignment_id || sub._id;
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(sub);
-    });
-    return Object.keys(groups).map(key => {
-      const versions = groups[key].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-      const base = versions[0];
-      const latest = versions[versions.length - 1];
-      let calendarName = base.calendar_name || '';
-      let itemName = base.item_name || '';
-      let publishedStatus = false;
-      for (const cal of calendars) {
-        const ci = (cal.contentItems || []).find(ci =>
-          ci.id === key || ci.title === base.caption || ci.description === base.notes
-        );
-        if (ci) {
-          calendarName = calendarName || cal.name;
-          itemName = itemName || ci.title || ci.description;
-          publishedStatus = isItemPublished(ci);
-          break;
-        }
-      }
-      return {
-        id: key,
-        title: base.caption || '',
-        platform: base.platform || '',
-        status: latest.status || 'submitted',
-        createdDate: base.created_at,
-        lastUpdated: latest.created_at,
-        totalVersions: versions.length,
-        versions: versions.map((v, i) => ({
-          id: v._id,
-          versionNumber: i + 1,
-          media: normalizeMedia(v.media || v.images || []),
-          caption: v.caption || '',
-          hashtags: v.hashtags || '',
-          notes: v.notes || '',
-          createdAt: v.created_at,
-          status: v.status || 'submitted',
-          comments: v.comments || [],
-        })),
-        calendarName,
-        itemName,
-        published: publishedStatus,
-        publishedPlatforms: [],
-      };
-    }).sort((a, b) => {
-      const dateA = a.lastUpdated ? new Date(a.lastUpdated).getTime() : 0;
-      const dateB = b.lastUpdated ? new Date(b.lastUpdated).getTime() : 0;
-      return dateB - dateA;
-    });
-  }, [allSubmissions, id, calendars, isItemPublished]);
-
-  // ── Scheduled posts filtered for tab ──────────────────────────────────────
-  const scheduledForTab = useMemo(() => {
-    if (scheduledPostsFilter === 'all') return scheduledPosts;
-    return scheduledPosts.filter(p => p.status === scheduledPostsFilter);
-  }, [scheduledPosts, scheduledPostsFilter]);
-
-  // Check if all items in a calendar are published
-  const isCalendarPublished = useCallback((calendar) => {
-    if (!calendar.contentItems || calendar.contentItems.length === 0) return false;
-    return calendar.contentItems.every(item => isItemPublished(item));
-  }, [isItemPublished]);
-
-  // Get item status with published check
-  const getItemStatus = useCallback((item) => {
-    if (isItemPublished(item)) return 'published';
-    return item.status || 'pending';
-  }, [isItemPublished]);
-
-  // Get published count for a calendar
-  const getCalendarStats = useCallback((calendar) => {
-    const total = calendar.contentItems?.length || 0;
-    const published = calendar.contentItems?.filter(item => isItemPublished(item)).length || 0;
-    const progressPercent = total > 0 ? Math.round((published / total) * 100) : 0;
-    return { total, published, progressPercent };
-  }, [isItemPublished]);
-
-  // Overall stats for all calendars
-  const overallStats = useMemo(() => {
-    let totalItems = 0, publishedItems = 0;
-    calendars.forEach(cal => {
-      cal.contentItems?.forEach(item => {
-        totalItems++;
-        if (isItemPublished(item)) publishedItems++;
-      });
-    });
-    return { 
-      totalCalendars: calendars.length,
-      totalItems, 
-      publishedItems, 
-      pendingItems: totalItems - publishedItems,
-      completionRate: totalItems > 0 ? Math.round((publishedItems / totalItems) * 100) : 0
-    };
-  }, [calendars, isItemPublished]);
-
-  const handleCreateCalendar = async (calendarData) => {
-    try {
-      const response = await fetch(`${API_URL}/calendars`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          customerId: id,
-          name: calendarData.name,
-          description: calendarData.description,
-          assignedTo: calendarData.assignedTo,
-          contentItems: [],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        })
-      });
-
-      if (!response.ok) throw new Error('Failed to create calendar');
-      fetchCalendars();
-    } catch (err) {
-      console.error('Error creating calendar:', err);
-    }
-  };
-
-  const handleAddContentItem = async (item) => {
-    if (!selectedCalendar) return;
-
-    try {
-      // Try to fetch by _id, fallback to customerId if not found
-      let calendar = null;
-      let calendarRes = await fetch(`${API_URL}/calendars/${selectedCalendar._id}`);
-      if (calendarRes.ok) {
-        calendar = await calendarRes.json();
-      } else {
-        // fallback: try to fetch all calendars for this customer and find by _id
-        const allRes = await fetch(`${API_URL}/calendars`);
-        if (allRes.ok) {
-          const allCalendars = await allRes.json();
-          calendar = allCalendars.find(c => c._id === selectedCalendar._id);
-        }
-      }
-      if (!calendar || !calendar._id) {
-        throw new Error('Calendar not found');
-      }
-
-      const now = new Date().toISOString();
-      const itemWithTimestamp = {
-        ...item,
-        createdAt: item.createdAt || now,
-        assignedAt: item.assignedAt || (item.assignedTo ? now : undefined),
-      };
-      const updatedContentItems = [...(calendar.contentItems || []), itemWithTimestamp];
-
-      const response = await fetch(`${API_URL}/calendars/${calendar._id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...calendar,
-          contentItems: updatedContentItems,
-          updatedAt: now
-        })
-      });
-
-      if (!response.ok) throw new Error('Failed to add content item');
-
-      // Send assignment email notification to the creator
-      if (item.assignedTo) {
-        try {
-          await fetch(`${API_URL}/calendars/notify-creator`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              creatorEmail: item.assignedTo,
-              calendarName: calendar.name || 'Content Calendar',
-              customerName: customer?.name || '',
-              item
-            })
-          });
-        } catch (notifyErr) {
-          console.warn('⚠️ Failed to send creator notification email:', notifyErr);
-        }
-      }
-
-      fetchCalendars();
-    } catch (err) {
-      console.error('Error adding content item:', err);
-    }
-  };
-
-  const handleAssignCreator = async (creator) => {
-    if (!selectedCalendar) return;
-
-    try {
-      const calendar = calendars.find(c => c._id === selectedCalendar._id);
-      
-      const response = await fetch(`${API_URL}/calendars/${selectedCalendar._id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...calendar,
-          assignedTo: creator.email,
-          assignedToName: creator.name,
-          updatedAt: new Date().toISOString()
-        })
-      });
-
-      if (!response.ok) throw new Error('Failed to assign creator');
-      fetchCalendars();
-    } catch (err) {
-      console.error('Error assigning creator:', err);
-    }
-  };
-
-  const toggleCalendarExpansion = (calendarId) => {
-    const newExpanded = new Set(expandedCalendars);
-    if (newExpanded.has(calendarId)) {
-      newExpanded.delete(calendarId);
-    } else {
-      newExpanded.add(calendarId);
-    }
-    setExpandedCalendars(newExpanded);
-  };
-
-  // Mobile menu handlers
-  const openMobileMenu = useCallback((calendar) => {
-    setMobileMenuCalendar(calendar);
-  }, []);
-
-  const closeMobileMenu = useCallback(() => {
-    setMobileMenuCalendar(null);
-  }, []);
-
-  // Edit content item handler
-  const handleEditItem = (item, calendarId) => {
-    setSelectedItem({
-      ...item,
-      _calendarId: calendarId,
-      originalDate: item.date,
-      originalDescription: item.description
-    });
-    setIsEditModalOpen(true);
-  };
-
-  // Update content item handler
-  const handleUpdateItem = async (updatedItem) => {
-    try {
-      const {
-        _calendarId,
-        date,
-        description,
-        originalDate,
-        originalDescription,
-        type,
-        status,
-        title,
-        assignedTo,
-        assignedToName
-      } = updatedItem;
-
-      if (!_calendarId || !originalDate || !originalDescription) return;
-
-      // Fetch the latest calendar to get all items
-      const calendarRes = await fetch(`${API_URL}/calendars/${_calendarId}`);
-      let calendar = null;
-      if (calendarRes.ok) {
-        calendar = await calendarRes.json();
-      } else {
-        // fallback: try to fetch all calendars and find by _id
-        const allRes = await fetch(`${API_URL}/calendars`);
-        if (allRes.ok) {
-          const allCalendars = await allRes.json();
-          calendar = allCalendars.find(c => c._id === _calendarId);
-        }
-      }
-      if (!calendar || !calendar._id) {
-        throw new Error('Calendar not found');
-      }
-
-      // Find and update the content item in the array
-      const updatedContentItems = (calendar.contentItems || []).map(item => {
-        if (
-          item.date === originalDate &&
-          item.description === originalDescription
-        ) {
-          const newAssignedTo = assignedTo !== undefined ? assignedTo : item.assignedTo;
-          return {
-            ...item,
-            date,
-            description,
-            type: type !== undefined ? type : item.type,
-            status: status !== undefined ? status : item.status,
-            title: title !== undefined ? title : item.title,
-            assignedTo: newAssignedTo,
-            assignedToName: assignedToName !== undefined ? assignedToName : item.assignedToName,
-            assignedAt: item.assignedAt || (newAssignedTo && !item.assignedAt ? new Date().toISOString() : undefined),
-          }; 
-        }
-        return item;
-      });
-
-      const response = await fetch(`${API_URL}/calendars/${calendar._id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...calendar,
-          contentItems: updatedContentItems,
-          updatedAt: new Date().toISOString()
-        })
-      });
-
-      if (!response.ok) throw new Error('Failed to update item');
-      fetchCalendars();
-    } catch (err) {
-      // handle error
-    } finally {
-      setIsEditModalOpen(false);
-    }
-  };
-
-  const openManualPublishModal = useCallback((item, calendarId) => {
-    setManualPublishItem(item);
-    setManualPublishCalendarId(calendarId);
-    setIsManualPublishModalOpen(true);
-  }, []);
-
-  const handleSaveManualPublish = async (platforms, manualUrls, notes, notifyEmail) => {
-    if (!manualPublishCalendarId || !manualPublishItem?.id) return;
-    setManualPublishSaving(true);
-    try {
-      const hasManuallyPublished = platforms.length > 0;
-      const response = await fetch(
-        `${API_URL}/calendars/item/${manualPublishCalendarId}/mark-published`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            itemId: manualPublishItem.id,
-            published: hasManuallyPublished,
-            publishedPlatforms: platforms,
-            publishedNotes: notes,
-            manualPlatformUrls: manualUrls,
-            publishedAt: new Date().toISOString(),
-            sendEmailNotification: notifyEmail
-          })
-        }
-      );
-
-      if (!response.ok) throw new Error('Failed to save manual publish status');
-      fetchCalendars();
-      setIsManualPublishModalOpen(false);
-      setManualPublishItem(null);
-      setManualPublishCalendarId(null);
-    } catch (err) {
-      console.error('Error saving manual publish status:', err);
-      alert('Failed to save publish status. Please try again.');
-    } finally {
-      setManualPublishSaving(false);
-    }
-  };
-
-  // Delete content item handler
-  const handleDeleteItem = async (calendarId, item) => {
-    if (!window.confirm('Are you sure you want to delete this content item?')) return;
-    try {
-      const description = item.description;
-      const date = item.date;
-      const url = `${API_URL}/calendars/item/${calendarId}/${date}/${encodeURIComponent(description)}`;
-      const response = await fetch(url, { method: 'DELETE' });
-      if (!response.ok) throw new Error('Failed to delete item');
-      fetchCalendars();
-    } catch (err) {
-      // handle error
-    }
-  };
-
-  // Edit calendar handler (prefill values)
-  const handleEditCalendar = (calendar) => {
-    setCalendarToEdit(calendar);
-    setIsEditCalendarModalOpen(true);
-    setMobileMenuCalendar(null);
-  };
-
-  // Update calendar handler
-  const handleUpdateCalendar = async (updatedCalendarData) => {
-    try {
-      const response = await fetch(`${API_URL}/calendars/${calendarToEdit._id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...calendarToEdit,
-          ...updatedCalendarData,
-          updatedAt: new Date().toISOString()
-        })
-      });
-      if (!response.ok) throw new Error('Failed to update calendar');
-      fetchCalendars();
-    } catch (err) {
-      // handle error
-    } finally {
-      setIsEditCalendarModalOpen(false);
-      setCalendarToEdit(null);
-    }
-  };
-
-  // Delete calendar handler (fix: use DELETE method and refresh)
-  const handleDeleteCalendar = async (calendarId) => {
-    if (!window.confirm('Are you sure you want to delete this content calendar?')) return;
-    try {
-      const response = await fetch(`${API_URL}/calendars/${calendarId}`, {
-        method: 'DELETE'
-      });
-      if (!response.ok) throw new Error('Failed to delete calendar');
-      fetchCalendars();
-    } catch (err) {
-      // handle error
-    }
-    setMobileMenuCalendar(null);
-  };
-
-  // Toggle published status of a content item
-  const handleTogglePublished = async (calendarId, item) => {
-    const newPublishedState = !item.published;
-    try {
-      const response = await fetch(`${API_URL}/calendars/item/${calendarId}/publish`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          itemId: item.id,
-          published: newPublishedState,
-          publishedAt: newPublishedState ? new Date().toISOString() : null,
-          publishedPlatforms: item.platforms || item.type || []
-        })
-      });
-      if (!response.ok) throw new Error('Failed to update publish status');
-      fetchCalendars();
-    } catch (err) {
-      console.error('Error toggling publish status:', err);
-    }
-  };
-
-  const isIdValid = (id) => id && id !== 'null' && id !== 'undefined' && id !== 'none' && id !== 'N/A';
-
-  // Find the matching scheduled post(s) for a calendar item and build platform links
-  const getItemPublishedLinks = useCallback((item) => {
-    const links = [];
-
-    // Manual platform URLs first
-    if (item.manualPlatformUrls) {
-      Object.entries(item.manualPlatformUrls).forEach(([platform, url]) => {
-        if (url && isIdValid(url)) {
-          links.push({
-            url: url,
-            label: PLATFORM_META[platform.toLowerCase()]?.title || platform,
-            platform: platform.toLowerCase(),
-            isManual: true
-          });
-        }
-      });
-    }
-
-    if (item.postUrl && isIdValid(item.postUrl)) {
-      if (!links.some(l => l.platform === null)) {
-        links.push({ url: item.postUrl, label: 'View Post', platform: null });
-      }
-    }
-    for (const post of scheduledPosts) {
-      const matches =
-        (post.item_id && post.item_id === item.id) ||
-        (post.contentId && post.contentId === item.id) ||
-        (post.item_name && post.item_name === (item.title || item.description));
-      if (!matches || !(post.status === 'published' || post.publishedAt)) continue;
-      if (isIdValid(post.facebookPostId) && !post.facebookPostId.startsWith('fb_shared_from_')) {
-        const fbId = post.facebookPostId;
-        const fbUrl = fbId.includes('_')
-          ? `https://www.facebook.com/permalink.php?story_fbid=${fbId.split('_')[1]}&id=${fbId.split('_')[0]}`
-          : `https://www.facebook.com/${fbId}`;
-        if (!links.some(l => l.platform === 'facebook')) {
-          links.push({ url: fbUrl, label: 'Facebook', platform: 'facebook' });
-        }
-      }
-      if (isIdValid(post.instagramPostId)) {
-        const igUrl = post.instagramPermalink || instagramMediaIdToUrl(post.instagramPostId, post.postType);
-        if (igUrl && !links.some(l => l.platform === 'instagram')) {
-          // If we have live metrics source but no permalink, it means the post was not found/available on Instagram
-          const isLiveButUnavailable = post.metricsSource === 'live' && !post.instagramPermalink;
-          if (!isLiveButUnavailable) {
-            links.push({ url: igUrl, label: 'Instagram', platform: 'instagram' });
-          }
-        }
-      } else if (isIdValid(post.instagramPermalink)) {
-        if (!links.some(l => l.platform === 'instagram')) {
-          links.push({ url: post.instagramPermalink, label: 'Instagram', platform: 'instagram' });
-        }
-      }
-      if (isIdValid(post.youtubePostId)) {
-        const ytUrl = `https://www.youtube.com/watch?v=${post.youtubePostId}`;
-        if (!links.some(l => l.platform === 'youtube')) {
-          links.push({ url: ytUrl, label: 'YouTube', platform: 'youtube' });
-        }
-      }
-      if (isIdValid(post.linkedinPostId)) {
-        const liUrl = `https://www.linkedin.com/feed/update/${post.linkedinPostId}`;
-        if (!links.some(l => l.platform === 'linkedin')) {
-          links.push({ url: liUrl, label: 'LinkedIn', platform: 'linkedin' });
-        }
-      }
-    }
-    return links;
-  }, [scheduledPosts]);
-
-
-  const getCustomerName = useCallback(() => customer?.name || '', [customer]);
-
-  const isContentPublished = useCallback((contentId, item = null) => {
-    if (item && item.published === true) return true;
-    return scheduledPosts.some(post => {
-      if (post.status !== 'published') return false;
-      if (post.contentId === contentId) return true;
-      if (post.item_id === contentId) return true;
-      if (item?.versions?.some(v => post.contentId === v.id)) return true;
-      return false;
-    });
-  }, [scheduledPosts]);
-
-  const getPublishedPlatformsForContent = useCallback((contentId, item = null) => {
-    const manualPlatforms = (item && item.publishedPlatforms) ? item.publishedPlatforms : [];
-    const scheduledPlatformsArr = scheduledPosts
-      .filter(post => {
-        if (post.status !== 'published') return false;
-        if (post.contentId === contentId) return true;
-        if (post.item_id === contentId) return true;
-        if (item?.versions?.some(v => post.contentId === v.id)) return true;
-        return false;
-      })
-      .map(post => post.platform);
-    return [...new Set([...manualPlatforms, ...scheduledPlatformsArr])];
-  }, [scheduledPosts]);
-
-  const extractHashtags = useCallback((text = '') => {
-    const hashtags = String(text).match(/#[a-zA-Z0-9_]+/g);
-    return hashtags ? hashtags.join(' ') : '';
-  }, []);
-
-  const getCustomerSocialAccounts = useCallback((customerId) => {
-    return customerId === id ? socialAccounts : [];
-  }, [id, socialAccounts]);
-
-  const getCustomer = useCallback((customerId) => {
-    return customerId === id ? customer : null;
-  }, [id, customer]);
-
-  const handleShowIntegration = useCallback((platform) => {
-    const map = {
-      facebook: 'fb',
-      instagram: 'insta',
-      linkedin: 'linkedin',
-      youtube: 'yt',
-    };
-    const qrPlatform = map[(platform || '').toLowerCase()];
-    setScheduleModalData(null);
-    setActiveTab('qr');
-    if (qrPlatform) handleGenerateQr(qrPlatform);
-  }, [handleGenerateQr]);
-
-  const handleScheduleContent = useCallback((content = null) => {
-    const contentToSchedule = content || selectedContentDetail;
-    if (!contentToSchedule) return;
-    setSelectedContentDetail(null);
-    setScheduleModalData(contentToSchedule);
-  }, [selectedContentDetail]);
-
-  const handleUpdatePortfolioStatus = useCallback(() => {
-    fetchSubmissions();
-  }, []);
-
-  const handleDeleteVersion = useCallback(async (versionId, portfolioId) => {
-    try {
-      await fetch(`${API_URL}/api/content-submissions/${versionId}`, { method: 'DELETE' });
-    } catch (err) {
-      console.error('Failed to delete version', err);
-    }
-    setSelectedContentDetail(prev => {
-      if (!prev || prev.id !== portfolioId) return prev;
-      const newVersions = prev.versions.filter(v => v.id !== versionId);
-      return { ...prev, versions: newVersions, totalVersions: newVersions.length };
-    });
-  }, []);
-
-  const openContentDetail = useCallback(async (item, calendar) => {
-    setContentDetailLoading(true);
-    setSelectedContentDetail({ _loading: true });
-    try {
-      const res = await fetch(`${API_URL}/api/content-submissions`);
-      if (res.ok) {
-        const submissionsData = await res.json();
-        const allSubmissions = Array.isArray(submissionsData) ? submissionsData : [];
-        const itemId = item.id;
-        const itemTitle = item.title || item.description;
-        const matching = allSubmissions
-          .filter(s =>
-            (s.assignment_id && s.assignment_id === itemId) ||
-            (s.item_name && s.item_name === itemTitle) ||
-            (s.item_id && s.item_id === itemId)
-          )
-          .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-        const normalizeMedia = (media) => {
-          if (!Array.isArray(media)) return [];
-          return media.map(m => {
-            if (typeof m === 'string') return { url: m, type: /\.(mp4|webm|ogg|mov|avi)$/i.test(m) ? 'video' : 'image' };
-            return m;
-          });
-        };
-        setSelectedContentDetail({
-          id: itemId,
-          customerId: calendar.customerId || id,
-          title: (matching[0]?.caption) || item.title || '',
-          description: (matching[0]?.notes) || item.description || '',
-          platform: item.type || (matching[0]?.platform) || '',
-          status: (matching[matching.length - 1]?.status) || item.status || 'pending',
-          published: item.published === true,
-          publishedPlatforms: item.publishedPlatforms || [],
-          totalVersions: matching.length,
-          versions: matching.map((s, idx) => ({
-            id: s._id,
-            assignment_id: s.assignment_id,
-            versionNumber: idx + 1,
-            media: normalizeMedia(s.media || s.images || []),
-            caption: s.caption || '',
-            hashtags: s.hashtags || '',
-            notes: s.notes || '',
-            createdAt: s.created_at,
-            status: s.status || 'submitted',
-            comments: s.comments || [],
-          })),
-          calendarName: calendar.name || '',
-          itemName: item.title || item.description || '',
-        });
-      }
-    } catch (err) {
-      console.error('Error fetching content submissions', err);
-      setSelectedContentDetail(null);
-    } finally {
-      setContentDetailLoading(false);
-    }
-  }, [id]);
-
-  const getPriorityColor = useCallback((priority) => {
-    switch ((priority || '').toLowerCase()) {
-      case 'high': return 'bg-red-100 text-red-800 border-red-200';
-      case 'medium': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'low': return 'bg-green-100 text-green-800 border-green-200';
-      default: return 'bg-gray-100 text-gray-800 border-gray-200';
-    }
-  }, []);
-
-  const isVideoUrl = useCallback((url) => {
-    if (!url) return false;
-    const ext = url.split('.').pop().toLowerCase();
-    return ['mp4', 'webm', 'ogg', 'mov', 'avi'].includes(ext);
-  }, []);
-
-  if (loading) {
-    return (
-      <AdminLayout title="Customer Details">
-        <div className="flex items-center justify-center h-48">
-          <div className="flex flex-col items-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-2"></div>
-            <p className="text-gray-500 text-base">Loading...</p>
-          </div>
-        </div>
-      </AdminLayout>
-    );
+const getPostLinks = (post) => {
+  const links = [];
+  if (!post) return links;
+  if (post.postUrl) links.push({ url: post.postUrl, label: 'View Post', platform: null });
+  if (post.facebookPostId && !post.facebookPostId.startsWith('fb_shared_from_')) {
+    const fbId = post.facebookPostId;
+    const fbUrl = fbId.includes('_')
+      ? `https://www.facebook.com/permalink.php?story_fbid=${fbId.split('_')[1]}&id=${fbId.split('_')[0]}`
+      : `https://www.facebook.com/${fbId}`;
+    if (!links.find(l => l.url === fbUrl)) links.push({ url: fbUrl, label: 'Facebook', platform: 'facebook' });
   }
+  if (post.instagramPostId) {
+    const igUrl = post.instagramPermalink || instagramMediaIdToUrl(post.instagramPostId, post.postType);
+    if (igUrl && !links.find(l => l.url === igUrl))
+      links.push({ url: igUrl, label: 'Instagram', platform: 'instagram' });
+  }
+  if (post.youtubePostId) {
+    const ytUrl = `https://www.youtube.com/watch?v=${post.youtubePostId}`;
+    if (!links.find(l => l.url === ytUrl)) links.push({ url: ytUrl, label: 'YouTube', platform: 'youtube' });
+  }
+  if (post.linkedinPostId) {
+    const liUrl = `https://www.linkedin.com/feed/update/${post.linkedinPostId}`;
+    if (!links.find(l => l.url === liUrl)) links.push({ url: liUrl, label: 'LinkedIn', platform: 'linkedin' });
+  }
+  if (post.twitterPostId) {
+    const twUrl = `https://twitter.com/i/web/status/${post.twitterPostId}`;
+    if (!links.find(l => l.url === twUrl)) links.push({ url: twUrl, label: 'Twitter', platform: 'twitter' });
+  }
+  return links;
+};
 
-  if (error || !customer) {
-    return (
-      <AdminLayout title="Customer Details">
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200 max-w-sm mx-auto mt-10">
-          <div className="text-center">
-            <div className="bg-red-100 rounded-full w-12 h-12 flex items-center justify-center mx-auto mb-3">
-              <AlertCircle className="h-6 w-6 text-red-600" />
-            </div>
-            <h3 className="text-lg font-bold text-gray-900 mb-1">Not Found</h3>
-            <p className="text-base text-gray-600 mb-4">{error || "Customer doesn't exist."}</p>
-            <button
-              onClick={() => navigate('/admin/customers-list')}
-              className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <ArrowLeft className="h-4 w-4 mr-1" />
-              Back
-            </button>
-          </div>
-        </div>
-      </AdminLayout>
-    );
+// ── Content item card ─────────────────────────────────────────────────────────
+const ContentItemCard = ({ assignment, scheduledPosts, calendarName, isExpanded, onToggle, liveMetrics }) => {
+  const platforms = [...new Set(
+    [
+      ...(Array.isArray(assignment.platforms) ? assignment.platforms.flat() : []),
+      assignment.platform,
+      ...scheduledPosts.map(p => p.platform),
+    ].filter(p => p && typeof p === 'string').map(p => p.toLowerCase().trim())
+  )];
+
+  const publishedPosts = liveMetrics?.posts?.length > 0
+    ? liveMetrics.posts
+    : scheduledPosts.filter(p => p.status === 'published' || p.publishedAt);
+
+  const metricsLoading = liveMetrics?.loading === true;
+
+  const metricsPosts = (() => {
+    const raw = liveMetrics?.posts?.length > 0
+      ? liveMetrics.posts
+      : scheduledPosts.filter(p => p.status === 'published' || p.publishedAt || p.metrics);
+    const seen = new Set();
+    return raw.filter(p => {
+      const key = p._id || `${(Array.isArray(p.platform) ? p.platform[0] : p.platform)}|${p.publishedAt || p.scheduledAt}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  })();
+
+  const uploadedAt = assignment.firstSubmittedAt;
+  const approvedVersion = [...(assignment.versions || [])].reverse().find(v => v.approvedAt || (v.status === 'approved' && v.submittedAt));
+  const approvedAt = approvedVersion ? (approvedVersion.approvedAt || approvedVersion.submittedAt) : null;
+  
+  let daysToApproval = null;
+  if (uploadedAt && approvedAt) {
+    daysToApproval = Math.max(0, (new Date(approvedAt) - new Date(uploadedAt)) / (1000 * 60 * 60 * 24)).toFixed(1);
   }
 
   return (
-    <AdminLayout title={`${customer.name || 'Customer'} - Details`}>
-      <div className="space-y-2 sm:space-y-3">
-        {/* Header + Tab Nav */}
-        <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm p-2 sm:p-3 border border-gray-200/50">
-          <div className="flex items-center">
-            <div className="h-9 w-9 sm:h-10 sm:w-10 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center flex-shrink-0">
-              <span className="text-white font-bold text-sm">
-                {(customer.name || 'U').charAt(0).toUpperCase()}
+    <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+      <div className="flex items-start gap-4 p-5">
+        <Thumbnail url={assignment.thumbnail} />
+        <div className="flex-1 min-w-0">
+          {calendarName && (
+            <p className="text-[10px] text-gray-400 mb-1 flex items-center gap-1">
+              <Calendar className="w-3 h-3" />
+              {calendarName}
+            </p>
+          )}
+          <h3 className="text-[15px] font-bold text-gray-900 mb-1.5 leading-snug">
+            {assignment.itemTitle || assignment.caption?.slice(0, 70) || `Assignment …${assignment.assignmentId?.slice(-6)}`}
+          </h3>
+          <div className="flex items-center gap-2.5 flex-wrap text-xs text-gray-500">
+            <span className="flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              Created {assignment.firstSubmittedAt
+                ? new Date(assignment.firstSubmittedAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })
+                : '—'}
+            </span>
+            <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0 ${getAvatarColor(assignment.creatorName)}`}>
+              {getInitials(assignment.creatorName)}
+            </div>
+            <span className="font-medium text-gray-700">{assignment.creatorName}</span>
+          </div>
+          {publishedPosts.length > 0 && (
+            <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-semibold">
+                <CheckCircle className="w-3 h-3" />
+                Published
               </span>
-            </div>
-            <div className="ml-2 sm:ml-3 min-w-0 flex-1">
-              <h2 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">{customer.name || 'Customer'}</h2>
-              <p className="text-base text-gray-500 truncate">{customer.email}</p>
-              {socialPlatforms.length > 0 && (
-                <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                  {socialPlatforms.map(p => <SocialBadge key={p} platform={p} />)}
-                </div>
+              {publishedPosts[0]?.publishedAt && (
+                <span className="text-[10px] text-gray-400">
+                  {new Date(publishedPosts[0].publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                </span>
               )}
-            </div>
-          </div>
-          {/* Tab Navigation */}
-          <div className="flex gap-1 mt-3 overflow-x-auto pb-0.5 scrollbar-hide">
-            {TABS_CONFIG.map(tab => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-              // Badge counts
-              let badge = null;
-              if (tab.id === 'portfolio')  badge = portfolioItemsMapped.length || null;
-              if (tab.id === 'social')     badge = socialAccounts.length || null;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all flex-shrink-0 ${
-                    isActive
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                  }`}
+              {publishedPosts.flatMap(getPostLinks).filter((l, i, arr) => arr.findIndex(x => (x.platform ?? x.label) === (l.platform ?? l.label)) === i).map((link, li) => (
+                <a
+                  key={li}
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={e => e.stopPropagation()}
+                  title={`Open on ${link.label}`}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded border text-[11px] font-semibold bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100 transition-colors"
                 >
-                  <Icon className="h-3.5 w-3.5" />
-                  {tab.label}
-                  {badge !== null && (
-                    <span className={`ml-0.5 text-[9px] font-bold px-1 rounded-full ${isActive ? 'bg-white/30 text-white' : 'bg-gray-200 text-gray-600'}`}>
-                      {badge}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* ══════════ TAB: OVERVIEW ══════════ */}
-        {activeTab === 'overview' && (
-          <>
-        {/* Customer Info - Side by Side Grid on Mobile */}
-        <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm p-2 sm:p-3 border border-gray-200/50">
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Customer Information</h3>
-          
-          {/* 2-Column Grid for Mobile */}
-          <div className="grid grid-cols-2 gap-1.5">
-            {/* Personal Details */}
-            <InfoItem icon={User} iconBg="bg-blue-100" iconColor="text-blue-600" label="Name" value={customer.name} />
-            <InfoItem icon={Mail} iconBg="bg-green-100" iconColor="text-green-600" label="Email" value={customer.email} />
-            <InfoItem icon={Phone} iconBg="bg-purple-100" iconColor="text-purple-600" label="Mobile" value={customer.mobile} />
-            <InfoItem icon={MapPin} iconBg="bg-orange-100" iconColor="text-orange-600" label="Address" value={customer.address} />
-            
-            {/* Business Details */}
-            <InfoItem icon={FileText} iconBg="bg-indigo-100" iconColor="text-indigo-600" label="GST" value={customer.gstNumber} />
-            <InfoItem icon={Building} iconBg="bg-pink-100" iconColor="text-pink-600" label="Role" value={customer.role} />
-            <InfoItem icon={Hash} iconBg="bg-yellow-100" iconColor="text-yellow-600" label="ID" value={customer._id} mono />
-            <InfoItem icon={Calendar} iconBg="bg-teal-100" iconColor="text-teal-600" label="Registered" value={formatDate(customer.createdAt)} />
-          </div>
-        </div>
-
-        {/* Content Calendars Section */}
-        <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-          {/* Header with Stats */}
-          <div className="px-3 sm:px-4 py-3 border-b border-gray-100">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <div>
-                <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Content Calendars</h2>
-                <p className="text-base text-gray-500 mt-0.5">Manage content schedule and items</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setShowTrend(v => !v)}
-                  className={`inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                    showTrend
-                      ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                      : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                  }`}
-                >
-                  <TrendingUp className="h-4 w-4 mr-1.5" />
-                  Trend
-                </button>
-                <button
-                  onClick={() => setIsReportModalOpen(true)}
-                  className="inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
-                >
-                  <Download className="h-4 w-4 mr-1.5" />
-                  Download Report
-                </button>
-                <button
-                  onClick={() => setIsCalendarModalOpen(true)}
-                  className="inline-flex items-center px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-colors"
-                >
-                  <Plus className="h-4 w-4 mr-1.5" />
-                  Add Calendar
-                </button>
-              </div>
-            </div>
-            
-            {/* Stats Grid */}
-            {calendars.length > 0 && (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 mt-2">
-                <div className="bg-gray-50 rounded-xl p-2 border border-gray-100">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-2xl font-semibold text-gray-900 tabular-nums">{overallStats.totalCalendars}</div>
-                      <div className="text-sm text-gray-500 font-medium uppercase tracking-wide">Calendars</div>
-                    </div>
-                    <Calendar className="h-6 w-6 text-gray-400" />
-                  </div>
-                </div>
-                <div className="bg-blue-50 rounded-xl p-2 border border-blue-100">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-2xl font-semibold text-blue-700 tabular-nums">{overallStats.totalItems}</div>
-                      <div className="text-sm text-blue-600 font-medium uppercase tracking-wide">Items</div>
-                    </div>
-                    <FileText className="h-6 w-6 text-blue-500" />
-                  </div>
-                </div>
-                <div className="bg-emerald-50 rounded-xl p-2 border border-emerald-100">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-2xl font-semibold text-emerald-700 tabular-nums">{overallStats.publishedItems}</div>
-                      <div className="text-sm text-emerald-600 font-medium uppercase tracking-wide">Published</div>
-                    </div>
-                    <CheckCircle className="h-6 w-6 text-emerald-500" />
-                  </div>
-                </div>
-                <div className="bg-amber-50 rounded-xl p-2 border border-amber-100">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-2xl font-semibold text-amber-700 tabular-nums">{overallStats.pendingItems}</div>
-                      <div className="text-sm text-amber-600 font-medium uppercase tracking-wide">Pending</div>
-                    </div>
-                    <Clock className="h-6 w-6 text-amber-500" />
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Trend chart */}
-          {showTrend && calendars.length > 0 && (
-            <div className="px-4 sm:px-6 pb-4">
-              <TrendChart calendars={calendars} onClose={() => setShowTrend(false)} />
+                  {link.label}
+                  <ExternalLink className="w-2.5 h-2.5" />
+                </a>
+              ))}
             </div>
           )}
+        </div>
+        <div className="flex flex-col items-end gap-2 flex-shrink-0">
+          <div className="flex flex-wrap gap-1 justify-end">
+            {platforms.map(p => <PlatformPill key={p} platform={p} />)}
+          </div>
+          <MediaTypeBadge mediaType={assignment.mediaType} slideCount={assignment.slideCount} />
+        </div>
+      </div>
 
-          <div className="p-2 sm:p-3">
-            {calendars.length > 0 ? (
-              <div className="space-y-1">
-                {[...calendars].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)).map((calendar) => {
-                  const calStats = getCalendarStats(calendar);
-                  return (
-                    <div key={calendar._id} className="bg-gray-50 rounded-xl border border-gray-100 overflow-hidden">
-                      {/* Calendar Header */}
-                      <div 
-                        className="p-2 sm:p-3 cursor-pointer hover:bg-gray-100/50 transition-colors"
-                        onClick={() => toggleCalendarExpansion(calendar._id)}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3 min-w-0 flex-1">
-                            <div className="h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                              <Calendar className="h-5 w-5 text-blue-600" />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2">
-                                <h4 className="text-sm font-semibold text-gray-900 truncate">{calendar.name}</h4>
-                                {isCalendarPublished(calendar) && (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 border border-emerald-200 flex-shrink-0">
-                                    <CheckCircle className="w-3 h-3 mr-1" />
-                                    Complete
-                                  </span>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-3 mt-1">
-                                <span className="text-xs text-gray-500">{calStats.total} items</span>
-                                {calendar.assignedTo && (
-                                  <span className="text-xs text-gray-500 truncate">
-                                    Assigned: {calendar.assignedToName || calendar.assignedTo}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                          
-                          {/* Progress & Actions */}
-                          <div className="flex items-center gap-3 ml-3">
-                            {/* Progress Bar - Desktop */}
-                            <div className="hidden sm:flex items-center gap-2">
-                              <span className="text-xs text-gray-600 tabular-nums min-w-[40px] text-right">
-                                {calStats.published}/{calStats.total}
-                              </span>
-                              <div className="w-20 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                                <div 
-                                  className="h-full bg-emerald-500 rounded-full transition-all"
-                                  style={{ width: `${calStats.progressPercent}%` }}
-                                />
-                              </div>
-                            </div>
-                            
-                            {/* Desktop Actions */}
-                            <div className="hidden sm:flex items-center gap-1">
-                              <button
-                                onClick={(e) => { e.stopPropagation(); setSelectedCalendar(calendar); setIsContentModalOpen(true); }}
-                                className="p-1.5 text-green-600 hover:bg-green-100 rounded-lg transition-colors"
-                                title="Add Item"
-                              >
-                                <Plus className="h-4 w-4" />
-                              </button>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleEditCalendar(calendar); }}
-                                className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors"
-                                title="Edit"
-                              >
-                                <Edit className="h-4 w-4" />
-                              </button>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleDeleteCalendar(calendar._id); }}
-                                className="p-1.5 text-red-600 hover:bg-red-100 rounded-lg transition-colors"
-                                title="Delete"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
-                            </div>
-
-                            {/* Mobile Menu Button */}
-                            <div className="sm:hidden">
-                              <button
-                                type="button"
-                                onClick={e => { e.stopPropagation(); openMobileMenu(calendar); }}
-                                className="p-1.5 text-gray-500 hover:bg-gray-200 rounded-lg transition-colors"
-                              >
-                                <MoreVertical className="h-4 w-4" />
-                              </button>
-                            </div>
-
-                            {expandedCalendars.has(calendar._id) ? (
-                              <ChevronDown className="h-4 w-4 text-gray-400" />
-                            ) : (
-                              <ChevronRight className="h-4 w-4 text-gray-400" />
-                            )}
-                          </div>
-                        </div>
-                        
-                        {/* Progress Bar - Mobile */}
-                        <div className="sm:hidden mt-3 flex items-center gap-2">
-                          <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                            <div 
-                              className="h-full bg-emerald-500 rounded-full transition-all"
-                              style={{ width: `${calStats.progressPercent}%` }}
-                            />
-                          </div>
-                          <span className="text-xs text-gray-500 tabular-nums">{calStats.progressPercent}%</span>
-                        </div>
-                      </div>
-
-                      {/* Expanded Content Items */}
-                      {expandedCalendars.has(calendar._id) && (
-                        <div className="border-t border-gray-200/50 p-2 space-y-1">
-                          {calendar.contentItems && calendar.contentItems.length > 0 ? (
-                            <>
-                              <div className="flex items-center justify-end pb-1">
-                                <button
-                                  onClick={e => { e.stopPropagation(); setItemSortOrder(o => o === 'desc' ? 'asc' : 'desc'); }}
-                                  className="flex items-center gap-1 px-2 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
-                                  title={itemSortOrder === 'desc' ? 'Newest first — click for oldest first' : 'Oldest first — click for newest first'}
-                                >
-                                  <ArrowUpDown className="h-3 w-3" />
-                                  {itemSortOrder === 'desc' ? 'Newest first' : 'Oldest first'}
-                                </button>
-                              </div>
-                              {[...calendar.contentItems].sort((a, b) => itemSortOrder === 'desc'
-                                ? new Date(b.date) - new Date(a.date)
-                                : new Date(a.date) - new Date(b.date)
-                              ).map((item, index) => {
-                              const originalIndex = calendar.contentItems.findIndex(
-                                orig => orig.date === item.date && orig.description === item.description
-                              );
-                              const itemStatus = getItemStatus(item);
-                              const statusConfig = getStatusConfig(itemStatus);
-                              const itemKey = item.id || `${calendar._id}_${index}`;
-                              const itemTrendData = postTrendCache[itemKey];
-                              const isTrendLoading = itemTrendData === null;
-                              const isExpanded = expandedTrendItem === itemKey;
-                              const publishedLinks = itemStatus === 'published' ? getItemPublishedLinks(item) : [];
-                              const creatorId = item.assignedTo || calendar.assignedTo;
-                              const creatorName = item.assignedToName || calendar.assignedToName || (creators.find(c => c.email === creatorId)?.name) || creatorId || '';
-                              // Filter submissions for this item (for version nodes in timeline)
-                              const itemTitle = item.title || item.description;
-                              const itemSubmissions = allSubmissions
-                                .filter(s =>
-                                  (s.assignment_id && s.assignment_id === item.id) ||
-                                  (s.item_id && s.item_id === item.id) ||
-                                  (s.item_name && s.item_name === itemTitle)
-                                )
-                                .sort((a, b) => new Date(a.created_at || a.createdAt) - new Date(b.created_at || b.createdAt));
-                              return (
-                                <div key={itemKey} className="bg-white rounded-lg border border-gray-100 hover:border-gray-200 transition-colors overflow-hidden">
-                                  <div className="flex items-center justify-between p-2">
-                                    <div className="flex items-center gap-3 min-w-0 flex-1">
-                                      <div className="h-9 w-9 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                                        <FileText className="h-4 w-4 text-gray-400" />
-                                      </div>
-                                      <div className="min-w-0 flex-1">
-                                        <div className="flex items-center gap-1.5 flex-wrap">
-                                          {item.title && (
-                                            <button
-                                              className="text-sm font-medium text-blue-800 truncate hover:text-blue-600 hover:underline cursor-pointer text-left"
-                                              onClick={(e) => { e.stopPropagation(); openContentDetail(item, calendar); }}
-                                              title="View content details"
-                                            >
-                                              {item.title}
-                                            </button>
-                                          )}
-                                          {publishedLinks.map((link, li) => (
-                                            <a
-                                              key={li}
-                                              href={link.url}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              className="flex-shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-100 transition-colors"
-                                              onClick={e => e.stopPropagation()}
-                                              title={`Open on ${link.label}${link.isManual ? ' (Manual)' : ''}`}
-                                            >
-                                              <PlatformIcon platform={link.platform || link.label} />
-                                              {link.isManual && <span className="text-[9px] font-bold text-emerald-600 bg-emerald-100/50 px-0.5 rounded ml-0.5 scale-90">m</span>}
-                                              <ExternalLink className="h-2.5 w-2.5 ml-0.5" />
-                                            </a>
-                                          ))}
-                                        </div>
-                                        <p className="text-sm text-gray-900 truncate">{item.description || 'Untitled'}</p>
-                                        <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                          {item.type && (
-                                            (Array.isArray(item.type) ? item.type :
-                                              (typeof item.type === 'string' ? item.type.split(',').map(p => p.trim()) : [item.type])
-                                            ).map((platform, idx) => (
-                                              <span key={idx} title={platform} className="flex items-center justify-center">
-                                                <PlatformIcon platform={platform} />
-                                              </span>
-                                            ))
-                                          )}
-                                          {creatorName && (
-                                            <span className="text-[10px] text-gray-500 flex items-center gap-0.5">
-                                              <User className="h-2.5 w-2.5" />
-                                              {creatorName}
-                                            </span>
-                                          )}
-                                        </div>
-                                        <ItemTimeline item={item} itemStatus={itemStatus} scheduledPosts={scheduledPosts} submissions={itemSubmissions} />
-                                        {itemStatus === 'published' && itemTrendData && typeof itemTrendData === 'object' && (
-                                          <MiniTrendCharts platformData={itemTrendData} />
-                                        )}
-                                      </div>
-                                    </div>
-                                    <div className="flex items-center gap-1.5 ml-2">
-                                      {itemStatus === 'published' && (
-                                        <div className="hidden sm:block" onClick={e => e.stopPropagation()}>
-                                          <PostTrendButton
-                                            isLoading={isTrendLoading}
-                                            isActive={isExpanded}
-                                            onClick={() => {
-                                              if (isExpanded) {
-                                                setExpandedTrendItem(null);
-                                              } else {
-                                                fetchPostTrend(itemKey, item);
-                                                setExpandedTrendItem(itemKey);
-                                              }
-                                            }}
-                                          />
-                                        </div>
-                                      )}
-                                      <span className={`px-2 py-1 rounded-md text-xs font-medium ${statusConfig.bg} ${statusConfig.text} border ${statusConfig.border} hidden sm:inline-flex`}>
-                                        {itemStatus.replace('_', ' ')}
-                                      </span>
-                                      <button
-                                        className={`p-1.5 rounded transition-colors touch-manipulation ${
-                                          itemStatus === 'published' 
-                                            ? 'text-emerald-650 hover:bg-emerald-50' 
-                                            : 'text-gray-400 hover:text-emerald-650 hover:bg-emerald-50'
-                                        }`}
-                                        onClick={(e) => { e.stopPropagation(); openManualPublishModal(item, calendar._id); }}
-                                        onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); openManualPublishModal(item, calendar._id); }}
-                                        title="Publish Status"
-                                      >
-                                        <CheckCircle className="h-3.5 w-3.5" />
-                                      </button>
-                                      <button
-                                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors touch-manipulation"
-                                        onClick={(e) => { e.stopPropagation(); handleEditItem(item, calendar._id); }}
-                                        onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleEditItem(item, calendar._id); }}
-                                        title="Edit"
-                                      >
-                                        <Edit className="h-3.5 w-3.5" />
-                                      </button>
-                                      <button
-                                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors touch-manipulation"
-                                        onClick={(e) => { e.stopPropagation(); handleDeleteItem(calendar._id, item); }}
-                                        onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteItem(calendar._id, item); }}
-                                        title="Delete"
-                                      >
-                                        <Trash2 className="h-3.5 w-3.5" />
-                                      </button>
-                                      <button
-                                        className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors touch-manipulation"
-                                        onClick={(e) => { e.stopPropagation(); navigate(`/admin/content-upload/${calendar._id}/${originalIndex}`); }}
-                                        onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); navigate(`/admin/content-upload/${calendar._id}/${originalIndex}`); }}
-                                        title="Upload"
-                                      >
-                                        <Upload className="h-3.5 w-3.5" />
-                                      </button>
-                                    </div>
-                                  </div>
-
-                                  {/* Mobile trend & post link row */}
-                                  <div className="sm:hidden px-3 pb-2 flex items-center gap-2 flex-wrap">
-                                    <span className={`px-2 py-0.5 rounded-md text-[10px] font-medium ${statusConfig.bg} ${statusConfig.text} border ${statusConfig.border}`}>
-                                      {itemStatus.replace('_', ' ')}
-                                    </span>
-                                    {publishedLinks.map((link, li) => (
-                                      <a
-                                        key={li}
-                                        href={link.url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-600 border border-blue-100"
-                                        onClick={e => e.stopPropagation()}
-                                      >
-                                        <ExternalLink className="h-2.5 w-2.5" /> {link.label} {link.isManual ? '(m)' : ''}
-                                      </a>
-                                    ))}
-                                    {itemStatus === 'published' && (
-                                      <PostTrendButton
-                                        isLoading={isTrendLoading}
-                                        isActive={isExpanded}
-                                        onClick={() => {
-                                          if (isExpanded) {
-                                            setExpandedTrendItem(null);
-                                          } else {
-                                            fetchPostTrend(itemKey, item);
-                                            setExpandedTrendItem(itemKey);
-                                          }
-                                        }}
-                                      />
-                                    )}
-                                  </div>
-
-                                  {/* Expanded Trend Chart */}
-                                  {isExpanded && (
-                                    <div className="px-3 pb-3">
-                                      {isTrendLoading ? (
-                                        <div className="mt-3 bg-blue-50/50 rounded-lg border border-blue-100 p-6 flex items-center justify-center gap-2">
-                                          <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                                          <span className="text-xs text-gray-500">Loading trend data…</span>
-                                        </div>
-                                      ) : (
-                                        <ExpandedTrendChart
-                                          platformData={itemTrendData || {}}
-                                          dateRange={trendDateRange}
-                                          onDateRangeChange={setTrendDateRange}
-                                          onClose={() => setExpandedTrendItem(null)}
-                                        />
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })}
-                            </>
-                          ) : (
-                            <div className="text-center py-6 text-sm text-gray-500">
-                              No content items in this calendar
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="text-center py-12">
-                <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
-                  <Calendar className="h-7 w-7 text-gray-400" />
-                </div>
-                <h3 className="text-lg font-medium text-gray-800 mb-1">No calendars yet</h3>
-                <p className="text-gray-500 text-sm max-w-sm mx-auto mb-4">
-                  Create a content calendar to start managing this customer's content schedule.
-                </p>
-                <button
-                  onClick={() => setIsCalendarModalOpen(true)}
-                  className="inline-flex items-center px-5 py-2.5 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-colors"
-                >
-                  <Plus className="h-4 w-4 mr-1.5" />
-                  Create First Calendar
-                </button>
+      <div className="px-5 pb-3">
+        <div className="bg-gray-50/50 rounded-lg p-2.5 border border-gray-100 flex flex-col gap-1.5">
+          <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1"><Clock className="w-3 h-3" /> Approval History</h4>
+          <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs">
+            <div className="flex flex-col">
+              <span className="text-[10px] text-gray-400">Uploaded</span>
+              <span className="font-medium text-gray-700">
+                {uploadedAt ? new Date(uploadedAt).toLocaleString('en-US', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—'}
+              </span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[10px] text-gray-400">Approved</span>
+              <span className="font-medium text-gray-700">
+                {approvedAt ? new Date(approvedAt).toLocaleString('en-US', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'Pending'}
+              </span>
+            </div>
+            {daysToApproval !== null && (
+              <div className="flex flex-col">
+                <span className="text-[10px] text-gray-400">Turnaround</span>
+                <span className={`font-semibold ${daysToApproval <= 1 ? 'text-emerald-600' : daysToApproval <= 3 ? 'text-amber-600' : 'text-rose-600'}`}>
+                  {daysToApproval}d
+                </span>
               </div>
             )}
           </div>
         </div>
-      
-        </> /* end overview tab */
-        )}
+      </div>
 
-        {/* ══════════ TAB: PORTFOLIO ══════════ */}
-        {activeTab === 'portfolio' && (
-          <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-            <div className="px-4 sm:px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-              <div>
-                <h2 className="text-base sm:text-lg font-semibold text-gray-900">Content Portfolio</h2>
-                <p className="text-sm text-gray-500 mt-0.5">Submitted content versions for review & publishing</p>
+      {!isExpanded && (
+        <div className="px-5 pb-4 border-t border-gray-50 pt-3 space-y-2">
+          {assignment.caption && (
+            <p className="text-xs text-gray-500 leading-relaxed line-clamp-2">{assignment.caption}</p>
+          )}
+          {assignment.hashtags && (
+            <p className="text-[11px] text-blue-400 line-clamp-1">{assignment.hashtags}</p>
+          )}
+          <div className="flex items-center justify-between">
+            <button onClick={onToggle}
+              className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-blue-600 font-medium transition-colors">
+              <ChevronDown className="w-4 h-4" />
+              Expand to view versions and metrics
+            </button>
+            {assignment.totalVersions > 1 && (
+              <span className="text-[11px] text-amber-600 font-semibold bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                {assignment.totalVersions} revisions
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {isExpanded && (
+        <div className="border-t border-gray-100">
+          <div className="grid grid-cols-1 md:grid-cols-2">
+            <div className="p-5 md:border-r border-gray-100">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-1.5">
+                <Layers className="w-3.5 h-3.5" />
+                Versions ({assignment.totalVersions})
+              </p>
+              <div className="space-y-3">
+                {assignment.versions.map(v => (
+                  <VersionRow key={v.versionId || v.versionNumber} version={v} />
+                ))}
               </div>
-              <button
-                onClick={fetchSubmissions}
-                className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
-                title="Refresh"
-              >
-                <RefreshCw className="h-4 w-4" />
-              </button>
             </div>
-            <div className="p-4">
-              {portfolioItemsMapped.length === 0 ? (
-                <div className="text-center py-14">
-                  <Briefcase className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-                  <p className="text-gray-500 text-sm">No portfolio submissions yet</p>
-                  <p className="text-gray-400 text-xs mt-1">Content uploaded by creators will appear here</p>
+
+            <div className="p-5 border-t md:border-t-0 border-gray-100">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-1.5">
+                <BarChart2 className="w-3.5 h-3.5" />
+                Performance Metrics
+                {metricsLoading && <Loader2 className="w-3 h-3 animate-spin ml-1 text-blue-400" />}
+              </p>
+              {metricsLoading ? (
+                <div className="flex flex-col items-center justify-center py-8 text-gray-300">
+                  <Loader2 className="w-8 h-8 mb-2 animate-spin text-blue-300" />
+                  <p className="text-xs text-gray-400">Loading live metrics…</p>
+                </div>
+              ) : metricsPosts.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-8 text-gray-300">
+                  <Eye className="w-8 h-8 mb-2" />
+                  <p className="text-xs text-gray-400">No published posts found</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {portfolioItemsMapped.map(item => {
-                    const latestVersion = item.versions[item.versions.length - 1];
-                    const firstMedia = latestVersion?.media?.[0];
-                    const isPublished = item.published || isContentPublished(item.id, item);
-                    const displayStatus = isPublished ? 'published' : item.status;
+                <div className="space-y-5">
+                  {metricsPosts.map((post, i) => {
+                    const postLinks = getPostLinks(post);
                     return (
-                      <div
-                        key={item.id}
-                        className="bg-white rounded-xl shadow-sm border border-gray-200/50 overflow-hidden hover:shadow-md transition-shadow flex flex-col cursor-pointer"
-                        onClick={() => {
-                          const fakeItem = { id: item.id, title: item.title, description: item.title, type: item.platform };
-                          const fakeCal = { customerId: id, name: item.calendarName };
-                          openContentDetail(fakeItem, fakeCal);
-                        }}
-                      >
-                        {/* Thumbnail */}
-                        <div className="relative h-36 bg-gray-100 flex-shrink-0">
-                          {firstMedia?.url ? (
-                            isVideoUrl(firstMedia.url) ? (
-                              <div className="w-full h-full flex items-center justify-center bg-gray-800">
-                                <Video className="h-8 w-8 text-white" />
-                              </div>
-                            ) : (
-                              <img src={firstMedia.url} alt="" className="w-full h-full object-cover" loading="lazy" />
-                            )
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center">
-                              <ImageIcon className="h-8 w-8 text-gray-300" />
-                            </div>
-                          )}
-                          <span className={`absolute top-2 left-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${getPortfolioStatusColor(displayStatus)}`}>
-                            {getPortfolioStatusLabel(displayStatus)}
-                          </span>
-                          <span className="absolute top-2 right-2 px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-100 text-purple-700">
-                            V{item.totalVersions}
-                          </span>
-                        </div>
-                        {/* Body */}
-                        <div className="p-3 flex-1 flex flex-col">
-                          {item.title && <p className="text-sm font-medium text-gray-900 truncate mb-1">{item.title}</p>}
-                          {item.calendarName && <p className="text-[10px] text-gray-500 truncate">📅 {item.calendarName}</p>}
-                          {item.itemName && item.itemName !== item.title && <p className="text-[10px] text-gray-500 truncate">📝 {item.itemName}</p>}
-                          <div className="flex items-center justify-between text-[10px] text-gray-400 mt-1.5">
-                            <span className="capitalize">{item.platform || '—'}</span>
-                            <span>{formatSimpleDate(item.lastUpdated)}</span>
+                      <div key={post._id || i}>
+                        {(post.publishedAt || postLinks.length > 0) && (
+                          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                            {post.publishedAt && (
+                              <span className="text-[10px] text-gray-400 flex items-center gap-1">
+                                <CheckCircle className="w-3 h-3 text-emerald-500" />
+                                Published {new Date(post.publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                              </span>
+                            )}
+                            {postLinks.map((link, li) => (
+                              <a
+                                key={li}
+                                href={link.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={e => e.stopPropagation()}
+                                title={`Open ${link.label} post`}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded border text-[10px] font-semibold bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100 transition-colors"
+                              >
+                                View on {link.label}
+                                <ExternalLink className="w-2.5 h-2.5" />
+                              </a>
+                            ))}
                           </div>
-                          <button
-                            className="mt-3 w-full bg-blue-600 text-white py-1.5 px-2 rounded-lg text-xs font-medium hover:bg-blue-700 transition-colors"
-                            onClick={e => {
-                              e.stopPropagation();
-                              const fakeItem = { id: item.id, title: item.title, description: item.title, type: item.platform };
-                              const fakeCal = { customerId: id, name: item.calendarName };
-                              openContentDetail(fakeItem, fakeCal);
-                            }}
-                          >
-                            View Details
-                          </button>
-                        </div>
+                        )}
+                        <PlatformMetricsSection post={post} />
                       </div>
                     );
                   })}
@@ -2612,354 +614,2248 @@ function CustomerDetailsView() {
               )}
             </div>
           </div>
-        )}
+
+          <div className="px-5 py-3 border-t border-gray-100">
+            <button onClick={onToggle}
+              className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-blue-600 font-medium transition-colors">
+              <ChevronUp className="w-4 h-4" />
+              Collapse
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ── Main page ─────────────────────────────────────────────────────────────────
+export default function SummaryReport({ embedded = false, customerId = null }) {
+  const { currentUser } = useAuth();
+
+  const [customers, setCustomers] = useState([]);
+  const [selectedCustomer, setSelectedCustomer] = useState('');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const [calendars, setCalendars] = useState([]);
+  const [selectedCalendar, setSelectedCalendar] = useState('');
+  const [contentItems, setContentItems] = useState([]);
+  const [selectedItem, setSelectedItem] = useState('');
+
+  const [report, setReport] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [emailLoading, setEmailLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [expandedItems, setExpandedItems] = useState({});
+  const [visibleCount, setVisibleCount] = useState(5);
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [sortBy, setSortBy] = useState('date_desc');
+  const [searchCreator, setSearchCreator] = useState('');
+  const [showCreatorTable, setShowCreatorTable] = useState(false);
+
+  const [liveScheduledPosts, setLiveScheduledPosts] = useState([]);
+  const [liveMetricsCache, setLiveMetricsCache] = useState({});
+  const fetchedMetricsRef = useRef(new Set());
+
+  const reportRef = useRef(null);
+
+  useEffect(() => {
+    const adminId = currentUser?._id || currentUser?.id;
+    if (!adminId) return;
+    fetch(`${API_URL}/admin/assigned-customers?adminId=${adminId}`)
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(data => setCustomers(Array.isArray(data) ? data : []))
+      .catch(() => {
+        fetch(`${API_URL}/api/customers`)
+          .then(r => r.ok ? r.json() : Promise.reject())
+          .then(data => setCustomers(Array.isArray(data) ? data : []))
+          .catch(() => setCustomers([]));
+      });
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (customerId) {
+      setSelectedCustomer(customerId);
+    }
+  }, [customerId]);
+
+  useEffect(() => {
+    setCalendars([]);
+    setSelectedCalendar('');
+    setContentItems([]);
+    setSelectedItem('');
+    if (!selectedCustomer) return;
+    fetch(`${API_URL}/calendars/customer/${selectedCustomer}`)
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(data => setCalendars(Array.isArray(data) ? data : []))
+      .catch(() => setCalendars([]));
+  }, [selectedCustomer]);
+
+  useEffect(() => {
+    setContentItems([]);
+    setSelectedItem('');
+    if (!selectedCalendar) return;
+    fetch(`${API_URL}/api/admin/summary-report/items?calendarId=${selectedCalendar}`)
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(data => setContentItems(Array.isArray(data) ? data : []))
+      .catch(() => setContentItems([]));
+  }, [selectedCalendar]);
+
+  const filteredCalendars = useMemo(() => {
+    if (!fromDate && !toDate) return calendars;
+    const from = fromDate ? new Date(fromDate) : null;
+    const to = toDate ? new Date(toDate + 'T23:59:59.999Z') : null;
+    return calendars.filter(cal => {
+      if (!Array.isArray(cal.contentItems) || cal.contentItems.length === 0) return false;
+      return cal.contentItems.some(item => {
+        if (!item.date) return false;
+        const d = new Date(item.date);
+        if (from && d < from) return false;
+        if (to && d > to) return false;
+        return true;
+      });
+    });
+  }, [calendars, fromDate, toDate]);
+
+  const filteredContentItems = useMemo(() => {
+    if (!fromDate && !toDate) return contentItems;
+    const from = fromDate ? new Date(fromDate) : null;
+    const to = toDate ? new Date(toDate + 'T23:59:59.999Z') : null;
+    return contentItems.filter(item => {
+      if (!item.date) return false;
+      const d = new Date(item.date);
+      if (from && d < from) return false;
+      if (to && d > to) return false;
+      return true;
+    });
+  }, [contentItems, fromDate, toDate]);
+
+  useEffect(() => {
+    if (selectedCalendar && !filteredCalendars.some(c => c._id === selectedCalendar)) {
+      setSelectedCalendar('');
+      setReport(null);
+    }
+  }, [filteredCalendars, selectedCalendar]);
+
+  useEffect(() => {
+    if (selectedItem && !filteredContentItems.some((item, i) => String(item.id || i) === String(selectedItem))) {
+      setSelectedItem('');
+      setReport(null);
+    }
+  }, [filteredContentItems, selectedItem]);
+
+  const handleGenerate = useCallback(async () => {
+    if (!selectedCustomer) { setError('Please select a customer.'); return; }
+    setError('');
+    setLoading(true);
+    setReport(null);
+    try {
+      const params = new URLSearchParams({ customerId: selectedCustomer });
+      if (fromDate) params.set('fromDate', fromDate);
+      if (toDate)   params.set('toDate', toDate);
+      if (selectedCalendar) params.set('calendarId', selectedCalendar);
+      if (selectedItem)     params.set('itemId', selectedItem);
+
+      const [reportRes, postsRes] = await Promise.all([
+        fetch(`${API_URL}/api/admin/summary-report?${params.toString()}`),
+        fetch(`${API_URL}/api/scheduled-posts?customerId=${encodeURIComponent(selectedCustomer)}`).catch(() => null),
+      ]);
+      if (!reportRes.ok) throw new Error(`HTTP ${reportRes.status}`);
+      const [data, postsDataRaw] = await Promise.all([
+        reportRes.json(),
+        postsRes?.ok ? postsRes.json().catch(() => null) : Promise.resolve(null),
+      ]);
+      const postsData = Array.isArray(postsDataRaw) ? postsDataRaw : [];
+      setLiveMetricsCache({});
+      fetchedMetricsRef.current = new Set();
+      setReport(data);
+      setLiveScheduledPosts(postsData);
+    } catch (err) {
+      setError('Failed to generate report. Please try again.');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedCustomer, fromDate, toDate, selectedCalendar, selectedItem]);
+
+  // ── Download PDF ─────────────────────────────────────────────────────────────
+  const generatePDFDoc = useCallback(async () => {
+    if (!report) return null;
+    try {
+      const customerObj = customers.find(c => (c._id || c.id) === selectedCustomer);
+      const customerName = customerObj?.businessName || customerObj?.name || 'Customer';
+
+      const calendarObj = report.calendar ||
+        calendars.find(c => (c._id || c.id) === selectedCalendar) || null;
+      const calendarName = (calendarObj?.name || '').replace(/[\x00-\x1F\x7F]/g, ' ').trim();
+
+      // Pre-load thumbnails via backend proxy
+      const thumbCache = {};
+      const API = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+      const VIDEO_EXTS = /\.(mp4|webm|mov|avi|mkv|m4v|ogv)(\?.*)?$/i;
+      const isVideoUrl = (url) => VIDEO_EXTS.test(url);
+      const tryLoadImg = async (url) => {
+        if (!url || thumbCache[url] !== undefined) return;
+        if (isVideoUrl(url)) {
+          const b64 = await new Promise((resolve) => {
+            const proxyUrl = `${API}/api/image-proxy?url=${encodeURIComponent(url)}`;
+            const video = document.createElement('video');
+            video.crossOrigin = 'anonymous';
+            video.preload = 'metadata';
+            video.muted = true;
+            const tid = setTimeout(() => { video.src = ''; resolve(null); }, 12000);
+            video.addEventListener('loadeddata', () => { video.currentTime = 0; }, { once: true });
+            video.addEventListener('seeked', () => {
+              clearTimeout(tid);
+              try {
+                const canvas = document.createElement('canvas');
+                canvas.width  = video.videoWidth  || 320;
+                canvas.height = video.videoHeight || 180;
+                canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+                resolve(canvas.toDataURL('image/jpeg', 0.85));
+              } catch { resolve(null); }
+            }, { once: true });
+            video.addEventListener('error', () => { clearTimeout(tid); resolve(null); }, { once: true });
+            video.src = proxyUrl;
+          });
+          thumbCache[url] = b64 || 'VIDEO';
+          return;
+        }
+        try {
+          const resp = await fetch(`${API}/api/admin/summary-report/proxy-image?url=${encodeURIComponent(url)}`);
+          if (!resp.ok) { thumbCache[url] = null; return; }
+          const json = await resp.json();
+          thumbCache[url] = json.data || null;
+        } catch { thumbCache[url] = null; }
+      };
+      const allThumbUrls = report.assignments.flatMap(a => {
+        const urls = [];
+        if (a.thumbnail) urls.push(a.thumbnail);
+        if (Array.isArray(a.thumbnails)) urls.push(...a.thumbnails.filter(Boolean));
+        if (Array.isArray(a.versions)) {
+          for (const v of a.versions) {
+            for (const m of (v.media || [])) {
+              const u = typeof m === 'string' ? m : (m?.url || m?.publicUrl || '');
+              if (u) urls.push(u);
+            }
+          }
+        }
+        return urls;
+      });
+      await Promise.all(allThumbUrls.map(tryLoadImg));
+
+      // ── Pre-render complex text (emojis/non-Latin) via html2canvas ────────
+      const textImageCache = {};
+      const preRenderText = async (key, text, widthMm) => {
+        if (!text || textImageCache[key]) return;
+        const div = document.createElement('div');
+        div.style.position = 'fixed';
+        div.style.left = '-9999px';
+        div.style.top = '0';
+        div.style.width = `${widthMm * 3.78}px`; 
+        div.style.fontFamily = 'helvetica, Arial, sans-serif';
+        div.style.fontSize = '11px';
+        div.style.lineHeight = '1.5';
+        div.style.color = '#1e293b'; 
+        div.style.whiteSpace = 'pre-wrap';
+        div.style.wordBreak = 'break-word';
+        div.innerText = text;
+        document.body.appendChild(div);
+        try {
+          const canvas = await html2canvas(div, { backgroundColor: null, scale: 2 });
+          document.body.removeChild(div);
+          const ratio = canvas.height / canvas.width;
+          textImageCache[key] = {
+            url: canvas.toDataURL('image/png'),
+            hMm: widthMm * ratio
+          };
+        } catch {
+          if (document.body.contains(div)) document.body.removeChild(div);
+        }
+      };
+
+      const textPreloads = [];
+      const PW_ = 210, M_ = 18, CW_ = PW_ - M_ * 2;
+      const CARD_PAD_ = 7;
+      const innerW_ = CW_ - CARD_PAD_ * 2;
+
+      for (let ai = 0; ai < report.assignments.length; ai++) {
+        const assignment = report.assignments[ai];
+        const vCaption = assignment.caption ? assignment.caption.trim() : '';
+        const vHashtags = assignment.hashtags ? assignment.hashtags.trim() : '';
+        const chText = [vCaption, vHashtags].filter(Boolean).join('\n\n');
+        if (chText) {
+          textPreloads.push(preRenderText(`caption_${ai}`, chText, innerW_ - 10));
+        }
+
+        if (assignment.versions) {
+          assignment.versions.forEach((v, idx) => {
+            (v.comments || []).forEach((c, ci) => {
+               const textBody = `${c.comment}${c.done ? '  ✓ Done' : ''}`;
+               textPreloads.push(preRenderText(`comment_${ai}_${idx}_${ci}`, textBody, innerW_ - 25));
+            });
+          });
+        }
+      }
+      await Promise.all(textPreloads);
+
+      // ── jsPDF setup ───────────────────────────────────────────────────────
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const PW = 210, PH = 297, M = 18, CW = PW - M * 2;
+      let y = 0;
+
+      // ── Professional light palette ────────────────────────────────────────
+      // Pure white page, cool-gray borders, slate text, muted steel accents
+      const C = {
+        // Base matching ContentApprovalReport
+        dark:   [15,  23,  42],
+        blue:   [59,  130, 246],
+        indigo: [99,  102, 241],
+        green:  [22,  163, 74],
+        amber:  [217, 119, 6],
+        slate:  [100, 116, 139],
+        white:  [255, 255, 255],
+        light:  [248, 250, 252],
+        bgblue: [239, 246, 255],
+        bggreen:[236, 253, 245],
+        bgamber:[255, 251, 235],
+        bgindig:[238, 242, 255],
+        red:    [220, 38,  38],
+        bgred:  [254, 242, 242],
+
+        // Original properties preserved for existing layout compatibility
+        pageBg:        [255, 255, 255],
+        cardBg:        [252, 253, 254],
+        sectionBg:     [247, 249, 251],
+        border:        [226, 232, 240], // mapped to new C.border
+        borderLight:   [232, 237, 242],
+        ink:           [30,  36,  44],
+        body:          [60,  72,  84],
+        muted:         [100, 116, 139], // mapped to slate
+        faint:         [165, 178, 192],
+        accent:        [99,  102, 241], // mapped to indigo
+        accentLight:   [238, 242, 255], // mapped to bgindig
+        
+        // Status & badges
+        publishedBg:   [236, 253, 245],  publishedText: [22,  163, 74],
+        approvedBg:    [236, 253, 245],  approvedText:  [22,  163, 74],
+        reviewBg:      [255, 251, 235],  reviewText:    [217, 119, 6],
+        revisionBg:    [255, 251, 235],  revisionText:  [217, 119, 6],
+        rejectedBg:    [254, 242, 242],  rejectedText:  [220, 38,  38],
+        pendingBg:     [248, 250, 252],  pendingText:   [100, 116, 139],
+        
+        igBg:          [253, 242, 248],  igText:  [219,  39, 119],
+        fbBg:          [239, 246, 255],  fbText:  [59,  130, 246],
+        liBg:          [240, 249, 255],  liText:  [3,   105, 161],
+        ytBg:          [254, 242, 242],  ytText:  [220,  38,  38],
+        twBg:          [248, 250, 252],  twText:  [71,   85, 105],
+        
+        engGreen:      [22,  163, 74],
+      };
+
+      const sf  = a => doc.setFillColor(...a);
+      const ss  = a => doc.setDrawColor(...a);
+      const sc  = a => doc.setTextColor(...a);
+      const sans   = (style = 'normal', sz = 10) => { doc.setFont('helvetica', style); doc.setFontSize(sz); };
+      const serif  = (style = 'normal', sz = 10) => { doc.setFont('times', style);     doc.setFontSize(sz); };
+      const hairline = () => doc.setLineWidth(0.18);
+      const thinLine = () => doc.setLineWidth(0.35);
+
+      const sanitize = str => {
+        if (!str) return '';
+        return str
+          .replace(/[\u2013\u2014]/g, '-')
+          .replace(/[\u2018\u2019]/g, "'")
+          .replace(/[\u201C\u201D]/g, '"')
+          .replace(/\u2026/g, '...')
+          .replace(/[^\x00-\xFF]/g, '')
+          .trim();
+      };
+
+      const fmtNum = n => {
+        if (n === undefined || n === null || n === '—') return '—';
+        const num = Number(n);
+        if (isNaN(num)) return String(n);
+        if (num >= 1_000_000) return (num / 1_000_000).toFixed(1) + 'M';
+        if (num >= 1_000) return (num / 1_000).toFixed(1) + 'K';
+        return num.toLocaleString();
+      };
+
+      const fmtDateShort = d => {
+        if (!d) return '—';
+        return new Date(d).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
+      };
+
+      // ── Badge helpers ─────────────────────────────────────────────────────
+      const getStatusStyle = status => {
+        const s = (status || '').toLowerCase();
+        return ({
+          published:          { bg: C.publishedBg,  tc: C.publishedText,  label: 'Published'  },
+          approved:           { bg: C.approvedBg,   tc: C.approvedText,   label: 'Approved'   },
+          rejected:           { bg: C.rejectedBg,   tc: C.rejectedText,   label: 'Rejected'   },
+          submitted:          { bg: C.reviewBg,     tc: C.reviewText,     label: 'In Review'  },
+          in_review:          { bg: C.reviewBg,     tc: C.reviewText,     label: 'In Review'  },
+          under_review:       { bg: C.reviewBg,     tc: C.reviewText,     label: 'In Review'  },
+          revision_requested: { bg: C.revisionBg,   tc: C.revisionText,   label: 'Revision'   },
+          pending:            { bg: C.pendingBg,    tc: C.pendingText,    label: 'Pending'    },
+          publishing:         { bg: C.accentLight,  tc: C.accent,         label: 'Publishing' },
+        })[s] || { bg: C.pendingBg, tc: C.muted, label: (status || '—').replace(/_/g, ' ') };
+      };
+
+      const getPlatformStyle = p => ({
+        instagram: { bg: C.igBg, tc: C.igText, label: 'Instagram' },
+        facebook:  { bg: C.fbBg, tc: C.fbText, label: 'Facebook'  },
+        linkedin:  { bg: C.liBg, tc: C.liText, label: 'LinkedIn'  },
+        youtube:   { bg: C.ytBg, tc: C.ytText, label: 'YouTube'   },
+        twitter:   { bg: C.twBg, tc: C.twText, label: 'Twitter/X' },
+      })[(p || '').toLowerCase()] || { bg: C.sectionBg, tc: C.muted, label: p || '—' };
+
+      // ── Page helpers ──────────────────────────────────────────────────────
+      const fillPageBg = () => {
+        sf(C.pageBg);
+        doc.setLineWidth(0);
+        doc.rect(0, 0, PW, PH, 'F');
+      };
+
+      const checkY = (need = 20) => {
+        if (y + need > PH - 22) {
+          doc.addPage();
+          fillPageBg();
+          y = M;
+        }
+      };
+
+      // ── Enrich posts from live cache ──────────────────────────────────────
+      const pdfAllEnriched = Object.values(liveMetricsCache).flatMap(c => c?.posts || []);
+      const pdfEnrichedById = {};
+      pdfAllEnriched.forEach(p => { if (p._id) pdfEnrichedById[p._id] = p; });
+      const pdfMergedPosts = (report.scheduledPosts || []).map(p =>
+        pdfEnrichedById[p._id] ? { ...p, metrics: pdfEnrichedById[p._id].metrics || p.metrics } : p
+      );
+      const pdfByItemId = {}, pdfByItemTitle = {};
+      for (const post of pdfMergedPosts) {
+        const itemId = post.itemId || post.item_id || post.contentId;
+        if (itemId) { if (!pdfByItemId[itemId]) pdfByItemId[itemId] = []; pdfByItemId[itemId].push(post); }
+        const tKey = (post.itemTitle || post.item_name || '').toLowerCase().trim();
+        if (tKey) { if (!pdfByItemTitle[tKey]) pdfByItemTitle[tKey] = []; pdfByItemTitle[tKey].push(post); }
+      }
+      const getPdfPosts = (assignment) => {
+        const cached = liveMetricsCache[assignment.assignmentId];
+        if (cached?.posts?.length > 0) return cached.posts;
+        if (assignment.itemId) { const byId = pdfByItemId[assignment.itemId]; if (byId?.length) return byId; }
+        const tKey = (assignment.itemTitle || '').toLowerCase().trim();
+        if (tKey) { const byTitle = pdfByItemTitle[tKey]; if (byTitle?.length) return byTitle; }
+        return report.assignments.length === 1 ? pdfMergedPosts : [];
+      };
+
+      // ── Summary counts ────────────────────────────────────────────────────
+      const totalItems      = report.assignments.length;
+      const pdfApprovedCount = report.assignments.filter(a =>
+        a.versions?.some(v => ['approved', 'published'].includes((v.status || '').toLowerCase()))
+      ).length;
+      const pdfPublishedCount = report.assignments.filter(a =>
+        a.versions?.some(v => (v.status || '').toLowerCase() === 'published') ||
+        getPdfPosts(a).some(p => p.status === 'published' || p.publishedAt)
+      ).length;
+      const pdfApprovalRate  = totalItems > 0 ? Math.round((pdfApprovedCount / totalItems) * 100) : 0;
+      const pdfTotalVersions = report.assignments.reduce((s, a) => s + (a.totalVersions || 1), 0);
+      const pdfAvgRevisions  = totalItems > 0 ? (pdfTotalVersions / totalItems).toFixed(1) : '—';
+      const platformsSet     = new Set(
+        report.assignments.flatMap(a => [
+          ...(Array.isArray(a.platforms) ? a.platforms.flat() : []),
+          ...(a.platform ? [a.platform] : []),
+          ...getPdfPosts(a).map(p => Array.isArray(p.platform) ? p.platform[0] : p.platform),
+        ].filter(p => p && typeof p === 'string').map(p => p.toLowerCase().trim()))
+      );
+      const platformCount = platformsSet.size;
+      const periodVal = (report.filters?.fromDate && report.filters?.toDate)
+        ? `${report.filters.fromDate} – ${report.filters.toDate}`
+        : (report.filters?.fromDate || report.filters?.toDate || 'All dates');
+
+      // ════════════════════════════════════════════════════════════════════
+      //  PAGE 1
+      // ════════════════════════════════════════════════════════════════════
+      fillPageBg();
+      y = M;
+
+      // ── PAGE HEADER ───────────────────────────────────────────────────────────
+      sf(C.dark);
+      doc.rect(0, 0, PW, 40, 'F');
+      sf(C.blue);
+      doc.rect(0, 38, PW, 2, 'F');
+      sf(C.indigo);
+      doc.rect(0, 0, 4, 40, 'F');
+
+      sans('bold', 16);
+      sc(C.white);
+      doc.text('CONTENT PERFORMANCE REPORT', M + 4, 16);
+
+      sans('normal', 10);
+      sc([148, 163, 184]);
+      doc.text(`${sanitize(customerName).toUpperCase()}  •  ${sanitize(calendarName ? `Calendar: ${calendarName}` : 'All Calendars')}`, M + 4, 27);
+
+      sc([203, 213, 225]);
+      doc.text(`Generated: ${new Date().toLocaleString('en-US', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })}`, PW - M, 16, { align: 'right' });
+      doc.text(`Period: ${sanitize(periodVal)}`, PW - M, 27, { align: 'right' });
+
+      y = 48;
+
+      // ── SUMMARY STATS (3 boxes across) ───────────────────────────────────────────────
+      const boxW = (CW - 6) / 3;
+      [
+        { label: 'Total Content',    value: String(totalItems),          color: C.indigo },
+        { label: 'Published Posts',  value: String(pdfPublishedCount),   color: C.green  },
+        { label: 'Platforms Active', value: String(platformCount),       color: C.blue },
+      ].forEach((b, i) => {
+        const bx = M + i * (boxW + 3);
+        sf(C.light);
+        doc.roundedRect(bx, y, boxW, 18, 2, 2, 'F');
+        sf(b.color);
+        doc.rect(bx, y, 3, 18, 'F');
+        sans('bold', 17);
+        sc(b.color);
+        doc.text(b.value, bx + 8, y + 12);
+        sans('normal', 9);
+        sc(C.slate);
+        doc.text(b.label, bx + 8, y + 17);
+      });
+      y += 26;
+
+      // ── PLATFORM BREAKDOWN TABLE ──────────────────────────────────────────
+      const pdfPlatformMap = {};
+      for (const post of pdfMergedPosts) {
+        if (post.status !== 'published' && !post.publishedAt && !post.metrics) continue;
+        const pl = (Array.isArray(post.platform) ? post.platform[0] : post.platform || 'other').toLowerCase();
+        if (!pdfPlatformMap[pl]) pdfPlatformMap[pl] = { pl, posts: 0, reach: 0, likes: 0, comments: 0, shares: 0 };
+        pdfPlatformMap[pl].posts++;
+        const mm = post.metrics || {};
+        pdfPlatformMap[pl].reach    += mm.reach || mm.impressions || 0;
+        pdfPlatformMap[pl].likes    += mm.likes || 0;
+        pdfPlatformMap[pl].comments += mm.comments || 0;
+        pdfPlatformMap[pl].shares   += mm.shares || 0;
+      }
+      const pdfPlatformRows = Object.values(pdfPlatformMap).sort((a, b) => b.posts - a.posts);
+
+      if (pdfPlatformRows.length > 0) {
+        checkY(pdfPlatformRows.length * 7 + 20);
+
+        // Section label
+        sf(C.dark); doc.rect(M, y, CW, 8, 'F');
+        sf(C.indigo); doc.rect(M, y, 2, 8, 'F');
+        sans('bold', 8); sc(C.white); doc.text('PLATFORM BREAKDOWN', M + 5, y + 5.5);
+        y += 12;
+
+        const pCols = [
+          { label: 'Platform',    w: 30 },
+          { label: 'Posts',       w: 16 },
+          { label: 'Reach',       w: 24 },
+          { label: 'Likes',       w: 20 },
+          { label: 'Comments',    w: 24 },
+          { label: 'Shares',      w: 20 },
+          { label: 'Eng. Rate',   w: 20 },
+        ];
+        let hx = M;
+        pCols.forEach(c => { sans('bold', 6.5); sc(C.faint); doc.text(c.label.toUpperCase(), hx, y); hx += c.w; });
+        y += 5;
+
+        for (const row of pdfPlatformRows) {
+          const eng = row.likes + row.comments + row.shares;
+          const er  = row.reach > 0 ? ((eng / row.reach) * 100).toFixed(1) + '%' : '—';
+          const plStyle = getPlatformStyle(row.pl);
+          const rowVals = [
+            { v: row.pl.charAt(0).toUpperCase() + row.pl.slice(1), w: 30, bold: true },
+            { v: String(row.posts),    w: 16 },
+            { v: fmtNum(row.reach),    w: 24 },
+            { v: fmtNum(row.likes),    w: 20 },
+            { v: fmtNum(row.comments), w: 24 },
+            { v: fmtNum(row.shares),   w: 20 },
+            { v: er,                   w: 20, color: C.engGreen },
+          ];
+          // Subtle row stripe on alternates
+          if (pdfPlatformRows.indexOf(row) % 2 === 0) {
+            sf(C.sectionBg); doc.setLineWidth(0);
+            doc.rect(M, y - 3.5, CW, 7, 'F');
+          }
+          let rx = M;
+          rowVals.forEach(cell => {
+            if (cell.bold) { sans('bold', 7); sc(C.body); }
+            else if (cell.color) { sans('bold', 7); sc(cell.color); }
+            else { sans('normal', 7); sc(C.body); }
+            doc.text(sanitize(cell.v), rx, y);
+            rx += cell.w;
+          });
+          y += 7;
+        }
+        hairline(); ss(C.border);
+        doc.line(M, y, PW - M, y);
+        y += 10;
+      }
+
+      // ── STATUS DISTRIBUTION ───────────────────────────────────────────────
+      const pdfStatusCounts = {};
+      for (const a of report.assignments) {
+        const latest = a.versions?.[a.versions.length - 1];
+        const s = (latest?.status || 'pending').toLowerCase();
+        const key = ['submitted', 'in_review', 'under_review'].includes(s) ? 'in_review'
+          : s === 'revision_requested' ? 'revision' : s;
+        pdfStatusCounts[key] = (pdfStatusCounts[key] || 0) + 1;
+      }
+      const pdfStatusTotal = report.assignments.length || 1;
+      const pdfStatusMeta = {
+        published: { label: 'Published', rgb: [30,  126, 82]  },
+        approved:  { label: 'Approved',  rgb: [56,  159, 95]  },
+        in_review: { label: 'In Review', rgb: [198, 148, 42]  },
+        revision:  { label: 'Revision',  rgb: [200, 110, 42]  },
+        rejected:  { label: 'Rejected',  rgb: [185,  65, 65]  },
+        pending:   { label: 'Pending',   rgb: [180, 192, 205] },
+      };
+      const pdfStatusRows = ['published', 'approved', 'in_review', 'revision', 'rejected', 'pending']
+        .filter(k => pdfStatusCounts[k] > 0)
+        .map(k => ({ ...pdfStatusMeta[k], count: pdfStatusCounts[k], pct: Math.round((pdfStatusCounts[k] / pdfStatusTotal) * 100) }));
+
+      if (pdfStatusRows.length > 0) {
+        checkY(36);
+        sf(C.dark); doc.rect(M, y, CW, 8, 'F');
+        sf(C.indigo); doc.rect(M, y, 2, 8, 'F');
+        sans('bold', 8); sc(C.white); doc.text('STATUS DISTRIBUTION', M + 5, y + 5.5);
+        y += 12;
+
+        // Segmented bar (rounded, with gaps between segments)
+        const barH = 7;
+        let barX = M;
+        for (const sr of pdfStatusRows) {
+          const segW = (sr.pct / 100) * CW;
+          if (segW < 0.5) continue;
+          doc.setFillColor(...sr.rgb);
+          doc.setLineWidth(0);
+          doc.rect(barX, y, segW - 0.5, barH, 'F');
+          barX += segW;
+        }
+        // Bar border
+        hairline(); ss(C.border); doc.setFillColor(0, 0, 0, 0);
+        doc.roundedRect(M, y, CW, barH, 1.5, 1.5, 'D');
+        y += barH + 5;
+
+        // Legend dots
+        let legX = M, legY = y;
+        for (const sr of pdfStatusRows) {
+          sans('normal', 6.5); sc(C.body);
+          const lw = doc.getTextWidth(`${sr.label} ${sr.count} (${sr.pct}%)`) + 10;
+          if (legX + lw > PW - M) { legX = M; legY += 6.5; }
+          doc.setFillColor(...sr.rgb); doc.setLineWidth(0);
+          doc.circle(legX + 1.5, legY - 1.5, 1.5, 'F');
+          sc(C.body);
+          doc.text(`${sr.label} `, legX + 5, legY);
+          sans('bold', 6.5); sc(C.muted);
+          doc.text(`${sr.count} (${sr.pct}%)`, legX + 5 + doc.getTextWidth(`${sr.label} `), legY);
+          legX += lw;
+        }
+        y = legY + 9;
+      }
+
+      // ── TOP PERFORMING CONTENT ────────────────────────────────────────────
+      const pdfTopPerformers = report.assignments
+        .map(a => {
+          const posts = liveMetricsCache[a.assignmentId]?.posts || [];
+          const reach = posts.reduce((s, p) => s + (p.metrics?.reach || p.metrics?.impressions || 0), 0);
+          const eng   = posts.reduce((s, p) => s + (p.metrics?.likes || 0) + (p.metrics?.comments || 0) + (p.metrics?.shares || 0), 0);
+          return { ...a, _reach: reach, _eng: eng, _rate: reach > 0 ? ((eng / reach) * 100).toFixed(1) : null };
+        })
+        .filter(a => a._eng > 0 || a._reach > 0)
+        .sort((a, b) => b._eng - a._eng)
+        .slice(0, 3);
+
+      if (pdfTopPerformers.length > 0) {
+        checkY(54);
+        sf(C.dark); doc.rect(M, y, CW, 8, 'F');
+        sf(C.indigo); doc.rect(M, y, 2, 8, 'F');
+        sans('bold', 8); sc(C.white); doc.text('TOP PERFORMING CONTENT', M + 5, y + 5.5);
+        y += 12;
+
+        const tpCount = pdfTopPerformers.length;
+        const tpTileW = (CW - (tpCount - 1) * 5) / tpCount;
+        const tpTileH = 40;
+
+        pdfTopPerformers.forEach((a, i) => {
+          const tx = M + i * (tpTileW + 5);
+          // Card bg — first is lightly tinted
+          sf(i === 0 ? [252, 250, 237] : C.sectionBg);
+          hairline(); ss(i === 0 ? [210, 185, 80] : C.borderLight);
+          doc.roundedRect(tx, y, tpTileW, tpTileH, 2, 2, 'FD');
+
+          // Rank badge
+          const rankBg = i === 0 ? [198, 168, 42] : [185, 195, 210];
+          sf(rankBg); doc.setLineWidth(0);
+          doc.roundedRect(tx + 3, y + 3.5, 10, 6, 1.5, 1.5, 'F');
+          sans('bold', 6.5); sc([255, 255, 255]);
+          doc.text(`#${i + 1}`, tx + 8, y + 8, { align: 'center' });
+
+          // Title
+          sans('normal', 7.5); sc(C.ink);
+          const tpTitle = doc.splitTextToSize(
+            sanitize(a.itemTitle || a.caption?.slice(0, 50) || `Item ${i + 1}`),
+            tpTileW - 10
+          ).slice(0, 2);
+          doc.text(tpTitle, tx + 3.5, y + 15);
+
+          // Creator name
+          sans('normal', 6); sc(C.muted);
+          doc.text(sanitize(a.creatorName || '—'), tx + 3.5, y + 15 + tpTitle.length * 5.5);
+
+          // Stats row at bottom
+          const statsY = y + tpTileH - 9;
+          hairline(); ss(C.borderLight);
+          doc.line(tx + 3, statsY - 3, tx + tpTileW - 3, statsY - 3);
+
+          const statItems = [
+            { v: fmtNum(a._eng),   l: 'Eng'   },
+            { v: fmtNum(a._reach), l: 'Reach'  },
+            ...(a._rate ? [{ v: `${a._rate}%`, l: 'Rate' }] : []),
+          ];
+          const statW = (tpTileW - 6) / 3;
+          statItems.forEach((st, si) => {
+            const sx = tx + 3 + si * statW;
+            serif('normal', 9); sc(C.ink);
+            doc.text(st.v, sx, statsY + 1);
+            sans('normal', 5.5); sc(C.faint);
+            doc.text(st.l.toUpperCase(), sx, statsY + 6);
+          });
+        });
+        y += tpTileH + 10;
+      }
+
+      // ── TWO-COLUMN: Content Type + Creator Performance ────────────────────
+      const pdfTypeMap = {};
+      for (const a of report.assignments) {
+        const t = (a.mediaType || 'image').toLowerCase();
+        const label = t === 'carousel' ? 'Carousel' : t === 'video' ? 'Video' : 'Image';
+        if (!pdfTypeMap[label]) pdfTypeMap[label] = { label, count: 0, eng: 0, reach: 0 };
+        pdfTypeMap[label].count++;
+        for (const p of (liveMetricsCache[a.assignmentId]?.posts || [])) {
+          if (!p.metrics) continue;
+          pdfTypeMap[label].eng   += (p.metrics.likes || 0) + (p.metrics.comments || 0) + (p.metrics.shares || 0);
+          pdfTypeMap[label].reach += p.metrics.reach || p.metrics.impressions || 0;
+        }
+      }
+      const pdfTypeRows = Object.values(pdfTypeMap).sort((a, b) => b.count - a.count);
+
+      const pdfCreatorMap = {};
+      for (const a of report.assignments) {
+        const name = a.creatorName || 'Unknown';
+        if (!pdfCreatorMap[name]) pdfCreatorMap[name] = { name, assigned: 0, approved: 0, totalV: 0 };
+        pdfCreatorMap[name].assigned++;
+        pdfCreatorMap[name].totalV += a.totalVersions || 1;
+        if (a.versions?.some(v => ['approved', 'published'].includes((v.status || '').toLowerCase())))
+          pdfCreatorMap[name].approved++;
+      }
+      const pdfCreatorRows = Object.values(pdfCreatorMap).sort((a, b) => b.assigned - a.assigned);
+
+      const colGap = 8;
+      const halfW  = (CW - colGap) / 2;
+      const colRX  = M + halfW + colGap;
+
+      const typeH = pdfTypeRows.length > 0 ? pdfTypeRows.length * 12 + 18 : 0;
+      const crtrH = pdfCreatorRows.length > 0 ? Math.min(pdfCreatorRows.length, 6) * 8 + 22 : 0;
+      const twoColH = Math.max(typeH, crtrH);
+
+      if (twoColH > 0) {
+        checkY(Math.min(twoColH + 6, 100));
+        const twoColY = y;
+
+        // Left: Content Type Breakdown
+        if (pdfTypeRows.length > 0) {
+          sf(C.dark); doc.rect(M, twoColY, halfW, 8, 'F');
+          sf(C.indigo); doc.rect(M, twoColY, 2, 8, 'F');
+          sans('bold', 8); sc(C.white); doc.text('CONTENT TYPE BREAKDOWN', M + 5, twoColY + 5.5);
+          let ty = twoColY + 14;
+
+          for (const ct of pdfTypeRows) {
+            const pct = totalItems > 0 ? Math.round((ct.count / totalItems) * 100) : 0;
+            const er = ct.reach > 0 ? ((ct.eng / ct.reach) * 100).toFixed(1) + '%' : null;
+
+            sans('bold', 7.5); sc(C.body);
+            doc.text(sanitize(ct.label), M, ty);
+
+            sans('normal', 6.5); sc(C.muted);
+            const stat = `${ct.count} items (${pct}%)${er ? `  ·  ${er}` : ''}`;
+            doc.text(sanitize(stat), M + halfW, ty, { align: 'right' });
+
+            ty += 4;
+            // Bar track
+            sf(C.borderLight); doc.setLineWidth(0);
+            doc.roundedRect(M, ty, halfW, 3, 1.5, 1.5, 'F');
+            // Fill bar
+            sf(C.accent); doc.setLineWidth(0);
+            doc.roundedRect(M, ty, Math.max((pct / 100) * halfW, 2), 3, 1.5, 1.5, 'F');
+            ty += 8;
+          }
+        }
+
+        // Right: Creator Performance table
+        if (pdfCreatorRows.length > 0) {
+          sf(C.dark); doc.rect(colRX, twoColY, halfW, 8, 'F');
+          sf(C.indigo); doc.rect(colRX, twoColY, 2, 8, 'F');
+          sans('bold', 8); sc(C.white); doc.text('CREATOR PERFORMANCE', colRX + 5, twoColY + 5.5);
+
+          let hry = twoColY + 14;
+          const crCols = [
+            { label: 'Creator', x: colRX,      w: 40 },
+            { label: 'Items',   x: colRX + 40, w: 18 },
+            { label: 'Appr.',   x: colRX + 58, w: 22 },
+            { label: 'Avg Rev', x: colRX + 80, w: 18 },
+          ];
+          crCols.forEach(c => { sans('bold', 6.5); sc(C.faint); doc.text(c.label.toUpperCase(), c.x, hry); });
+          hry += 2;
+          hairline(); ss(C.border);
+          doc.line(colRX, hry, colRX + halfW, hry);
+          hry += 5;
+
+          const displayCreators = pdfCreatorRows.slice(0, 6);
+          for (const c of displayCreators) {
+            const apprPct = c.assigned > 0 ? Math.round((c.approved / c.assigned) * 100) : 0;
+            const avgRev  = c.assigned > 0 ? (c.totalV / c.assigned).toFixed(1) : '—';
+
+            sans('bold', 7); sc(C.body);
+            doc.text(sanitize(c.name).slice(0, 30), colRX, hry);
+            sans('normal', 7); sc(C.body);
+            doc.text(String(c.assigned), colRX + 40, hry);
+            doc.text(`${c.approved} (${apprPct}%)`, colRX + 58, hry);
+            doc.text(String(avgRev), colRX + 80, hry);
+            hry += 8;
+          }
+          if (pdfCreatorRows.length > 6) {
+            sans('normal', 6); sc(C.faint);
+            doc.text(`+ ${pdfCreatorRows.length - 6} more creators`, colRX, hry);
+          }
+        }
+
+        y = twoColY + twoColH + 8;
+      }
+
+      // ── Section divider before content items ─────────────────────────────
+      sf(C.dark); doc.rect(M, y, CW, 8, 'F');
+      sf(C.indigo); doc.rect(M, y, 2, 8, 'F');
+      sans('bold', 8); sc(C.white); doc.text('CONTENT ITEMS', M + 5, y + 5.5);
+      
+      sans('normal', 7); sc(C.faint);
+      doc.text(`${report.assignments.length} item${report.assignments.length !== 1 ? 's' : ''}`, PW - M - 2, y + 5.5, { align: 'right' });
+      y += 14;
+
+      // ════════════════════════════════════════════════════════════════════
+      //  CONTENT ITEM CARDS
+      // ════════════════════════════════════════════════════════════════════
+      for (let ai = 0; ai < report.assignments.length; ai++) {
+        const assignment = report.assignments[ai];
+        try {
+          const asmAllPosts     = getPdfPosts(assignment);
+          const asmMetricsPosts = asmAllPosts.filter(p => p.status === 'published' || p.publishedAt || p.metrics);
+          const hasMetrics      = asmMetricsPosts.length > 0;
+
+          const asmPlatforms = [...new Set([
+            ...(Array.isArray(assignment.platforms) ? assignment.platforms.flat() : []),
+            ...(Array.isArray(assignment.platform) ? assignment.platform : (assignment.platform ? [assignment.platform] : [])),
+            // Include platforms from the actual scheduled/published posts
+            ...asmAllPosts.map(p => Array.isArray(p.platform) ? p.platform[0] : p.platform).filter(Boolean),
+          ].filter(p => p && typeof p === 'string').map(p => p.toLowerCase().trim()))];
+
+          const collectMediaImages = (mediaArr) =>
+            (mediaArr || []).map(m => typeof m === 'string' ? m : (m?.url || m?.publicUrl || ''))
+                            .filter(u => u && !isVideoUrl(u));
+
+          const allThumbs = (() => {
+            const urls = [];
+            if (assignment.thumbnail && !isVideoUrl(assignment.thumbnail))
+              urls.push(assignment.thumbnail);
+            if (Array.isArray(assignment.versions)) {
+              for (const v of assignment.versions) {
+                for (const u of collectMediaImages(v.media)) {
+                  if (!urls.includes(u)) urls.push(u);
+                }
+              }
+            }
+            if (urls.length === 0 && assignment.thumbnail) urls.push(assignment.thumbnail);
+            return urls;
+          })();
+
+          const THUMB_SZ       = 26;
+          const THUMB_GAP      = 3;
+          const showThumbCount = Math.min(allThumbs.length, 4);
+          const hasThumbs      = showThumbCount > 0;
+
+          // Estimate card height
+          sans('normal', 14);
+          const itemTitleText  = sanitize(assignment.itemTitle || assignment.caption?.slice(0, 60) || `Item ${ai + 1}`);
+          const titleLinesEst  = doc.splitTextToSize(itemTitleText, CW - 65).length;
+          const estCardH = (
+            10 +
+            Math.max(titleLinesEst * 7, 12) + 4 +
+            6 + 4 +
+            (asmPlatforms.length > 0 ? 11 : 0) +
+            (hasThumbs ? THUMB_SZ + 7 : 0) +
+            (assignment.versions?.length > 0 ? 14 : 0) +
+            8 +
+            (hasMetrics ? 30 : 14) +
+            10
+          );
+          checkY(Math.min(estCardH, 95));
+
+          const cardStartY = y;
+          const CARD_PAD   = 7;
+          const innerX     = M + CARD_PAD;
+          const innerW     = CW - CARD_PAD * 2;
+          y += CARD_PAD + 2;
+
+          // ── Item Card Header ───────────────────────────────────────────────
+          sf(C.dark);
+          doc.roundedRect(M, y, CW, 15, 2, 2, 'F');
+          sf(C.indigo);
+          doc.rect(M, y, 3, 15, 'F');
+
+          // Item Title
+          sans('bold', 11); sc(C.white);
+          const clip = (str, len) => str && str.length > len ? str.slice(0, len) + '...' : str;
+          doc.text(`${ai + 1}. ${clip(itemTitleText, 50)}`, M + 6, y + 6.5);
+
+          // Creator info + Date
+          sans('normal', 9); sc([148, 163, 184]);
+          const creatorName = sanitize(assignment.creatorName || '—');
+          const createdStr = assignment.firstSubmittedAt ? new Date(assignment.firstSubmittedAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+          doc.text(`${creatorName}  |  Created: ${createdStr}`, M + 6, y + 12.5);
+
+          // Status Badge
+          const currStatus = (assignment.currentStatus || 'pending').toLowerCase();
+          const sColor = { approved: C.green, rejected: C.red, published: [5, 150, 105] }[currStatus] || C.slate;
+          sans('bold', 10); sc(sColor);
+          doc.text(currStatus.toUpperCase(), PW - M - 3, y + 6.5, { align: 'right' });
+
+          // MediaType and Version count
+          const mt = (assignment.mediaType || 'image').toLowerCase();
+          const mtStr = mt === 'carousel' ? `Carousel · ${assignment.slideCount || '?'} slides` : mt === 'video' ? 'Video' : `Image · ${assignment.slideCount || 1} slide`;
+          sans('normal', 9); sc([203, 213, 225]);
+          doc.text(`${mtStr}  |  ${assignment.totalVersions || 1} versions`, PW - M - 3, y + 12.5, { align: 'right' });
+
+          y += 20;
+
+          // ── Platform pills ─────────────────────────────────────────────
+          if (asmPlatforms.length > 0) {
+            let pillX = innerX;
+            for (const pl of asmPlatforms) {
+              const plStyle = getPlatformStyle(pl);
+              sans('normal', 6.5);
+              const pillW = doc.getTextWidth(plStyle.label) + 8;
+              if (pillX + pillW > M + CW - CARD_PAD) break;
+              sf(plStyle.bg); hairline(); ss(plStyle.bg);
+              doc.roundedRect(pillX, y, pillW, 6.5, 3, 3, 'F');
+              sc(plStyle.tc);
+              doc.text(plStyle.label, pillX + pillW / 2, y + 4.7, { align: 'center' });
+              pillX += pillW + 3;
+            }
+            y += 11;
+          }
+
+          // ── Approval History ───────────────────────────────────────────
+          const pdfUploadedAt = assignment.firstSubmittedAt;
+          const pdfApprovedVer = [...(assignment.versions || [])].reverse().find(v => v.approvedAt || (v.status === 'approved' && v.submittedAt));
+          const pdfApprovedAt = pdfApprovedVer ? (pdfApprovedVer.approvedAt || pdfApprovedVer.submittedAt) : null;
+          let pdfDaysToApproval = null;
+          if (pdfUploadedAt && pdfApprovedAt) {
+            pdfDaysToApproval = Math.max(0, (new Date(pdfApprovedAt) - new Date(pdfUploadedAt)) / (1000 * 60 * 60 * 24)).toFixed(1);
+          }
+
+          checkY(20);
+          sf([248, 250, 252]); hairline(); ss(C.borderLight);
+          doc.roundedRect(innerX, y, innerW, 13, 2, 2, 'FD');
+          sans('bold', 6); sc(C.muted);
+          doc.text('APPROVAL HISTORY', innerX + 4, y + 5);
+          sans('normal', 7.5); sc(C.body);
+          
+          let ahX = innerX + 4;
+          doc.text(`Uploaded: ${pdfUploadedAt ? new Date(pdfUploadedAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}`, ahX, y + 10);
+          ahX += 45;
+          doc.text(`Approved: ${pdfApprovedAt ? new Date(pdfApprovedAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Pending'}`, ahX, y + 10);
+          ahX += 45;
+          if (pdfDaysToApproval !== null) {
+            doc.text(`Turnaround: ${pdfDaysToApproval}d`, ahX, y + 10);
+          }
+          y += 18;
+
+          // ── Item Caption & Hashtags ──
+          const asmCaption = assignment.caption ? assignment.caption.trim() : '';
+          const asmHashtags = assignment.hashtags ? assignment.hashtags.trim() : '';
+          const rawChText = [asmCaption, asmHashtags].filter(Boolean).join('\n\n');
+          
+          if (rawChText) {
+            const imgData = textImageCache[`caption_${ai}`];
+            if (imgData && imgData.url) {
+              const lineH = imgData.hMm + 4;
+              checkY(lineH + 12);
+              
+              sans('bold', 8); sc(C.slate);
+              doc.text('CAPTION & HASHTAGS', innerX + 2, y + 5);
+              y += 7;
+              
+              sf([248, 250, 252]); hairline(); ss(C.borderLight);
+              doc.roundedRect(innerX, y, innerW, lineH, 1, 1, 'F');
+              
+              doc.addImage(imgData.url, 'PNG', innerX + 5, y + 2, innerW - 10, imgData.hMm);
+              y += lineH + 6;
+            } else {
+              // Fallback
+              const chText = sanitize(rawChText);
+              // Handle newlines explicitly for jsPDF splitTextToSize
+              const paragraphs = chText.split('\n');
+              const wrappedLines = [];
+              paragraphs.forEach(p => {
+                if (p.trim() === '') wrappedLines.push('');
+                else wrappedLines.push(...doc.splitTextToSize(p, innerW - 10));
+              });
+              
+              const lineH = Math.max(wrappedLines.length * 4 + 6, 9);
+              checkY(lineH + 12);
+              
+              sans('bold', 8); sc(C.slate);
+              doc.text('CAPTION & HASHTAGS', innerX + 2, y + 5);
+              y += 7;
+              
+              sf([248, 250, 252]); hairline(); ss(C.borderLight);
+              doc.roundedRect(innerX, y, innerW, lineH, 1, 1, 'F');
+              
+              sans('normal', 8); sc(C.dark);
+              wrappedLines.forEach((line, li) => {
+                doc.text(line, innerX + 5, y + 5 + li * 4);
+              });
+              y += lineH + 6;
+            }
+          }
+
+          // ── Thumbnail strip ────────────────────────────────────────────
+          if (hasThumbs) {
+            let thumbX = innerX;
+            for (let ti = 0; ti < showThumbCount; ti++) {
+              const thumbUrl = allThumbs[ti];
+              const cached   = thumbCache[thumbUrl];
+              const isVideoUrlType = isVideoUrl(thumbUrl);
+
+              if (cached && cached !== 'VIDEO') {
+                try {
+                  const fmt = cached.startsWith('data:image/png') ? 'PNG' : 'JPEG';
+                  const props    = doc.getImageProperties(cached);
+                  const imgRatio = props.width / props.height;
+                  let fitW, fitH;
+                  if (imgRatio > 1) { fitW = THUMB_SZ; fitH = THUMB_SZ / imgRatio; }
+                  else              { fitH = THUMB_SZ; fitW = THUMB_SZ * imgRatio; }
+                  const offX = (THUMB_SZ - fitW) / 2;
+                  const offY = (THUMB_SZ - fitH) / 2;
+                  sf(C.sectionBg); doc.setLineWidth(0);
+                  doc.roundedRect(thumbX, y, THUMB_SZ, THUMB_SZ, 2, 2, 'F');
+                  doc.addImage(cached, fmt, thumbX + offX, y + offY, fitW, fitH, undefined, 'FAST');
+                  hairline(); ss(C.borderLight); doc.setFillColor(0, 0, 0, 0);
+                  doc.roundedRect(thumbX, y, THUMB_SZ, THUMB_SZ, 2, 2, 'D');
+
+                  if (isVideoUrlType) {
+                    const cx = thumbX + THUMB_SZ / 2, cy = y + THUMB_SZ / 2, r = 5;
+                    doc.setFillColor(0, 0, 0, 0.45);
+                    doc.circle(cx, cy, r, 'F');
+                    doc.setFillColor(255, 255, 255);
+                    doc.triangle(cx - 1.5, cy - 2.5, cx - 1.5, cy + 2.5, cx + 2.8, cy, 'F');
+                  }
+                } catch {
+                  sf(C.sectionBg); hairline(); ss(C.borderLight);
+                  doc.roundedRect(thumbX, y, THUMB_SZ, THUMB_SZ, 2, 2, 'FD');
+                  sans('normal', 6.5); sc(C.faint);
+                  doc.text('—', thumbX + THUMB_SZ / 2, y + THUMB_SZ / 2 + 2, { align: 'center' });
+                }
+              } else if (cached === 'VIDEO' || isVideoUrlType) {
+                sf([45, 50, 58]); hairline(); ss(C.borderLight);
+                doc.roundedRect(thumbX, y, THUMB_SZ, THUMB_SZ, 2, 2, 'FD');
+                const cx = thumbX + THUMB_SZ / 2, cy = y + THUMB_SZ / 2 - 2;
+                sf([255, 255, 255]); doc.setLineWidth(0);
+                doc.triangle(cx - 3.5, cy - 4.5, cx - 3.5, cy + 4.5, cx + 5, cy, 'F');
+              } else {
+                sf(C.sectionBg); hairline(); ss(C.borderLight);
+                doc.roundedRect(thumbX, y, THUMB_SZ, THUMB_SZ, 2, 2, 'FD');
+                sans('normal', 6.5); sc(C.faint);
+                doc.text('No img', thumbX + THUMB_SZ / 2, y + THUMB_SZ / 2 + 2, { align: 'center' });
+              }
+
+              // Slide label below thumbnail
+              sans('normal', 5.5); sc(C.faint);
+              const barLabel = isVideoUrlType ? 'VIDEO' : `Slide ${ti + 1}`;
+              doc.text(barLabel, thumbX + THUMB_SZ / 2, y + THUMB_SZ + 3.5, { align: 'center' });
+
+              thumbX += THUMB_SZ + THUMB_GAP;
+            }
+            // +N more badge
+            const extraSlides = Math.max(0, (assignment.slideCount || allThumbs.length) - showThumbCount);
+            if (extraSlides > 0) {
+              sf(C.sectionBg); hairline(); ss(C.borderLight);
+              doc.roundedRect(thumbX, y, THUMB_SZ, THUMB_SZ, 2, 2, 'FD');
+              sans('bold', 8); sc(C.muted);
+              doc.text(`+${extraSlides}`, thumbX + THUMB_SZ / 2, y + THUMB_SZ / 2 + 2, { align: 'center' });
+              sans('normal', 5.5); sc(C.faint);
+              doc.text('more', thumbX + THUMB_SZ / 2, y + THUMB_SZ + 3.5, { align: 'center' });
+            }
+            y += THUMB_SZ + 8;
+          }
+
+          // ── Versions: vertical rows ───────────────────────────────
+          if (assignment.versions?.length > 0) {
+            hairline(); ss(C.borderLight);
+            doc.line(innerX, y, M + CW - CARD_PAD, y);
+            y += 5;
+
+            assignment.versions.forEach((v, idx) => {
+              checkY(14);
+
+              // ── Version header bar ──
+              const vBg = [245, 247, 255];
+              sf(vBg); doc.setLineWidth(0);
+              doc.roundedRect(innerX, y, innerW, 11, 1, 1, 'F');
+              sf(C.indigo);
+              doc.rect(innerX, y, 2.5, 11, 'F');
+
+              sans('bold', 10); sc(C.indigo);
+              doc.text(`v${v.versionNumber || (idx + 1)}`, innerX + 5, y + 7.5);
+
+              sans('normal', 8); sc(C.dark);
+              const vCreatedBy = sanitize(v.created_by || assignment.creatorName || 'Unknown');
+              const vCreatedDt = v.submittedAt ? new Date(v.submittedAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+              doc.text(`Uploaded by ${clip(vCreatedBy, 28)}  on  ${vCreatedDt}`, innerX + 13, y + 4.5);
+
+              // Version status
+              const rawStatus = String(v.status || '—');
+              const vsLabel = rawStatus.replace(/_/g, ' ');
+              const vsColor = { approved: C.green, rejected: C.red, published: [5, 150, 105] }[rawStatus.toLowerCase()] || C.slate;
+              sans('bold', 8); sc(vsColor);
+              doc.text(vsLabel.toUpperCase(), innerX + innerW - 4, y + 4.5, { align: 'right' });
+
+              y += 13;
+
+              y += 5; // space before comments or next version
+
+              // ── Image thumbnails ──
+              const vMediaUrls = (Array.isArray(v.media) ? v.media : [])
+                .map(m => typeof m === 'string' ? m : (m?.url || m?.publicUrl || ''))
+                .filter(Boolean);
+              if (vMediaUrls.length > 0) {
+                const THUMB = 24;
+                const GAP   = 3;
+                const maxPerRow = Math.floor((innerW - 10) / (THUMB + GAP));
+                const thumbsToShow = vMediaUrls.slice(0, maxPerRow);
+                checkY(THUMB + 6);
+                let tx = innerX + 2;
+                thumbsToShow.forEach((imgUrl) => {
+                  const cached = thumbCache[imgUrl];
+                  const vIsVidType = isVideoUrl(imgUrl);
+                  
+                  if (!cached || cached === 'VIDEO') {
+                    sf(C.border); hairline(); ss(C.borderLight);
+                    doc.roundedRect(tx, y, THUMB, THUMB, 1, 1, 'FD');
+                    sans('bold', 7); sc(C.slate);
+                    doc.text(vIsVidType ? 'VIDEO' : 'IMG', tx + THUMB / 2, y + THUMB / 2 + 2, { align: 'center' });
+                  } else {
+                    try {
+                      const fmt = cached.startsWith('data:image/png') ? 'PNG' : 'JPEG';
+                      const props = doc.getImageProperties(cached);
+                      const imgRatio = props.width / props.height;
+                      let fitW, fitH;
+                      if (imgRatio > 1) { fitW = THUMB; fitH = THUMB / imgRatio; }
+                      else              { fitH = THUMB; fitW = THUMB * imgRatio; }
+                      const offX = (THUMB - fitW) / 2;
+                      const offY = (THUMB - fitH) / 2;
+                      
+                      sf(C.sectionBg); doc.setLineWidth(0);
+                      doc.roundedRect(tx, y, THUMB, THUMB, 1, 1, 'F');
+                      doc.addImage(cached, fmt, tx + offX, y + offY, fitW, fitH, undefined, 'FAST');
+                      hairline(); ss(C.borderLight); doc.setFillColor(0, 0, 0, 0);
+                      doc.roundedRect(tx, y, THUMB, THUMB, 1, 1, 'S');
+
+                      if (vIsVidType) {
+                        const vcx = tx + THUMB / 2, vcy = y + THUMB / 2, r = 4;
+                        doc.setFillColor(0, 0, 0, 0.45);
+                        doc.circle(vcx, vcy, r, 'F');
+                        doc.setFillColor(255, 255, 255);
+                        doc.triangle(vcx - 1.2, vcy - 2, vcx - 1.2, vcy + 2, vcx + 2.2, vcy, 'F');
+                      }
+                    } catch { /* skip broken image */ }
+                  }
+                  tx += THUMB + GAP;
+                });
+                if (vMediaUrls.length > maxPerRow) {
+                  sans('normal', 8.5); sc(C.slate);
+                  doc.text(`+${vMediaUrls.length - maxPerRow} more`, tx, y + THUMB / 2 + 2);
+                }
+                y += THUMB + 5;
+              }
+
+              // ── Comments ──
+              const comments = v.comments || [];
+              if (comments.length > 0) {
+                checkY(10);
+                sans('bold', 8); sc(C.slate);
+                doc.text(`COMMENTS (${comments.length})`, innerX + 2, y + 5);
+                y += 7;
+
+                comments.forEach((c, ci) => {
+                  const rawTextBody = `${c.comment}${c.done ? '  ✓ Done' : ''}`;
+                  const imgData = textImageCache[`comment_${ai}_${idx}_${ci}`];
+                  
+                  if (imgData && imgData.url) {
+                    const lineH = imgData.hMm + 6;
+                    checkY(lineH + 2);
+
+                    sf(c.done ? C.light : [255, 251, 235]); hairline(); ss(C.borderLight);
+                    doc.roundedRect(innerX + 2, y, innerW - 5, lineH, 1, 1, 'F');
+
+                    if (c.author && c.author !== 'Unknown') {
+                      const authorColor = c.author === 'Admin' ? C.indigo : C.green;
+                      sans('bold', 8); sc(authorColor);
+                      doc.text(`${c.author}:`, innerX + 5, y + 5);
+                    }
+                    const authorW = (c.author && c.author !== 'Unknown') ? doc.getTextWidth(`${c.author}: `) : 0;
+                    
+                    doc.addImage(imgData.url, 'PNG', innerX + 5 + authorW + 1, y + 1.5, innerW - 25, imgData.hMm);
+                    y += lineH + 2;
+                  } else {
+                    const textBody = sanitize(rawTextBody);
+                    const wrappedLines = doc.splitTextToSize(textBody, innerW - 25);
+                    const lineH = Math.max(wrappedLines.length * 4 + 6, 9);
+                    checkY(lineH + 2);
+
+                    sf(c.done ? C.light : [255, 251, 235]); hairline(); ss(C.borderLight);
+                    doc.roundedRect(innerX + 2, y, innerW - 5, lineH, 1, 1, 'F');
+
+                    if (c.author && c.author !== 'Unknown') {
+                      const authorColor = c.author === 'Admin' ? C.indigo : C.green;
+                      sans('bold', 8); sc(authorColor);
+                      doc.text(`${c.author}:`, innerX + 5, y + 5);
+                    }
+                    const authorW = (c.author && c.author !== 'Unknown') ? doc.getTextWidth(`${c.author}: `) : 0;
+                    
+                    sans('normal', 8); sc(C.dark);
+                    wrappedLines.forEach((line, li) => {
+                      doc.text(line, innerX + 5 + authorW + 1, y + 5 + li * 4);
+                    });
+                    y += lineH + 2;
+                  }
+                });
+              } else {
+                checkY(7);
+                sf(C.light); doc.setLineWidth(0);
+                doc.roundedRect(innerX + 2, y, innerW - 5, 6, 1, 1, 'F');
+                sans('italic', 8); sc(C.slate);
+                doc.text('No comments on this version.', innerX + 5, y + 4.5);
+                y += 8;
+              }
+
+              y += 3; // gap between versions
+            });
+            y += 2;
+          }
+
+          // ── Metrics divider ────────────────────────────────────────────
+          hairline(); ss(C.borderLight);
+          doc.line(innerX, y, M + CW - CARD_PAD, y);
+          y += 5;
+
+          // ── Metrics rows (per platform) ────────────────────────────────
+          if (hasMetrics) {
+            // Group published posts by platform
+            const platformPostsMap = {};
+            for (const post of asmMetricsPosts) {
+              const pl = (Array.isArray(post.platform) ? post.platform[0] : post.platform || 'other').toLowerCase();
+              if (!platformPostsMap[pl]) platformPostsMap[pl] = [];
+              platformPostsMap[pl].push(post);
+            }
+
+            const getPlMetricCols = (posts, pl) => {
+              let likes = 0, comments = 0, shares = 0, reach = 0, saves = 0,
+                  clicks = 0, impressions = 0, views = 0;
+              for (const p of posts) {
+                const m = p.metrics || {};
+                likes       += (m.likes        ?? m.likeCount       ?? 0);
+                comments    += (m.comments     ?? m.commentCount    ?? 0);
+                shares      += (m.shares       ?? m.shareCount      ?? 0);
+                clicks      += (m.clicks       ?? m.clickCount      ?? 0);
+                views       += (m.views        ?? m.videoViews      ?? 0);
+                saves       += (m.saves        ?? m.saved           ?? 0);
+                impressions += (m.impressions  ?? m.impressionCount ?? 0);
+                reach       += pl === 'linkedin'
+                  ? (m.uniqueImpressionsCount ?? m.impressionCount ?? m.reach ?? 0)
+                  : (m.reach ?? m.impressions ?? 0);
+              }
+              const eng     = likes + comments + shares;
+              const engRate = reach > 0 ? ((eng / reach) * 100).toFixed(1) + '%' : '—';
+              if (pl === 'instagram') return [
+                { label: 'Likes',    value: fmtNum(likes)    },
+                { label: 'Comments', value: fmtNum(comments) },
+                { label: 'Reach',    value: fmtNum(reach)    },
+                { label: 'Shares',   value: fmtNum(shares)   },
+                { label: 'Saves',    value: fmtNum(saves)    },
+                { label: 'Eng.Rate', value: engRate, isRate: true },
+              ];
+              if (pl === 'facebook') return [
+                { label: 'Likes',       value: fmtNum(likes)       },
+                { label: 'Comments',    value: fmtNum(comments)    },
+                { label: 'Shares',      value: fmtNum(shares)      },
+                { label: 'Impressions', value: fmtNum(impressions) },
+                { label: 'Clicks',      value: fmtNum(clicks)      },
+                { label: 'Eng.Rate',    value: engRate, isRate: true },
+              ];
+              if (pl === 'linkedin') return [
+                { label: 'Likes',       value: fmtNum(likes)       },
+                { label: 'Comments',    value: fmtNum(comments)    },
+                { label: 'Shares',      value: fmtNum(shares)      },
+                { label: 'Impressions', value: fmtNum(impressions) },
+                { label: 'Clicks',      value: fmtNum(clicks)      },
+                { label: 'Eng.Rate',    value: engRate, isRate: true },
+              ];
+              if (pl === 'youtube') return [
+                { label: 'Views',    value: fmtNum(views)    },
+                { label: 'Likes',    value: fmtNum(likes)    },
+                { label: 'Comments', value: fmtNum(comments) },
+                { label: 'Eng.Rate', value: engRate, isRate: true },
+              ];
+              return [
+                { label: 'Likes',    value: fmtNum(likes)       },
+                { label: 'Comments', value: fmtNum(comments)    },
+                { label: 'Shares',   value: fmtNum(shares)      },
+                { label: 'Reach',    value: fmtNum(reach)       },
+                { label: 'Eng.Rate', value: engRate, isRate: true },
+              ];
+            };
+
+            const ROW_H    = 22;
+            const PLABEL_W = 28;
+            for (const [pl, plPosts] of Object.entries(platformPostsMap)) {
+              const plStyle  = getPlatformStyle(pl);
+              const cols     = getPlMetricCols(plPosts, pl);
+              checkY(ROW_H + 4);
+
+              // Platform label badge
+              sf(plStyle.bg); doc.setLineWidth(0);
+              doc.roundedRect(innerX, y, PLABEL_W, ROW_H, 2, 2, 'F');
+              sans('bold', 6.5); sc(plStyle.tc);
+              doc.text(plStyle.label, innerX + PLABEL_W / 2, y + ROW_H / 2 + 2.5, { align: 'center' });
+
+              // Metric tile area
+              const metAreaX = innerX + PLABEL_W + 2;
+              const metAreaW = innerW - PLABEL_W - 2;
+              sf(C.sectionBg); doc.setLineWidth(0);
+              doc.roundedRect(metAreaX, y, metAreaW, ROW_H, 2, 2, 'F');
+
+              const colW = metAreaW / cols.length;
+              cols.forEach((mc, mi) => {
+                const mx = metAreaX + mi * colW;
+                if (mi > 0) { hairline(); ss(C.borderLight); doc.line(mx, y + 3, mx, y + ROW_H - 3); }
+                serif('normal', 11); sc(mc.isRate ? C.engGreen : C.ink);
+                doc.text(mc.value, mx + colW / 2, y + 12, { align: 'center' });
+                sans('bold', 5); sc(C.faint);
+                doc.text(mc.label.toUpperCase(), mx + colW / 2, y + ROW_H - 3, { align: 'center' });
+              });
+              y += ROW_H + 3;
+            }
+            y += 3;
+          } else {
+            sans('normal', 7); sc(C.faint);
+            doc.text('No performance metrics available', innerX + innerW / 2, y + 6, { align: 'center' });
+            y += 12;
+          }
+
+          y += CARD_PAD;
+
+          // ── Card border ────────────────────────────────────────────────
+          const cardH = y - cardStartY;
+          hairline(); ss(C.border);
+          doc.roundedRect(M, cardStartY, CW, cardH, 2.5, 2.5, 'D');
+
+          y += 5; // gap between cards
+
+        } catch (asmErr) {
+          console.warn('PDF: skipped assignment due to error', asmErr, assignment);
+        }
+      }
+
+      // ── Footer on every page ──────────────────────────────────────────────
+      const totalPages = doc.internal.getNumberOfPages();
+      for (let p = 1; p <= totalPages; p++) {
+        doc.setPage(p);
+        // Bottom accent rule
+        sf(C.sectionBg); doc.setLineWidth(0);
+        doc.rect(0, PH - 14, PW, 14, 'F');
+        hairline(); ss(C.border);
+        doc.line(0, PH - 14, PW, PH - 14);
+
+        sans('normal', 6.5); sc(C.muted);
+        doc.text(
+          `${sanitize(customerName)}  ·  ${sanitize(calendarName || 'All Calendars')}`,
+          M, PH - 6
+        );
+        doc.text(
+          `${sanitize(periodVal)}  ·  Page ${p} of ${totalPages}`,
+          PW - M, PH - 6, { align: 'right' }
+        );
+      }
+
+      // ── Save ──────────────────────────────────────────────────────────────
+      const safeCustomer = sanitize(customerName).replace(/[^a-z0-9]/gi, '_');
+      const safeCalendar = sanitize(calendarName || 'Report').replace(/[^a-z0-9]/gi, '_');
+      const dateStr      = new Date().toISOString().slice(0, 10);
+      const filename = `Content_Performance_Report_${safeCustomer}_${safeCalendar}_${dateStr}.pdf`;
+      return { doc, filename, customerName, calendarName };
+    } catch (err) {
+      console.error('PDF generation failed inside helper:', err);
+      throw err;
+    }
+  }, [customers, selectedCustomer, selectedCalendar, calendars, report, liveMetricsCache]);
+
+  const handleDownloadPDF = useCallback(async () => {
+    if (!report) return;
+    setPdfLoading(true);
+    try {
+      const result = await generatePDFDoc();
+      if (result) {
+        result.doc.save(result.filename);
+      }
+    } catch (err) {
+      alert(`Failed to generate PDF: ${err?.message || err}`);
+    } finally {
+      setPdfLoading(false);
+    }
+  }, [report, generatePDFDoc]);
+
+  const handleSendToCustomer = useCallback(async () => {
+    if (!report) return;
+    const confirmSend = window.confirm("Are you sure you want to send this report to the customer via email?");
+    if (!confirmSend) return;
+
+    setEmailLoading(true);
+    try {
+      const result = await generatePDFDoc();
+      if (!result) {
+        throw new Error("Could not generate report PDF");
+      }
+      const pdfBase64 = result.doc.output('datauristring').split(',')[1];
+
+      const res = await fetch(`${API_URL}/api/admin/summary-report/send-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerId: selectedCustomer,
+          pdfBase64,
+          filename: result.filename
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        alert("Report sent successfully to the customer's email!");
+      } else {
+        throw new Error(data.error || "Failed to send email");
+      }
+    } catch (err) {
+      console.error('Failed to send email to customer:', err);
+      alert(`Failed to send email: ${err?.message || err}`);
+    } finally {
+      setEmailLoading(false);
+    }
+  }, [report, generatePDFDoc, selectedCustomer]);
 
 
-        {/* ══════════ TAB: QR CODES ══════════ */}
-        {activeTab === 'qr' && (
-          <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-            <div className="px-4 sm:px-6 py-4 border-b border-gray-100">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 bg-blue-100 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <QrCode className="h-5 w-5 text-blue-600" />
+  const handleClearFilters = useCallback(() => {
+    setSelectedCustomer('');
+    setFromDate('');
+    setToDate('');
+    setSelectedCalendar('');
+    setSelectedItem('');
+    setReport(null);
+    setError('');
+    setExpandedItems({});
+    setVisibleCount(5);
+    setStatusFilter('all');
+    setSortBy('date_desc');
+    setSearchCreator('');
+    setLiveScheduledPosts([]);
+    setLiveMetricsCache({});
+    fetchedMetricsRef.current = new Set();
+  }, []);
+
+  const fetchLiveMetrics = useCallback(async (assignmentId, posts) => {
+    if (fetchedMetricsRef.current.has(assignmentId)) return;
+    fetchedMetricsRef.current.add(assignmentId);
+
+    const seenIds = new Set();
+    const publishedPosts = posts.filter(p => {
+      if (!p._id) return p.status === 'published' || !!p.publishedAt;
+      if (seenIds.has(p._id)) return false;
+      seenIds.add(p._id);
+      return p.status === 'published' || !!p.publishedAt;
+    });
+
+    if (publishedPosts.length === 0) {
+      setLiveMetricsCache(prev => ({ ...prev, [assignmentId]: { loading: false, posts: [] } }));
+      return;
+    }
+
+    setLiveMetricsCache(prev => ({ ...prev, [assignmentId]: { loading: true, posts: publishedPosts } }));
+
+    try {
+      const res = await fetch(`${API_URL}/api/admin/post-metrics/live`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customerId: selectedCustomer, posts: publishedPosts }),
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        const enrichedPosts = json.posts || publishedPosts;
+        // Carry back any permalink that the API resolved
+        enrichedPosts.forEach(p => {
+          if (p.metrics?.permalink && !p.instagramPermalink) {
+            p.instagramPermalink = p.metrics.permalink;
+          }
+        });
+        setLiveMetricsCache(prev => ({ ...prev, [assignmentId]: { loading: false, posts: enrichedPosts } }));
+        return;
+      }
+    } catch (err) {
+      console.warn('[fetchLiveMetrics] live endpoint failed, falling back to cached data:', err.message);
+    }
+
+    // Fallback: keep whatever metrics are already on the posts (from the report payload)
+    setLiveMetricsCache(prev => ({ ...prev, [assignmentId]: { loading: false, posts: publishedPosts } }));
+  }, [selectedCustomer]);
+
+  const selectedCustomerObj = customers.find(c => (c._id || c.id) === selectedCustomer);
+  const selectedCalendarObj = calendars.find(c => c._id === selectedCalendar);
+
+  const resolvedCalendarName = useMemo(() => {
+    if (selectedCalendarObj?.name) return selectedCalendarObj.name;
+    if (report?.calendar?.name) return report.calendar.name;
+    const firstCalId = report?.assignments?.[0]?.calendarId;
+    if (firstCalId) {
+      const found = calendars.find(c => (c._id || c.id) === firstCalId);
+      if (found?.name) return found.name;
+    }
+    return null;
+  }, [selectedCalendarObj, report, calendars]);
+
+  const postsByItem = useMemo(() => {
+    if (!report) return { byId: {}, byTitle: {}, all: [] };
+    const combined = [...(report.scheduledPosts || [])];
+    const existingIds = new Set(combined.map(p => p._id).filter(Boolean));
+    for (const lp of liveScheduledPosts) {
+      if (lp._id && existingIds.has(lp._id)) continue;
+      combined.push({
+        _id:            lp._id,
+        platform:       lp.platform,
+        itemId:         lp.item_id     || '',
+        itemTitle:      lp.item_name   || '',
+        caption:        lp.caption     || '',
+        status:         lp.status,
+        scheduledAt:    lp.scheduledAt,
+        publishedAt:    lp.publishedAt,
+        facebookPostId:     lp.facebookPostId     || null,
+        instagramPostId:    lp.instagramPostId    || null,
+        instagramId:        lp.instagramId        || null,
+        instagramPermalink: lp.instagramPermalink || null,
+        pageId:             lp.pageId             || null,
+        linkedinPostId:     lp.linkedinPostId     || null,
+        linkedinAccountId:  lp.linkedinAccountId  || lp.organizationId || null,
+        youtubePostId:      lp.youtubePostId      || null,
+        twitterPostId:      lp.twitterPostId      || null,
+        postType:           lp.postType            || null,
+        metrics:        lp.metrics     || null,
+        item_id:        lp.item_id     || '',
+        item_name:      lp.item_name   || '',
+        contentId:      lp.contentId   || '',
+      });
+    }
+    const byId = {}, byTitle = {};
+    for (const post of combined) {
+      const itemId = post.itemId || post.item_id;
+      if (itemId) {
+        if (!byId[itemId]) byId[itemId] = [];
+        byId[itemId].push(post);
+      }
+      if (post.contentId && post.contentId !== itemId) {
+        if (!byId[post.contentId]) byId[post.contentId] = [];
+        byId[post.contentId].push(post);
+      }
+      const titleKey = (post.itemTitle || post.item_name || '').toLowerCase().trim();
+      if (titleKey) {
+        if (!byTitle[titleKey]) byTitle[titleKey] = [];
+        byTitle[titleKey].push(post);
+      }
+    }
+    return { byId, byTitle, all: combined };
+  }, [report, liveScheduledPosts]);
+
+  const summaryTotals = useMemo(() => {
+    if (!report) return { items: 0, versions: 0, engagements: 0, reach: 0 };
+    const cachedPosts = Object.values(liveMetricsCache).filter(v => !v.loading).flatMap(v => v.posts || []);
+    const cachedIds = new Set(cachedPosts.map(p => p._id).filter(Boolean));
+    const fallbackPosts = (report.scheduledPosts || []).filter(p => !p._id || !cachedIds.has(p._id));
+    const allPosts = [...cachedPosts, ...fallbackPosts];
+    const engagements = allPosts.reduce((sum, p) => {
+      if (!p.metrics) return sum;
+      return sum + (p.metrics.likes || 0) + (p.metrics.comments || 0) + (p.metrics.shares || 0);
+    }, 0);
+    const reach = allPosts.reduce((sum, p) => {
+      if (!p.metrics) return sum;
+      return sum + (p.metrics.reach || p.metrics.impressions || 0);
+    }, 0);
+    const publishedCount = report.assignments.filter(a =>
+      a.versions?.some(v => (v.status || '').toLowerCase() === 'published') ||
+      (liveMetricsCache[a.assignmentId]?.posts || []).some(p => p.status === 'published' || p.publishedAt)
+    ).length;
+    const approvedCount = report.assignments.filter(a =>
+      a.versions?.some(v => ['approved', 'published'].includes((v.status || '').toLowerCase()))
+    ).length;
+    const approvalRate = report.assignments.length > 0
+      ? Math.round((approvedCount / report.assignments.length) * 100) : 0;
+    const totalVersionCount = report.assignments.reduce((s, a) => s + (a.totalVersions || 1), 0);
+    const avgRevisions = report.assignments.length > 0
+      ? (totalVersionCount / report.assignments.length).toFixed(1) : '—';
+    const timesToApproval = report.assignments
+      .map(a => {
+        const firstSub = a.firstSubmittedAt ? new Date(a.firstSubmittedAt) : null;
+        const approvedV = a.versions?.find(v => ['approved', 'published'].includes((v.status || '').toLowerCase()));
+        const approvedAt = approvedV?.updatedAt || approvedV?.reviewedAt || null;
+        if (!firstSub || !approvedAt) return null;
+        return (new Date(approvedAt) - firstSub) / (1000 * 60 * 60 * 24);
+      })
+      .filter(d => d !== null && d >= 0);
+    const avgTimeToApproval = timesToApproval.length > 0
+      ? (timesToApproval.reduce((s, d) => s + d, 0) / timesToApproval.length).toFixed(1) : null;
+    const overallEngRate = reach > 0 ? ((engagements / reach) * 100).toFixed(1) : null;
+    return {
+      items: report.assignments?.length || 0,
+      versions: report.summary?.totalVersions || 0,
+      engagements, reach, publishedCount, approvedCount, approvalRate,
+      avgRevisions, avgTimeToApproval, overallEngRate,
+    };
+  }, [report, liveMetricsCache]);
+
+  const platformBreakdown = useMemo(() => {
+    if (!report) return [];
+    const map = {};
+    const allCachedPosts = Object.values(liveMetricsCache).filter(v => !v.loading).flatMap(v => v.posts || []);
+    const cachedIds = new Set(allCachedPosts.map(p => p._id).filter(Boolean));
+    const fallback = (report.scheduledPosts || []).filter(p => !p._id || !cachedIds.has(p._id));
+    for (const post of [...allCachedPosts, ...fallback]) {
+      if (post.status !== 'published' && !post.publishedAt && !post.metrics) continue;
+      const pl = (Array.isArray(post.platform) ? post.platform[0] : post.platform || 'unknown').toLowerCase();
+      if (!map[pl]) map[pl] = { platform: pl, posts: 0, reach: 0, likes: 0, comments: 0, shares: 0, saves: 0 };
+      map[pl].posts++;
+      if (post.metrics) {
+        map[pl].reach    += post.metrics.reach    || post.metrics.impressions || 0;
+        map[pl].likes    += post.metrics.likes    || 0;
+        map[pl].comments += post.metrics.comments || 0;
+        map[pl].shares   += post.metrics.shares   || 0;
+        map[pl].saves    += post.metrics.saves    || post.metrics.saved || 0;
+      }
+    }
+    return Object.values(map).sort((a, b) => b.posts - a.posts);
+  }, [report, liveMetricsCache]);
+
+  const statusDistribution = useMemo(() => {
+    if (!report) return [];
+    const counts = {};
+    for (const a of (report.assignments || [])) {
+      const latest = a.versions?.[a.versions.length - 1];
+      const s = (latest?.status || 'pending').toLowerCase();
+      const key = ['submitted', 'in_review', 'under_review'].includes(s) ? 'in_review'
+        : s === 'revision_requested' ? 'revision' : s;
+      counts[key] = (counts[key] || 0) + 1;
+    }
+    const total = report.assignments?.length || 1;
+    const meta = {
+      published: { label: 'Published', color: 'bg-emerald-500' },
+      approved:  { label: 'Approved',  color: 'bg-green-500'   },
+      in_review: { label: 'In Review', color: 'bg-amber-400'   },
+      revision:  { label: 'Revision',  color: 'bg-orange-400'  },
+      rejected:  { label: 'Rejected',  color: 'bg-red-400'     },
+      pending:   { label: 'Pending',   color: 'bg-gray-300'    },
+    };
+    return ['published', 'approved', 'in_review', 'revision', 'rejected', 'pending']
+      .filter(k => counts[k] > 0)
+      .map(k => ({ status: k, ...meta[k], count: counts[k], pct: Math.round((counts[k] / total) * 100) }));
+  }, [report]);
+
+  const topPerformers = useMemo(() => {
+    if (!report) return [];
+    return report.assignments
+      .map(a => {
+        const posts = liveMetricsCache[a.assignmentId]?.posts || [];
+        const reach = posts.reduce((s, p) => s + (p.metrics?.reach || p.metrics?.impressions || 0), 0);
+        const eng   = posts.reduce((s, p) => s + (p.metrics?.likes || 0) + (p.metrics?.comments || 0) + (p.metrics?.shares || 0), 0);
+        return { ...a, _totalReach: reach, _totalEng: eng, _engRate: reach > 0 ? parseFloat(((eng / reach) * 100).toFixed(1)) : 0 };
+      })
+      .filter(a => a._totalEng > 0 || a._totalReach > 0)
+      .sort((a, b) => b._totalEng - a._totalEng)
+      .slice(0, 3);
+  }, [report, liveMetricsCache]);
+
+  const creatorStats = useMemo(() => {
+    if (!report) return [];
+    const map = {};
+    for (const a of (report.assignments || [])) {
+      const name = a.creatorName || 'Unknown';
+      if (!map[name]) map[name] = { name, email: a.creatorEmail || '', assigned: 0, approved: 0, published: 0, totalVersions: 0 };
+      map[name].assigned++;
+      map[name].totalVersions += a.totalVersions || 1;
+      if (a.versions?.some(v => ['approved', 'published'].includes((v.status || '').toLowerCase()))) map[name].approved++;
+      if (a.versions?.some(v => (v.status || '').toLowerCase() === 'published')) map[name].published++;
+    }
+    return Object.values(map).sort((a, b) => b.assigned - a.assigned);
+  }, [report]);
+
+  const contentTypeStats = useMemo(() => {
+    if (!report) return [];
+    const map = {};
+    for (const a of (report.assignments || [])) {
+      const t = (a.mediaType || 'image').toLowerCase();
+      const label = t === 'carousel' ? 'Carousel' : t === 'video' ? 'Video' : 'Image';
+      if (!map[label]) map[label] = { type: label, count: 0, eng: 0, reach: 0 };
+      map[label].count++;
+      for (const p of (liveMetricsCache[a.assignmentId]?.posts || [])) {
+        if (!p.metrics) continue;
+        map[label].eng   += (p.metrics.likes || 0) + (p.metrics.comments || 0) + (p.metrics.shares || 0);
+        map[label].reach += p.metrics.reach || p.metrics.impressions || 0;
+      }
+    }
+    return Object.values(map).sort((a, b) => b.count - a.count);
+  }, [report, liveMetricsCache]);
+
+  const filteredSortedAssignments = useMemo(() => {
+    if (!report) return [];
+    let items = [...report.assignments];
+    if (statusFilter !== 'all') {
+      items = items.filter(a => {
+        const latest = a.versions?.[a.versions.length - 1];
+        const s = (latest?.status || '').toLowerCase();
+        if (statusFilter === 'published')  return a.versions?.some(v => (v.status || '').toLowerCase() === 'published');
+        if (statusFilter === 'approved')   return ['approved', 'published'].includes(s);
+        if (statusFilter === 'in_review')  return ['submitted', 'in_review', 'under_review'].includes(s);
+        if (statusFilter === 'rejected')   return s === 'rejected';
+        if (statusFilter === 'revision')   return s === 'revision_requested';
+        return true;
+      });
+    }
+    if (searchCreator.trim()) {
+      const q = searchCreator.trim().toLowerCase();
+      items = items.filter(a =>
+        (a.creatorName || '').toLowerCase().includes(q) || (a.creatorEmail || '').toLowerCase().includes(q)
+      );
+    }
+    const getEng   = a => (liveMetricsCache[a.assignmentId]?.posts || []).reduce((s, p) => s + (p.metrics?.likes || 0) + (p.metrics?.comments || 0) + (p.metrics?.shares || 0), 0);
+    const getReach = a => (liveMetricsCache[a.assignmentId]?.posts || []).reduce((s, p) => s + (p.metrics?.reach || p.metrics?.impressions || 0), 0);
+    if (sortBy === 'date_asc')        items.sort((a, b) => new Date(a.firstSubmittedAt || 0) - new Date(b.firstSubmittedAt || 0));
+    else if (sortBy === 'date_desc')  items.sort((a, b) => new Date(b.firstSubmittedAt || 0) - new Date(a.firstSubmittedAt || 0));
+    else if (sortBy === 'engagement') items.sort((a, b) => getEng(b) - getEng(a));
+    else if (sortBy === 'reach')      items.sort((a, b) => getReach(b) - getReach(a));
+    else if (sortBy === 'revisions')  items.sort((a, b) => (b.totalVersions || 1) - (a.totalVersions || 1));
+    else if (sortBy === 'creator')    items.sort((a, b) => (a.creatorName || '').localeCompare(b.creatorName || ''));
+    return items;
+  }, [report, statusFilter, searchCreator, sortBy, liveMetricsCache]);
+
+  useEffect(() => {
+    if (!report || !report.assignments) return;
+    report.assignments.forEach(assignment => {
+      const titleKey = (assignment.itemTitle || '').toLowerCase().trim();
+      const itemPosts = (() => {
+        if (assignment.itemId) {
+          const byId = postsByItem.byId[assignment.itemId];
+          if (byId?.length) return byId;
+        }
+        if (titleKey) {
+          const byTitle = postsByItem.byTitle[titleKey];
+          if (byTitle?.length) return byTitle;
+        }
+        return [];
+      })();
+      fetchLiveMetrics(assignment.assignmentId, itemPosts);
+    });
+  }, [report, postsByItem, fetchLiveMetrics]);
+
+  const Wrapper = ({ children }) => (
+    embedded ? <>{children}</> : <AdminLayout title="Content Summary Report">{children}</AdminLayout>
+  );
+
+  return (
+    <Wrapper>
+      <div className="min-h-screen bg-gray-50">
+        <div className="max-w-6xl mx-auto px-4 py-6 space-y-5">
+
+          {/* Breadcrumb + actions */}
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-1.5 text-sm text-gray-500">
+              <span>Admin</span>
+              <span className="text-gray-300">/</span>
+              <span>Reports</span>
+              <span className="text-gray-300">/</span>
+              <span className="text-gray-800 font-medium">Content Summary Report</span>
+              <span className="ml-1.5 bg-blue-600 text-white text-xs font-semibold px-2 py-0.5 rounded-full">Admin</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleClearFilters}
+                className="flex items-center gap-1.5 border border-gray-300 bg-white text-gray-600 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                Reset
+              </button>
+              {report && (
+                <>
+                  <button
+                    onClick={handleDownloadPDF}
+                    disabled={pdfLoading}
+                    className="flex items-center gap-1.5 bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-60 transition-colors"
+                  >
+                    {pdfLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                    Export PDF
+                  </button>
+                  <button
+                    onClick={handleSendToCustomer}
+                    disabled={emailLoading}
+                    className="flex items-center gap-1.5 bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-sm font-semibold hover:bg-emerald-700 disabled:opacity-60 transition-colors"
+                  >
+                    {emailLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Mail className="w-3.5 h-3.5" />}
+                    Send to Customer
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Filters card */}
+          <div className="bg-white border border-gray-200 rounded-2xl p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <Filter className="w-4 h-4 text-gray-400" />
+              <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Filters</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Customer</label>
+                <select
+                  value={selectedCustomer}
+                  onChange={e => { setSelectedCustomer(e.target.value); setReport(null); }}
+                  disabled={!!customerId}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="">— Select customer —</option>
+                  {customers.map(c => (
+                    <option key={c._id || c.id} value={c._id || c.id}>
+                      {c.businessName || c.name || c.email}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Date range</label>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="date" value={fromDate} onChange={e => setFromDate(e.target.value)}
+                    className="flex-1 min-w-0 border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  <span className="text-gray-400 text-xs flex-shrink-0">→</span>
+                  <input
+                    type="date" value={toDate} onChange={e => setToDate(e.target.value)}
+                    className="flex-1 min-w-0 border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
                 </div>
-                <div>
-                  <h2 className="text-base sm:text-lg font-semibold text-gray-900">QR Code Generator</h2>
-                  <p className="text-sm text-gray-500">Generate social integration QR codes for {customer.name}</p>
-                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Content calendar</label>
+                <select
+                  value={selectedCalendar}
+                  onChange={e => { setSelectedCalendar(e.target.value); setReport(null); }}
+                  disabled={!selectedCustomer}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-400"
+                >
+                  <option value="">All calendars</option>
+                  {filteredCalendars.map(cal => (
+                    <option key={cal._id} value={cal._id}>{cal.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Content item</label>
+                <select
+                  value={selectedItem}
+                  onChange={e => { setSelectedItem(e.target.value); setReport(null); }}
+                  disabled={!selectedCalendar || filteredContentItems.length === 0}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-400"
+                >
+                  <option value="">All items</option>
+                  {filteredContentItems.map((item, i) => (
+                    <option key={item.id || i} value={item.id || i}>
+                      {item.title || item.description || `Item ${i + 1}`}
+                      {item.date ? ` (${new Date(item.date).toLocaleDateString()})` : ''}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
-            <div className="p-5">
-              {/* Platform buttons */}
-              <p className="text-sm font-medium text-gray-700 mb-3">Select a platform to generate a QR code:</p>
-              <div className="flex flex-wrap gap-3 mb-6">
-                {PLATFORMS_QR.map(({ key, label, color, Icon }) => (
-                  <button
-                    key={key}
-                    onClick={() => handleGenerateQr(key)}
-                    disabled={qrLoading}
-                    className={`${color} text-white px-5 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2 shadow-sm hover:shadow-md transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed`}
-                  >
-                    {qrLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icon className="h-4 w-4" />}
-                    {label}
-                  </button>
-                ))}
+
+            <div className="flex items-center justify-end gap-3 mt-4 pt-4 border-t border-gray-100">
+              <button
+                onClick={handleClearFilters}
+                className="text-sm text-gray-500 hover:text-gray-700 font-medium transition-colors"
+              >
+                Clear filters
+              </button>
+              <button
+                onClick={handleGenerate}
+                disabled={loading || !selectedCustomer}
+                className="flex items-center gap-2 bg-gray-900 hover:bg-gray-800 text-white px-5 py-2 rounded-xl text-sm font-semibold disabled:opacity-50 transition-colors"
+              >
+                {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                Generate report
+              </button>
+            </div>
+
+            {error && (
+              <div className="mt-3 flex items-center gap-2 text-red-600 bg-red-50 rounded-xl px-4 py-2.5 text-sm border border-red-100">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                {error}
+              </div>
+            )}
+          </div>
+
+          {loading && (
+            <div className="flex flex-col items-center justify-center py-20">
+              <Loader2 className="w-10 h-10 animate-spin mb-4 text-blue-500" />
+              <p className="text-sm text-gray-500 font-medium">Building your report…</p>
+            </div>
+          )}
+
+          {report && !loading && (
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {[
+                  { icon: FileText,    iconCls: 'text-blue-500',    label: 'Content Items',     value: summaryTotals.items,                              sub: null },
+                  { icon: CheckCircle, iconCls: 'text-emerald-500', label: 'Published',         value: summaryTotals.publishedCount,                     sub: null },
+                  { icon: Heart,       iconCls: 'text-rose-500',    label: 'Total Engagements', value: fmtNumUI(summaryTotals.engagements),              sub: summaryTotals.overallEngRate ? `${summaryTotals.overallEngRate}% eng rate` : null },
+                  { icon: Eye,         iconCls: 'text-violet-500',  label: 'Total Reach',       value: fmtNumUI(summaryTotals.reach),                    sub: summaryTotals.avgTimeToApproval ? `~${summaryTotals.avgTimeToApproval}d to approve` : null },
+                ].map(card => {
+                  const Icon = card.icon;
+                  return (
+                    <div key={card.label} className="bg-white border border-gray-200 rounded-2xl p-4">
+                      <Icon className={`w-5 h-5 ${card.iconCls} mb-2`} />
+                      <p className="text-xl font-bold text-gray-900">{card.value}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">{card.label}</p>
+                      {card.sub && <p className="text-[11px] text-gray-400 mt-0.5">{card.sub}</p>}
+                    </div>
+                  );
+                })}
               </div>
 
-              {/* Feedback */}
-              {qrError && (
-                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg mb-4">
-                  <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
-                  <p className="text-sm text-red-700">{qrError}</p>
-                </div>
-              )}
-              {qrSuccess && (
-                <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg mb-4">
-                  <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  <p className="text-sm text-green-700">{qrSuccess}</p>
+              {statusDistribution.length > 0 && (
+                <div className="bg-white border border-gray-200 rounded-2xl p-5">
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Content Status Distribution</p>
+                  <div className="flex h-3 rounded-full overflow-hidden gap-px mb-3">
+                    {statusDistribution.map(s => (
+                      <div key={s.status} className={`${s.color} transition-all`} style={{ width: `${s.pct}%` }} title={`${s.label}: ${s.count} (${s.pct}%)`} />
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap gap-4">
+                    {statusDistribution.map(s => (
+                      <div key={s.status} className="flex items-center gap-1.5">
+                        <div className={`w-2.5 h-2.5 rounded-full ${s.color}`} />
+                        <span className="text-xs text-gray-600 font-medium">{s.label}</span>
+                        <span className="text-xs text-gray-400">{s.count} ({s.pct}%)</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 
-              {/* QR Result */}
-              {qrResult.qrDataUrl && (
-                <div className="flex flex-col sm:flex-row gap-6 items-start">
-                  {/* QR Image */}
-                  <div className="flex-shrink-0">
-                    <div className="p-3 bg-white border-2 border-gray-200 rounded-xl inline-block shadow-sm">
-                      <img src={qrResult.qrDataUrl} alt="QR Code" className="w-44 h-44 sm:w-52 sm:h-52" />
+              {topPerformers.length > 0 && (
+                <div className="bg-white border border-gray-200 rounded-2xl p-5">
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                    <TrendingUp className="w-3.5 h-3.5 text-amber-500" />
+                    Top Performing Content
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {topPerformers.map((a, i) => (
+                      <div key={a.assignmentId} className={`rounded-xl border p-3 ${i === 0 ? 'border-amber-200 bg-amber-50' : 'border-gray-100 bg-gray-50'}`}>
+                        <div className="flex items-start gap-2">
+                          <span className={`text-xs font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${i === 0 ? 'bg-amber-400 text-white' : 'bg-gray-200 text-gray-500'}`}>#{i + 1}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-semibold text-gray-800 line-clamp-1">{a.itemTitle || a.caption?.slice(0, 50) || `Item ${i + 1}`}</p>
+                            <p className="text-[10px] text-gray-400 mt-0.5">{a.creatorName}</p>
+                          </div>
+                        </div>
+                        <div className="flex gap-3 mt-2 pt-2 border-t border-gray-200">
+                          <div>
+                            <p className="text-sm font-bold text-gray-800">{fmtNumUI(a._totalEng)}</p>
+                            <p className="text-[9px] text-gray-400">Engagements</p>
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-gray-800">{fmtNumUI(a._totalReach)}</p>
+                            <p className="text-[9px] text-gray-400">Reach</p>
+                          </div>
+                          {a._engRate > 0 && (
+                            <div>
+                              <p className="text-sm font-bold text-emerald-600">{a._engRate}%</p>
+                              <p className="text-[9px] text-gray-400">Eng. rate</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {platformBreakdown.length > 0 && (
+                <div className="bg-white border border-gray-200 rounded-2xl p-5">
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Platform Breakdown</p>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-gray-100">
+                          {['Platform', 'Posts', 'Reach', 'Likes', 'Comments', 'Shares', 'Eng. Rate'].map(h => (
+                            <th key={h} className="text-left text-[11px] font-bold text-gray-400 uppercase pb-2 pr-4 whitespace-nowrap">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {platformBreakdown.map(row => {
+                          const eng = row.likes + row.comments + row.shares;
+                          const engRate = row.reach > 0 ? ((eng / row.reach) * 100).toFixed(1) : null;
+                          return (
+                            <tr key={row.platform} className="border-b border-gray-50 last:border-0">
+                              <td className="py-2 pr-4"><PlatformPill platform={row.platform} /></td>
+                              <td className="py-2 pr-4 font-semibold text-gray-800">{row.posts}</td>
+                              <td className="py-2 pr-4 text-gray-600">{fmtNumUI(row.reach)}</td>
+                              <td className="py-2 pr-4 text-gray-600">{fmtNumUI(row.likes)}</td>
+                              <td className="py-2 pr-4 text-gray-600">{fmtNumUI(row.comments)}</td>
+                              <td className="py-2 pr-4 text-gray-600">{fmtNumUI(row.shares)}</td>
+                              <td className="py-2 pr-4 font-semibold text-emerald-600">{engRate ? `${engRate}%` : '—'}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {contentTypeStats.length > 0 && (
+                  <div className="bg-white border border-gray-200 rounded-2xl p-5">
+                    <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Content Type Breakdown</p>
+                    <div className="space-y-3">
+                      {contentTypeStats.map(ct => {
+                        const engRate = ct.reach > 0 ? ((ct.eng / ct.reach) * 100).toFixed(1) : null;
+                        const pct = summaryTotals.items > 0 ? Math.round((ct.count / summaryTotals.items) * 100) : 0;
+                        return (
+                          <div key={ct.type}>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-sm font-medium text-gray-700">{ct.type}</span>
+                              <div className="flex items-center gap-3 text-xs text-gray-500">
+                                <span>{ct.count} items ({pct}%)</span>
+                                {ct.eng > 0 && <span className="text-emerald-600 font-semibold">{fmtNumUI(ct.eng)} eng</span>}
+                                {engRate && <span className="text-gray-400">{engRate}% rate</span>}
+                              </div>
+                            </div>
+                            <div className="h-1.5 bg-gray-100 rounded-full">
+                              <div className="h-1.5 bg-blue-500 rounded-full" style={{ width: `${pct}%` }} />
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
-                  {/* QR Details */}
-                  <div className="flex-1 min-w-0 space-y-3">
-                    <div>
-                      <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Platform</p>
-                      <div className="flex items-center gap-2">
-                        {PLATFORMS_QR.find(p => p.key === qrResult.platform) && (() => {
-                          const plat = PLATFORMS_QR.find(p => p.key === qrResult.platform);
-                          const Icon = plat.Icon;
-                          return <><Icon className="h-5 w-5" /><span className="font-semibold text-gray-800">{plat.label}</span></>;
-                        })()}
-                      </div>
-                    </div>
-                    {timeRemaining && (
-                      <div>
-                        <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Expires in</p>
-                        <span className={`text-sm font-medium ${qrExpiration === 'expired' ? 'text-red-600' : qrExpiration === 'warning' ? 'text-amber-600' : 'text-green-600'}`}>
-                          {timeRemaining}
-                        </span>
-                      </div>
-                    )}
-                    {qrResult.qrCodeUrl && (
-                      <div>
-                        <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">QR URL</p>
-                        <p className="text-xs text-gray-600 break-all bg-gray-50 rounded p-2">{qrResult.qrCodeUrl}</p>
-                      </div>
-                    )}
-                    <div className="flex gap-2 flex-wrap pt-1">
-                      <button
-                        onClick={downloadQrCode}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-                      >
-                        <Download className="h-4 w-4" />
-                        Download QR
-                      </button>
-                      <button
-                        onClick={handleSendQrEmail}
-                        disabled={emailSending}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50"
-                      >
-                        {emailSending ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Send className="h-4 w-4" />
-                        )}
-                        Send to Customer
-                      </button>
-                      {qrResult.configUrl && (
-                        <a
-                          href={qrResult.configUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors"
-                        >
-                          <ExternalLink className="h-4 w-4" />
-                          Preview
-                        </a>
+                )}
+                {creatorStats.length > 0 && (
+                  <div className="bg-white border border-gray-200 rounded-2xl p-5">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Creator Performance</p>
+                      {creatorStats.length > 3 && (
+                        <button onClick={() => setShowCreatorTable(v => !v)} className="text-xs text-blue-600 font-medium hover:underline">
+                          {showCreatorTable ? 'Show less' : `View all ${creatorStats.length}`}
+                        </button>
                       )}
                     </div>
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-gray-100">
+                          {['Creator', 'Assigned', 'Approved', 'Avg Rev.'].map(h => (
+                            <th key={h} className="text-left text-[11px] font-bold text-gray-400 uppercase pb-2 pr-3">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(showCreatorTable ? creatorStats : creatorStats.slice(0, 3)).map(c => (
+                          <tr key={c.name} className="border-b border-gray-50 last:border-0">
+                            <td className="py-2 pr-3">
+                              <div className="flex items-center gap-1.5">
+                                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0 ${getAvatarColor(c.name)}`}>
+                                  {getInitials(c.name)}
+                                </div>
+                                <span className="font-medium text-gray-800 text-xs truncate max-w-[90px]">{c.name}</span>
+                              </div>
+                            </td>
+                            <td className="py-2 pr-3 font-semibold text-gray-800">{c.assigned}</td>
+                            <td className="py-2 pr-3">
+                              <span className={`text-xs font-semibold ${c.approved === c.assigned ? 'text-emerald-600' : 'text-gray-600'}`}>
+                                {c.approved} <span className="text-gray-400 font-normal">({c.assigned > 0 ? Math.round((c.approved / c.assigned) * 100) : 0}%)</span>
+                              </span>
+                            </td>
+                            <td className="py-2 pr-3 text-gray-600">{c.assigned > 0 ? (c.totalVersions / c.assigned).toFixed(1) : '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
+                )}
+              </div>
+            </>
+          )}
+
+          {report && !loading && (
+            <div ref={reportRef}>
+              <div className="flex items-start justify-between mb-4 flex-wrap gap-3">
+                <div>
+                  <h2 className="text-lg font-bold text-gray-900">
+                    {resolvedCalendarName || 'All Calendars'} — Report
+                  </h2>
+                  <p className="text-sm text-gray-500 mt-0.5">
+                    Showing {Math.min(visibleCount, filteredSortedAssignments.length)} of {filteredSortedAssignments.length} items
+                    {filteredSortedAssignments.length !== report.assignments.length ? ` (filtered from ${report.assignments.length})` : ''}
+                    {selectedCustomerObj ? ` · ${selectedCustomerObj.businessName || selectedCustomerObj.name}` : ''}
+                    {(fromDate || toDate)
+                      ? ` · ${fromDate ? new Date(fromDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '…'} – ${toDate ? new Date(toDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '…'}`
+                      : ''}
+                  </p>
                 </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    onClick={() => {
+                      const allIds = report.assignments.map(a => a.assignmentId);
+                      const anyCollapsed = allIds.some(id => expandedItems[id] === false);
+                      const next = {};
+                      allIds.forEach(id => { next[id] = anyCollapsed ? true : false; });
+                      setExpandedItems(next);
+                    }}
+                    className="flex items-center gap-1.5 border border-gray-200 bg-white text-gray-600 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-50"
+                  >
+                    <AlignJustify className="w-3.5 h-3.5" />
+                    {Object.values(expandedItems).some(v => v === false) ? 'Expand All' : 'Collapse All'}
+                  </button>
+                  <div className="relative">
+                    <User className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+                    <input
+                      type="text"
+                      placeholder="Search creator…"
+                      value={searchCreator}
+                      onChange={e => { setSearchCreator(e.target.value); setVisibleCount(5); }}
+                      className="pl-7 pr-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500 w-36"
+                    />
+                  </div>
+                  <select
+                    value={statusFilter}
+                    onChange={e => { setStatusFilter(e.target.value); setVisibleCount(5); }}
+                    className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white focus:ring-1 focus:ring-blue-500"
+                  >
+                    <option value="all">All statuses</option>
+                    <option value="published">Published</option>
+                    <option value="approved">Approved</option>
+                    <option value="in_review">In Review</option>
+                    <option value="revision">Revision Requested</option>
+                    <option value="rejected">Rejected</option>
+                  </select>
+                  <select
+                    value={sortBy}
+                    onChange={e => { setSortBy(e.target.value); setVisibleCount(5); }}
+                    className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white focus:ring-1 focus:ring-blue-500"
+                  >
+                    <option value="date_desc">Newest first</option>
+                    <option value="date_asc">Oldest first</option>
+                    <option value="engagement">Most engaged</option>
+                    <option value="reach">Most reach</option>
+                    <option value="revisions">Most revisions</option>
+                    <option value="creator">By creator</option>
+                  </select>
+                </div>
+              </div>
+
+              {filteredSortedAssignments.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 bg-white border border-gray-200 rounded-2xl text-gray-400">
+                  <FileText className="w-12 h-12 mb-3 text-gray-300" />
+                  <p className="text-base font-semibold text-gray-500">
+                    {report.assignments.length === 0 ? 'No content found' : 'No results match your filters'}
+                  </p>
+                  <p className="text-sm mt-1">
+                    {report.assignments.length === 0 ? 'Try adjusting your filters.' : 'Clear or change the status / creator filters above.'}
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-3">
+                    {filteredSortedAssignments.slice(0, visibleCount).map((assignment, ai) => {
+                      const titleKey = (assignment.itemTitle || '').toLowerCase().trim();
+                      const itemPosts = (() => {
+                        if (assignment.itemId) {
+                          const byId = postsByItem.byId[assignment.itemId];
+                          if (byId?.length) return byId;
+                        }
+                        if (titleKey) {
+                          const byTitle = postsByItem.byTitle[titleKey];
+                          if (byTitle?.length) return byTitle;
+                        }
+                        return [];
+                      })();
+                      const isExpanded = expandedItems[assignment.assignmentId] !== false;
+                      const liveMetrics = liveMetricsCache[assignment.assignmentId];
+                      return (
+                        <ContentItemCard
+                          key={assignment.assignmentId}
+                          assignment={assignment}
+                          scheduledPosts={itemPosts}
+                          calendarName={report.calendar?.name || ''}
+                          isExpanded={isExpanded}
+                          liveMetrics={liveMetrics}
+                          onToggle={() => {
+                            const nowExpanded = !isExpanded;
+                            setExpandedItems(prev => ({
+                              ...prev,
+                              [assignment.assignmentId]: nowExpanded,
+                            }));
+                            if (nowExpanded) {
+                              fetchLiveMetrics(assignment.assignmentId, itemPosts);
+                            }
+                          }}
+                        />
+                      );
+                    })}
+                  </div>
+
+                  {visibleCount < filteredSortedAssignments.length && (
+                    <div className="flex items-center justify-center gap-3 mt-6 text-sm text-gray-500">
+                      <span>Showing {visibleCount} of {filteredSortedAssignments.length} items</span>
+                      <button
+                        onClick={() => setVisibleCount(v => v + 5)}
+                        className="text-blue-600 font-semibold hover:underline"
+                      >
+                        Load more
+                      </button>
+                    </div>
+                  )}
+                </>
               )}
             </div>
-          </div>
-        )}
-
-        {/* ══════════ TAB: SOCIAL & ANALYTICS ══════════ */}
-        {activeTab === 'social' && (
-          <div className="space-y-3">
-            <CustomerSocialAccounts embedded={true} customerId={id} />
-          </div>
-        )}
-
-        {/* ══════════ TAB: SUMMARY REPORT ══════════ */}
-        {activeTab === 'report' && (
-          <SummaryReport embedded={true} customerId={id} />
-        )}
-
+          )}
+        </div>
       </div>
-
-      {/* Schedule Post Modal from Publish Manager */}
-      {scheduleModalData && (
-        <SchedulePostModal
-          selectedContent={scheduleModalData}
-          onClose={() => setScheduleModalData(null)}
-          extractHashtags={extractHashtags}
-          getCustomerSocialAccounts={getCustomerSocialAccounts}
-          getCustomerName={getCustomerName}
-          getCustomer={getCustomer}
-          showIntegration={handleShowIntegration}
-          updatePortfolioStatus={handleUpdatePortfolioStatus}
-          onRefreshScheduledPosts={fetchScheduledPosts}
-        />
-      )}
-
-      {mobileMenuCalendar && (
-        <div className="fixed inset-0 z-[9999] sm:hidden">
-          {/* Backdrop */}
-          <div 
-            className="absolute inset-0 bg-black/50"
-            onClick={closeMobileMenu}
-          />
-          {/* Bottom Sheet */}
-          <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl animate-slide-up">
-            {/* Handle bar */}
-            <div className="flex justify-center pt-3 pb-2">
-              <div className="w-10 h-1 bg-gray-300 rounded-full" />
-            </div>
-            {/* Header */}
-            <div className="flex items-center justify-between px-4 pb-3 border-b border-gray-100">
-              <h3 className="font-semibold text-gray-900">{mobileMenuCalendar.name}</h3>
-              <button
-                onClick={closeMobileMenu}
-                className="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            {/* Actions */}
-            <div className="p-2">
-              <button
-                onClick={() => {
-                  const cal = mobileMenuCalendar;
-                  closeMobileMenu();
-                  setSelectedCalendar(cal);
-                  setIsContentModalOpen(true);
-                }}
-                className="w-full flex items-center px-4 py-4 text-gray-700 hover:bg-gray-50 active:bg-gray-100 rounded-xl transition-colors"
-              >
-                <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mr-3">
-                  <Plus className="h-5 w-5 text-green-600" />
-                </div>
-                <span className="font-medium">Add Item</span>
-              </button>
-              <button
-                onClick={() => {
-                  handleEditCalendar(mobileMenuCalendar);
-                }}
-                className="w-full flex items-center px-4 py-4 text-gray-700 hover:bg-gray-50 active:bg-gray-100 rounded-xl transition-colors"
-              >
-                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center mr-3">
-                  <Edit className="h-5 w-5 text-blue-600" />
-                </div>
-                <span className="font-medium">Edit Calendar</span>
-              </button>
-              <button
-                onClick={() => {
-                  const calId = mobileMenuCalendar._id;
-                  closeMobileMenu();
-                  handleDeleteCalendar(calId);
-                }}
-                className="w-full flex items-center px-4 py-4 text-red-600 hover:bg-red-50 active:bg-red-100 rounded-xl transition-colors"
-              >
-                <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center mr-3">
-                  <Trash2 className="h-5 w-5 text-red-600" />
-                </div>
-                <span className="font-medium">Delete Calendar</span>
-              </button>
-            </div>
-            {/* Safe area padding for phones with home indicator */}
-            <div className="h-6" />
-          </div>
-        </div>
-      )}
-
-      {/* Modals */}
-      <ContentCalendarModal
-        isOpen={isCalendarModalOpen}
-        onClose={() => setIsCalendarModalOpen(false)}
-        onSave={handleCreateCalendar}
-        title="Create Content Calendar"
-        creators={creators}
-      />
-
-      <ContentItemModal
-        isOpen={isContentModalOpen}
-        onClose={() => {
-          setIsContentModalOpen(false);
-          setSelectedCalendar(null);
-        }}
-        onSave={handleAddContentItem}
-        title="Add Content Item"
-        creators={creators}
-        platformOptions={['facebook', 'instagram', 'youtube', 'linkedin']}
-        multiPlatform={true}
-      />
-
-      <AssignCreatorModal
-        isOpen={isAssignModalOpen}
-        onClose={() => {
-          setIsAssignModalOpen(false);
-          setSelectedCalendar(null);
-        }}
-        onAssign={handleAssignCreator}
-        calendarName={selectedCalendar?.name || ''}
-      />
-
-      <ContentItemModal
-        isOpen={isEditModalOpen}
-        onClose={() => setIsEditModalOpen(false)}
-        onSave={handleUpdateItem}
-        contentItem={selectedItem}
-        title="Edit Content"
-        creators={creators}
-        platformOptions={['facebook', 'instagram', 'youtube', 'linkedin']}
-        multiPlatform={true}
-      />
-
-      <ManualPublishModal
-        isOpen={isManualPublishModalOpen}
-        onClose={() => {
-          setIsManualPublishModalOpen(false);
-          setManualPublishItem(null);
-          setManualPublishCalendarId(null);
-        }}
-        onSave={handleSaveManualPublish}
-        item={manualPublishItem}
-        scheduledPosts={scheduledPosts}
-        saving={manualPublishSaving}
-      />
-
-      {/* Edit Calendar Modal with prefilled values */}
-      <ContentCalendarModal
-        isOpen={isEditCalendarModalOpen}
-        onClose={() => {
-          setIsEditCalendarModalOpen(false);
-          setCalendarToEdit(null);
-        }}
-        onSave={handleUpdateCalendar}
-        title="Edit Content Calendar"
-        initialData={calendarToEdit}
-      />
-
-      {/* Report Modal */}
-      <ReportModal
-        isOpen={isReportModalOpen}
-        onClose={() => setIsReportModalOpen(false)}
-        customer={customer}
-        calendars={calendars}
-        isItemPublished={isItemPublished}
-      />
-
-      {/* Content Detail Loading Overlay */}
-      {contentDetailLoading && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center">
-          <div className="bg-white rounded-xl p-8 flex flex-col items-center gap-3">
-            <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
-            <p className="text-sm text-gray-600">Loading content details...</p>
-          </div>
-        </div>
-      )}
-
-      {/* Content Detail Modal */}
-      {selectedContentDetail && !selectedContentDetail._loading && (
-        <div
-          className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center overflow-y-auto py-4 px-2"
-          onClick={() => setSelectedContentDetail(null)}
-        >
-          <div
-            className="w-full max-w-5xl bg-gray-50 rounded-2xl p-4 my-auto"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-base font-semibold text-gray-900">Content Details</h2>
-              <button
-                onClick={() => setSelectedContentDetail(null)}
-                className="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <ContentDetailView
-              selectedContent={selectedContentDetail}
-              getCustomerName={getCustomerName}
-              formatDate={formatDate}
-              getStatusColor={() => ''}
-              getStatusIcon={() => null}
-              isContentPublished={isContentPublished}
-              getPublishedPlatformsForContent={getPublishedPlatformsForContent}
-              handleScheduleContent={handleScheduleContent}
-              isVideoUrl={isVideoUrl}
-              calendarName={selectedContentDetail.calendarName}
-              itemName={selectedContentDetail.itemName}
-              onDeleteVersion={handleDeleteVersion}
-              scheduledPosts={scheduledPosts}
-              onDeleteScheduledPost={handleDeleteScheduledPost}
-            />
-          </div>
-        </div>
-      )}
-    </AdminLayout>
+    </Wrapper>
   );
 }
-
-export default memo(CustomerDetailsView);

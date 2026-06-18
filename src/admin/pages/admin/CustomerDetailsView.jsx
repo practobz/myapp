@@ -94,7 +94,7 @@ SocialBadge.displayName = 'SocialBadge';
 // ── Tab config ────────────────────────────────────────────────────────────────
 const TABS_CONFIG = [
   { id: 'overview', label: 'Overview', icon: LayoutGrid },
-  { id: 'portfolio', label: 'Portfolio', icon: Briefcase },
+  { id: 'portfolio', label: 'Total Posts', icon: Briefcase },
   { id: 'qr', label: 'QR Codes', icon: QrCode },
   { id: 'social', label: 'Social', icon: BarChart3 },
   { id: 'report', label: 'Report', icon: FileText },

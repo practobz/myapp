@@ -42,10 +42,10 @@ const getAvatarColor = (name = '') => {
 const PlatformPill = ({ platform }) => {
   const cfg = {
     instagram: { label: 'Instagram', cls: 'bg-pink-50 text-pink-600 border-pink-200' },
-    facebook: { label: 'Facebook', cls: 'bg-blue-50 text-blue-600 border-blue-200' },
-    linkedin: { label: 'LinkedIn', cls: 'bg-sky-50 text-sky-700 border-sky-200' },
-    twitter: { label: 'Twitter/X', cls: 'bg-gray-50 text-gray-600 border-gray-200' },
-    youtube: { label: 'YouTube', cls: 'bg-red-50 text-red-600 border-red-200' },
+    facebook:  { label: 'Facebook',  cls: 'bg-blue-50 text-blue-600 border-blue-200' },
+    linkedin:  { label: 'LinkedIn',  cls: 'bg-sky-50 text-sky-700 border-sky-200' },
+    twitter:   { label: 'Twitter/X', cls: 'bg-gray-50 text-gray-600 border-gray-200' },
+    youtube:   { label: 'YouTube',   cls: 'bg-red-50 text-red-600 border-red-200' },
   }[(platform || '').toLowerCase()] || { label: platform || '—', cls: 'bg-gray-50 text-gray-500 border-gray-200' };
   return (
     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${cfg.cls}`}>
@@ -58,15 +58,15 @@ const PlatformPill = ({ platform }) => {
 const StatusBadge = ({ status }) => {
   const s = (status || '').toLowerCase();
   const map = {
-    submitted: 'bg-amber-50 text-amber-700 border-amber-200',
-    approved: 'bg-green-50 text-green-700 border-green-200',
-    rejected: 'bg-red-50 text-red-700 border-red-200',
+    submitted:          'bg-amber-50 text-amber-700 border-amber-200',
+    approved:           'bg-green-50 text-green-700 border-green-200',
+    rejected:           'bg-red-50 text-red-700 border-red-200',
     revision_requested: 'bg-orange-50 text-orange-700 border-orange-200',
-    published: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    pending: 'bg-gray-50 text-gray-600 border-gray-200',
-    publishing: 'bg-blue-50 text-blue-700 border-blue-200',
-    under_review: 'bg-purple-50 text-purple-700 border-purple-200',
-    in_review: 'bg-amber-50 text-amber-700 border-amber-200',
+    published:          'bg-emerald-50 text-emerald-700 border-emerald-200',
+    pending:            'bg-gray-50 text-gray-600 border-gray-200',
+    publishing:         'bg-blue-50 text-blue-700 border-blue-200',
+    under_review:       'bg-purple-50 text-purple-700 border-purple-200',
+    in_review:          'bg-amber-50 text-amber-700 border-amber-200',
   };
   const cls = map[s] || 'bg-gray-50 text-gray-600 border-gray-200';
   const label = s === 'submitted' ? 'In review'
@@ -105,7 +105,7 @@ const MediaTypeBadge = ({ mediaType, slideCount }) => {
   const t = (mediaType || '').toLowerCase();
   const label = t === 'carousel' ? `Carousel · ${slideCount || '?'} slides`
     : t === 'video' ? 'Video'
-      : `Image · ${slideCount || 1} slide`;
+    : `Image · ${slideCount || 1} slide`;
   return (
     <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200">
       {label}
@@ -124,7 +124,7 @@ const VersionRow = ({ version }) => {
   const mediaUrls = (version.media || [])
     .map(m => typeof m === 'string' ? m : (m?.url || m?.publicUrl || ''))
     .filter(Boolean);
-  const showCount = Math.min(mediaUrls.length, 5);
+  const showCount  = Math.min(mediaUrls.length, 5);
   const extraCount = mediaUrls.length - showCount;
 
   return (
@@ -197,26 +197,26 @@ const MetricTile = ({ label, value, highlight }) => (
 const PlatformMetricsSection = ({ post }) => {
   const platform = (post.platform || '').toLowerCase();
   const PI = {
-    instagram: { color: 'text-pink-600', label: 'Instagram' },
-    facebook: { color: 'text-blue-600', label: 'Facebook' },
-    linkedin: { color: 'text-blue-700', label: 'LinkedIn' },
-    twitter: { color: 'text-sky-500', label: 'Twitter/X' },
-    youtube: { color: 'text-red-600', label: 'YouTube' },
+    instagram: { color: 'text-pink-600',  label: 'Instagram' },
+    facebook:  { color: 'text-blue-600',  label: 'Facebook'  },
+    linkedin:  { color: 'text-blue-700',  label: 'LinkedIn'  },
+    twitter:   { color: 'text-sky-500',   label: 'Twitter/X' },
+    youtube:   { color: 'text-red-600',   label: 'YouTube'   },
   }[platform] || { color: 'text-gray-600', label: post.platform || 'Unknown' };
 
   const m = post.metrics || {};
 
   if (platform === 'instagram') {
     const cells = [
-      { label: 'Likes', value: m.likes },
-      { label: 'Comments', value: m.comments },
-      { label: 'Views', value: m.views },
-      { label: 'Shares', value: m.shares },
-      { label: 'Saved', value: m.saves ?? m.saved },
-      { label: 'Reach', value: m.reach },
+      { label: 'Likes',        value: m.likes      },
+      { label: 'Comments',     value: m.comments   },
+      { label: 'Views',        value: m.views      },
+      { label: 'Shares',       value: m.shares     },
+      { label: 'Saved',        value: m.saves ?? m.saved },
+      { label: 'Reach',        value: m.reach      },
       { label: 'Interactions', value: m.total_interactions },
     ].filter(c => c.value != null);
-    const engRaw = (m.likes || 0) + (m.comments || 0) + (m.shares || 0);
+    const engRaw  = (m.likes || 0) + (m.comments || 0) + (m.shares || 0);
     const engRate = m.reach && engRaw ? ((engRaw / m.reach) * 100).toFixed(1) : null;
     const mediaTypeLabel = m.media_type ? m.media_type.replace(/_/g, ' ') : null;
     const postDate = m.timestamp
@@ -244,13 +244,13 @@ const PlatformMetricsSection = ({ post }) => {
 
   if (platform === 'facebook') {
     const mainCells = [
-      { label: 'Likes', value: m.likes },
-      { label: 'Comments', value: m.comments },
-      { label: 'Shares', value: m.shares },
-      { label: 'Clicks', value: m.clicks },
+      { label: 'Likes',       value: m.likes       },
+      { label: 'Comments',    value: m.comments    },
+      { label: 'Shares',      value: m.shares      },
+      { label: 'Clicks',      value: m.clicks      },
       { label: 'Impressions', value: m.impressions },
-      { label: 'Reach', value: m.reach },
-      { label: 'Video Views', value: m.videoViews },
+      { label: 'Reach',       value: m.reach       },
+      { label: 'Video Views', value: m.videoViews  },
     ].filter(c => c.value != null);
     const er = typeof m.engagementRate === 'number'
       ? (m.engagementRate * (m.engagementRate > 1 ? 1 : 100)).toFixed(1)
@@ -291,12 +291,12 @@ const PlatformMetricsSection = ({ post }) => {
 
   if (platform === 'linkedin') {
     const cells = [
-      { label: 'Likes', value: m.likeCount ?? m.likes },
-      { label: 'Comments', value: m.commentCount ?? m.comments },
-      { label: 'Shares', value: m.shareCount ?? m.shares },
-      { label: 'Clicks', value: m.clickCount ?? m.clicks },
-      { label: 'Impressions', value: m.impressionCount ?? m.impressions ?? m.reach },
-      { label: 'Unique Imp.', value: m.uniqueImpressionsCount },
+      { label: 'Likes',            value: m.likeCount              ?? m.likes    },
+      { label: 'Comments',         value: m.commentCount           ?? m.comments },
+      { label: 'Shares',           value: m.shareCount             ?? m.shares   },
+      { label: 'Clicks',           value: m.clickCount             ?? m.clicks   },
+      { label: 'Impressions',      value: m.impressionCount        ?? m.impressions ?? m.reach },
+      { label: 'Unique Imp.',      value: m.uniqueImpressionsCount },
     ].filter(c => c.value != null);
     const engRate = m.engagement != null
       ? (m.engagement * (m.engagement > 1 ? 1 : 100)).toFixed(2)
@@ -319,12 +319,12 @@ const PlatformMetricsSection = ({ post }) => {
   }
 
   const genCells = [
-    { label: 'Likes', value: m.likes },
-    { label: 'Comments', value: m.comments },
-    { label: 'Shares', value: m.shares },
+    { label: 'Likes',       value: m.likes       },
+    { label: 'Comments',    value: m.comments    },
+    { label: 'Shares',      value: m.shares      },
     { label: 'Impressions', value: m.impressions ?? m.reach },
   ].filter(c => c.value != null);
-  const genReach = m.reach || m.impressions;
+  const genReach  = m.reach || m.impressions;
   const genEngRaw = (m.likes || 0) + (m.comments || 0) + (m.shares || 0);
   const genEngRate = genReach && genEngRaw ? ((genEngRaw / genReach) * 100).toFixed(1) : null;
   return (
@@ -422,6 +422,15 @@ const ContentItemCard = ({ assignment, scheduledPosts, calendarName, isExpanded,
     });
   })();
 
+  const uploadedAt = assignment.firstSubmittedAt;
+  const approvedVersion = [...(assignment.versions || [])].reverse().find(v => v.approvedAt || (v.status === 'approved' && v.submittedAt));
+  const approvedAt = approvedVersion ? (approvedVersion.approvedAt || approvedVersion.submittedAt) : null;
+  
+  let daysToApproval = null;
+  if (uploadedAt && approvedAt) {
+    daysToApproval = Math.max(0, (new Date(approvedAt) - new Date(uploadedAt)) / (1000 * 60 * 60 * 24)).toFixed(1);
+  }
+
   return (
     <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
       <div className="flex items-start gap-4 p-5">
@@ -481,6 +490,34 @@ const ContentItemCard = ({ assignment, scheduledPosts, calendarName, isExpanded,
             {platforms.map(p => <PlatformPill key={p} platform={p} />)}
           </div>
           <MediaTypeBadge mediaType={assignment.mediaType} slideCount={assignment.slideCount} />
+        </div>
+      </div>
+
+      <div className="px-5 pb-3">
+        <div className="bg-gray-50/50 rounded-lg p-2.5 border border-gray-100 flex flex-col gap-1.5">
+          <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1"><Clock className="w-3 h-3" /> Approval History</h4>
+          <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs">
+            <div className="flex flex-col">
+              <span className="text-[10px] text-gray-400">Uploaded</span>
+              <span className="font-medium text-gray-700">
+                {uploadedAt ? new Date(uploadedAt).toLocaleString('en-US', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—'}
+              </span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[10px] text-gray-400">Approved</span>
+              <span className="font-medium text-gray-700">
+                {approvedAt ? new Date(approvedAt).toLocaleString('en-US', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'Pending'}
+              </span>
+            </div>
+            {daysToApproval !== null && (
+              <div className="flex flex-col">
+                <span className="text-[10px] text-gray-400">Turnaround</span>
+                <span className={`font-semibold ${daysToApproval <= 1 ? 'text-emerald-600' : daysToApproval <= 3 ? 'text-amber-600' : 'text-rose-600'}`}>
+                  {daysToApproval}d
+                </span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -714,9 +751,9 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
     try {
       const params = new URLSearchParams({ customerId: selectedCustomer });
       if (fromDate) params.set('fromDate', fromDate);
-      if (toDate) params.set('toDate', toDate);
+      if (toDate)   params.set('toDate', toDate);
       if (selectedCalendar) params.set('calendarId', selectedCalendar);
-      if (selectedItem) params.set('itemId', selectedItem);
+      if (selectedItem)     params.set('itemId', selectedItem);
 
       const [reportRes, postsRes] = await Promise.all([
         fetch(`${API_URL}/api/admin/summary-report?${params.toString()}`),
@@ -758,7 +795,31 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
       const isVideoUrl = (url) => VIDEO_EXTS.test(url);
       const tryLoadImg = async (url) => {
         if (!url || thumbCache[url] !== undefined) return;
-        if (isVideoUrl(url)) { thumbCache[url] = 'VIDEO'; return; }
+        if (isVideoUrl(url)) {
+          const b64 = await new Promise((resolve) => {
+            const proxyUrl = `${API}/api/image-proxy?url=${encodeURIComponent(url)}`;
+            const video = document.createElement('video');
+            video.crossOrigin = 'anonymous';
+            video.preload = 'metadata';
+            video.muted = true;
+            const tid = setTimeout(() => { video.src = ''; resolve(null); }, 12000);
+            video.addEventListener('loadeddata', () => { video.currentTime = 0; }, { once: true });
+            video.addEventListener('seeked', () => {
+              clearTimeout(tid);
+              try {
+                const canvas = document.createElement('canvas');
+                canvas.width  = video.videoWidth  || 320;
+                canvas.height = video.videoHeight || 180;
+                canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+                resolve(canvas.toDataURL('image/jpeg', 0.85));
+              } catch { resolve(null); }
+            }, { once: true });
+            video.addEventListener('error', () => { clearTimeout(tid); resolve(null); }, { once: true });
+            video.src = proxyUrl;
+          });
+          thumbCache[url] = b64 || 'VIDEO';
+          return;
+        }
         try {
           const resp = await fetch(`${API}/api/admin/summary-report/proxy-image?url=${encodeURIComponent(url)}`);
           if (!resp.ok) { thumbCache[url] = null; return; }
@@ -790,41 +851,57 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
       // ── Professional light palette ────────────────────────────────────────
       // Pure white page, cool-gray borders, slate text, muted steel accents
       const C = {
-        pageBg: [255, 255, 255],   // pure white
-        cardBg: [252, 253, 254],   // off-white card background
-        sectionBg: [247, 249, 251],   // very light blue-gray for tiles
-        border: [218, 224, 230],   // cool gray border
-        borderLight: [232, 237, 242],   // lighter divider
-        // Text
-        ink: [30, 36, 44],    // near-black for headings
-        body: [60, 72, 84],    // dark slate for body text
-        muted: [120, 134, 150],   // steel gray for labels
-        faint: [165, 178, 192],   // faint for secondary meta
-        // Accent — single muted slate-blue
-        accent: [59, 100, 158],   // professional blue
-        accentLight: [235, 242, 252],   // light accent fill
-        // Status — all desaturated/muted
-        publishedBg: [236, 252, 243], publishedText: [30, 126, 82],
-        approvedBg: [240, 253, 244], approvedText: [34, 120, 78],
-        reviewBg: [255, 251, 235], reviewText: [160, 98, 26],
-        revisionBg: [255, 247, 237], revisionText: [170, 90, 30],
-        rejectedBg: [255, 241, 241], rejectedText: [178, 50, 50],
-        pendingBg: [246, 248, 250], pendingText: [120, 134, 150],
-        // Platform badge — all light-tinted, low saturation
-        igBg: [253, 242, 248], igText: [160, 60, 110],
-        fbBg: [240, 246, 255], fbText: [40, 90, 170],
-        liBg: [237, 248, 255], liText: [30, 90, 150],
-        ytBg: [255, 242, 242], ytText: [170, 40, 40],
-        twBg: [245, 248, 251], twText: [80, 100, 120],
-        // Metric accent
-        engGreen: [30, 126, 82],
+        // Base matching ContentApprovalReport
+        dark:   [15,  23,  42],
+        blue:   [59,  130, 246],
+        indigo: [99,  102, 241],
+        green:  [22,  163, 74],
+        amber:  [217, 119, 6],
+        slate:  [100, 116, 139],
+        white:  [255, 255, 255],
+        light:  [248, 250, 252],
+        bgblue: [239, 246, 255],
+        bggreen:[236, 253, 245],
+        bgamber:[255, 251, 235],
+        bgindig:[238, 242, 255],
+        red:    [220, 38,  38],
+        bgred:  [254, 242, 242],
+
+        // Original properties preserved for existing layout compatibility
+        pageBg:        [255, 255, 255],
+        cardBg:        [252, 253, 254],
+        sectionBg:     [247, 249, 251],
+        border:        [226, 232, 240], // mapped to new C.border
+        borderLight:   [232, 237, 242],
+        ink:           [30,  36,  44],
+        body:          [60,  72,  84],
+        muted:         [100, 116, 139], // mapped to slate
+        faint:         [165, 178, 192],
+        accent:        [99,  102, 241], // mapped to indigo
+        accentLight:   [238, 242, 255], // mapped to bgindig
+        
+        // Status & badges
+        publishedBg:   [236, 253, 245],  publishedText: [22,  163, 74],
+        approvedBg:    [236, 253, 245],  approvedText:  [22,  163, 74],
+        reviewBg:      [255, 251, 235],  reviewText:    [217, 119, 6],
+        revisionBg:    [255, 251, 235],  revisionText:  [217, 119, 6],
+        rejectedBg:    [254, 242, 242],  rejectedText:  [220, 38,  38],
+        pendingBg:     [248, 250, 252],  pendingText:   [100, 116, 139],
+        
+        igBg:          [253, 242, 248],  igText:  [219,  39, 119],
+        fbBg:          [239, 246, 255],  fbText:  [59,  130, 246],
+        liBg:          [240, 249, 255],  liText:  [3,   105, 161],
+        ytBg:          [254, 242, 242],  ytText:  [220,  38,  38],
+        twBg:          [248, 250, 252],  twText:  [71,   85, 105],
+        
+        engGreen:      [22,  163, 74],
       };
 
-      const sf = a => doc.setFillColor(...a);
-      const ss = a => doc.setDrawColor(...a);
-      const sc = a => doc.setTextColor(...a);
-      const sans = (style = 'normal', sz = 10) => { doc.setFont('helvetica', style); doc.setFontSize(sz); };
-      const serif = (style = 'normal', sz = 10) => { doc.setFont('times', style); doc.setFontSize(sz); };
+      const sf  = a => doc.setFillColor(...a);
+      const ss  = a => doc.setDrawColor(...a);
+      const sc  = a => doc.setTextColor(...a);
+      const sans   = (style = 'normal', sz = 10) => { doc.setFont('helvetica', style); doc.setFontSize(sz); };
+      const serif  = (style = 'normal', sz = 10) => { doc.setFont('times', style);     doc.setFontSize(sz); };
       const hairline = () => doc.setLineWidth(0.18);
       const thinLine = () => doc.setLineWidth(0.35);
 
@@ -857,24 +934,24 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
       const getStatusStyle = status => {
         const s = (status || '').toLowerCase();
         return ({
-          published: { bg: C.publishedBg, tc: C.publishedText, label: 'Published' },
-          approved: { bg: C.approvedBg, tc: C.approvedText, label: 'Approved' },
-          rejected: { bg: C.rejectedBg, tc: C.rejectedText, label: 'Rejected' },
-          submitted: { bg: C.reviewBg, tc: C.reviewText, label: 'In Review' },
-          in_review: { bg: C.reviewBg, tc: C.reviewText, label: 'In Review' },
-          under_review: { bg: C.reviewBg, tc: C.reviewText, label: 'In Review' },
-          revision_requested: { bg: C.revisionBg, tc: C.revisionText, label: 'Revision' },
-          pending: { bg: C.pendingBg, tc: C.pendingText, label: 'Pending' },
-          publishing: { bg: C.accentLight, tc: C.accent, label: 'Publishing' },
+          published:          { bg: C.publishedBg,  tc: C.publishedText,  label: 'Published'  },
+          approved:           { bg: C.approvedBg,   tc: C.approvedText,   label: 'Approved'   },
+          rejected:           { bg: C.rejectedBg,   tc: C.rejectedText,   label: 'Rejected'   },
+          submitted:          { bg: C.reviewBg,     tc: C.reviewText,     label: 'In Review'  },
+          in_review:          { bg: C.reviewBg,     tc: C.reviewText,     label: 'In Review'  },
+          under_review:       { bg: C.reviewBg,     tc: C.reviewText,     label: 'In Review'  },
+          revision_requested: { bg: C.revisionBg,   tc: C.revisionText,   label: 'Revision'   },
+          pending:            { bg: C.pendingBg,    tc: C.pendingText,    label: 'Pending'    },
+          publishing:         { bg: C.accentLight,  tc: C.accent,         label: 'Publishing' },
         })[s] || { bg: C.pendingBg, tc: C.muted, label: (status || '—').replace(/_/g, ' ') };
       };
 
       const getPlatformStyle = p => ({
         instagram: { bg: C.igBg, tc: C.igText, label: 'Instagram' },
-        facebook: { bg: C.fbBg, tc: C.fbText, label: 'Facebook' },
-        linkedin: { bg: C.liBg, tc: C.liText, label: 'LinkedIn' },
-        youtube: { bg: C.ytBg, tc: C.ytText, label: 'YouTube' },
-        twitter: { bg: C.twBg, tc: C.twText, label: 'Twitter/X' },
+        facebook:  { bg: C.fbBg, tc: C.fbText, label: 'Facebook'  },
+        linkedin:  { bg: C.liBg, tc: C.liText, label: 'LinkedIn'  },
+        youtube:   { bg: C.ytBg, tc: C.ytText, label: 'YouTube'   },
+        twitter:   { bg: C.twBg, tc: C.twText, label: 'Twitter/X' },
       })[(p || '').toLowerCase()] || { bg: C.sectionBg, tc: C.muted, label: p || '—' };
 
       // ── Page helpers ──────────────────────────────────────────────────────
@@ -916,7 +993,7 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
       };
 
       // ── Summary counts ────────────────────────────────────────────────────
-      const totalItems = report.assignments.length;
+      const totalItems      = report.assignments.length;
       const pdfApprovedCount = report.assignments.filter(a =>
         a.versions?.some(v => ['approved', 'published'].includes((v.status || '').toLowerCase()))
       ).length;
@@ -924,10 +1001,10 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
         a.versions?.some(v => (v.status || '').toLowerCase() === 'published') ||
         getPdfPosts(a).some(p => p.status === 'published' || p.publishedAt)
       ).length;
-      const pdfApprovalRate = totalItems > 0 ? Math.round((pdfApprovedCount / totalItems) * 100) : 0;
+      const pdfApprovalRate  = totalItems > 0 ? Math.round((pdfApprovedCount / totalItems) * 100) : 0;
       const pdfTotalVersions = report.assignments.reduce((s, a) => s + (a.totalVersions || 1), 0);
-      const pdfAvgRevisions = totalItems > 0 ? (pdfTotalVersions / totalItems).toFixed(1) : '—';
-      const platformsSet = new Set(
+      const pdfAvgRevisions  = totalItems > 0 ? (pdfTotalVersions / totalItems).toFixed(1) : '—';
+      const platformsSet     = new Set(
         report.assignments.flatMap(a => [
           ...(Array.isArray(a.platforms) ? a.platforms.flat() : []),
           ...(a.platform ? [a.platform] : []),
@@ -945,85 +1022,48 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
       fillPageBg();
       y = M;
 
-      // ── Top header bar ────────────────────────────────────────────────────
-      // Accent rule at very top
-      sf(C.accent); doc.setLineWidth(0);
-      doc.rect(0, 0, PW, 1.2, 'F');
+      // ── PAGE HEADER ───────────────────────────────────────────────────────────
+      sf(C.dark);
+      doc.rect(0, 0, PW, 40, 'F');
+      sf(C.blue);
+      doc.rect(0, 38, PW, 2, 'F');
+      sf(C.indigo);
+      doc.rect(0, 0, 4, 40, 'F');
 
-      y = M + 2;
+      sans('bold', 16);
+      sc(C.white);
+      doc.text('CONTENT PERFORMANCE REPORT', M + 4, 16);
 
-      // Left: brand name
-      sans('bold', 8); sc(C.ink);
-      doc.text(sanitize(customerName).toUpperCase(), M, y);
-      sans('normal', 7); sc(C.muted);
-      doc.text(sanitize(calendarName ? `Calendar: ${calendarName}` : 'All Calendars'), M, y + 5);
+      sans('normal', 10);
+      sc([148, 163, 184]);
+      doc.text(`${sanitize(customerName).toUpperCase()}  •  ${sanitize(calendarName ? `Calendar: ${calendarName}` : 'All Calendars')}`, M + 4, 27);
 
-      // Right: meta trio (GENERATED / PERIOD / ITEMS) stacked
-      const genDate = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-      const rightMeta = [
-        { label: 'Generated', value: genDate },
-        { label: 'Period', value: sanitize(periodVal) },
-        { label: 'Items', value: `${totalItems}` },
-      ];
-      rightMeta.forEach((rm, i) => {
-        sans('normal', 7); sc(C.muted);
-        doc.text(rm.label + ':', PW - M - 50, y + i * 5);
-        sans('bold', 7); sc(C.body);
-        doc.text(rm.value, PW - M, y + i * 5, { align: 'right' });
+      sc([203, 213, 225]);
+      doc.text(`Generated: ${new Date().toLocaleString('en-US', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })}`, PW - M, 16, { align: 'right' });
+      doc.text(`Period: ${sanitize(periodVal)}`, PW - M, 27, { align: 'right' });
+
+      y = 48;
+
+      // ── SUMMARY STATS (3 boxes across) ───────────────────────────────────────────────
+      const boxW = (CW - 6) / 3;
+      [
+        { label: 'Total Content',    value: String(totalItems),          color: C.indigo },
+        { label: 'Published Posts',  value: String(pdfPublishedCount),   color: C.green  },
+        { label: 'Platforms Active', value: String(platformCount),       color: C.blue },
+      ].forEach((b, i) => {
+        const bx = M + i * (boxW + 3);
+        sf(C.light);
+        doc.roundedRect(bx, y, boxW, 18, 2, 2, 'F');
+        sf(b.color);
+        doc.rect(bx, y, 3, 18, 'F');
+        sans('bold', 17);
+        sc(b.color);
+        doc.text(b.value, bx + 8, y + 12);
+        sans('normal', 9);
+        sc(C.slate);
+        doc.text(b.label, bx + 8, y + 17);
       });
-
-      y += 16;
-
-      // ── Thin divider ──────────────────────────────────────────────────────
-      hairline(); ss(C.border);
-      doc.line(M, y, PW - M, y);
-      y += 10;
-
-      // ── Report title ──────────────────────────────────────────────────────
-      serif('normal', 26); sc(C.ink);
-      doc.text('Content Performance Report', M, y);
-      y += 8;
-
-      // Subtitle tagline
-      sans('normal', 8.5); sc(C.muted);
-      const execSummary = sanitize(
-        `${totalItems} item${totalItems !== 1 ? 's' : ''} · ${platformCount} platform${platformCount !== 1 ? 's' : ''} · ` +
-        `${pdfApprovedCount} approved (${pdfApprovalRate}%) · ${pdfPublishedCount} published · avg ${pdfAvgRevisions} revision${parseFloat(pdfAvgRevisions) !== 1 ? 's' : ''} per item`
-      );
-      doc.text(execSummary, M, y);
-      y += 12;
-
-      // ── KPI SUMMARY TILES (5 across) ─────────────────────────────────────
-      const TILE_GAP = 4;
-      const TILE_W = (CW - TILE_GAP * 4) / 5;
-      const TILE_H = 26;
-
-      const kpiTiles = [
-        { label: 'Total Items', value: String(totalItems), sub: null },
-        { label: 'Published', value: String(pdfPublishedCount), sub: 'posts live' },
-        { label: 'Approval Rate', value: `${pdfApprovalRate}%`, sub: `${pdfApprovedCount} approved` },
-        { label: 'Avg Revisions', value: String(pdfAvgRevisions), sub: 'per item' },
-        { label: 'Platforms', value: String(platformCount), sub: null },
-      ];
-
-      kpiTiles.forEach((tile, i) => {
-        const tx = M + i * (TILE_W + TILE_GAP);
-        // Card background
-        sf(C.sectionBg); hairline(); ss(C.borderLight);
-        doc.roundedRect(tx, y, TILE_W, TILE_H, 2, 2, 'FD');
-        // Top accent line on first tile
-        if (i === 0) {
-          sf(C.accent); doc.setLineWidth(0);
-          doc.roundedRect(tx, y, TILE_W, 1.5, 1, 1, 'F');
-        }
-        // Value (serif large)
-        serif('normal', 17); sc(C.ink);
-        doc.text(tile.value, tx + TILE_W / 2, y + 14, { align: 'center' });
-        // Label
-        sans('bold', 6); sc(C.muted);
-        doc.text(tile.label.toUpperCase(), tx + TILE_W / 2, y + 21.5, { align: 'center' });
-      });
-      y += TILE_H + 10;
+      y += 26;
 
       // ── PLATFORM BREAKDOWN TABLE ──────────────────────────────────────────
       const pdfPlatformMap = {};
@@ -1033,10 +1073,10 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
         if (!pdfPlatformMap[pl]) pdfPlatformMap[pl] = { pl, posts: 0, reach: 0, likes: 0, comments: 0, shares: 0 };
         pdfPlatformMap[pl].posts++;
         const mm = post.metrics || {};
-        pdfPlatformMap[pl].reach += mm.reach || mm.impressions || 0;
-        pdfPlatformMap[pl].likes += mm.likes || 0;
+        pdfPlatformMap[pl].reach    += mm.reach || mm.impressions || 0;
+        pdfPlatformMap[pl].likes    += mm.likes || 0;
         pdfPlatformMap[pl].comments += mm.comments || 0;
-        pdfPlatformMap[pl].shares += mm.shares || 0;
+        pdfPlatformMap[pl].shares   += mm.shares || 0;
       }
       const pdfPlatformRows = Object.values(pdfPlatformMap).sort((a, b) => b.posts - a.posts);
 
@@ -1044,22 +1084,19 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
         checkY(pdfPlatformRows.length * 7 + 20);
 
         // Section label
-        sans('bold', 7); sc(C.muted);
-        doc.text('PLATFORM BREAKDOWN', M, y);
-        y += 5;
-
-        hairline(); ss(C.border);
-        doc.line(M, y, PW - M, y);
-        y += 4;
+        sf(C.dark); doc.rect(M, y, CW, 8, 'F');
+        sf(C.indigo); doc.rect(M, y, 2, 8, 'F');
+        sans('bold', 8); sc(C.white); doc.text('PLATFORM BREAKDOWN', M + 5, y + 5.5);
+        y += 12;
 
         const pCols = [
-          { label: 'Platform', w: 30 },
-          { label: 'Posts', w: 16 },
-          { label: 'Reach', w: 24 },
-          { label: 'Likes', w: 20 },
-          { label: 'Comments', w: 24 },
-          { label: 'Shares', w: 20 },
-          { label: 'Eng. Rate', w: 20 },
+          { label: 'Platform',    w: 30 },
+          { label: 'Posts',       w: 16 },
+          { label: 'Reach',       w: 24 },
+          { label: 'Likes',       w: 20 },
+          { label: 'Comments',    w: 24 },
+          { label: 'Shares',      w: 20 },
+          { label: 'Eng. Rate',   w: 20 },
         ];
         let hx = M;
         pCols.forEach(c => { sans('bold', 6.5); sc(C.faint); doc.text(c.label.toUpperCase(), hx, y); hx += c.w; });
@@ -1067,16 +1104,16 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
 
         for (const row of pdfPlatformRows) {
           const eng = row.likes + row.comments + row.shares;
-          const er = row.reach > 0 ? ((eng / row.reach) * 100).toFixed(1) + '%' : '—';
+          const er  = row.reach > 0 ? ((eng / row.reach) * 100).toFixed(1) + '%' : '—';
           const plStyle = getPlatformStyle(row.pl);
           const rowVals = [
             { v: row.pl.charAt(0).toUpperCase() + row.pl.slice(1), w: 30, bold: true },
-            { v: String(row.posts), w: 16 },
-            { v: fmtNum(row.reach), w: 24 },
-            { v: fmtNum(row.likes), w: 20 },
+            { v: String(row.posts),    w: 16 },
+            { v: fmtNum(row.reach),    w: 24 },
+            { v: fmtNum(row.likes),    w: 20 },
             { v: fmtNum(row.comments), w: 24 },
-            { v: fmtNum(row.shares), w: 20 },
-            { v: er, w: 20, color: C.engGreen },
+            { v: fmtNum(row.shares),   w: 20 },
+            { v: er,                   w: 20, color: C.engGreen },
           ];
           // Subtle row stripe on alternates
           if (pdfPlatformRows.indexOf(row) % 2 === 0) {
@@ -1109,12 +1146,12 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
       }
       const pdfStatusTotal = report.assignments.length || 1;
       const pdfStatusMeta = {
-        published: { label: 'Published', rgb: [30, 126, 82] },
-        approved: { label: 'Approved', rgb: [56, 159, 95] },
-        in_review: { label: 'In Review', rgb: [198, 148, 42] },
-        revision: { label: 'Revision', rgb: [200, 110, 42] },
-        rejected: { label: 'Rejected', rgb: [185, 65, 65] },
-        pending: { label: 'Pending', rgb: [180, 192, 205] },
+        published: { label: 'Published', rgb: [30,  126, 82]  },
+        approved:  { label: 'Approved',  rgb: [56,  159, 95]  },
+        in_review: { label: 'In Review', rgb: [198, 148, 42]  },
+        revision:  { label: 'Revision',  rgb: [200, 110, 42]  },
+        rejected:  { label: 'Rejected',  rgb: [185,  65, 65]  },
+        pending:   { label: 'Pending',   rgb: [180, 192, 205] },
       };
       const pdfStatusRows = ['published', 'approved', 'in_review', 'revision', 'rejected', 'pending']
         .filter(k => pdfStatusCounts[k] > 0)
@@ -1122,9 +1159,10 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
 
       if (pdfStatusRows.length > 0) {
         checkY(36);
-        sans('bold', 7); sc(C.muted);
-        doc.text('STATUS DISTRIBUTION', M, y);
-        y += 5;
+        sf(C.dark); doc.rect(M, y, CW, 8, 'F');
+        sf(C.indigo); doc.rect(M, y, 2, 8, 'F');
+        sans('bold', 8); sc(C.white); doc.text('STATUS DISTRIBUTION', M + 5, y + 5.5);
+        y += 12;
 
         // Segmented bar (rounded, with gaps between segments)
         const barH = 7;
@@ -1164,7 +1202,7 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
         .map(a => {
           const posts = liveMetricsCache[a.assignmentId]?.posts || [];
           const reach = posts.reduce((s, p) => s + (p.metrics?.reach || p.metrics?.impressions || 0), 0);
-          const eng = posts.reduce((s, p) => s + (p.metrics?.likes || 0) + (p.metrics?.comments || 0) + (p.metrics?.shares || 0), 0);
+          const eng   = posts.reduce((s, p) => s + (p.metrics?.likes || 0) + (p.metrics?.comments || 0) + (p.metrics?.shares || 0), 0);
           return { ...a, _reach: reach, _eng: eng, _rate: reach > 0 ? ((eng / reach) * 100).toFixed(1) : null };
         })
         .filter(a => a._eng > 0 || a._reach > 0)
@@ -1173,9 +1211,10 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
 
       if (pdfTopPerformers.length > 0) {
         checkY(54);
-        sans('bold', 7); sc(C.muted);
-        doc.text('TOP PERFORMING CONTENT', M, y);
-        y += 5;
+        sf(C.dark); doc.rect(M, y, CW, 8, 'F');
+        sf(C.indigo); doc.rect(M, y, 2, 8, 'F');
+        sans('bold', 8); sc(C.white); doc.text('TOP PERFORMING CONTENT', M + 5, y + 5.5);
+        y += 12;
 
         const tpCount = pdfTopPerformers.length;
         const tpTileW = (CW - (tpCount - 1) * 5) / tpCount;
@@ -1213,8 +1252,8 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
           doc.line(tx + 3, statsY - 3, tx + tpTileW - 3, statsY - 3);
 
           const statItems = [
-            { v: fmtNum(a._eng), l: 'Eng' },
-            { v: fmtNum(a._reach), l: 'Reach' },
+            { v: fmtNum(a._eng),   l: 'Eng'   },
+            { v: fmtNum(a._reach), l: 'Reach'  },
             ...(a._rate ? [{ v: `${a._rate}%`, l: 'Rate' }] : []),
           ];
           const statW = (tpTileW - 6) / 3;
@@ -1238,7 +1277,7 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
         pdfTypeMap[label].count++;
         for (const p of (liveMetricsCache[a.assignmentId]?.posts || [])) {
           if (!p.metrics) continue;
-          pdfTypeMap[label].eng += (p.metrics.likes || 0) + (p.metrics.comments || 0) + (p.metrics.shares || 0);
+          pdfTypeMap[label].eng   += (p.metrics.likes || 0) + (p.metrics.comments || 0) + (p.metrics.shares || 0);
           pdfTypeMap[label].reach += p.metrics.reach || p.metrics.impressions || 0;
         }
       }
@@ -1256,8 +1295,8 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
       const pdfCreatorRows = Object.values(pdfCreatorMap).sort((a, b) => b.assigned - a.assigned);
 
       const colGap = 8;
-      const halfW = (CW - colGap) / 2;
-      const colRX = M + halfW + colGap;
+      const halfW  = (CW - colGap) / 2;
+      const colRX  = M + halfW + colGap;
 
       const typeH = pdfTypeRows.length > 0 ? pdfTypeRows.length * 12 + 18 : 0;
       const crtrH = pdfCreatorRows.length > 0 ? Math.min(pdfCreatorRows.length, 6) * 8 + 22 : 0;
@@ -1269,9 +1308,10 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
 
         // Left: Content Type Breakdown
         if (pdfTypeRows.length > 0) {
-          sans('bold', 7); sc(C.muted);
-          doc.text('CONTENT TYPE BREAKDOWN', M, twoColY);
-          let ty = twoColY + 8;
+          sf(C.dark); doc.rect(M, twoColY, halfW, 8, 'F');
+          sf(C.indigo); doc.rect(M, twoColY, 2, 8, 'F');
+          sans('bold', 8); sc(C.white); doc.text('CONTENT TYPE BREAKDOWN', M + 5, twoColY + 5.5);
+          let ty = twoColY + 14;
 
           for (const ct of pdfTypeRows) {
             const pct = totalItems > 0 ? Math.round((ct.count / totalItems) * 100) : 0;
@@ -1297,14 +1337,15 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
 
         // Right: Creator Performance table
         if (pdfCreatorRows.length > 0) {
-          sans('bold', 7); sc(C.muted);
-          doc.text('CREATOR PERFORMANCE', colRX, twoColY);
+          sf(C.dark); doc.rect(colRX, twoColY, halfW, 8, 'F');
+          sf(C.indigo); doc.rect(colRX, twoColY, 2, 8, 'F');
+          sans('bold', 8); sc(C.white); doc.text('CREATOR PERFORMANCE', colRX + 5, twoColY + 5.5);
 
-          let hry = twoColY + 8;
+          let hry = twoColY + 14;
           const crCols = [
-            { label: 'Creator', x: colRX, w: 40 },
-            { label: 'Items', x: colRX + 40, w: 18 },
-            { label: 'Appr.', x: colRX + 58, w: 22 },
+            { label: 'Creator', x: colRX,      w: 40 },
+            { label: 'Items',   x: colRX + 40, w: 18 },
+            { label: 'Appr.',   x: colRX + 58, w: 22 },
             { label: 'Avg Rev', x: colRX + 80, w: 18 },
           ];
           crCols.forEach(c => { sans('bold', 6.5); sc(C.faint); doc.text(c.label.toUpperCase(), c.x, hry); });
@@ -1316,7 +1357,7 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
           const displayCreators = pdfCreatorRows.slice(0, 6);
           for (const c of displayCreators) {
             const apprPct = c.assigned > 0 ? Math.round((c.approved / c.assigned) * 100) : 0;
-            const avgRev = c.assigned > 0 ? (c.totalV / c.assigned).toFixed(1) : '—';
+            const avgRev  = c.assigned > 0 ? (c.totalV / c.assigned).toFixed(1) : '—';
 
             sans('bold', 7); sc(C.body);
             doc.text(sanitize(c.name).slice(0, 30), colRX, hry);
@@ -1336,15 +1377,13 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
       }
 
       // ── Section divider before content items ─────────────────────────────
-      hairline(); ss(C.border);
-      doc.line(M, y, PW - M, y);
-      y += 8;
-
-      sans('bold', 8.5); sc(C.ink);
-      doc.text('Content Items', M, y);
-      sans('normal', 7); sc(C.muted);
-      doc.text(`${report.assignments.length} item${report.assignments.length !== 1 ? 's' : ''}`, PW - M, y, { align: 'right' });
-      y += 9;
+      sf(C.dark); doc.rect(M, y, CW, 8, 'F');
+      sf(C.indigo); doc.rect(M, y, 2, 8, 'F');
+      sans('bold', 8); sc(C.white); doc.text('CONTENT ITEMS', M + 5, y + 5.5);
+      
+      sans('normal', 7); sc(C.faint);
+      doc.text(`${report.assignments.length} item${report.assignments.length !== 1 ? 's' : ''}`, PW - M - 2, y + 5.5, { align: 'right' });
+      y += 14;
 
       // ════════════════════════════════════════════════════════════════════
       //  CONTENT ITEM CARDS
@@ -1352,9 +1391,9 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
       for (let ai = 0; ai < report.assignments.length; ai++) {
         const assignment = report.assignments[ai];
         try {
-          const asmAllPosts = getPdfPosts(assignment);
+          const asmAllPosts     = getPdfPosts(assignment);
           const asmMetricsPosts = asmAllPosts.filter(p => p.status === 'published' || p.publishedAt || p.metrics);
-          const hasMetrics = asmMetricsPosts.length > 0;
+          const hasMetrics      = asmMetricsPosts.length > 0;
 
           const asmPlatforms = [...new Set([
             ...(Array.isArray(assignment.platforms) ? assignment.platforms.flat() : []),
@@ -1365,7 +1404,7 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
 
           const collectMediaImages = (mediaArr) =>
             (mediaArr || []).map(m => typeof m === 'string' ? m : (m?.url || m?.publicUrl || ''))
-              .filter(u => u && !isVideoUrl(u));
+                            .filter(u => u && !isVideoUrl(u));
 
           const allThumbs = (() => {
             const urls = [];
@@ -1382,15 +1421,15 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
             return urls;
           })();
 
-          const THUMB_SZ = 26;
-          const THUMB_GAP = 3;
+          const THUMB_SZ       = 26;
+          const THUMB_GAP      = 3;
           const showThumbCount = Math.min(allThumbs.length, 4);
-          const hasThumbs = showThumbCount > 0;
+          const hasThumbs      = showThumbCount > 0;
 
           // Estimate card height
           sans('normal', 14);
-          const itemTitleText = sanitize(assignment.itemTitle || assignment.caption?.slice(0, 60) || `Item ${ai + 1}`);
-          const titleLinesEst = doc.splitTextToSize(itemTitleText, CW - 65).length;
+          const itemTitleText  = sanitize(assignment.itemTitle || assignment.caption?.slice(0, 60) || `Item ${ai + 1}`);
+          const titleLinesEst  = doc.splitTextToSize(itemTitleText, CW - 65).length;
           const estCardH = (
             10 +
             Math.max(titleLinesEst * 7, 12) + 4 +
@@ -1405,54 +1444,41 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
           checkY(Math.min(estCardH, 95));
 
           const cardStartY = y;
-          const CARD_PAD = 7;
-          const innerX = M + CARD_PAD;
-          const innerW = CW - CARD_PAD * 2;
+          const CARD_PAD   = 7;
+          const innerX     = M + CARD_PAD;
+          const innerW     = CW - CARD_PAD * 2;
           y += CARD_PAD + 2;
 
-          // ── Item number badge + title ───────────────────────────────────
-          // Small index badge
-          sf(C.sectionBg); hairline(); ss(C.borderLight); doc.setLineWidth(0);
-          doc.roundedRect(innerX, y - 3, 8, 8, 1, 1, 'F');
-          sans('bold', 6); sc(C.muted);
-          doc.text(String(ai + 1), innerX + 4, y + 2, { align: 'center' });
+          // ── Item Card Header ───────────────────────────────────────────────
+          sf(C.dark);
+          doc.roundedRect(M, y, CW, 15, 2, 2, 'F');
+          sf(C.indigo);
+          doc.rect(M, y, 3, 15, 'F');
 
-          // Title
-          serif('normal', 14); sc(C.ink);
-          const titleLinesArr = doc.splitTextToSize(itemTitleText, innerW - 68).slice(0, 2);
-          doc.text(titleLinesArr, innerX + 11, y + 1.5);
+          // Item Title
+          sans('bold', 11); sc(C.white);
+          const clip = (str, len) => str && str.length > len ? str.slice(0, len) + '...' : str;
+          doc.text(`${ai + 1}. ${clip(itemTitleText, 50)}`, M + 6, y + 6.5);
 
-          // ── Creator info (top-right) ────────────────────────────────────
+          // Creator info + Date
+          sans('normal', 9); sc([148, 163, 184]);
           const creatorName = sanitize(assignment.creatorName || '—');
-          const AVATAR_R = 5;
-          const avatarCX = M + CW - CARD_PAD - AVATAR_R;
-          const avatarCY = y + 1;
+          const createdStr = assignment.firstSubmittedAt ? new Date(assignment.firstSubmittedAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+          doc.text(`${creatorName}  |  Created: ${createdStr}`, M + 6, y + 12.5);
 
-          sf(C.accentLight); doc.setLineWidth(0);
-          doc.circle(avatarCX, avatarCY, AVATAR_R, 'F');
-          hairline(); ss(C.border);
-          doc.circle(avatarCX, avatarCY, AVATAR_R, 'D');
-          sans('bold', 6); sc(C.accent);
-          doc.text(getInitials(creatorName), avatarCX, avatarCY + 2, { align: 'center' });
-          sans('bold', 7); sc(C.body);
-          doc.text(creatorName, avatarCX - AVATAR_R - 2.5, avatarCY + 1, { align: 'right' });
-          if (assignment.creatorEmail) {
-            sans('normal', 6); sc(C.faint);
-            doc.text(sanitize(assignment.creatorEmail), avatarCX - AVATAR_R - 2.5, avatarCY + 6, { align: 'right' });
-          }
+          // Status Badge
+          const currStatus = (assignment.currentStatus || 'pending').toLowerCase();
+          const sColor = { approved: C.green, rejected: C.red, published: [5, 150, 105] }[currStatus] || C.slate;
+          sans('bold', 10); sc(sColor);
+          doc.text(currStatus.toUpperCase(), PW - M - 3, y + 6.5, { align: 'right' });
 
-          y += Math.max(titleLinesArr.length * 7, 12) + 4;
-
-          // ── Meta line ──────────────────────────────────────────────────
-          const createdStr = assignment.firstSubmittedAt ? fmtDateShort(assignment.firstSubmittedAt) : '—';
+          // MediaType and Version count
           const mt = (assignment.mediaType || 'image').toLowerCase();
-          const mtStr = mt === 'carousel'
-            ? `Carousel · ${assignment.slideCount || '?'} slides`
-            : mt === 'video' ? 'Video'
-              : `Image · ${assignment.slideCount || 1} slide`;
-          sans('normal', 7); sc(C.muted);
-          doc.text(`${createdStr}  ·  ${mtStr}  ·  ${assignment.totalVersions || 1} version${(assignment.totalVersions || 1) !== 1 ? 's' : ''}`, innerX, y);
-          y += 7;
+          const mtStr = mt === 'carousel' ? `Carousel · ${assignment.slideCount || '?'} slides` : mt === 'video' ? 'Video' : `Image · ${assignment.slideCount || 1} slide`;
+          sans('normal', 9); sc([203, 213, 225]);
+          doc.text(`${mtStr}  |  ${assignment.totalVersions || 1} versions`, PW - M - 3, y + 12.5, { align: 'right' });
+
+          y += 20;
 
           // ── Platform pills ─────────────────────────────────────────────
           if (asmPlatforms.length > 0) {
@@ -1471,28 +1497,48 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
             y += 11;
           }
 
+          // ── Approval History ───────────────────────────────────────────
+          const pdfUploadedAt = assignment.firstSubmittedAt;
+          const pdfApprovedVer = [...(assignment.versions || [])].reverse().find(v => v.approvedAt || (v.status === 'approved' && v.submittedAt));
+          const pdfApprovedAt = pdfApprovedVer ? (pdfApprovedVer.approvedAt || pdfApprovedVer.submittedAt) : null;
+          let pdfDaysToApproval = null;
+          if (pdfUploadedAt && pdfApprovedAt) {
+            pdfDaysToApproval = Math.max(0, (new Date(pdfApprovedAt) - new Date(pdfUploadedAt)) / (1000 * 60 * 60 * 24)).toFixed(1);
+          }
+
+          checkY(20);
+          sf([248, 250, 252]); hairline(); ss(C.borderLight);
+          doc.roundedRect(innerX, y, innerW, 13, 2, 2, 'FD');
+          sans('bold', 6); sc(C.muted);
+          doc.text('APPROVAL HISTORY', innerX + 4, y + 5);
+          sans('normal', 7.5); sc(C.body);
+          
+          let ahX = innerX + 4;
+          doc.text(`Uploaded: ${pdfUploadedAt ? new Date(pdfUploadedAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}`, ahX, y + 10);
+          ahX += 45;
+          doc.text(`Approved: ${pdfApprovedAt ? new Date(pdfApprovedAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Pending'}`, ahX, y + 10);
+          ahX += 45;
+          if (pdfDaysToApproval !== null) {
+            doc.text(`Turnaround: ${pdfDaysToApproval}d`, ahX, y + 10);
+          }
+          y += 18;
+
           // ── Thumbnail strip ────────────────────────────────────────────
           if (hasThumbs) {
             let thumbX = innerX;
             for (let ti = 0; ti < showThumbCount; ti++) {
               const thumbUrl = allThumbs[ti];
-              const cached = thumbCache[thumbUrl];
-              const isVideo = cached === 'VIDEO' || isVideoUrl(thumbUrl);
+              const cached   = thumbCache[thumbUrl];
+              const isVideoUrlType = isVideoUrl(thumbUrl);
 
-              if (isVideo) {
-                sf([45, 50, 58]); hairline(); ss(C.borderLight);
-                doc.roundedRect(thumbX, y, THUMB_SZ, THUMB_SZ, 2, 2, 'FD');
-                const cx = thumbX + THUMB_SZ / 2, cy = y + THUMB_SZ / 2 - 2;
-                sf([255, 255, 255]); doc.setLineWidth(0);
-                doc.triangle(cx - 3.5, cy - 4.5, cx - 3.5, cy + 4.5, cx + 5, cy, 'F');
-              } else if (cached) {
+              if (cached && cached !== 'VIDEO') {
                 try {
                   const fmt = cached.startsWith('data:image/png') ? 'PNG' : 'JPEG';
-                  const props = doc.getImageProperties(cached);
+                  const props    = doc.getImageProperties(cached);
                   const imgRatio = props.width / props.height;
                   let fitW, fitH;
                   if (imgRatio > 1) { fitW = THUMB_SZ; fitH = THUMB_SZ / imgRatio; }
-                  else { fitH = THUMB_SZ; fitW = THUMB_SZ * imgRatio; }
+                  else              { fitH = THUMB_SZ; fitW = THUMB_SZ * imgRatio; }
                   const offX = (THUMB_SZ - fitW) / 2;
                   const offY = (THUMB_SZ - fitH) / 2;
                   sf(C.sectionBg); doc.setLineWidth(0);
@@ -1500,12 +1546,26 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
                   doc.addImage(cached, fmt, thumbX + offX, y + offY, fitW, fitH, undefined, 'FAST');
                   hairline(); ss(C.borderLight); doc.setFillColor(0, 0, 0, 0);
                   doc.roundedRect(thumbX, y, THUMB_SZ, THUMB_SZ, 2, 2, 'D');
+
+                  if (isVideoUrlType) {
+                    const cx = thumbX + THUMB_SZ / 2, cy = y + THUMB_SZ / 2, r = 5;
+                    doc.setFillColor(0, 0, 0, 0.45);
+                    doc.circle(cx, cy, r, 'F');
+                    doc.setFillColor(255, 255, 255);
+                    doc.triangle(cx - 1.5, cy - 2.5, cx - 1.5, cy + 2.5, cx + 2.8, cy, 'F');
+                  }
                 } catch {
                   sf(C.sectionBg); hairline(); ss(C.borderLight);
                   doc.roundedRect(thumbX, y, THUMB_SZ, THUMB_SZ, 2, 2, 'FD');
                   sans('normal', 6.5); sc(C.faint);
                   doc.text('—', thumbX + THUMB_SZ / 2, y + THUMB_SZ / 2 + 2, { align: 'center' });
                 }
+              } else if (cached === 'VIDEO' || isVideoUrlType) {
+                sf([45, 50, 58]); hairline(); ss(C.borderLight);
+                doc.roundedRect(thumbX, y, THUMB_SZ, THUMB_SZ, 2, 2, 'FD');
+                const cx = thumbX + THUMB_SZ / 2, cy = y + THUMB_SZ / 2 - 2;
+                sf([255, 255, 255]); doc.setLineWidth(0);
+                doc.triangle(cx - 3.5, cy - 4.5, cx - 3.5, cy + 4.5, cx + 5, cy, 'F');
               } else {
                 sf(C.sectionBg); hairline(); ss(C.borderLight);
                 doc.roundedRect(thumbX, y, THUMB_SZ, THUMB_SZ, 2, 2, 'FD');
@@ -1515,7 +1575,7 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
 
               // Slide label below thumbnail
               sans('normal', 5.5); sc(C.faint);
-              const barLabel = isVideo ? 'VIDEO' : `Slide ${ti + 1}`;
+              const barLabel = isVideoUrlType ? 'VIDEO' : `Slide ${ti + 1}`;
               doc.text(barLabel, thumbX + THUMB_SZ / 2, y + THUMB_SZ + 3.5, { align: 'center' });
 
               thumbX += THUMB_SZ + THUMB_GAP;
@@ -1533,111 +1593,159 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
             y += THUMB_SZ + 8;
           }
 
-          // ── Versions: horizontal columns ───────────────────────────────
+          // ── Versions: vertical rows ───────────────────────────────
           if (assignment.versions?.length > 0) {
             hairline(); ss(C.borderLight);
             doc.line(innerX, y, M + CW - CARD_PAD, y);
             y += 5;
 
-            const MAX_COLS = 4;
-            const COL_GAP = 4;
-            const THUMB_H = 32;
-            const HDR_H = 17;
-            const CELL_H = HDR_H + THUMB_H + 4;
+            assignment.versions.forEach((v, idx) => {
+              checkY(14);
 
-            for (let rowStart = 0; rowStart < assignment.versions.length; rowStart += MAX_COLS) {
-              const rowVersions = assignment.versions.slice(rowStart, rowStart + MAX_COLS);
-              const COLS = rowVersions.length;
-              const COL_W = (innerW - (COLS - 1) * COL_GAP) / COLS;
+              // ── Version header bar ──
+              const vBg = [245, 247, 255];
+              sf(vBg); doc.setLineWidth(0);
+              doc.roundedRect(innerX, y, innerW, 11, 1, 1, 'F');
+              sf(C.indigo);
+              doc.rect(innerX, y, 2.5, 11, 'F');
 
-              checkY(CELL_H + 6);
+              sans('bold', 10); sc(C.indigo);
+              doc.text(`v${v.versionNumber || (idx + 1)}`, innerX + 5, y + 7.5);
 
-              for (let ci = 0; ci < COLS; ci++) {
-                const version = rowVersions[ci];
-                const vs = getStatusStyle(version.status);
-                const colX = innerX + ci * (COL_W + COL_GAP);
-                let colY = y;
+              sans('normal', 8); sc(C.dark);
+              const vCreatedBy = sanitize(v.created_by || assignment.creatorName || 'Unknown');
+              const vCreatedDt = v.submittedAt ? new Date(v.submittedAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+              doc.text(`Uploaded by ${clip(vCreatedBy, 28)}  on  ${vCreatedDt}`, innerX + 13, y + 4.5);
 
-                // Version header: label + badge
-                sans('bold', 7.5); sc(C.body);
-                doc.text(`v${version.versionNumber}`, colX, colY + 4);
+              // Version status
+              const rawStatus = String(v.status || '—');
+              const vsLabel = rawStatus.replace(/_/g, ' ');
+              const vsColor = { approved: C.green, rejected: C.red, published: [5, 150, 105] }[rawStatus.toLowerCase()] || C.slate;
+              sans('bold', 8); sc(vsColor);
+              doc.text(vsLabel.toUpperCase(), innerX + innerW - 4, y + 4.5, { align: 'right' });
 
-                const vLblW = doc.getTextWidth(`v${version.versionNumber}`) + 3;
-                const badgeX = colX + vLblW;
-                const vBadgeW = doc.getTextWidth(vs.label) + 6;
-                sf(vs.bg); doc.setLineWidth(0);
-                doc.roundedRect(badgeX, colY, vBadgeW, 6, 3, 3, 'F');
-                sans('normal', 5.5); sc(vs.tc);
-                doc.text(vs.label, badgeX + vBadgeW / 2, colY + 4.2, { align: 'center' });
+              y += 13;
 
-                colY += 7;
-
-                if (version.submittedAt) {
-                  sans('normal', 6); sc(C.faint);
-                  doc.text(new Date(version.submittedAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short' }), colX, colY + 1);
-                  colY += 5;
-                }
-
-                // Version thumbnail
-                const vMediaUrls = (version.media || [])
-                  .map(m => typeof m === 'string' ? m : (m?.url || m?.publicUrl || ''))
-                  .filter(Boolean);
-                const thumbTop = y + HDR_H;
-
-                if (vMediaUrls.length > 0) {
-                  const vUrl = vMediaUrls[0];
-                  const vCached = thumbCache[vUrl];
-                  const vIsVid = vCached === 'VIDEO' || isVideoUrl(vUrl);
-
-                  if (vIsVid) {
-                    sf([45, 50, 58]); hairline(); ss(C.borderLight);
-                    doc.roundedRect(colX, thumbTop, COL_W, THUMB_H, 2, 2, 'FD');
-                    const vcx = colX + COL_W / 2, vcy = thumbTop + THUMB_H / 2;
-                    sf([255, 255, 255]); doc.setLineWidth(0);
-                    doc.triangle(vcx - 3.5, vcy - 4.5, vcx - 3.5, vcy + 4.5, vcx + 5, vcy, 'F');
-                  } else if (vCached) {
-                    try {
-                      const fmt = vCached.startsWith('data:image/png') ? 'PNG' : 'JPEG';
-                      const props = doc.getImageProperties(vCached);
-                      const imgRatio = props.width / props.height;
-                      const boxRatio = COL_W / THUMB_H;
-                      let fitW, fitH;
-                      if (imgRatio > boxRatio) { fitW = COL_W; fitH = COL_W / imgRatio; }
-                      else { fitH = THUMB_H; fitW = THUMB_H * imgRatio; }
-                      const offX = (COL_W - fitW) / 2;
-                      const offY = (THUMB_H - fitH) / 2;
-                      sf(C.sectionBg); doc.setLineWidth(0);
-                      doc.roundedRect(colX, thumbTop, COL_W, THUMB_H, 2, 2, 'F');
-                      doc.addImage(vCached, fmt, colX + offX, thumbTop + offY, fitW, fitH, undefined, 'FAST');
-                      hairline(); ss(C.borderLight); doc.setFillColor(0, 0, 0, 0);
-                      doc.roundedRect(colX, thumbTop, COL_W, THUMB_H, 2, 2, 'D');
-                    } catch {
-                      sf(C.sectionBg); hairline(); ss(C.borderLight);
-                      doc.roundedRect(colX, thumbTop, COL_W, THUMB_H, 2, 2, 'FD');
-                    }
-                  } else {
-                    sf(C.sectionBg); hairline(); ss(C.borderLight);
-                    doc.roundedRect(colX, thumbTop, COL_W, THUMB_H, 2, 2, 'FD');
-                  }
-
-                  if (vMediaUrls.length > 1) {
-                    const moreLabel = `+${vMediaUrls.length - 1}`;
-                    sans('bold', 5.5);
-                    const moreLabelW = doc.getTextWidth(moreLabel) + 5;
-                    sf([30, 36, 44]); doc.setLineWidth(0);
-                    doc.roundedRect(colX + COL_W - moreLabelW - 2, thumbTop + THUMB_H - 8, moreLabelW, 6, 1, 1, 'F');
-                    sc([255, 255, 255]);
-                    doc.text(moreLabel, colX + COL_W - 2 - moreLabelW / 2, thumbTop + THUMB_H - 3.5, { align: 'center' });
-                  }
-                } else {
-                  sf(C.sectionBg); hairline(); ss(C.borderLight);
-                  doc.roundedRect(colX, thumbTop, COL_W, THUMB_H, 2, 2, 'FD');
-                  sans('normal', 6); sc(C.faint);
-                  doc.text('No media', colX + COL_W / 2, thumbTop + THUMB_H / 2 + 2, { align: 'center' });
-                }
+              // ── Caption & Hashtags ──
+              const vCaption = v.caption ? v.caption.trim() : '';
+              const vHashtags = v.hashtags ? v.hashtags.trim() : '';
+              const chText = [vCaption, vHashtags].filter(Boolean).join('\n\n');
+              
+              if (chText) {
+                const wrappedLines = doc.splitTextToSize(chText, innerW - 10);
+                const lineH = Math.max(wrappedLines.length * 4 + 6, 9);
+                checkY(lineH + 12);
+                
+                sans('bold', 8); sc(C.slate);
+                doc.text('CAPTION & HASHTAGS', innerX + 2, y + 5);
+                y += 7;
+                
+                sf([248, 250, 252]); hairline(); ss(C.borderLight);
+                doc.roundedRect(innerX + 2, y, innerW - 5, lineH, 1, 1, 'F');
+                
+                sans('normal', 8); sc(C.dark);
+                wrappedLines.forEach((line, li) => {
+                  doc.text(line, innerX + 5, y + 5 + li * 4);
+                });
+                y += lineH + 4;
               }
-              y += CELL_H + 4;
-            }
+
+              // ── Image thumbnails ──
+              const vMediaUrls = (Array.isArray(v.media) ? v.media : [])
+                .map(m => typeof m === 'string' ? m : (m?.url || m?.publicUrl || ''))
+                .filter(Boolean);
+              if (vMediaUrls.length > 0) {
+                const THUMB = 24;
+                const GAP   = 3;
+                const maxPerRow = Math.floor((innerW - 10) / (THUMB + GAP));
+                const thumbsToShow = vMediaUrls.slice(0, maxPerRow);
+                checkY(THUMB + 6);
+                let tx = innerX + 2;
+                thumbsToShow.forEach((imgUrl) => {
+                  const cached = thumbCache[imgUrl];
+                  const vIsVidType = isVideoUrl(imgUrl);
+                  
+                  if (!cached || cached === 'VIDEO') {
+                    sf(C.border); hairline(); ss(C.borderLight);
+                    doc.roundedRect(tx, y, THUMB, THUMB, 1, 1, 'FD');
+                    sans('bold', 7); sc(C.slate);
+                    doc.text(vIsVidType ? 'VIDEO' : 'IMG', tx + THUMB / 2, y + THUMB / 2 + 2, { align: 'center' });
+                  } else {
+                    try {
+                      const fmt = cached.startsWith('data:image/png') ? 'PNG' : 'JPEG';
+                      const props = doc.getImageProperties(cached);
+                      const imgRatio = props.width / props.height;
+                      let fitW, fitH;
+                      if (imgRatio > 1) { fitW = THUMB; fitH = THUMB / imgRatio; }
+                      else              { fitH = THUMB; fitW = THUMB * imgRatio; }
+                      const offX = (THUMB - fitW) / 2;
+                      const offY = (THUMB - fitH) / 2;
+                      
+                      sf(C.sectionBg); doc.setLineWidth(0);
+                      doc.roundedRect(tx, y, THUMB, THUMB, 1, 1, 'F');
+                      doc.addImage(cached, fmt, tx + offX, y + offY, fitW, fitH, undefined, 'FAST');
+                      hairline(); ss(C.borderLight); doc.setFillColor(0, 0, 0, 0);
+                      doc.roundedRect(tx, y, THUMB, THUMB, 1, 1, 'S');
+
+                      if (vIsVidType) {
+                        const vcx = tx + THUMB / 2, vcy = y + THUMB / 2, r = 4;
+                        doc.setFillColor(0, 0, 0, 0.45);
+                        doc.circle(vcx, vcy, r, 'F');
+                        doc.setFillColor(255, 255, 255);
+                        doc.triangle(vcx - 1.2, vcy - 2, vcx - 1.2, vcy + 2, vcx + 2.2, vcy, 'F');
+                      }
+                    } catch { /* skip broken image */ }
+                  }
+                  tx += THUMB + GAP;
+                });
+                if (vMediaUrls.length > maxPerRow) {
+                  sans('normal', 8.5); sc(C.slate);
+                  doc.text(`+${vMediaUrls.length - maxPerRow} more`, tx, y + THUMB / 2 + 2);
+                }
+                y += THUMB + 5;
+              }
+
+              // ── Comments ──
+              const comments = v.comments || [];
+              if (comments.length > 0) {
+                checkY(10);
+                sans('bold', 8); sc(C.slate);
+                doc.text(`COMMENTS (${comments.length})`, innerX + 2, y + 5);
+                y += 7;
+
+                comments.forEach((c) => {
+                  const textBody = `${c.comment}${c.done ? '  ✓ Done' : ''}`;
+                  const wrappedLines = doc.splitTextToSize(textBody, innerW - 25);
+                  const lineH = Math.max(wrappedLines.length * 4 + 6, 9);
+                  checkY(lineH + 2);
+
+                  sf(c.done ? C.light : [255, 251, 235]); hairline(); ss(C.borderLight);
+                  doc.roundedRect(innerX + 2, y, innerW - 5, lineH, 1, 1, 'F');
+
+                  if (c.author && c.author !== 'Unknown') {
+                    const authorColor = c.author === 'Admin' ? C.indigo : C.green;
+                    sans('bold', 8); sc(authorColor);
+                    doc.text(`${c.author}:`, innerX + 5, y + 5);
+                  }
+                  const authorW = (c.author && c.author !== 'Unknown') ? doc.getTextWidth(`${c.author}: `) : 0;
+                  
+                  sans('normal', 8); sc(C.dark);
+                  wrappedLines.forEach((line, li) => {
+                    doc.text(line, innerX + 5 + authorW + 1, y + 5 + li * 4);
+                  });
+                  y += lineH + 2;
+                });
+              } else {
+                checkY(7);
+                sf(C.light); doc.setLineWidth(0);
+                doc.roundedRect(innerX + 2, y, innerW - 5, 6, 1, 1, 'F');
+                sans('italic', 8); sc(C.slate);
+                doc.text('No comments on this version.', innerX + 5, y + 4.5);
+                y += 8;
+              }
+
+              y += 3; // gap between versions
+            });
             y += 2;
           }
 
@@ -1658,66 +1766,66 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
 
             const getPlMetricCols = (posts, pl) => {
               let likes = 0, comments = 0, shares = 0, reach = 0, saves = 0,
-                clicks = 0, impressions = 0, views = 0;
+                  clicks = 0, impressions = 0, views = 0;
               for (const p of posts) {
                 const m = p.metrics || {};
-                likes += (m.likes ?? m.likeCount ?? 0);
-                comments += (m.comments ?? m.commentCount ?? 0);
-                shares += (m.shares ?? m.shareCount ?? 0);
-                clicks += (m.clicks ?? m.clickCount ?? 0);
-                views += (m.views ?? m.videoViews ?? 0);
-                saves += (m.saves ?? m.saved ?? 0);
-                impressions += (m.impressions ?? m.impressionCount ?? 0);
-                reach += pl === 'linkedin'
+                likes       += (m.likes        ?? m.likeCount       ?? 0);
+                comments    += (m.comments     ?? m.commentCount    ?? 0);
+                shares      += (m.shares       ?? m.shareCount      ?? 0);
+                clicks      += (m.clicks       ?? m.clickCount      ?? 0);
+                views       += (m.views        ?? m.videoViews      ?? 0);
+                saves       += (m.saves        ?? m.saved           ?? 0);
+                impressions += (m.impressions  ?? m.impressionCount ?? 0);
+                reach       += pl === 'linkedin'
                   ? (m.uniqueImpressionsCount ?? m.impressionCount ?? m.reach ?? 0)
                   : (m.reach ?? m.impressions ?? 0);
               }
-              const eng = likes + comments + shares;
+              const eng     = likes + comments + shares;
               const engRate = reach > 0 ? ((eng / reach) * 100).toFixed(1) + '%' : '—';
               if (pl === 'instagram') return [
-                { label: 'Likes', value: fmtNum(likes) },
+                { label: 'Likes',    value: fmtNum(likes)    },
                 { label: 'Comments', value: fmtNum(comments) },
-                { label: 'Reach', value: fmtNum(reach) },
-                { label: 'Shares', value: fmtNum(shares) },
-                { label: 'Saves', value: fmtNum(saves) },
+                { label: 'Reach',    value: fmtNum(reach)    },
+                { label: 'Shares',   value: fmtNum(shares)   },
+                { label: 'Saves',    value: fmtNum(saves)    },
                 { label: 'Eng.Rate', value: engRate, isRate: true },
               ];
               if (pl === 'facebook') return [
-                { label: 'Likes', value: fmtNum(likes) },
-                { label: 'Comments', value: fmtNum(comments) },
-                { label: 'Shares', value: fmtNum(shares) },
+                { label: 'Likes',       value: fmtNum(likes)       },
+                { label: 'Comments',    value: fmtNum(comments)    },
+                { label: 'Shares',      value: fmtNum(shares)      },
                 { label: 'Impressions', value: fmtNum(impressions) },
-                { label: 'Clicks', value: fmtNum(clicks) },
-                { label: 'Eng.Rate', value: engRate, isRate: true },
+                { label: 'Clicks',      value: fmtNum(clicks)      },
+                { label: 'Eng.Rate',    value: engRate, isRate: true },
               ];
               if (pl === 'linkedin') return [
-                { label: 'Likes', value: fmtNum(likes) },
-                { label: 'Comments', value: fmtNum(comments) },
-                { label: 'Shares', value: fmtNum(shares) },
+                { label: 'Likes',       value: fmtNum(likes)       },
+                { label: 'Comments',    value: fmtNum(comments)    },
+                { label: 'Shares',      value: fmtNum(shares)      },
                 { label: 'Impressions', value: fmtNum(impressions) },
-                { label: 'Clicks', value: fmtNum(clicks) },
-                { label: 'Eng.Rate', value: engRate, isRate: true },
+                { label: 'Clicks',      value: fmtNum(clicks)      },
+                { label: 'Eng.Rate',    value: engRate, isRate: true },
               ];
               if (pl === 'youtube') return [
-                { label: 'Views', value: fmtNum(views) },
-                { label: 'Likes', value: fmtNum(likes) },
+                { label: 'Views',    value: fmtNum(views)    },
+                { label: 'Likes',    value: fmtNum(likes)    },
                 { label: 'Comments', value: fmtNum(comments) },
                 { label: 'Eng.Rate', value: engRate, isRate: true },
               ];
               return [
-                { label: 'Likes', value: fmtNum(likes) },
-                { label: 'Comments', value: fmtNum(comments) },
-                { label: 'Shares', value: fmtNum(shares) },
-                { label: 'Reach', value: fmtNum(reach) },
+                { label: 'Likes',    value: fmtNum(likes)       },
+                { label: 'Comments', value: fmtNum(comments)    },
+                { label: 'Shares',   value: fmtNum(shares)      },
+                { label: 'Reach',    value: fmtNum(reach)       },
                 { label: 'Eng.Rate', value: engRate, isRate: true },
               ];
             };
 
-            const ROW_H = 22;
+            const ROW_H    = 22;
             const PLABEL_W = 28;
             for (const [pl, plPosts] of Object.entries(platformPostsMap)) {
-              const plStyle = getPlatformStyle(pl);
-              const cols = getPlMetricCols(plPosts, pl);
+              const plStyle  = getPlatformStyle(pl);
+              const cols     = getPlMetricCols(plPosts, pl);
               checkY(ROW_H + 4);
 
               // Platform label badge
@@ -1788,7 +1896,7 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
       // ── Save ──────────────────────────────────────────────────────────────
       const safeCustomer = sanitize(customerName).replace(/[^a-z0-9]/gi, '_');
       const safeCalendar = sanitize(calendarName || 'Report').replace(/[^a-z0-9]/gi, '_');
-      const dateStr = new Date().toISOString().slice(0, 10);
+      const dateStr      = new Date().toISOString().slice(0, 10);
       const filename = `Content_Performance_Report_${safeCustomer}_${safeCalendar}_${dateStr}.pdf`;
       return { doc, filename, customerName, calendarName };
     } catch (err) {
@@ -1935,28 +2043,28 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
     for (const lp of liveScheduledPosts) {
       if (lp._id && existingIds.has(lp._id)) continue;
       combined.push({
-        _id: lp._id,
-        platform: lp.platform,
-        itemId: lp.item_id || '',
-        itemTitle: lp.item_name || '',
-        caption: lp.caption || '',
-        status: lp.status,
-        scheduledAt: lp.scheduledAt,
-        publishedAt: lp.publishedAt,
-        facebookPostId: lp.facebookPostId || null,
-        instagramPostId: lp.instagramPostId || null,
-        instagramId: lp.instagramId || null,
+        _id:            lp._id,
+        platform:       lp.platform,
+        itemId:         lp.item_id     || '',
+        itemTitle:      lp.item_name   || '',
+        caption:        lp.caption     || '',
+        status:         lp.status,
+        scheduledAt:    lp.scheduledAt,
+        publishedAt:    lp.publishedAt,
+        facebookPostId:     lp.facebookPostId     || null,
+        instagramPostId:    lp.instagramPostId    || null,
+        instagramId:        lp.instagramId        || null,
         instagramPermalink: lp.instagramPermalink || null,
-        pageId: lp.pageId || null,
-        linkedinPostId: lp.linkedinPostId || null,
-        linkedinAccountId: lp.linkedinAccountId || lp.organizationId || null,
-        youtubePostId: lp.youtubePostId || null,
-        twitterPostId: lp.twitterPostId || null,
-        postType: lp.postType || null,
-        metrics: lp.metrics || null,
-        item_id: lp.item_id || '',
-        item_name: lp.item_name || '',
-        contentId: lp.contentId || '',
+        pageId:             lp.pageId             || null,
+        linkedinPostId:     lp.linkedinPostId     || null,
+        linkedinAccountId:  lp.linkedinAccountId  || lp.organizationId || null,
+        youtubePostId:      lp.youtubePostId      || null,
+        twitterPostId:      lp.twitterPostId      || null,
+        postType:           lp.postType            || null,
+        metrics:        lp.metrics     || null,
+        item_id:        lp.item_id     || '',
+        item_name:      lp.item_name   || '',
+        contentId:      lp.contentId   || '',
       });
     }
     const byId = {}, byTitle = {};
@@ -2037,11 +2145,11 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
       if (!map[pl]) map[pl] = { platform: pl, posts: 0, reach: 0, likes: 0, comments: 0, shares: 0, saves: 0 };
       map[pl].posts++;
       if (post.metrics) {
-        map[pl].reach += post.metrics.reach || post.metrics.impressions || 0;
-        map[pl].likes += post.metrics.likes || 0;
+        map[pl].reach    += post.metrics.reach    || post.metrics.impressions || 0;
+        map[pl].likes    += post.metrics.likes    || 0;
         map[pl].comments += post.metrics.comments || 0;
-        map[pl].shares += post.metrics.shares || 0;
-        map[pl].saves += post.metrics.saves || post.metrics.saved || 0;
+        map[pl].shares   += post.metrics.shares   || 0;
+        map[pl].saves    += post.metrics.saves    || post.metrics.saved || 0;
       }
     }
     return Object.values(map).sort((a, b) => b.posts - a.posts);
@@ -2060,11 +2168,11 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
     const total = report.assignments?.length || 1;
     const meta = {
       published: { label: 'Published', color: 'bg-emerald-500' },
-      approved: { label: 'Approved', color: 'bg-green-500' },
-      in_review: { label: 'In Review', color: 'bg-amber-400' },
-      revision: { label: 'Revision', color: 'bg-orange-400' },
-      rejected: { label: 'Rejected', color: 'bg-red-400' },
-      pending: { label: 'Pending', color: 'bg-gray-300' },
+      approved:  { label: 'Approved',  color: 'bg-green-500'   },
+      in_review: { label: 'In Review', color: 'bg-amber-400'   },
+      revision:  { label: 'Revision',  color: 'bg-orange-400'  },
+      rejected:  { label: 'Rejected',  color: 'bg-red-400'     },
+      pending:   { label: 'Pending',   color: 'bg-gray-300'    },
     };
     return ['published', 'approved', 'in_review', 'revision', 'rejected', 'pending']
       .filter(k => counts[k] > 0)
@@ -2077,7 +2185,7 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
       .map(a => {
         const posts = liveMetricsCache[a.assignmentId]?.posts || [];
         const reach = posts.reduce((s, p) => s + (p.metrics?.reach || p.metrics?.impressions || 0), 0);
-        const eng = posts.reduce((s, p) => s + (p.metrics?.likes || 0) + (p.metrics?.comments || 0) + (p.metrics?.shares || 0), 0);
+        const eng   = posts.reduce((s, p) => s + (p.metrics?.likes || 0) + (p.metrics?.comments || 0) + (p.metrics?.shares || 0), 0);
         return { ...a, _totalReach: reach, _totalEng: eng, _engRate: reach > 0 ? parseFloat(((eng / reach) * 100).toFixed(1)) : 0 };
       })
       .filter(a => a._totalEng > 0 || a._totalReach > 0)
@@ -2109,7 +2217,7 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
       map[label].count++;
       for (const p of (liveMetricsCache[a.assignmentId]?.posts || [])) {
         if (!p.metrics) continue;
-        map[label].eng += (p.metrics.likes || 0) + (p.metrics.comments || 0) + (p.metrics.shares || 0);
+        map[label].eng   += (p.metrics.likes || 0) + (p.metrics.comments || 0) + (p.metrics.shares || 0);
         map[label].reach += p.metrics.reach || p.metrics.impressions || 0;
       }
     }
@@ -2123,11 +2231,11 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
       items = items.filter(a => {
         const latest = a.versions?.[a.versions.length - 1];
         const s = (latest?.status || '').toLowerCase();
-        if (statusFilter === 'published') return a.versions?.some(v => (v.status || '').toLowerCase() === 'published');
-        if (statusFilter === 'approved') return ['approved', 'published'].includes(s);
-        if (statusFilter === 'in_review') return ['submitted', 'in_review', 'under_review'].includes(s);
-        if (statusFilter === 'rejected') return s === 'rejected';
-        if (statusFilter === 'revision') return s === 'revision_requested';
+        if (statusFilter === 'published')  return a.versions?.some(v => (v.status || '').toLowerCase() === 'published');
+        if (statusFilter === 'approved')   return ['approved', 'published'].includes(s);
+        if (statusFilter === 'in_review')  return ['submitted', 'in_review', 'under_review'].includes(s);
+        if (statusFilter === 'rejected')   return s === 'rejected';
+        if (statusFilter === 'revision')   return s === 'revision_requested';
         return true;
       });
     }
@@ -2137,14 +2245,14 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
         (a.creatorName || '').toLowerCase().includes(q) || (a.creatorEmail || '').toLowerCase().includes(q)
       );
     }
-    const getEng = a => (liveMetricsCache[a.assignmentId]?.posts || []).reduce((s, p) => s + (p.metrics?.likes || 0) + (p.metrics?.comments || 0) + (p.metrics?.shares || 0), 0);
+    const getEng   = a => (liveMetricsCache[a.assignmentId]?.posts || []).reduce((s, p) => s + (p.metrics?.likes || 0) + (p.metrics?.comments || 0) + (p.metrics?.shares || 0), 0);
     const getReach = a => (liveMetricsCache[a.assignmentId]?.posts || []).reduce((s, p) => s + (p.metrics?.reach || p.metrics?.impressions || 0), 0);
-    if (sortBy === 'date_asc') items.sort((a, b) => new Date(a.firstSubmittedAt || 0) - new Date(b.firstSubmittedAt || 0));
-    else if (sortBy === 'date_desc') items.sort((a, b) => new Date(b.firstSubmittedAt || 0) - new Date(a.firstSubmittedAt || 0));
+    if (sortBy === 'date_asc')        items.sort((a, b) => new Date(a.firstSubmittedAt || 0) - new Date(b.firstSubmittedAt || 0));
+    else if (sortBy === 'date_desc')  items.sort((a, b) => new Date(b.firstSubmittedAt || 0) - new Date(a.firstSubmittedAt || 0));
     else if (sortBy === 'engagement') items.sort((a, b) => getEng(b) - getEng(a));
-    else if (sortBy === 'reach') items.sort((a, b) => getReach(b) - getReach(a));
-    else if (sortBy === 'revisions') items.sort((a, b) => (b.totalVersions || 1) - (a.totalVersions || 1));
-    else if (sortBy === 'creator') items.sort((a, b) => (a.creatorName || '').localeCompare(b.creatorName || ''));
+    else if (sortBy === 'reach')      items.sort((a, b) => getReach(b) - getReach(a));
+    else if (sortBy === 'revisions')  items.sort((a, b) => (b.totalVersions || 1) - (a.totalVersions || 1));
+    else if (sortBy === 'creator')    items.sort((a, b) => (a.creatorName || '').localeCompare(b.creatorName || ''));
     return items;
   }, [report, statusFilter, searchCreator, sortBy, liveMetricsCache]);
 
@@ -2325,14 +2433,12 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
 
           {report && !loading && (
             <>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 {[
-                  { icon: FileText, iconCls: 'text-blue-500', label: 'Content Items', value: summaryTotals.items, sub: null },
-                  { icon: CheckCircle, iconCls: 'text-emerald-500', label: 'Published', value: summaryTotals.publishedCount, sub: null },
-                  { icon: TrendingUp, iconCls: 'text-green-500', label: 'Approval Rate', value: summaryTotals.approvalRate + '%', sub: `${summaryTotals.approvedCount} approved` },
-                  { icon: Layers, iconCls: 'text-indigo-500', label: 'Avg Revisions', value: summaryTotals.avgRevisions, sub: `${summaryTotals.versions} total` },
-                  { icon: Heart, iconCls: 'text-rose-500', label: 'Total Engagements', value: fmtNumUI(summaryTotals.engagements), sub: summaryTotals.overallEngRate ? `${summaryTotals.overallEngRate}% eng rate` : null },
-                  { icon: Eye, iconCls: 'text-violet-500', label: 'Total Reach', value: fmtNumUI(summaryTotals.reach), sub: summaryTotals.avgTimeToApproval ? `~${summaryTotals.avgTimeToApproval}d to approve` : null },
+                  { icon: FileText,    iconCls: 'text-blue-500',    label: 'Content Items',     value: summaryTotals.items,                              sub: null },
+                  { icon: CheckCircle, iconCls: 'text-emerald-500', label: 'Published',         value: summaryTotals.publishedCount,                     sub: null },
+                  { icon: Heart,       iconCls: 'text-rose-500',    label: 'Total Engagements', value: fmtNumUI(summaryTotals.engagements),              sub: summaryTotals.overallEngRate ? `${summaryTotals.overallEngRate}% eng rate` : null },
+                  { icon: Eye,         iconCls: 'text-violet-500',  label: 'Total Reach',       value: fmtNumUI(summaryTotals.reach),                    sub: summaryTotals.avgTimeToApproval ? `~${summaryTotals.avgTimeToApproval}d to approve` : null },
                 ].map(card => {
                   const Icon = card.icon;
                   return (

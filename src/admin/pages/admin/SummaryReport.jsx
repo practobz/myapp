@@ -22,6 +22,68 @@ const fmtNumUI = n => {
   return v.toLocaleString();
 };
 
+const cleanDisplayText = (value) => {
+  if (value === null || value === undefined) return '';
+
+  let text = String(value)
+    .replace(/\u00A0/g, ' ')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/[ \t]{2,}/g, ' ');
+
+  // Collapse words saved as spaced letters: "H a p p y" -> "Happy".
+  text = text.replace(/\b(?:[A-Za-z]\s){3,}[A-Za-z]\b/g, match => match.replace(/\s+/g, ''));
+
+  const tokens = text.split(/(\s+)/);
+  text = tokens
+    .map(token => {
+      if (/^\s+$/.test(token)) return token;
+      const looksLikeMojibake = /^(?:Ã.|Â.|â[^\s]*|ðŸ[^\s]*|Ø[=<>][^\s]*)$/.test(token)
+        || (/[ØÃÂâ]/.test(token) && /[=<>]/.test(token));
+      return looksLikeMojibake ? '' : token;
+    })
+    .join('');
+
+  return text
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/ {2,}/g, ' ')
+    .trim();
+};
+
+const normalizeSummaryReportData = (payload) => {
+  if (!payload || !Array.isArray(payload.assignments)) return payload;
+
+  return {
+    ...payload,
+    assignments: payload.assignments.map(assignment => ({
+      ...assignment,
+      itemTitle: cleanDisplayText(assignment.itemTitle || ''),
+      caption: cleanDisplayText(assignment.caption || ''),
+      hashtags: cleanDisplayText(assignment.hashtags || ''),
+      creatorName: cleanDisplayText(assignment.creatorName || ''),
+      versions: Array.isArray(assignment.versions)
+        ? assignment.versions.map(version => ({
+          ...version,
+          caption: cleanDisplayText(version.caption || ''),
+          hashtags: cleanDisplayText(version.hashtags || ''),
+          created_by: cleanDisplayText(version.created_by || ''),
+          rejectionReason: cleanDisplayText(version.rejectionReason || ''),
+          approvalNotes: cleanDisplayText(version.approvalNotes || ''),
+          comments: Array.isArray(version.comments)
+            ? version.comments.map(comment => ({
+              ...comment,
+              comment: typeof comment.comment === 'string' ? cleanDisplayText(comment.comment) : comment.comment,
+              text: typeof comment.text === 'string' ? cleanDisplayText(comment.text) : comment.text,
+              authorName: typeof comment.authorName === 'string' ? cleanDisplayText(comment.authorName) : comment.authorName,
+              authorEmail: typeof comment.authorEmail === 'string' ? cleanDisplayText(comment.authorEmail) : comment.authorEmail,
+            }))
+            : version.comments,
+        }))
+        : assignment.versions,
+    })),
+  };
+};
+
 const getInitials = (name = '') => {
   const parts = name.trim().split(/\s+/);
   if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
@@ -117,6 +179,9 @@ const MediaTypeBadge = ({ mediaType, slideCount }) => {
 const isVersionVideoUrl = url => /\.(mp4|mov|webm|avi|mkv)/i.test(url);
 
 const VersionRow = ({ version }) => {
+  const cleanCaption = cleanDisplayText(version.caption || '');
+  const cleanHashtags = cleanDisplayText(version.hashtags || '');
+
   const latestComment = version.comments?.[version.comments.length - 1];
   const feedback = version.rejectionReason || version.approvalNotes || latestComment?.comment || latestComment?.text;
   const feedbackAuthor = latestComment?.authorName || latestComment?.authorEmail;
@@ -168,11 +233,11 @@ const VersionRow = ({ version }) => {
         </div>
       )}
 
-      {version.caption && (
-        <p className="text-xs text-gray-700 leading-relaxed line-clamp-2 pl-7">{version.caption}</p>
+      {cleanCaption && (
+        <p className="text-xs text-gray-700 leading-relaxed line-clamp-2 pl-7">{cleanCaption}</p>
       )}
-      {version.hashtags && (
-        <p className="text-[10px] text-blue-500 pl-7 line-clamp-1">{version.hashtags}</p>
+      {cleanHashtags && (
+        <p className="text-[10px] text-blue-500 pl-7 line-clamp-1">{cleanHashtags}</p>
       )}
       {feedback && (
         <div className="flex items-start gap-1 pl-7">
@@ -395,6 +460,9 @@ const getPostLinks = (post) => {
 
 // ── Content item card ─────────────────────────────────────────────────────────
 const ContentItemCard = ({ assignment, scheduledPosts, calendarName, isExpanded, onToggle, liveMetrics }) => {
+  const compactCaption = cleanDisplayText(assignment.caption || '');
+  const compactHashtags = cleanDisplayText(assignment.hashtags || '');
+
   const platforms = [...new Set(
     [
       ...(Array.isArray(assignment.platforms) ? assignment.platforms.flat() : []),
@@ -523,11 +591,11 @@ const ContentItemCard = ({ assignment, scheduledPosts, calendarName, isExpanded,
 
       {!isExpanded && (
         <div className="px-5 pb-4 border-t border-gray-50 pt-3 space-y-2">
-          {assignment.caption && (
-            <p className="text-xs text-gray-500 leading-relaxed line-clamp-2">{assignment.caption}</p>
+          {compactCaption && (
+            <p className="text-xs text-gray-500 leading-relaxed line-clamp-2">{compactCaption}</p>
           )}
-          {assignment.hashtags && (
-            <p className="text-[11px] text-blue-400 line-clamp-1">{assignment.hashtags}</p>
+          {compactHashtags && (
+            <p className="text-[11px] text-blue-400 line-clamp-1">{compactHashtags}</p>
           )}
           <div className="flex items-center justify-between">
             <button onClick={onToggle}
@@ -767,8 +835,13 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
       const postsData = Array.isArray(postsDataRaw) ? postsDataRaw : [];
       setLiveMetricsCache({});
       fetchedMetricsRef.current = new Set();
-      setReport(data);
-      setLiveScheduledPosts(postsData);
+      setReport(normalizeSummaryReportData(data));
+      setLiveScheduledPosts(postsData.map(post => ({
+        ...post,
+        caption: cleanDisplayText(post.caption || ''),
+        item_name: cleanDisplayText(post.item_name || ''),
+        itemTitle: cleanDisplayText(post.itemTitle || ''),
+      })));
     } catch (err) {
       setError('Failed to generate report. Please try again.');
       console.error(err);
@@ -906,8 +979,9 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
       const thinLine = () => doc.setLineWidth(0.35);
 
       const sanitize = str => {
-        if (!str) return '';
-        return str
+        const normalized = cleanDisplayText(str);
+        if (!normalized) return '';
+        return normalized
           .replace(/[\u2013\u2014]/g, '-')
           .replace(/[\u2018\u2019]/g, "'")
           .replace(/[\u201C\u201D]/g, '"')

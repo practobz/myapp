@@ -9,6 +9,7 @@ import {
   Clock, CheckCircle, FileText, ExternalLink, Mail,
 } from 'lucide-react';
 import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 
@@ -20,68 +21,6 @@ const fmtNumUI = n => {
   if (v >= 1_000_000) return (v / 1_000_000).toFixed(1) + 'M';
   if (v >= 1_000) return (v / 1_000).toFixed(1) + 'K';
   return v.toLocaleString();
-};
-
-const cleanDisplayText = (value) => {
-  if (value === null || value === undefined) return '';
-
-  let text = String(value)
-    .replace(/\u00A0/g, ' ')
-    .replace(/[\u200B-\u200D\uFEFF]/g, '')
-    .replace(/[ \t]+\n/g, '\n')
-    .replace(/[ \t]{2,}/g, ' ');
-
-  // Collapse words saved as spaced letters: "H a p p y" -> "Happy".
-  text = text.replace(/\b(?:[A-Za-z]\s){3,}[A-Za-z]\b/g, match => match.replace(/\s+/g, ''));
-
-  const tokens = text.split(/(\s+)/);
-  text = tokens
-    .map(token => {
-      if (/^\s+$/.test(token)) return token;
-      const looksLikeMojibake = /^(?:Ã.|Â.|â[^\s]*|ðŸ[^\s]*|Ø[=<>][^\s]*)$/.test(token)
-        || (/[ØÃÂâ]/.test(token) && /[=<>]/.test(token));
-      return looksLikeMojibake ? '' : token;
-    })
-    .join('');
-
-  return text
-    .replace(/\n{3,}/g, '\n\n')
-    .replace(/ {2,}/g, ' ')
-    .trim();
-};
-
-const normalizeSummaryReportData = (payload) => {
-  if (!payload || !Array.isArray(payload.assignments)) return payload;
-
-  return {
-    ...payload,
-    assignments: payload.assignments.map(assignment => ({
-      ...assignment,
-      itemTitle: cleanDisplayText(assignment.itemTitle || ''),
-      caption: cleanDisplayText(assignment.caption || ''),
-      hashtags: cleanDisplayText(assignment.hashtags || ''),
-      creatorName: cleanDisplayText(assignment.creatorName || ''),
-      versions: Array.isArray(assignment.versions)
-        ? assignment.versions.map(version => ({
-          ...version,
-          caption: cleanDisplayText(version.caption || ''),
-          hashtags: cleanDisplayText(version.hashtags || ''),
-          created_by: cleanDisplayText(version.created_by || ''),
-          rejectionReason: cleanDisplayText(version.rejectionReason || ''),
-          approvalNotes: cleanDisplayText(version.approvalNotes || ''),
-          comments: Array.isArray(version.comments)
-            ? version.comments.map(comment => ({
-              ...comment,
-              comment: typeof comment.comment === 'string' ? cleanDisplayText(comment.comment) : comment.comment,
-              text: typeof comment.text === 'string' ? cleanDisplayText(comment.text) : comment.text,
-              authorName: typeof comment.authorName === 'string' ? cleanDisplayText(comment.authorName) : comment.authorName,
-              authorEmail: typeof comment.authorEmail === 'string' ? cleanDisplayText(comment.authorEmail) : comment.authorEmail,
-            }))
-            : version.comments,
-        }))
-        : assignment.versions,
-    })),
-  };
 };
 
 const getInitials = (name = '') => {
@@ -179,9 +118,6 @@ const MediaTypeBadge = ({ mediaType, slideCount }) => {
 const isVersionVideoUrl = url => /\.(mp4|mov|webm|avi|mkv)/i.test(url);
 
 const VersionRow = ({ version }) => {
-  const cleanCaption = cleanDisplayText(version.caption || '');
-  const cleanHashtags = cleanDisplayText(version.hashtags || '');
-
   const latestComment = version.comments?.[version.comments.length - 1];
   const feedback = version.rejectionReason || version.approvalNotes || latestComment?.comment || latestComment?.text;
   const feedbackAuthor = latestComment?.authorName || latestComment?.authorEmail;
@@ -233,11 +169,11 @@ const VersionRow = ({ version }) => {
         </div>
       )}
 
-      {cleanCaption && (
-        <p className="text-xs text-gray-700 leading-relaxed line-clamp-2 pl-7">{cleanCaption}</p>
+      {version.caption && (
+        <p className="text-xs text-gray-700 leading-relaxed line-clamp-2 pl-7">{version.caption}</p>
       )}
-      {cleanHashtags && (
-        <p className="text-[10px] text-blue-500 pl-7 line-clamp-1">{cleanHashtags}</p>
+      {version.hashtags && (
+        <p className="text-[10px] text-blue-500 pl-7 line-clamp-1">{version.hashtags}</p>
       )}
       {feedback && (
         <div className="flex items-start gap-1 pl-7">
@@ -460,9 +396,6 @@ const getPostLinks = (post) => {
 
 // ── Content item card ─────────────────────────────────────────────────────────
 const ContentItemCard = ({ assignment, scheduledPosts, calendarName, isExpanded, onToggle, liveMetrics }) => {
-  const compactCaption = cleanDisplayText(assignment.caption || '');
-  const compactHashtags = cleanDisplayText(assignment.hashtags || '');
-
   const platforms = [...new Set(
     [
       ...(Array.isArray(assignment.platforms) ? assignment.platforms.flat() : []),
@@ -591,11 +524,11 @@ const ContentItemCard = ({ assignment, scheduledPosts, calendarName, isExpanded,
 
       {!isExpanded && (
         <div className="px-5 pb-4 border-t border-gray-50 pt-3 space-y-2">
-          {compactCaption && (
-            <p className="text-xs text-gray-500 leading-relaxed line-clamp-2">{compactCaption}</p>
+          {assignment.caption && (
+            <p className="text-xs text-gray-500 leading-relaxed line-clamp-2">{assignment.caption}</p>
           )}
-          {compactHashtags && (
-            <p className="text-[11px] text-blue-400 line-clamp-1">{compactHashtags}</p>
+          {assignment.hashtags && (
+            <p className="text-[11px] text-blue-400 line-clamp-1">{assignment.hashtags}</p>
           )}
           <div className="flex items-center justify-between">
             <button onClick={onToggle}
@@ -835,13 +768,8 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
       const postsData = Array.isArray(postsDataRaw) ? postsDataRaw : [];
       setLiveMetricsCache({});
       fetchedMetricsRef.current = new Set();
-      setReport(normalizeSummaryReportData(data));
-      setLiveScheduledPosts(postsData.map(post => ({
-        ...post,
-        caption: cleanDisplayText(post.caption || ''),
-        item_name: cleanDisplayText(post.item_name || ''),
-        itemTitle: cleanDisplayText(post.itemTitle || ''),
-      })));
+      setReport(data);
+      setLiveScheduledPosts(postsData);
     } catch (err) {
       setError('Failed to generate report. Please try again.');
       console.error(err);
@@ -916,6 +844,61 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
       });
       await Promise.all(allThumbUrls.map(tryLoadImg));
 
+      // ── Pre-render complex text (emojis/non-Latin) via html2canvas ────────
+      const textImageCache = {};
+      const preRenderText = async (key, text, widthMm) => {
+        if (!text || textImageCache[key]) return;
+        const div = document.createElement('div');
+        div.style.position = 'fixed';
+        div.style.left = '-9999px';
+        div.style.top = '0';
+        div.style.width = `${widthMm * 3.78}px`; 
+        div.style.fontFamily = 'helvetica, Arial, sans-serif';
+        div.style.fontSize = '11px';
+        div.style.lineHeight = '1.5';
+        div.style.color = '#1e293b'; 
+        div.style.whiteSpace = 'pre-wrap';
+        div.style.wordBreak = 'break-word';
+        div.innerText = text;
+        document.body.appendChild(div);
+        try {
+          const canvas = await html2canvas(div, { backgroundColor: null, scale: 2 });
+          document.body.removeChild(div);
+          const ratio = canvas.height / canvas.width;
+          textImageCache[key] = {
+            url: canvas.toDataURL('image/png'),
+            hMm: widthMm * ratio
+          };
+        } catch {
+          if (document.body.contains(div)) document.body.removeChild(div);
+        }
+      };
+
+      const textPreloads = [];
+      const PW_ = 210, M_ = 18, CW_ = PW_ - M_ * 2;
+      const CARD_PAD_ = 7;
+      const innerW_ = CW_ - CARD_PAD_ * 2;
+
+      for (let ai = 0; ai < report.assignments.length; ai++) {
+        const assignment = report.assignments[ai];
+        const vCaption = assignment.caption ? assignment.caption.trim() : '';
+        const vHashtags = assignment.hashtags ? assignment.hashtags.trim() : '';
+        const chText = [vCaption, vHashtags].filter(Boolean).join('\n\n');
+        if (chText) {
+          textPreloads.push(preRenderText(`caption_${ai}`, chText, innerW_ - 10));
+        }
+
+        if (assignment.versions) {
+          assignment.versions.forEach((v, idx) => {
+            (v.comments || []).forEach((c, ci) => {
+               const textBody = `${c.comment}${c.done ? '  ✓ Done' : ''}`;
+               textPreloads.push(preRenderText(`comment_${ai}_${idx}_${ci}`, textBody, innerW_ - 25));
+            });
+          });
+        }
+      }
+      await Promise.all(textPreloads);
+
       // ── jsPDF setup ───────────────────────────────────────────────────────
       const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
       const PW = 210, PH = 297, M = 18, CW = PW - M * 2;
@@ -979,9 +962,8 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
       const thinLine = () => doc.setLineWidth(0.35);
 
       const sanitize = str => {
-        const normalized = cleanDisplayText(str);
-        if (!normalized) return '';
-        return normalized
+        if (!str) return '';
+        return str
           .replace(/[\u2013\u2014]/g, '-')
           .replace(/[\u2018\u2019]/g, "'")
           .replace(/[\u201C\u201D]/g, '"')
@@ -1597,6 +1579,55 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
           }
           y += 18;
 
+          // ── Item Caption & Hashtags ──
+          const asmCaption = assignment.caption ? assignment.caption.trim() : '';
+          const asmHashtags = assignment.hashtags ? assignment.hashtags.trim() : '';
+          const rawChText = [asmCaption, asmHashtags].filter(Boolean).join('\n\n');
+          
+          if (rawChText) {
+            const imgData = textImageCache[`caption_${ai}`];
+            if (imgData && imgData.url) {
+              const lineH = imgData.hMm + 4;
+              checkY(lineH + 12);
+              
+              sans('bold', 8); sc(C.slate);
+              doc.text('CAPTION & HASHTAGS', innerX + 2, y + 5);
+              y += 7;
+              
+              sf([248, 250, 252]); hairline(); ss(C.borderLight);
+              doc.roundedRect(innerX, y, innerW, lineH, 1, 1, 'F');
+              
+              doc.addImage(imgData.url, 'PNG', innerX + 5, y + 2, innerW - 10, imgData.hMm);
+              y += lineH + 6;
+            } else {
+              // Fallback
+              const chText = sanitize(rawChText);
+              // Handle newlines explicitly for jsPDF splitTextToSize
+              const paragraphs = chText.split('\n');
+              const wrappedLines = [];
+              paragraphs.forEach(p => {
+                if (p.trim() === '') wrappedLines.push('');
+                else wrappedLines.push(...doc.splitTextToSize(p, innerW - 10));
+              });
+              
+              const lineH = Math.max(wrappedLines.length * 4 + 6, 9);
+              checkY(lineH + 12);
+              
+              sans('bold', 8); sc(C.slate);
+              doc.text('CAPTION & HASHTAGS', innerX + 2, y + 5);
+              y += 7;
+              
+              sf([248, 250, 252]); hairline(); ss(C.borderLight);
+              doc.roundedRect(innerX, y, innerW, lineH, 1, 1, 'F');
+              
+              sans('normal', 8); sc(C.dark);
+              wrappedLines.forEach((line, li) => {
+                doc.text(line, innerX + 5, y + 5 + li * 4);
+              });
+              y += lineH + 6;
+            }
+          }
+
           // ── Thumbnail strip ────────────────────────────────────────────
           if (hasThumbs) {
             let thumbX = innerX;
@@ -1700,29 +1731,7 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
 
               y += 13;
 
-              // ── Caption & Hashtags ──
-              const vCaption = v.caption ? v.caption.trim() : '';
-              const vHashtags = v.hashtags ? v.hashtags.trim() : '';
-              const chText = [vCaption, vHashtags].filter(Boolean).join('\n\n');
-              
-              if (chText) {
-                const wrappedLines = doc.splitTextToSize(chText, innerW - 10);
-                const lineH = Math.max(wrappedLines.length * 4 + 6, 9);
-                checkY(lineH + 12);
-                
-                sans('bold', 8); sc(C.slate);
-                doc.text('CAPTION & HASHTAGS', innerX + 2, y + 5);
-                y += 7;
-                
-                sf([248, 250, 252]); hairline(); ss(C.borderLight);
-                doc.roundedRect(innerX + 2, y, innerW - 5, lineH, 1, 1, 'F');
-                
-                sans('normal', 8); sc(C.dark);
-                wrappedLines.forEach((line, li) => {
-                  doc.text(line, innerX + 5, y + 5 + li * 4);
-                });
-                y += lineH + 4;
-              }
+              y += 5; // space before comments or next version
 
               // ── Image thumbnails ──
               const vMediaUrls = (Array.isArray(v.media) ? v.media : [])
@@ -1787,27 +1796,48 @@ export default function SummaryReport({ embedded = false, customerId = null }) {
                 doc.text(`COMMENTS (${comments.length})`, innerX + 2, y + 5);
                 y += 7;
 
-                comments.forEach((c) => {
-                  const textBody = `${c.comment}${c.done ? '  ✓ Done' : ''}`;
-                  const wrappedLines = doc.splitTextToSize(textBody, innerW - 25);
-                  const lineH = Math.max(wrappedLines.length * 4 + 6, 9);
-                  checkY(lineH + 2);
-
-                  sf(c.done ? C.light : [255, 251, 235]); hairline(); ss(C.borderLight);
-                  doc.roundedRect(innerX + 2, y, innerW - 5, lineH, 1, 1, 'F');
-
-                  if (c.author && c.author !== 'Unknown') {
-                    const authorColor = c.author === 'Admin' ? C.indigo : C.green;
-                    sans('bold', 8); sc(authorColor);
-                    doc.text(`${c.author}:`, innerX + 5, y + 5);
-                  }
-                  const authorW = (c.author && c.author !== 'Unknown') ? doc.getTextWidth(`${c.author}: `) : 0;
+                comments.forEach((c, ci) => {
+                  const rawTextBody = `${c.comment}${c.done ? '  ✓ Done' : ''}`;
+                  const imgData = textImageCache[`comment_${ai}_${idx}_${ci}`];
                   
-                  sans('normal', 8); sc(C.dark);
-                  wrappedLines.forEach((line, li) => {
-                    doc.text(line, innerX + 5 + authorW + 1, y + 5 + li * 4);
-                  });
-                  y += lineH + 2;
+                  if (imgData && imgData.url) {
+                    const lineH = imgData.hMm + 6;
+                    checkY(lineH + 2);
+
+                    sf(c.done ? C.light : [255, 251, 235]); hairline(); ss(C.borderLight);
+                    doc.roundedRect(innerX + 2, y, innerW - 5, lineH, 1, 1, 'F');
+
+                    if (c.author && c.author !== 'Unknown') {
+                      const authorColor = c.author === 'Admin' ? C.indigo : C.green;
+                      sans('bold', 8); sc(authorColor);
+                      doc.text(`${c.author}:`, innerX + 5, y + 5);
+                    }
+                    const authorW = (c.author && c.author !== 'Unknown') ? doc.getTextWidth(`${c.author}: `) : 0;
+                    
+                    doc.addImage(imgData.url, 'PNG', innerX + 5 + authorW + 1, y + 1.5, innerW - 25, imgData.hMm);
+                    y += lineH + 2;
+                  } else {
+                    const textBody = sanitize(rawTextBody);
+                    const wrappedLines = doc.splitTextToSize(textBody, innerW - 25);
+                    const lineH = Math.max(wrappedLines.length * 4 + 6, 9);
+                    checkY(lineH + 2);
+
+                    sf(c.done ? C.light : [255, 251, 235]); hairline(); ss(C.borderLight);
+                    doc.roundedRect(innerX + 2, y, innerW - 5, lineH, 1, 1, 'F');
+
+                    if (c.author && c.author !== 'Unknown') {
+                      const authorColor = c.author === 'Admin' ? C.indigo : C.green;
+                      sans('bold', 8); sc(authorColor);
+                      doc.text(`${c.author}:`, innerX + 5, y + 5);
+                    }
+                    const authorW = (c.author && c.author !== 'Unknown') ? doc.getTextWidth(`${c.author}: `) : 0;
+                    
+                    sans('normal', 8); sc(C.dark);
+                    wrappedLines.forEach((line, li) => {
+                      doc.text(line, innerX + 5 + authorW + 1, y + 5 + li * 4);
+                    });
+                    y += lineH + 2;
+                  }
                 });
               } else {
                 checkY(7);

@@ -288,28 +288,37 @@ function ContentDetailView({
     const errorText = post.error || post.errorMessage || post.failureReason || '';
     const lowerError = errorText.toLowerCase();
 
+    // Check specific media issues first
+    if (lowerError.includes('aspect ratio')) {
+      return 'The image aspect ratio is not supported by the platform. Please use a valid aspect ratio (e.g., 4:5 for Instagram).';
+    }
+    if (lowerError.includes('size') || lowerError.includes('large')) {
+      return 'The file is too large. Please use a smaller file.';
+    }
+    if (lowerError.includes('rate limit') || lowerError.includes('too many') ||
+      lowerError.includes('limit exceeded') || lowerError.includes('429')) {
+      return 'Posting limit reached. Please wait a few minutes and try again.';
+    }
+
+    // Then connection/permission issues
     if (lowerError.includes('access token') || lowerError.includes('accesstoken') ||
       lowerError.includes('invalid token') || lowerError.includes('token expired') ||
-      lowerError.includes('auth') || lowerError.includes('unauthorized') ||
-      lowerError.includes('401') || lowerError.includes('login required')) {
+      lowerError.includes('unauthorized') || lowerError.includes('401') ||
+      lowerError.includes('login required')) {
       return 'Your social account connection has expired. Please reconnect in Settings.';
     }
     if (lowerError.includes('permission') || lowerError.includes('403') ||
       lowerError.includes('forbidden') || lowerError.includes('not allowed')) {
       return 'Permission issue. Please reconnect your account in Settings.';
     }
-    if (lowerError.includes('rate limit') || lowerError.includes('too many') ||
-      lowerError.includes('limit exceeded') || lowerError.includes('429')) {
-      return 'Posting limit reached. Please wait a few minutes and try again.';
-    }
+
+    // Generic media check
     if (lowerError.includes('image') || lowerError.includes('photo') ||
       lowerError.includes('video') || lowerError.includes('media') ||
       lowerError.includes('file')) {
-      if (lowerError.includes('size') || lowerError.includes('large')) {
-        return 'The file is too large. Please use a smaller file.';
-      }
       return 'There was an issue with the media file.';
     }
+
     return errorText || 'Publishing failed. Please try again.';
   }, []);
 
@@ -588,33 +597,28 @@ function ContentDetailView({
         <div className="flex flex-col sm:flex-row gap-3">
 
           {/* ── LEFT: Meta ── */}
-          <div className="flex flex-col gap-2 flex-1 min-w-0">
-            {/* Breadcrumb */}
-            {(calendarName || itemName) && (
-              <div className="flex flex-wrap gap-2 text-xs">
-                {calendarName && (
-                  <div className="flex items-center gap-1">
-                    <span className="font-medium text-blue-600">📅</span>
-                    <span className="text-gray-600">{calendarName}</span>
-                  </div>
-                )}
-                {itemName && (
-                  <div className="flex items-center gap-1">
-                    <span className="font-medium text-cyan-600">📝</span>
-                    <span className="text-gray-600">{itemName}</span>
-                  </div>
-                )}
-              </div>
-            )}
+          <div className="flex flex-col gap-3 flex-1 min-w-0">
+            {/* ── TOP LINE: Breadcrumb + Meta + Status/Action ── */}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
+              {/* Breadcrumb */}
+              {(calendarName || itemName) && (
+                <div className="flex flex-wrap items-center gap-3">
+                  {calendarName && (
+                    <div className="flex items-center gap-1">
+                      <span className="font-medium text-blue-600">📅</span>
+                      <span className="text-gray-600">{calendarName}</span>
+                    </div>
+                  )}
+                  {itemName && (
+                    <div className="flex items-center gap-1">
+                      <span className="font-medium text-cyan-600">📝</span>
+                      <span className="text-gray-600">{itemName}</span>
+                    </div>
+                  )}
+                </div>
+              )}
 
-
-            {/* Meta chips row */}
-            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
-              <div className="flex items-center gap-1">
-                <div className="w-1.5 h-1.5 bg-blue-600 rounded-full flex-shrink-0" />
-                <span className="text-gray-500">Customer:</span>
-                <span className="font-medium text-gray-900">{getCustomerName(selectedContent.customerId)}</span>
-              </div>
+              {/* Meta chips row */}
               <div className="flex items-center gap-1">
                 <div className="w-1.5 h-1.5 bg-cyan-600 rounded-full flex-shrink-0" />
                 <span className="text-gray-500">Platform:</span>
@@ -631,86 +635,68 @@ function ContentDetailView({
                 <span className="text-gray-500">Versions:</span>
                 <span className="font-medium text-gray-900">{selectedContent.totalVersions}</span>
               </div>
-            </div>
 
-            {/* Status + Action */}
-            <div className="flex flex-wrap items-center gap-2">
-              <span className={`inline-flex items-center px-2 py-1 rounded-lg text-xs font-medium ${getStatusColor(isPublished ? 'published' : selectedContent.status)}`}>
-                {getStatusIcon(isPublished ? 'published' : selectedContent.status)}
-                <span className="ml-1">
-                  {isPublished ? 'Published' : getStatusLabel(selectedContent.status)}
-                </span>
-                {isPublished && (
-                  <span className="ml-1 flex flex-wrap gap-1">
-                    {getPublishedPlatformsForContent(selectedContent.id, selectedContent).map((p, idx) => (
-                      <span key={idx} className={`px-1 py-0.5 rounded text-[10px] ${platformColor(p)}`}>
-                        {p.charAt(0).toUpperCase() + p.slice(1)}
-                      </span>
-                    ))}
-                  </span>
-                )}
-              </span>
-              <button
-                onClick={() => handleScheduleContent(selectedContent)}
-                className="inline-flex items-center justify-center px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                <Send className="h-3 w-3 mr-1" />
-                Post Content
-              </button>
-            </div>
-          </div>
+              {/* Status + Action */}
+              <div className="flex flex-wrap items-center gap-2">
 
-          {/* ── RIGHT: Scheduled Posts ── */}
-          {itemScheduledPosts.length > 0 && (
-            <div className="sm:w-56 flex-shrink-0 border-t sm:border-t-0 sm:border-l border-gray-100 sm:pl-3 pt-2 sm:pt-0 flex flex-col gap-1">
-              <div className="flex items-center gap-1.5 mb-1">
-                <Send className="h-3.5 w-3.5 text-blue-600" />
-                <span className="text-xs font-bold text-gray-800">Scheduled</span>
-                <span className="ml-auto bg-blue-100 text-blue-700 text-[9px] font-bold px-1.5 py-0.5 rounded-full">{itemScheduledPosts.length}</span>
+                <button
+                  onClick={() => handleScheduleContent(selectedContent)}
+                  className="inline-flex items-center justify-center px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  <Send className="h-3 w-3 mr-1" />
+                  Post Content
+                </button>
               </div>
-              <div className="flex flex-col gap-1 max-h-36 overflow-y-auto pr-0.5">
-                {itemScheduledPosts.map((post) => {
-                  const thumb = post.imageUrls?.[0] || post.imageUrl || null;
-                  const isVid = thumb && isVideoUrl && isVideoUrl(thumb);
+            </div>
+
+            {/* Scheduled / Published Platform Tiles (Horizontal) */}
+            <div className="flex flex-wrap items-center gap-2">
+              {parsePlatforms(selectedContent.platform).map(platform => {
+                const posts = itemScheduledPosts.filter(p => (p.platform || '').toLowerCase() === platform.toLowerCase());
+
+                if (posts.length === 0) {
                   return (
-                    <div key={post._id} className="flex items-center gap-2 p-1.5 rounded-lg bg-gray-50 border border-gray-100 hover:bg-blue-50/40 transition-colors">
-                      {/* Thumbnail */}
-                      <div className="w-8 h-8 flex-shrink-0 rounded-md overflow-hidden bg-gray-200 border border-gray-200">
-                        {isVid ? (
-                          <div className="w-full h-full bg-gray-800 flex items-center justify-center">
-                            <Video className="h-3.5 w-3.5 text-white" />
-                          </div>
-                        ) : thumb ? (
-                          <img src={thumb} alt="" className="w-full h-full object-cover" loading="lazy" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <Image className="h-3.5 w-3.5 text-gray-300" />
-                          </div>
-                        )}
+                    <div key={`unpub-${platform}`} className="flex items-center gap-2 p-1.5 rounded-lg bg-gray-50 border border-gray-100 min-w-[150px]">
+                      <div className="w-7 h-7 flex-shrink-0 rounded-md bg-white border border-gray-100 flex items-center justify-center">
+                        {getPlatformIcon(platform)}
                       </div>
-
-                      {/* Platform + Date */}
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1">
-                          {getPlatformIcon(post.platform)}
-                          <span className="text-[10px] font-semibold text-gray-800 truncate">
-                            {post.pageName || post.channelName || post.platform || 'Post'}
-                          </span>
+                        <span className="text-xs font-semibold text-gray-500 capitalize block truncate">
+                          {platform}
+                        </span>
+                      </div>
+                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-gray-100 text-gray-600 border-gray-200">
+                          Not Published
+                        </span>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return posts.map(post => {
+                  const isPostPublished = post.status === 'published';
+                  return (
+                    <div key={post._id} className="flex items-center gap-2 p-1.5 rounded-lg bg-gray-50 border border-gray-100 min-w-[150px]">
+                      <div className="w-7 h-7 flex-shrink-0 rounded-md bg-white border border-gray-100 flex items-center justify-center">
+                        {getPlatformIcon(post.platform)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-semibold text-gray-800 truncate">
+                          {post.pageName || post.channelName || post.platform || 'Post'}
                         </div>
-                        <div className="text-[9px] text-gray-400 mt-0.5">
-                          {new Date(post.scheduledAt).toLocaleDateString()} · {new Date(post.scheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        <div className="text-[11px] text-gray-500 mt-0.5">
+                          {post.scheduledAt ? `${new Date(post.scheduledAt).toLocaleDateString()}` : 'No Date'}
                         </div>
                       </div>
-
-                      {/* Status dot + Delete */}
                       <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                        <span className={`px-1.5 py-0.5 rounded-full text-[8px] font-bold border ${getScheduledStatusColor(post.status)}`}>
-                          {post.status}
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${getScheduledStatusColor(post.status)} capitalize`}>
+                          {post.status || 'pending'}
                         </span>
                         {onDeleteScheduledPost && (
                           <button
                             onClick={(e) => { e.stopPropagation(); onDeleteScheduledPost(post._id); }}
-                            className="text-gray-300 hover:text-red-500 transition-colors"
+                            className="text-gray-300 hover:text-red-500 transition-colors mt-0.5"
                             title="Delete"
                           >
                             <Trash2 className="h-3 w-3" />
@@ -719,11 +705,31 @@ function ContentDetailView({
                       </div>
                     </div>
                   );
-                })}
-              </div>
+                });
+              })}
             </div>
-          )}
 
+            {/* FAILED NOTES SECTION */}
+            {itemScheduledPosts.some(p => p.status === 'failed') && (
+              <div className="flex flex-col gap-2 w-full mt-2">
+                {itemScheduledPosts.filter(p => p.status === 'failed').map(failedPost => (
+                  <div key={`failed-${failedPost._id}`} className="flex items-start gap-2 p-2 bg-red-50 border border-red-100 rounded-lg">
+                    <div className="mt-0.5 w-6 h-6 flex-shrink-0 bg-white rounded border border-red-100 flex items-center justify-center">
+                      {getPlatformIcon(failedPost.platform)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-semibold text-red-900 capitalize block truncate">
+                        {failedPost.platform} - Publishing Failed
+                      </div>
+                      <div className="text-xs text-red-700 mt-0.5 leading-snug">
+                        {getFailureReason(failedPost)}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

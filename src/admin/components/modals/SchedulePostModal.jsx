@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, memo, useMemo, useCallback } from 'react';
-import { 
-  Send, XCircle, Video, Facebook, Instagram, Youtube, Linkedin, 
+import {
+  Send, XCircle, Video, Facebook, Instagram, Youtube, Linkedin,
   Check, Hash, Loader2, Zap, AlertCircle, Upload, Trash2, MoveVertical, X, Image
 } from 'lucide-react';
 
@@ -10,13 +10,12 @@ import {
 
 // Memoized Platform Card Component
 const PlatformCard = memo(({ platform, icon: Icon, iconColor, borderColor, bgColor, isSelected, isConnected, onToggle, onConnect, onDisconnect, accountName }) => (
-  <label className={`flex flex-col sm:flex-row items-start sm:items-center p-2 sm:p-3 border-2 rounded-lg cursor-pointer transition-all ${
-    isSelected 
-      ? `${borderColor} ${bgColor} shadow-sm` 
+  <label className={`flex flex-col sm:flex-row items-start sm:items-center p-2 sm:p-3 border-2 rounded-lg cursor-pointer transition-all ${isSelected
+      ? `${borderColor} ${bgColor} shadow-sm`
       : isConnected
-      ? 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-      : 'border-gray-200 bg-gray-50/50 cursor-not-allowed opacity-60'
-  }`}>
+        ? 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+        : 'border-gray-200 bg-gray-50/50 cursor-not-allowed opacity-60'
+    }`}>
     <input
       type="checkbox"
       checked={isSelected}
@@ -64,12 +63,11 @@ const PlatformCard = memo(({ platform, icon: Icon, iconColor, borderColor, bgCol
 
 // Memoized Media Card Component
 const MediaCard = memo(({ media, index, isSelected, selectionOrder, onToggle, isVideoUrl }) => (
-  <div 
-    className={`relative border-2 rounded-lg overflow-hidden cursor-pointer transition-all ${
-      isSelected 
-        ? 'border-blue-500 shadow-md ring-1 ring-blue-200 scale-[1.02]' 
+  <div
+    className={`relative border-2 rounded-lg overflow-hidden cursor-pointer transition-all ${isSelected
+        ? 'border-blue-500 shadow-md ring-1 ring-blue-200 scale-[1.02]'
         : 'border-gray-300 hover:border-blue-400 hover:shadow-sm'
-    }`}
+      }`}
     onClick={onToggle}
   >
     {media.type === 'video' || isVideoUrl(media.url) ? (
@@ -78,23 +76,22 @@ const MediaCard = memo(({ media, index, isSelected, selectionOrder, onToggle, is
         <span className="ml-1 text-[10px] text-gray-600">Video</span>
       </div>
     ) : (
-      <img 
-        src={media.url} 
+      <img
+        src={media.url}
         alt={`Media ${index + 1}`}
         className="w-full h-16 sm:h-20 object-cover"
         loading="lazy"
       />
     )}
-    
+
     {/* Selection Indicator */}
-    <div className={`absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold transition-all ${
-      isSelected 
-        ? 'bg-blue-500 text-white shadow' 
+    <div className={`absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold transition-all ${isSelected
+        ? 'bg-blue-500 text-white shadow'
         : 'bg-white/80 text-gray-600 border border-gray-300'
-    }`}>
+      }`}>
       {isSelected ? <Check className="h-3 w-3" /> : <span>{index + 1}</span>}
     </div>
-    
+
     {/* Selection Order */}
     {isSelected && selectionOrder !== null && (
       <div className="absolute top-1 left-1 bg-blue-500 text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shadow">
@@ -111,28 +108,27 @@ const CarouselItem = memo(({ media, index, isDragging, onDragStart, onDragOver, 
     onDragStart={(e) => onDragStart(e, index)}
     onDragOver={(e) => onDragOver(e, index)}
     onDragEnd={onDragEnd}
-    className={`relative border-2 rounded-lg overflow-hidden cursor-move transition-all ${
-      isDragging ? 'opacity-50 scale-95' : 'hover:shadow-md'
-    } border-blue-400 bg-white`}
+    className={`relative border-2 rounded-lg overflow-hidden cursor-move transition-all ${isDragging ? 'opacity-50 scale-95' : 'hover:shadow-md'
+      } border-blue-400 bg-white`}
   >
     {isVideoUrl(media.url) ? (
       <div className="w-full h-14 sm:h-16 bg-gray-800 flex items-center justify-center">
         <Video className="h-4 w-4 text-white" />
       </div>
     ) : (
-      <img 
-        src={media.url} 
+      <img
+        src={media.url}
         alt={`Carousel item ${index + 1}`}
         className="w-full h-14 sm:h-16 object-cover"
         loading="lazy"
       />
     )}
-    
+
     {/* Order number */}
     <div className="absolute top-0.5 left-0.5 bg-blue-600 text-white w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold">
       {index + 1}
     </div>
-    
+
     {/* Remove button */}
     <button
       type="button"
@@ -162,11 +158,11 @@ function isVideoUrl(url) {
  */
 async function createInstagramMediaContainers(mediaUrls, instagramId, pageAccessToken) {
   const containerIds = [];
-  
+
   for (const url of mediaUrls) {
     try {
       const isVideo = isVideoUrl(url);
-      
+
       const params = new URLSearchParams({
         access_token: pageAccessToken,
         is_carousel_item: 'true',
@@ -196,7 +192,7 @@ async function createInstagramMediaContainers(mediaUrls, instagramId, pageAccess
       throw new Error(`Failed to create container for ${url}: ${error.message}`);
     }
   }
-  
+
   return containerIds;
 }
 
@@ -211,7 +207,7 @@ async function createInstagramCarouselContainer(containerIds, caption, instagram
       children: containerIds.join(','),
       caption: caption || ''
     });
-    
+
     // Add location if provided
     if (locationId) {
       params.append('location_id', locationId);
@@ -282,24 +278,24 @@ async function createAndPublishInstagramCarousel(mediaUrls, caption, instagramId
 
     // Step 1: Create individual media containers
     const containerIds = await createInstagramMediaContainers(mediaUrls, instagramId, pageAccessToken);
-    
+
     if (containerIds.length !== mediaUrls.length) {
       throw new Error(`Only ${containerIds.length} out of ${mediaUrls.length} containers were created`);
     }
 
     // Step 2: Create carousel container
     const carouselContainerId = await createInstagramCarouselContainer(
-      containerIds, 
-      caption, 
-      instagramId, 
+      containerIds,
+      caption,
+      instagramId,
       pageAccessToken,
       locationId
     );
 
     // Step 3: Publish carousel
     const publishResult = await publishInstagramCarousel(
-      carouselContainerId, 
-      instagramId, 
+      carouselContainerId,
+      instagramId,
       pageAccessToken
     );
 
@@ -329,11 +325,11 @@ async function createFacebookCarousel(mediaUrls, caption, pageId, pageAccessToke
 
     // Step 1: Upload each media item and get media IDs
     const mediaIds = [];
-    
+
     for (const url of mediaUrls) {
       try {
         const isVideo = isVideoUrl(url);
-        
+
         const params = new URLSearchParams({
           access_token: pageAccessToken,
           url: url,
@@ -361,7 +357,7 @@ async function createFacebookCarousel(mediaUrls, caption, pageId, pageAccessToke
 
     // Step 2: Create carousel post with attached_media
     const attachedMedia = mediaIds.map(id => ({ media_fbid: id }));
-    
+
     const postParams = new URLSearchParams({
       access_token: pageAccessToken,
       message: caption || '',
@@ -411,11 +407,11 @@ function checkLinkedInTokenExpiry(account) {
   if (!account.tokenExpiresAt) {
     return { isExpiring: false, daysLeft: null };
   }
-  
+
   const expiryTime = new Date(account.tokenExpiresAt);
   const now = new Date();
   const daysLeft = Math.ceil((expiryTime.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
-  
+
   return {
     isExpiring: daysLeft <= 7,
     isExpired: daysLeft <= 0,
@@ -443,12 +439,12 @@ async function disconnectSocialAccount(accountId, onRefresh, onLocalDisconnect) 
   }
 }
 
-function SchedulePostModal({ 
-  selectedContent, 
-  onClose, 
-  extractHashtags, 
-  getCustomerSocialAccounts, 
-  getCustomerName, 
+function SchedulePostModal({
+  selectedContent,
+  onClose,
+  extractHashtags,
+  getCustomerSocialAccounts,
+  getCustomerName,
   getCustomer,
   showIntegration,
   updatePortfolioStatus,
@@ -521,7 +517,7 @@ function SchedulePostModal({
   });
   const [submitting, setSubmitting] = useState(false);
   const [isPostingNow, setIsPostingNow] = useState(false);
-  
+
   // Location search state
   const [locationSearchQuery, setLocationSearchQuery] = useState('');
   const [locationSearchResults, setLocationSearchResults] = useState([]);
@@ -530,12 +526,12 @@ function SchedulePostModal({
 
   // Local state for connected accounts
   const [localAccounts, setLocalAccounts] = useState([]);
-  
+
   // Drag and drop state for carousel reordering
   const [draggedIndex, setDraggedIndex] = useState(null);
   const [uploadingCarousel, setUploadingCarousel] = useState(false);
   const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
-  
+
   // Media library browser state
   const [showMediaLibrary, setShowMediaLibrary] = useState(false);
   const [libraryImages, setLibraryImages] = useState([]);
@@ -545,17 +541,17 @@ function SchedulePostModal({
   useEffect(() => {
     if (selectedContent) {
       const latestVersion = selectedContent.versions[selectedContent.versions.length - 1];
-      
+
       // Get all media from the latest version
-      const availableMedia = latestVersion?.media?.filter(media => 
+      const availableMedia = latestVersion?.media?.filter(media =>
         media.url && typeof media.url === 'string'
       ) || [];
-      
+
       // Extract caption without hashtags
       const captionText = latestVersion.caption || '';
       const hashtagsText = latestVersion.hashtags || extractHashtags(captionText);
       const captionWithoutHashtags = captionText.replace(/#[a-zA-Z0-9_]+/g, '').trim();
-      
+
       setScheduleFormData({
         caption: captionWithoutHashtags,
         hashtags: hashtagsText,
@@ -595,7 +591,7 @@ function SchedulePostModal({
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
   }, [selectedContent, getCustomerSocialAccounts]);
-  
+
   // Use localAccounts instead of getCustomerSocialAccounts for UI
   const getAvailableAccountsForPlatform = (customerId, platform) => {
     return localAccounts.filter(account => account.platform === platform);
@@ -606,7 +602,7 @@ function SchedulePostModal({
     if (!getCustomer) return true; // If no getCustomer function, allow all platforms
     const customer = getCustomer(customerId);
     if (!customer || !customer.platformAccess) return true; // If no platformAccess, allow all
-    
+
     // Map platform names to platformAccess keys
     const platformMap = {
       'facebook': 'facebook',
@@ -614,7 +610,7 @@ function SchedulePostModal({
       'linkedin': 'linkedin',
       'youtube': 'youtube'
     };
-    
+
     const accessKey = platformMap[platform];
     return customer.platformAccess[accessKey] !== false;
   }, [getCustomer]);
@@ -629,17 +625,17 @@ function SchedulePostModal({
   // Handle platform selection (checkbox)
   const handlePlatformToggle = (platform) => {
     if (!selectedContent) return;
-    
+
     setScheduleFormData(prev => {
       const currentPlatforms = [...prev.platforms];
       const platformIndex = currentPlatforms.indexOf(platform);
-      
+
       if (platformIndex > -1) {
         // Remove platform
         currentPlatforms.splice(platformIndex, 1);
         const newPlatformSettings = { ...prev.platformSettings };
         delete newPlatformSettings[platform];
-        
+
         return {
           ...prev,
           platforms: currentPlatforms,
@@ -657,7 +653,7 @@ function SchedulePostModal({
             linkedinAccountId: ''
           }
         };
-        
+
         return {
           ...prev,
           platforms: currentPlatforms,
@@ -685,7 +681,7 @@ function SchedulePostModal({
   const toggleImageSelection = (media) => {
     setScheduleFormData(prev => {
       const isSelected = prev.selectedImages.some(item => item.url === media.url);
-      
+
       if (isSelected) {
         // Remove from selection
         return {
@@ -703,7 +699,7 @@ function SchedulePostModal({
           };
         }
       }
-      
+
       return prev;
     });
   };
@@ -713,7 +709,7 @@ function SchedulePostModal({
     const hasYoutube = scheduleFormData.platforms.includes('youtube');
     const maxImages = hasYoutube ? 1 : 10;
     const mediaToSelect = scheduleFormData.availableImages.slice(0, maxImages);
-    
+
     setScheduleFormData(prev => ({
       ...prev,
       selectedImages: mediaToSelect
@@ -737,12 +733,12 @@ function SchedulePostModal({
   const handleDragOver = (e, index) => {
     e.preventDefault();
     if (draggedIndex === null || draggedIndex === index) return;
-    
+
     const newImages = [...scheduleFormData.selectedImages];
     const draggedItem = newImages[draggedIndex];
     newImages.splice(draggedIndex, 1);
     newImages.splice(index, 0, draggedItem);
-    
+
     setScheduleFormData(prev => ({
       ...prev,
       selectedImages: newImages
@@ -784,10 +780,10 @@ function SchedulePostModal({
     // Check if it's a video
     const isVideo = isVideoUrl(imageUrl);
     const mediaType = isVideo ? 'video' : 'image';
-    
+
     // Check if already selected
     const alreadySelected = scheduleFormData.selectedImages.some(item => item.url === imageUrl);
-    
+
     if (alreadySelected) {
       // Remove from selection
       setScheduleFormData(prev => ({
@@ -822,29 +818,29 @@ function SchedulePostModal({
   // Upload multiple files for carousel
   const handleMultipleFileUpload = async (files) => {
     if (files.length === 0) return;
-    
+
     const hasYoutube = scheduleFormData.platforms.includes('youtube');
     const maxItems = hasYoutube ? 1 : 10;
     const currentCount = scheduleFormData.selectedImages.length;
     const availableSlots = maxItems - currentCount;
-    
+
     if (availableSlots <= 0) {
       alert(`Maximum ${maxItems} items allowed for carousel`);
       return;
     }
-    
+
     const filesToUpload = Array.from(files).slice(0, availableSlots);
     setUploadingCarousel(true);
-    
+
     try {
       const uploadedMedia = [];
-      
+
       for (const file of filesToUpload) {
         if (file.size > 100 * 1024 * 1024) { // 100MB limit
           console.warn(`File ${file.name} is too large, skipping...`);
           continue;
         }
-        
+
         try {
           const base64Data = await new Promise((resolve, reject) => {
             const reader = new FileReader();
@@ -852,7 +848,7 @@ function SchedulePostModal({
             reader.onerror = reject;
             reader.readAsDataURL(file);
           });
-          
+
           const response = await fetch(`${process.env.REACT_APP_API_URL}/api/gcs/upload-base64`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -868,15 +864,15 @@ function SchedulePostModal({
           }
 
           const result = await response.json();
-          uploadedMedia.push({ 
-            url: result.publicUrl, 
+          uploadedMedia.push({
+            url: result.publicUrl,
             type: file.type.startsWith('video/') ? 'video' : 'image'
           });
         } catch (error) {
           console.error(`Failed to upload ${file.name}:`, error);
         }
       }
-      
+
       if (uploadedMedia.length > 0) {
         setScheduleFormData(prev => ({
           ...prev,
@@ -907,13 +903,13 @@ function SchedulePostModal({
     }
 
     setSearchingLocation(true);
-    
+
     try {
       // Get access token and available pages from Facebook/Instagram account
       let accessToken = null;
       let availablePages = [];
       let tokenSource = '';
-      
+
       // Get from selected accounts
       for (const platform of scheduleFormData.platforms) {
         if (platform === 'facebook' || platform === 'instagram') {
@@ -930,11 +926,11 @@ function SchedulePostModal({
           }
         }
       }
-      
+
       // If no token from selected account, try any FB/IG account
       if (!accessToken) {
         const allAccounts = getCustomerSocialAccounts(selectedContent.customerId);
-        const fbOrIgAccount = allAccounts.find(acc => 
+        const fbOrIgAccount = allAccounts.find(acc =>
           (acc.platform === 'facebook' || acc.platform === 'instagram') && acc.accessToken
         );
         if (fbOrIgAccount) {
@@ -953,24 +949,24 @@ function SchedulePostModal({
       }
 
       console.log(`🔍 Searching in your managed pages for "${query}"...`);
-      
+
       // Filter user's own pages by query (case-insensitive)
-      const matchingPages = availablePages.filter(page => 
+      const matchingPages = availablePages.filter(page =>
         page.name && page.name.toLowerCase().includes(query.toLowerCase())
       );
-      
+
       // Get full page details with location for matching pages
       const pagesWithLocation = [];
-      
+
       for (const page of matchingPages) {
         try {
           const response = await fetch(
             `https://graph.facebook.com/v18.0/${page.id}?fields=id,name,location,category,is_verified&access_token=${accessToken}`,
             { method: 'GET' }
           );
-          
+
           const pageData = await response.json();
-          
+
           if (!pageData.error && pageData.location) {
             pagesWithLocation.push(pageData);
           }
@@ -978,14 +974,14 @@ function SchedulePostModal({
           console.warn(`Failed to get location for page ${page.id}:`, err);
         }
       }
-      
+
       setLocationSearchResults(pagesWithLocation);
       console.log(`✅ Found ${pagesWithLocation.length} pages with locations matching "${query}"`);
-      
+
       if (pagesWithLocation.length === 0) {
         console.log('💡 Tip: Only your managed Facebook Pages with location data can be used');
       }
-      
+
     } catch (error) {
       console.error('❌ Location search error:', error);
       setLocationSearchResults([]);
@@ -1023,7 +1019,7 @@ function SchedulePostModal({
     // Validate each selected platform
     for (const platform of scheduleFormData.platforms) {
       const settings = scheduleFormData.platformSettings[platform];
-      
+
       if (!settings?.accountId) {
         alert(`Please select a ${platform} account`);
         return false;
@@ -1039,7 +1035,7 @@ function SchedulePostModal({
           alert('Instagram requires at least one image');
           return false;
         }
-        
+
         // Facebook Stories validation
         if (platform === 'facebook' && scheduleFormData.postType === 'story') {
           if (scheduleFormData.selectedImages.length === 0) {
@@ -1106,7 +1102,7 @@ function SchedulePostModal({
 
   // Create posts data object for multiple platforms
   const createPostsData = (isScheduled = true) => {
-    const fullCaption = scheduleFormData.hashtags 
+    const fullCaption = scheduleFormData.hashtags
       ? `${scheduleFormData.caption}\n\n${scheduleFormData.hashtags}`
       : scheduleFormData.caption;
 
@@ -1114,7 +1110,7 @@ function SchedulePostModal({
 
     for (const platform of scheduleFormData.platforms) {
       const settings = scheduleFormData.platformSettings[platform];
-      
+
       // Get the selected account details
       const selectedAccount = getCustomerSocialAccounts(selectedContent.customerId)
         .find(acc => acc._id === settings.accountId);
@@ -1156,11 +1152,11 @@ function SchedulePostModal({
       // Platform-specific settings
       if (platform === 'facebook' || platform === 'instagram') {
         const selectedPage = selectedAccount.pages?.find(page => page.id === settings.pageId);
-        
+
         if (!selectedPage) {
           throw new Error(`Selected ${platform} page not found`);
         }
-        
+
         if (!selectedPage.accessToken || selectedPage.accessToken.length < 50) {
           throw new Error(`Selected ${platform} page does not have a valid access token`);
         }
@@ -1170,17 +1166,17 @@ function SchedulePostModal({
           pageId: settings.pageId,
           pageName: selectedPage.name,
           pageAccessToken: selectedPage.accessToken,
-          instagramId: platform === 'instagram' 
+          instagramId: platform === 'instagram'
             ? selectedPage.instagramBusinessAccount?.id
             : null,
           thumbnailUrl: platform === 'facebook' ? (scheduleFormData.facebookThumbnailUrl || null) : null,
         });
-        
+
         // Mark as carousel if multiple images
         if (scheduleFormData.selectedImages.length > 1) {
           postData.useCarouselService = true;
         }
-        
+
         if (platform === 'instagram') {
           if (!selectedPage.instagramBusinessAccount?.id) {
             throw new Error('Selected page does not have an Instagram Business Account connected');
@@ -1188,7 +1184,7 @@ function SchedulePostModal({
         }
       } else if (platform === 'youtube') {
         const selectedChannel = selectedAccount.channels?.find(channel => channel.id === settings.channelId);
-        
+
         if (!selectedChannel) {
           throw new Error('Selected YouTube channel not found');
         }
@@ -1210,11 +1206,11 @@ function SchedulePostModal({
           hasOrgIdField: !!selectedAccount.organizationId,
           isUrnOrg: selectedAccount.platformUserId?.includes('urn:li:organization:')
         });
-        
+
         // Detect if this is an organization account
-        const isOrgAccount = selectedAccount.platformUserId?.includes('urn:li:organization:') || 
-                            selectedAccount.accountType === 'organization';
-        
+        const isOrgAccount = selectedAccount.platformUserId?.includes('urn:li:organization:') ||
+          selectedAccount.accountType === 'organization';
+
         // Extract organization ID if it's an org account
         let organizationId = '';
         if (isOrgAccount) {
@@ -1224,13 +1220,13 @@ function SchedulePostModal({
             organizationId = selectedAccount.platformUserId.replace('urn:li:organization:', '');
           }
         }
-        
+
         console.log('🏢 LinkedIn account type detected:', {
           isOrgAccount,
           organizationId,
           willPostAs: isOrgAccount ? `Organization (${organizationId})` : 'Personal'
         });
-        
+
         Object.assign(postData, {
           linkedinAccountId: selectedAccount.platformUserId,
           linkedinAccessToken: selectedAccount.accessToken,
@@ -1272,10 +1268,10 @@ function SchedulePostModal({
         const linkedinSettings = scheduleFormData.platformSettings['linkedin'];
         const linkedinAccount = getCustomerSocialAccounts(selectedContent.customerId)
           .find(acc => acc._id === linkedinSettings.accountId);
-        
+
         if (linkedinAccount) {
           console.log('🔍 Validating LinkedIn token before scheduling...');
-          
+
           // Check token expiry first
           const expiryCheck = checkLinkedInTokenExpiry(linkedinAccount);
           if (expiryCheck.isExpired) {
@@ -1284,7 +1280,7 @@ function SchedulePostModal({
             isSchedulingRef.current = false;
             return;
           }
-          
+
           if (expiryCheck.isExpiring) {
             const proceed = window.confirm(
               `⚠️ LinkedIn token expires in ${expiryCheck.daysLeft} days. The scheduled post may fail if the token expires before the scheduled time. Would you like to continue anyway?\n\nRecommendation: Ask the customer to reconnect their LinkedIn account to refresh the token.`
@@ -1295,7 +1291,7 @@ function SchedulePostModal({
               return;
             }
           }
-          
+
           // Validate token is actually working
           const validation = await validateLinkedInToken(linkedinAccount.accessToken);
           if (!validation.valid) {
@@ -1351,7 +1347,7 @@ function SchedulePostModal({
       }
 
       alert(message || 'All posts scheduled successfully!');
-      
+
       if (results.length > 0) {
         onRefreshScheduledPosts();
         onClose();
@@ -1404,10 +1400,10 @@ function SchedulePostModal({
         const linkedinSettings = scheduleFormData.platformSettings['linkedin'];
         const linkedinAccount = getCustomerSocialAccounts(selectedContent.customerId)
           .find(acc => acc._id === linkedinSettings.accountId);
-        
+
         if (linkedinAccount) {
           console.log('🔍 Validating LinkedIn token before posting...');
-          
+
           // Check token expiry first
           const expiryCheck = checkLinkedInTokenExpiry(linkedinAccount);
           if (expiryCheck.isExpired) {
@@ -1416,7 +1412,7 @@ function SchedulePostModal({
             isPostingRef.current = false;
             return;
           }
-          
+
           // Validate token is actually working
           const validation = await validateLinkedInToken(linkedinAccount.accessToken);
           if (!validation.valid) {
@@ -1483,7 +1479,7 @@ function SchedulePostModal({
       }
 
       alert(message || 'All posts published successfully!');
-      
+
       if (results.length > 0) {
         // Mark submission as complete to prevent re-submission
         markSubmissionComplete(selectedContent?.id, scheduleFormData.platforms);
@@ -1511,7 +1507,7 @@ function SchedulePostModal({
       reader.onload = async (e) => {
         try {
           const base64Data = e.target.result.split(',')[1];
-          
+
           const response = await fetch(`${process.env.REACT_APP_API_URL}/api/gcs/upload-base64`, {
             method: 'POST',
             headers: {
@@ -1529,26 +1525,26 @@ function SchedulePostModal({
           }
 
           const result = await response.json();
-          const newMedia = { 
-            url: result.publicUrl, 
+          const newMedia = {
+            url: result.publicUrl,
             type: file.type.startsWith('video/') ? 'video' : 'image'
           };
-          
+
           // Add to available images and select it
           setScheduleFormData(prev => ({
             ...prev,
             availableImages: [...prev.availableImages, newMedia],
             selectedImages: [...prev.selectedImages, newMedia]
           }));
-          
+
         } catch (error) {
           console.error('Base64 upload failed:', error);
           alert('File upload failed. Please try again.');
         }
       };
-      
+
       reader.readAsDataURL(file);
-      
+
     } catch (error) {
       console.error('File upload failed:', error);
       alert('File upload failed. Please try again.');
@@ -1629,7 +1625,7 @@ function SchedulePostModal({
   if (!selectedContent) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4">
+    <div className="fixed inset-0 z-[60] bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4">
       <div className="bg-white rounded-t-xl sm:rounded-xl shadow-2xl w-full sm:max-w-4xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
         <div className="p-3 sm:p-4">
           {/* Modal Header - Compact */}
@@ -1657,13 +1653,12 @@ function SchedulePostModal({
               <label className="block text-sm font-semibold text-gray-900 mb-2">Select Platforms</label>
               <div className="grid grid-cols-2 gap-2">
                 {/* Facebook */}
-                <label className={`flex flex-col sm:flex-row items-start sm:items-center p-2 sm:p-3 border-2 rounded-lg transition-all ${
-                  scheduleFormData.platforms.includes('facebook') 
-                    ? 'border-blue-500 bg-blue-50 shadow-sm cursor-pointer' 
+                <label className={`flex flex-col sm:flex-row items-start sm:items-center p-2 sm:p-3 border-2 rounded-lg transition-all ${scheduleFormData.platforms.includes('facebook')
+                    ? 'border-blue-500 bg-blue-50 shadow-sm cursor-pointer'
                     : hasAccountsForPlatform(selectedContent?.customerId, 'facebook')
-                    ? 'border-gray-200 hover:border-blue-400 hover:bg-blue-50/50 cursor-pointer'
-                    : 'border-gray-200 bg-gray-50/50 cursor-not-allowed opacity-60'
-                }`} title={!isPlatformEnabled(selectedContent?.customerId, 'facebook') ? 'Platform disabled by admin' : ''}>
+                      ? 'border-gray-200 hover:border-blue-400 hover:bg-blue-50/50 cursor-pointer'
+                      : 'border-gray-200 bg-gray-50/50 cursor-not-allowed opacity-60'
+                  }`} title={!isPlatformEnabled(selectedContent?.customerId, 'facebook') ? 'Platform disabled by admin' : ''}>
                   <input
                     type="checkbox"
                     name="platforms"
@@ -1727,13 +1722,12 @@ function SchedulePostModal({
                 </label>
 
                 {/* Instagram */}
-                <label className={`flex flex-col sm:flex-row items-start sm:items-center p-2 sm:p-3 border-2 rounded-lg transition-all ${
-                  scheduleFormData.platforms.includes('instagram') 
-                    ? 'border-pink-500 bg-pink-50 shadow-sm cursor-pointer' 
+                <label className={`flex flex-col sm:flex-row items-start sm:items-center p-2 sm:p-3 border-2 rounded-lg transition-all ${scheduleFormData.platforms.includes('instagram')
+                    ? 'border-pink-500 bg-pink-50 shadow-sm cursor-pointer'
                     : getAvailableAccountsForPlatform(selectedContent?.customerId, 'instagram').length > 0 && isPlatformEnabled(selectedContent?.customerId, 'instagram')
-                    ? 'border-gray-200 hover:border-pink-400 hover:bg-pink-50/50 cursor-pointer'
-                    : 'border-gray-200 bg-gray-50/50 cursor-not-allowed opacity-60'
-                }`} title={!isPlatformEnabled(selectedContent?.customerId, 'instagram') ? 'Platform disabled by admin' : ''}>
+                      ? 'border-gray-200 hover:border-pink-400 hover:bg-pink-50/50 cursor-pointer'
+                      : 'border-gray-200 bg-gray-50/50 cursor-not-allowed opacity-60'
+                  }`} title={!isPlatformEnabled(selectedContent?.customerId, 'instagram') ? 'Platform disabled by admin' : ''}>
                   <input
                     type="checkbox"
                     name="platforms"
@@ -1797,13 +1791,12 @@ function SchedulePostModal({
                 </label>
 
                 {/* YouTube */}
-                <label className={`flex flex-col sm:flex-row items-start sm:items-center p-2 sm:p-3 border-2 rounded-lg transition-all ${
-                  scheduleFormData.platforms.includes('youtube') 
-                    ? 'border-red-500 bg-red-50 shadow-sm cursor-pointer' 
+                <label className={`flex flex-col sm:flex-row items-start sm:items-center p-2 sm:p-3 border-2 rounded-lg transition-all ${scheduleFormData.platforms.includes('youtube')
+                    ? 'border-red-500 bg-red-50 shadow-sm cursor-pointer'
                     : hasAccountsForPlatform(selectedContent?.customerId, 'youtube')
-                    ? 'border-gray-200 hover:border-red-400 hover:bg-red-50/50 cursor-pointer'
-                    : 'border-gray-200 bg-gray-50/50 cursor-not-allowed opacity-60'
-                }`} title={!isPlatformEnabled(selectedContent?.customerId, 'youtube') ? 'Platform disabled by admin' : ''}>
+                      ? 'border-gray-200 hover:border-red-400 hover:bg-red-50/50 cursor-pointer'
+                      : 'border-gray-200 bg-gray-50/50 cursor-not-allowed opacity-60'
+                  }`} title={!isPlatformEnabled(selectedContent?.customerId, 'youtube') ? 'Platform disabled by admin' : ''}>
                   <input
                     type="checkbox"
                     name="platforms"
@@ -1867,13 +1860,12 @@ function SchedulePostModal({
                 </label>
 
                 {/* LinkedIn */}
-                <label className={`flex flex-col sm:flex-row items-start sm:items-center p-2 sm:p-3 border-2 rounded-lg transition-all ${
-                  scheduleFormData.platforms.includes('linkedin') 
-                    ? 'border-blue-500 bg-blue-50 shadow-sm cursor-pointer' 
+                <label className={`flex flex-col sm:flex-row items-start sm:items-center p-2 sm:p-3 border-2 rounded-lg transition-all ${scheduleFormData.platforms.includes('linkedin')
+                    ? 'border-blue-500 bg-blue-50 shadow-sm cursor-pointer'
                     : hasAccountsForPlatform(selectedContent?.customerId, 'linkedin')
-                    ? 'border-gray-200 hover:border-blue-400 hover:bg-blue-50/50 cursor-pointer'
-                    : 'border-gray-200 bg-gray-50/50 cursor-not-allowed opacity-60'
-                }`} title={!isPlatformEnabled(selectedContent?.customerId, 'linkedin') ? 'Platform disabled by admin' : ''}>
+                      ? 'border-gray-200 hover:border-blue-400 hover:bg-blue-50/50 cursor-pointer'
+                      : 'border-gray-200 bg-gray-50/50 cursor-not-allowed opacity-60'
+                  }`} title={!isPlatformEnabled(selectedContent?.customerId, 'linkedin') ? 'Platform disabled by admin' : ''}>
                   <input
                     type="checkbox"
                     name="platforms"
@@ -1936,7 +1928,7 @@ function SchedulePostModal({
                   </div>
                 </label>
               </div>
-              
+
               {scheduleFormData.platforms.length > 0 && (
                 <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-lg">
                   <p className="text-xs text-green-800 font-medium">
@@ -1963,7 +1955,7 @@ function SchedulePostModal({
                       {platform === 'linkedin' && <Linkedin className="h-4 w-4 text-blue-600 mr-1.5" />}
                       {platform} Settings
                     </h3>
-                    
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <div>
                         <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -2126,7 +2118,7 @@ function SchedulePostModal({
                       <div className="mb-2 p-2 bg-blue-50 border border-blue-200 rounded text-[10px] text-blue-800">
                         💡 Only your managed Facebook Pages with location data can be used
                       </div>
-                      
+
                       <div className="relative mb-2">
                         <input
                           type="text"
@@ -2202,17 +2194,17 @@ function SchedulePostModal({
               <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
                 <label className="block text-sm font-semibold text-gray-900 mb-2 flex items-center flex-wrap gap-1">
                   Media
-                  {(scheduleFormData.platforms.includes('youtube') || scheduleFormData.platforms.includes('instagram')) && 
+                  {(scheduleFormData.platforms.includes('youtube') || scheduleFormData.platforms.includes('instagram')) &&
                     <span className="text-red-500">*</span>}
                   {scheduleFormData.platforms.includes('youtube') && (
                     <span className="text-[10px] text-orange-600 font-normal">(Single video)</span>
                   )}
-                  {scheduleFormData.platforms.some(p => ['facebook', 'instagram', 'linkedin'].includes(p)) && 
+                  {scheduleFormData.platforms.some(p => ['facebook', 'instagram', 'linkedin'].includes(p)) &&
                     scheduleFormData.availableImages.length > 1 && (
-                    <span className="text-[10px] text-gray-500 font-normal">(Carousel: 2-10)</span>
-                  )}
+                      <span className="text-[10px] text-gray-500 font-normal">(Carousel: 2-10)</span>
+                    )}
                 </label>
-                
+
                 {/* Available Media from Version */}
                 {scheduleFormData.availableImages.length > 0 && (
                   <div className="mb-3">
@@ -2239,20 +2231,19 @@ function SchedulePostModal({
                         </button>
                       </div>
                     </div>
-                    
+
                     <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-2">
                       {scheduleFormData.availableImages.map((media, index) => {
                         const isSelected = scheduleFormData.selectedImages.some(item => item.url === media.url);
                         const selectionOrder = scheduleFormData.selectedImages.findIndex(item => item.url === media.url);
-                        
+
                         return (
-                          <div 
+                          <div
                             key={`${media.url}-${index}`}
-                            className={`relative border-2 rounded-lg overflow-hidden cursor-pointer transition-all ${
-                              isSelected 
-                                ? 'border-blue-500 shadow-md ring-1 ring-blue-200' 
+                            className={`relative border-2 rounded-lg overflow-hidden cursor-pointer transition-all ${isSelected
+                                ? 'border-blue-500 shadow-md ring-1 ring-blue-200'
                                 : 'border-gray-300 hover:border-blue-400'
-                            }`}
+                              }`}
                             onClick={() => toggleImageSelection(media)}
                           >
                             {media.type === 'video' || isVideoUrl(media.url) ? (
@@ -2260,23 +2251,22 @@ function SchedulePostModal({
                                 <Video className="h-4 w-4 text-gray-500" />
                               </div>
                             ) : (
-                              <img 
-                                src={media.url} 
+                              <img
+                                src={media.url}
                                 alt={`Media ${index + 1}`}
                                 className="w-full h-14 sm:h-16 object-cover"
                                 loading="lazy"
                               />
                             )}
-                            
+
                             {/* Selection Indicator */}
-                            <div className={`absolute top-0.5 right-0.5 w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold transition-all ${
-                              isSelected 
-                                ? 'bg-blue-500 text-white shadow' 
+                            <div className={`absolute top-0.5 right-0.5 w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold transition-all ${isSelected
+                                ? 'bg-blue-500 text-white shadow'
                                 : 'bg-white/80 text-gray-600 border border-gray-300'
-                            }`}>
+                              }`}>
                               {isSelected ? <Check className="h-2.5 w-2.5" /> : <span>{index + 1}</span>}
                             </div>
-                            
+
                             {/* Selection Order */}
                             {isSelected && (
                               <div className="absolute top-0.5 left-0.5 bg-blue-500 text-white w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold shadow">
@@ -2287,7 +2277,7 @@ function SchedulePostModal({
                         );
                       })}
                     </div>
-                    
+
                     {scheduleFormData.selectedImages.length > 0 && (
                       <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded-lg">
                         <span className="text-xs font-medium text-blue-800">
@@ -2328,27 +2318,26 @@ function SchedulePostModal({
                           onDragStart={(e) => handleDragStart(e, index)}
                           onDragOver={(e) => handleDragOver(e, index)}
                           onDragEnd={handleDragEnd}
-                          className={`relative border-2 rounded overflow-hidden cursor-move transition-all ${
-                            draggedIndex === index ? 'opacity-50 scale-95' : 'hover:shadow-md'
-                          } border-blue-400 bg-white`}
+                          className={`relative border-2 rounded overflow-hidden cursor-move transition-all ${draggedIndex === index ? 'opacity-50 scale-95' : 'hover:shadow-md'
+                            } border-blue-400 bg-white`}
                         >
                           {isVideoUrl(media.url) ? (
                             <div className="w-full h-12 sm:h-14 bg-gray-800 flex items-center justify-center">
                               <Video className="h-3 w-3 text-white" />
                             </div>
                           ) : (
-                            <img 
-                              src={media.url} 
+                            <img
+                              src={media.url}
                               alt={`Carousel ${index + 1}`}
                               className="w-full h-12 sm:h-14 object-cover"
                               loading="lazy"
                             />
                           )}
-                          
+
                           <div className="absolute top-0 left-0 bg-blue-600 text-white w-4 h-4 rounded-br flex items-center justify-center text-[8px] font-bold">
                             {index + 1}
                           </div>
-                          
+
                           <button
                             type="button"
                             onClick={() => removeImageFromCarousel(index)}
@@ -2722,7 +2711,7 @@ function SchedulePostModal({
                 <div>
                   <h2 className="text-base sm:text-xl font-bold text-gray-900">Media Library</h2>
                   <p className="text-xs text-gray-500 mt-1">
-                    {scheduleFormData.platforms.includes('youtube') 
+                    {scheduleFormData.platforms.includes('youtube')
                       ? 'Select a video'
                       : `Select images/videos (${scheduleFormData.selectedImages.length}/10)`}
                   </p>
@@ -2737,44 +2726,41 @@ function SchedulePostModal({
                   <X className="h-4 w-4" />
                 </button>
               </div>
-              
+
               {/* Filter buttons */}
               <div className="flex items-center gap-2 mb-4">
                 <span className="text-xs font-medium text-gray-600">Filter:</span>
                 <button
                   onClick={() => setMediaFilter('all')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                    mediaFilter === 'all'
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${mediaFilter === 'all'
                       ? 'bg-blue-600 text-white shadow'
                       : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
+                    }`}
                 >
                   All ({libraryImages.length})
                 </button>
                 <button
                   onClick={() => setMediaFilter('images')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1 ${
-                    mediaFilter === 'images'
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1 ${mediaFilter === 'images'
                       ? 'bg-green-600 text-white shadow'
                       : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
+                    }`}
                 >
                   <Image className="h-3 w-3" />
                   Images ({libraryImages.filter(img => !isVideoUrl(img.publicUrl)).length})
                 </button>
                 <button
                   onClick={() => setMediaFilter('videos')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1 ${
-                    mediaFilter === 'videos'
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1 ${mediaFilter === 'videos'
                       ? 'bg-purple-600 text-white shadow'
                       : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
+                    }`}
                 >
                   <Video className="h-3 w-3" />
                   Videos ({libraryImages.filter(img => isVideoUrl(img.publicUrl)).length})
                 </button>
               </div>
-              
+
               {loadingLibrary ? (
                 <div className="flex items-center justify-center py-8 sm:py-12">
                   <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 animate-spin text-blue-600" />
@@ -2796,7 +2782,7 @@ function SchedulePostModal({
                           if (mediaFilter === 'videos') return isVideoUrl(img.publicUrl);
                           return true; // 'all'
                         });
-                        
+
                         if (filteredImages.length === 0) {
                           return (
                             <div className="text-center py-8 sm:py-12 text-gray-500">
@@ -2815,110 +2801,108 @@ function SchedulePostModal({
                             </div>
                           );
                         }
-                        
+
                         return (
                           <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-2 sm:gap-4 max-h-64 sm:max-h-96 overflow-y-auto">
                             {filteredImages.map((image, index) => {
-                          const isSelected = scheduleFormData.selectedImages.some(item => item.url === image.publicUrl);
-                          const isVideoFile = isVideoUrl(image.publicUrl);
-                          const fileExtension = image.name.split('.').pop().toLowerCase();
-                          const isSubmission = image.source === 'content_submissions';
-                          
-                          return (
-                            <div
-                              key={index}
-                              className={`relative border-2 rounded-lg overflow-hidden cursor-pointer hover:shadow-lg transition-all ${
-                                isSelected 
-                                  ? 'border-blue-500 ring-2 ring-blue-200' 
-                                  : isVideoFile 
-                                    ? 'border-purple-300 hover:border-purple-400' 
-                                    : 'border-gray-200 hover:border-blue-300'
-                              }`}
-                              onClick={() => handleSelectLibraryImage(image.publicUrl)}
-                            >
-                              {isVideoFile ? (
-                                <div className="w-full aspect-square sm:h-32 bg-gradient-to-br from-purple-900 to-indigo-900 flex flex-col items-center justify-center relative">
-                                  <Video className="h-8 w-8 text-white mb-1" />
-                                  <span className="text-xs text-white font-medium">Video</span>
-                                  {image.size && (
-                                    <span className="text-[10px] text-purple-200 mt-0.5">
-                                      {image.size >= 1024 * 1024
-                                        ? `${(image.size / (1024 * 1024)).toFixed(1)} MB`
-                                        : `${(image.size / 1024).toFixed(0)} KB`}
-                                    </span>
-                                  )}
-                                  {/* Video badge */}
-                                  <div className="absolute top-1 left-1 bg-purple-600 text-white px-1.5 py-0.5 rounded text-[9px] font-bold">
-                                    VIDEO
-                                  </div>
-                                  {/* Submission badge */}
-                                  {isSubmission && (
-                                    <div className="absolute bottom-1 left-1 bg-orange-500 text-white px-1.5 py-0.5 rounded text-[9px] font-bold">
-                                      SUBMISSION
+                              const isSelected = scheduleFormData.selectedImages.some(item => item.url === image.publicUrl);
+                              const isVideoFile = isVideoUrl(image.publicUrl);
+                              const fileExtension = image.name.split('.').pop().toLowerCase();
+                              const isSubmission = image.source === 'content_submissions';
+
+                              return (
+                                <div
+                                  key={index}
+                                  className={`relative border-2 rounded-lg overflow-hidden cursor-pointer hover:shadow-lg transition-all ${isSelected
+                                      ? 'border-blue-500 ring-2 ring-blue-200'
+                                      : isVideoFile
+                                        ? 'border-purple-300 hover:border-purple-400'
+                                        : 'border-gray-200 hover:border-blue-300'
+                                    }`}
+                                  onClick={() => handleSelectLibraryImage(image.publicUrl)}
+                                >
+                                  {isVideoFile ? (
+                                    <div className="w-full aspect-square sm:h-32 bg-gradient-to-br from-purple-900 to-indigo-900 flex flex-col items-center justify-center relative">
+                                      <Video className="h-8 w-8 text-white mb-1" />
+                                      <span className="text-xs text-white font-medium">Video</span>
+                                      {image.size && (
+                                        <span className="text-[10px] text-purple-200 mt-0.5">
+                                          {image.size >= 1024 * 1024
+                                            ? `${(image.size / (1024 * 1024)).toFixed(1)} MB`
+                                            : `${(image.size / 1024).toFixed(0)} KB`}
+                                        </span>
+                                      )}
+                                      {/* Video badge */}
+                                      <div className="absolute top-1 left-1 bg-purple-600 text-white px-1.5 py-0.5 rounded text-[9px] font-bold">
+                                        VIDEO
+                                      </div>
+                                      {/* Submission badge */}
+                                      {isSubmission && (
+                                        <div className="absolute bottom-1 left-1 bg-orange-500 text-white px-1.5 py-0.5 rounded text-[9px] font-bold">
+                                          SUBMISSION
+                                        </div>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <div className="relative">
+                                      <img
+                                        src={image.publicUrl}
+                                        alt={image.name}
+                                        className="w-full aspect-square sm:h-32 object-cover"
+                                        loading="lazy"
+                                      />
+                                      {/* Image badge */}
+                                      <div className="absolute top-1 left-1 bg-green-600 text-white px-1.5 py-0.5 rounded text-[9px] font-bold">
+                                        IMAGE
+                                      </div>
+                                      {/* Submission badge */}
+                                      {isSubmission && (
+                                        <div className="absolute bottom-1 left-1 bg-orange-500 text-white px-1.5 py-0.5 rounded text-[9px] font-bold">
+                                          SUBMISSION
+                                        </div>
+                                      )}
                                     </div>
                                   )}
-                                </div>
-                              ) : (
-                                <div className="relative">
-                                  <img
-                                    src={image.publicUrl}
-                                    alt={image.name}
-                                    className="w-full aspect-square sm:h-32 object-cover"
-                                    loading="lazy"
-                                  />
-                                  {/* Image badge */}
-                                  <div className="absolute top-1 left-1 bg-green-600 text-white px-1.5 py-0.5 rounded text-[9px] font-bold">
-                                    IMAGE
-                                  </div>
-                                  {/* Submission badge */}
-                                  {isSubmission && (
-                                    <div className="absolute bottom-1 left-1 bg-orange-500 text-white px-1.5 py-0.5 rounded text-[9px] font-bold">
-                                      SUBMISSION
+
+                                  {/* Selection indicator */}
+                                  {isSelected && (
+                                    <div className="absolute top-1 right-1 bg-blue-500 text-white w-6 h-6 rounded-full flex items-center justify-center shadow-lg">
+                                      <Check className="h-4 w-4" />
                                     </div>
                                   )}
-                                </div>
-                              )}
-                              
-                              {/* Selection indicator */}
-                              {isSelected && (
-                                <div className="absolute top-1 right-1 bg-blue-500 text-white w-6 h-6 rounded-full flex items-center justify-center shadow-lg">
-                                  <Check className="h-4 w-4" />
-                                </div>
-                              )}
-                              
-                              <div className="hidden sm:block p-2 bg-gray-50">
-                                <p className="text-xs text-gray-600 truncate" title={image.name}>
-                                  {image.name.split('/').pop()}
-                                </p>
-                                <div className="flex items-center justify-between mt-0.5">
-                                  <p className="text-xs text-gray-500">
-                                    {image.size
-                                      ? image.size >= 1024 * 1024
-                                        ? `${(image.size / (1024 * 1024)).toFixed(1)} MB`
-                                        : `${(image.size / 1024).toFixed(0)} KB`
-                                      : new Date(image.updated).toLocaleDateString()}
-                                  </p>
-                                  <div className="flex items-center gap-1">
-                                    {isSubmission && (
-                                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-orange-100 text-orange-700">
-                                        SUB
-                                      </span>
-                                    )}
-                                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
-                                      isVideoFile ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'
-                                    }`}>
-                                      {fileExtension.toUpperCase()}
-                                    </span>
+
+                                  <div className="hidden sm:block p-2 bg-gray-50">
+                                    <p className="text-xs text-gray-600 truncate" title={image.name}>
+                                      {image.name.split('/').pop()}
+                                    </p>
+                                    <div className="flex items-center justify-between mt-0.5">
+                                      <p className="text-xs text-gray-500">
+                                        {image.size
+                                          ? image.size >= 1024 * 1024
+                                            ? `${(image.size / (1024 * 1024)).toFixed(1)} MB`
+                                            : `${(image.size / 1024).toFixed(0)} KB`
+                                          : new Date(image.updated).toLocaleDateString()}
+                                      </p>
+                                      <div className="flex items-center gap-1">
+                                        {isSubmission && (
+                                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-orange-100 text-orange-700">
+                                            SUB
+                                          </span>
+                                        )}
+                                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${isVideoFile ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'
+                                          }`}>
+                                          {fileExtension.toUpperCase()}
+                                        </span>
+                                      </div>
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            </div>
-                          );
-                        })}
+                              );
+                            })}
                           </div>
                         );
                       })()}
-                      
+
                       {/* Selection summary and actions */}
                       {scheduleFormData.selectedImages.length > 0 && (
                         <div className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-lg">

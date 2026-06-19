@@ -98,6 +98,7 @@ const TABS_CONFIG = [
   { id: 'qr', label: 'QR Codes', icon: QrCode },
   { id: 'social', label: 'Social', icon: BarChart3 },
   { id: 'report', label: 'Report', icon: FileText },
+  { id: 'info', label: 'Customer Info', icon: User },
 ];
 
 // ── QR platform config ─────────────────────────────────────────────────────────
@@ -238,8 +239,8 @@ const TrendChart = memo(({ calendars, onClose }) => {
               key={opt.label}
               onClick={() => setRange(opt.months)}
               className={`px-2.5 py-0.5 rounded-md text-xs font-medium transition-colors ${range === opt.months
-                  ? 'bg-emerald-600 text-white'
-                  : 'text-gray-500 hover:bg-gray-100'
+                ? 'bg-emerald-600 text-white'
+                : 'text-gray-500 hover:bg-gray-100'
                 }`}
             >
               {opt.label}
@@ -570,8 +571,8 @@ const ItemTimeline = ({ item, itemStatus, scheduledPosts = [], submissions = [] 
 const PostTrendButton = memo(({ isLoading, isActive, onClick }) => (
   <button
     className={`flex items-center gap-1 px-1.5 py-0.5 rounded border transition-colors flex-shrink-0 ${isActive
-        ? 'bg-blue-100 border-blue-300 text-blue-700'
-        : 'bg-blue-50 hover:bg-blue-100 border-blue-100 text-blue-600'
+      ? 'bg-blue-100 border-blue-300 text-blue-700'
+      : 'bg-blue-50 hover:bg-blue-100 border-blue-100 text-blue-600'
       }`}
     onClick={onClick}
     title="View post engagement trend"
@@ -677,8 +678,8 @@ const ExpandedTrendChart = memo(({ platformData, dateRange, onDateRangeChange, o
                 key={r.value}
                 onClick={() => onDateRangeChange(r.value)}
                 className={`px-2 py-0.5 text-[10px] rounded-full font-medium transition-colors ${dateRange === r.value
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-white text-gray-500 hover:bg-gray-100 border border-gray-200'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white text-gray-500 hover:bg-gray-100 border border-gray-200'
                   }`}
               >
                 {r.label}
@@ -838,6 +839,7 @@ function CustomerDetailsView() {
   }, []);
 
   useEffect(() => {
+    let intervalId;
     if (id) {
       fetchCustomer();
       fetchCalendars();
@@ -845,7 +847,15 @@ function CustomerDetailsView() {
       fetchScheduledPosts();
       fetchSocialAccounts();
       fetchSubmissions();
+
+      // Poll for scheduled posts updates every 10 seconds to show real-time states (e.g. processing -> published)
+      intervalId = setInterval(() => {
+        fetchScheduledPosts();
+      }, 10000);
     }
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
   }, [id]);
 
   const fetchCustomer = async () => {
@@ -1378,20 +1388,65 @@ function CustomerDetailsView() {
   }, [isItemPublished]);
 
   // Get published count for a calendar
+  // Get published count for a calendar
   const getCalendarStats = useCallback((calendar) => {
-    const total = calendar.contentItems?.length || 0;
-    const published = calendar.contentItems?.filter(item => isItemPublished(item)).length || 0;
+    let total = 0, published = 0, pending = 0, upcomingDue = 0, overdue = 0;
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    const twoDaysFromNow = new Date(today);
+    twoDaysFromNow.setDate(today.getDate() + 2);
+    twoDaysFromNow.setHours(23, 59, 59, 999);
+
+    if (calendar.contentItems) {
+      calendar.contentItems.forEach(item => {
+        total++;
+        if (isItemPublished(item)) {
+          published++;
+        } else {
+          pending++;
+          if (item.date) {
+            const dueDate = new Date(item.date);
+            if (dueDate < today) {
+              overdue++;
+            } else if (dueDate <= twoDaysFromNow) {
+              upcomingDue++;
+            }
+          }
+        }
+      });
+    }
+
     const progressPercent = total > 0 ? Math.round((published / total) * 100) : 0;
-    return { total, published, progressPercent };
+    return { total, published, pending, upcomingDue, overdue, progressPercent };
   }, [isItemPublished]);
 
   // Overall stats for all calendars
   const overallStats = useMemo(() => {
-    let totalItems = 0, publishedItems = 0;
+    let totalItems = 0, publishedItems = 0, upcomingDue = 0, overdue = 0;
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    const twoDaysFromNow = new Date(today);
+    twoDaysFromNow.setDate(today.getDate() + 2);
+    twoDaysFromNow.setHours(23, 59, 59, 999);
+
     calendars.forEach(cal => {
       cal.contentItems?.forEach(item => {
         totalItems++;
-        if (isItemPublished(item)) publishedItems++;
+        const isPublished = isItemPublished(item);
+        if (isPublished) {
+          publishedItems++;
+        } else {
+          if (item.date) {
+            const dueDate = new Date(item.date);
+            if (dueDate < today) {
+              overdue++;
+            } else if (dueDate <= twoDaysFromNow) {
+              upcomingDue++;
+            }
+          }
+        }
       });
     });
     return {
@@ -1399,6 +1454,8 @@ function CustomerDetailsView() {
       totalItems,
       publishedItems,
       pendingItems: totalItems - publishedItems,
+      upcomingDue,
+      overdue,
       completionRate: totalItems > 0 ? Math.round((publishedItems / totalItems) * 100) : 0
     };
   }, [calendars, isItemPublished]);
@@ -1869,7 +1926,8 @@ function CustomerDetailsView() {
   const handleScheduleContent = useCallback((content = null) => {
     const contentToSchedule = content || selectedContentDetail;
     if (!contentToSchedule) return;
-    setSelectedContentDetail(null);
+    // Do not close the detail modal so it remains underneath
+    // setSelectedContentDetail(null);
     setScheduleModalData(contentToSchedule);
   }, [selectedContentDetail]);
 
@@ -2034,8 +2092,8 @@ function CustomerDetailsView() {
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all flex-shrink-0 ${isActive
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                     }`}
                 >
                   <Icon className="h-3.5 w-3.5" />
@@ -2054,104 +2112,76 @@ function CustomerDetailsView() {
         {/* ══════════ TAB: OVERVIEW ══════════ */}
         {activeTab === 'overview' && (
           <>
-            {/* Customer Info - Side by Side Grid on Mobile */}
-            <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm p-2 sm:p-3 border border-gray-200/50">
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Customer Information</h3>
-
-              {/* 2-Column Grid for Mobile */}
-              <div className="grid grid-cols-2 gap-1.5">
-                {/* Personal Details */}
-                <InfoItem icon={User} iconBg="bg-blue-100" iconColor="text-blue-600" label="Name" value={customer.name} />
-                <InfoItem icon={Mail} iconBg="bg-green-100" iconColor="text-green-600" label="Email" value={customer.email} />
-                <InfoItem icon={Phone} iconBg="bg-purple-100" iconColor="text-purple-600" label="Mobile" value={customer.mobile} />
-                <InfoItem icon={MapPin} iconBg="bg-orange-100" iconColor="text-orange-600" label="Address" value={customer.address} />
-
-                {/* Business Details */}
-                <InfoItem icon={FileText} iconBg="bg-indigo-100" iconColor="text-indigo-600" label="GST" value={customer.gstNumber} />
-                <InfoItem icon={Building} iconBg="bg-pink-100" iconColor="text-pink-600" label="Role" value={customer.role} />
-                <InfoItem icon={Hash} iconBg="bg-yellow-100" iconColor="text-yellow-600" label="ID" value={customer._id} mono />
-                <InfoItem icon={Calendar} iconBg="bg-teal-100" iconColor="text-teal-600" label="Registered" value={formatDate(customer.createdAt)} />
-              </div>
-            </div>
-
             {/* Content Calendars Section */}
             <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-              {/* Header with Stats */}
+              {/* Header with Stats Inline */}
               <div className="px-3 sm:px-4 py-3 border-b border-gray-100">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                  <div>
+                <div className="flex flex-col xl:flex-row xl:items-center gap-3">
+                  <div className="flex-shrink-0">
                     <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Content Calendars</h2>
                     <p className="text-base text-gray-500 mt-0.5">Manage content schedule and items</p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setShowTrend(v => !v)}
-                      className={`inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg transition-colors ${showTrend
+
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 xl:ml-auto overflow-hidden">
+                    {/* Stats Inline */}
+                    {calendars.length > 0 && (
+                      <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0">
+                        <div className="flex items-center gap-1.5 px-2 py-1 bg-gray-50 rounded-md border border-gray-200 whitespace-nowrap">
+                          <span className="text-sm font-bold text-gray-700">{overallStats.totalCalendars}</span>
+                          <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">Calendars</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 px-2 py-1 bg-blue-50 rounded-md border border-blue-200 whitespace-nowrap">
+                          <span className="text-sm font-bold text-blue-700">{overallStats.totalItems}</span>
+                          <span className="text-[10px] font-medium text-blue-600 uppercase tracking-wide">Items</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 px-2 py-1 bg-emerald-50 rounded-md border border-emerald-200 whitespace-nowrap">
+                          <span className="text-sm font-bold text-emerald-700">{overallStats.publishedItems}</span>
+                          <span className="text-[10px] font-medium text-emerald-600 uppercase tracking-wide">Published</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 px-2 py-1 bg-amber-50 rounded-md border border-amber-200 whitespace-nowrap">
+                          <span className="text-sm font-bold text-amber-700">{overallStats.pendingItems}</span>
+                          <span className="text-[10px] font-medium text-amber-600 uppercase tracking-wide">Pending</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 px-2 py-1 bg-orange-50 rounded-md border border-orange-200 whitespace-nowrap">
+                          <span className="text-sm font-bold text-orange-700">{overallStats.upcomingDue}</span>
+                          <span className="text-[10px] font-medium text-orange-600 uppercase tracking-wide">Upcoming</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 px-2 py-1 bg-red-50 rounded-md border border-red-200 whitespace-nowrap">
+                          <span className="text-sm font-bold text-red-700">{overallStats.overdue}</span>
+                          <span className="text-[10px] font-medium text-red-600 uppercase tracking-wide">Overdue</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <button
+                        onClick={() => setShowTrend(v => !v)}
+                        className={`inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${showTrend
                           ? 'bg-emerald-600 text-white hover:bg-emerald-700'
                           : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                        }`}
-                    >
-                      <TrendingUp className="h-4 w-4 mr-1.5" />
-                      Trend
-                    </button>
-                    <button
-                      onClick={() => setIsReportModalOpen(true)}
-                      className="inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
-                    >
-                      <Download className="h-4 w-4 mr-1.5" />
-                      Download Report
-                    </button>
-                    <button
-                      onClick={() => setIsCalendarModalOpen(true)}
-                      className="inline-flex items-center px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-colors"
-                    >
-                      <Plus className="h-4 w-4 mr-1.5" />
-                      Add Calendar
-                    </button>
+                          }`}
+                      >
+                        <TrendingUp className="h-4 w-4 mr-1.5" />
+                        Trend
+                      </button>
+                      <button
+                        onClick={() => setIsReportModalOpen(true)}
+                        className="inline-flex items-center px-3 py-1.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+                      >
+                        <Download className="h-4 w-4 mr-1.5" />
+                        Report
+                      </button>
+                      <button
+                        onClick={() => setIsCalendarModalOpen(true)}
+                        className="inline-flex items-center px-3 py-1.5 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-colors"
+                      >
+                        <Plus className="h-4 w-4 mr-1.5" />
+                        Add Calendar
+                      </button>
+                    </div>
                   </div>
                 </div>
-
-                {/* Stats Grid */}
-                {calendars.length > 0 && (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 mt-2">
-                    <div className="bg-gray-50 rounded-xl p-2 border border-gray-100">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="text-2xl font-semibold text-gray-900 tabular-nums">{overallStats.totalCalendars}</div>
-                          <div className="text-sm text-gray-500 font-medium uppercase tracking-wide">Calendars</div>
-                        </div>
-                        <Calendar className="h-6 w-6 text-gray-400" />
-                      </div>
-                    </div>
-                    <div className="bg-blue-50 rounded-xl p-2 border border-blue-100">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="text-2xl font-semibold text-blue-700 tabular-nums">{overallStats.totalItems}</div>
-                          <div className="text-sm text-blue-600 font-medium uppercase tracking-wide">Items</div>
-                        </div>
-                        <FileText className="h-6 w-6 text-blue-500" />
-                      </div>
-                    </div>
-                    <div className="bg-emerald-50 rounded-xl p-2 border border-emerald-100">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="text-2xl font-semibold text-emerald-700 tabular-nums">{overallStats.publishedItems}</div>
-                          <div className="text-sm text-emerald-600 font-medium uppercase tracking-wide">Published</div>
-                        </div>
-                        <CheckCircle className="h-6 w-6 text-emerald-500" />
-                      </div>
-                    </div>
-                    <div className="bg-amber-50 rounded-xl p-2 border border-amber-100">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="text-2xl font-semibold text-amber-700 tabular-nums">{overallStats.pendingItems}</div>
-                          <div className="text-sm text-amber-600 font-medium uppercase tracking-wide">Pending</div>
-                        </div>
-                        <Clock className="h-6 w-6 text-amber-500" />
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
 
               {/* Trend chart */}
@@ -2179,7 +2209,7 @@ function CustomerDetailsView() {
                                   <Calendar className="h-5 w-5 text-blue-600" />
                                 </div>
                                 <div className="min-w-0 flex-1">
-                                  <div className="flex items-center gap-2">
+                                  <div className="flex items-center gap-2 flex-wrap">
                                     <h4 className="text-sm font-semibold text-gray-900 truncate">{calendar.name}</h4>
                                     {isCalendarPublished(calendar) && (
                                       <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 border border-emerald-200 flex-shrink-0">
@@ -2187,11 +2217,19 @@ function CustomerDetailsView() {
                                         Complete
                                       </span>
                                     )}
+                                    {calStats.total > 0 && (
+                                      <div className="flex items-center gap-1.5 ml-1">
+                                        <span className="text-[11px] font-medium text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">Published: {calStats.published}</span>
+                                        <span className="text-[11px] font-medium text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">Pending: {calStats.pending}</span>
+                                        <span className="text-[11px] font-medium text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded">Upcoming: {calStats.upcomingDue}</span>
+                                        <span className="text-[11px] font-medium text-red-600 bg-red-50 px-1.5 py-0.5 rounded">Overdue: {calStats.overdue}</span>
+                                      </div>
+                                    )}
                                   </div>
-                                  <div className="flex items-center gap-3 mt-1">
-                                    <span className="text-xs text-gray-500">{calStats.total} items</span>
+                                  <div className="flex items-center gap-3 mt-1 flex-wrap">
+                                    <span className="text-xs text-gray-500 font-medium">{calStats.total} items</span>
                                     {calendar.assignedTo && (
-                                      <span className="text-xs text-gray-500 truncate">
+                                      <span className="text-[11px] text-gray-500 truncate border-l border-gray-200 pl-3">
                                         Assigned: {calendar.assignedToName || calendar.assignedTo}
                                       </span>
                                     )}
@@ -2339,7 +2377,7 @@ function CustomerDetailsView() {
                                                     title={`Open on ${link.label}${link.isManual ? ' (Manual)' : ''}`}
                                                   >
                                                     <PlatformIcon platform={link.platform || link.label} />
-                                                    {link.isManual && <span className="text-[9px] font-bold text-emerald-600 bg-emerald-100/50 px-0.5 rounded ml-0.5 scale-90">m</span>}
+                                                    {link.isManual && <User className="h-3.5 w-3.5 text-emerald-600 bg-emerald-100/50 rounded ml-0.5 p-[2px]" title="Manually Published" />}
                                                     <ExternalLink className="h-2.5 w-2.5 ml-0.5" />
                                                   </a>
                                                 ))}
@@ -2390,8 +2428,8 @@ function CustomerDetailsView() {
                                             </span>
                                             <button
                                               className={`p-1.5 rounded transition-colors touch-manipulation ${itemStatus === 'published'
-                                                  ? 'text-emerald-650 hover:bg-emerald-50'
-                                                  : 'text-gray-400 hover:text-emerald-650 hover:bg-emerald-50'
+                                                ? 'text-emerald-650 hover:bg-emerald-50'
+                                                : 'text-gray-400 hover:text-emerald-650 hover:bg-emerald-50'
                                                 }`}
                                               onClick={(e) => { e.stopPropagation(); openManualPublishModal(item, calendar._id); }}
                                               onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); openManualPublishModal(item, calendar._id); }}
@@ -2540,7 +2578,7 @@ function CustomerDetailsView() {
                   <p className="text-gray-400 text-xs mt-1">Content uploaded by creators will appear here</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   {portfolioItemsMapped.map(item => {
                     const latestVersion = item.versions[item.versions.length - 1];
                     const firstMedia = latestVersion?.media?.[0];
@@ -2738,6 +2776,27 @@ function CustomerDetailsView() {
         {/* ══════════ TAB: SUMMARY REPORT ══════════ */}
         {activeTab === 'report' && (
           <SummaryReport embedded={true} customerId={id} />
+        )}
+
+        {/* ══════════ TAB: CUSTOMER INFO ══════════ */}
+        {activeTab === 'info' && (
+          <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm p-3 sm:p-4 border border-gray-200/50 mt-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">Customer Information</h3>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Personal Details */}
+              <InfoItem icon={User} iconBg="bg-blue-100" iconColor="text-blue-600" label="Name" value={customer.name} />
+              <InfoItem icon={Mail} iconBg="bg-green-100" iconColor="text-green-600" label="Email" value={customer.email} />
+              <InfoItem icon={Phone} iconBg="bg-purple-100" iconColor="text-purple-600" label="Mobile" value={customer.mobile} />
+              <InfoItem icon={MapPin} iconBg="bg-orange-100" iconColor="text-orange-600" label="Address" value={customer.address} />
+
+              {/* Business Details */}
+              <InfoItem icon={FileText} iconBg="bg-indigo-100" iconColor="text-indigo-600" label="GST" value={customer.gstNumber} />
+              <InfoItem icon={Building} iconBg="bg-pink-100" iconColor="text-pink-600" label="Role" value={customer.role} />
+              <InfoItem icon={Hash} iconBg="bg-yellow-100" iconColor="text-yellow-600" label="ID" value={customer._id} mono />
+              <InfoItem icon={Calendar} iconBg="bg-teal-100" iconColor="text-teal-600" label="Registered" value={formatDate(customer.createdAt)} />
+            </div>
+          </div>
         )}
 
       </div>

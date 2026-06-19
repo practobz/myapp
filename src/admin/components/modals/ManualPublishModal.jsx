@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { 
+import {
   X, Facebook, Instagram, Youtube, Linkedin, Twitter, Globe,
   CheckCircle, AlertCircle, Clock, Send, Mail
 } from 'lucide-react';
@@ -20,23 +20,24 @@ function ManualPublishModal({ isOpen, onClose, onSave, item, scheduledPosts = []
   const [manualPlatformUrls, setManualPlatformUrls] = useState({});
   const [publishedNotes, setPublishedNotes] = useState('');
   const [sendEmailNotification, setSendEmailNotification] = useState(false);
-  
+  const [urlErrors, setUrlErrors] = useState({});
+
   // Track which platforms are auto-published
   const [autoPublished, setAutoPublished] = useState({});
 
   useEffect(() => {
     if (isOpen && item) {
       // Find matching scheduled posts that are published
-      const matchingPosts = scheduledPosts.filter(post => 
+      const matchingPosts = scheduledPosts.filter(post =>
         ((post.item_id && post.item_id === item.id) ||
-         (post.contentId && post.contentId === item.id) ||
-         (post.item_name && post.item_name === (item.title || item.description))) &&
+          (post.contentId && post.contentId === item.id) ||
+          (post.item_name && post.item_name === (item.title || item.description))) &&
         (post.status === 'published' || post.publishedAt)
       );
 
       const autoMap = {};
       const autoUrls = {};
-      
+
       matchingPosts.forEach(post => {
         const platformKey = post.platform?.toLowerCase();
         if (platformKey) {
@@ -65,7 +66,7 @@ function ManualPublishModal({ isOpen, onClose, onSave, item, scheduledPosts = []
 
       // Manual urls populated from item
       const initialManualUrls = item.manualPlatformUrls || {};
-      
+
       // Determine checked state: either auto-published or manual url exists or platform is in item.publishedPlatforms
       const initialChecked = [];
       const initialUrls = {};
@@ -74,7 +75,7 @@ function ManualPublishModal({ isOpen, onClose, onSave, item, scheduledPosts = []
         const pId = plat.id;
         const isAuto = autoMap[pId];
         const isManual = (item.publishedPlatforms && item.publishedPlatforms.includes(pId)) || !!initialManualUrls[pId];
-        
+
         if (isAuto) {
           initialChecked.push(pId);
           initialUrls[pId] = autoUrls[pId] || '';
@@ -90,6 +91,7 @@ function ManualPublishModal({ isOpen, onClose, onSave, item, scheduledPosts = []
       setManualPlatformUrls(initialUrls);
       setPublishedNotes(item.publishedNotes || '');
       setSendEmailNotification(false);
+      setUrlErrors({});
     }
   }, [isOpen, item, scheduledPosts]);
 
@@ -105,24 +107,74 @@ function ManualPublishModal({ isOpen, onClose, onSave, item, scheduledPosts = []
     });
   };
 
+  const validateUrl = (platformId, url) => {
+    if (!url) return '';
+    try {
+      const parsed = new URL(url);
+      const hostname = parsed.hostname.toLowerCase();
+      switch (platformId) {
+        case 'facebook':
+          if (!hostname.includes('facebook.com') && !hostname.includes('fb.com') && !hostname.includes('fb.watch')) return 'Must be a valid Facebook URL';
+          break;
+        case 'instagram':
+          if (!hostname.includes('instagram.com')) return 'Must be a valid Instagram URL';
+          break;
+        case 'linkedin':
+          if (!hostname.includes('linkedin.com')) return 'Must be a valid LinkedIn URL';
+          break;
+        case 'youtube':
+          if (!hostname.includes('youtube.com') && !hostname.includes('youtu.be')) return 'Must be a valid YouTube URL';
+          break;
+        case 'twitter':
+          if (!hostname.includes('twitter.com') && !hostname.includes('x.com') && !hostname.includes('t.co')) return 'Must be a valid Twitter/X URL';
+          break;
+        default:
+          break;
+      }
+    } catch (e) {
+      return 'Invalid URL format (include https://)';
+    }
+    return '';
+  };
+
   const handleUrlChange = (platformId, value) => {
     setManualPlatformUrls(prev => ({
       ...prev,
       [platformId]: value
+    }));
+
+    const error = validateUrl(platformId, value.trim());
+    setUrlErrors(prev => ({
+      ...prev,
+      [platformId]: error
     }));
   };
 
   const handleSave = () => {
     // Only send manual checked platforms
     const finalManualPlatforms = checkedPlatforms.filter(p => !autoPublished[p]);
-    
-    // Construct final manual urls
+
+    let hasError = false;
+    const errors = {};
     const finalUrls = {};
+
     finalManualPlatforms.forEach(p => {
-      if (manualPlatformUrls[p]?.trim()) {
-        finalUrls[p] = manualPlatformUrls[p].trim();
+      const url = manualPlatformUrls[p]?.trim();
+      if (url) {
+        const error = validateUrl(p, url);
+        if (error) {
+          errors[p] = error;
+          hasError = true;
+        } else {
+          finalUrls[p] = url;
+        }
       }
     });
+
+    if (hasError) {
+      setUrlErrors(errors);
+      return;
+    }
 
     onSave(
       finalManualPlatforms,
@@ -138,7 +190,7 @@ function ManualPublishModal({ isOpen, onClose, onSave, item, scheduledPosts = []
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
         {/* Backdrop */}
-        <div 
+        <div
           className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
           onClick={onClose}
         />
@@ -172,7 +224,7 @@ function ManualPublishModal({ isOpen, onClose, onSave, item, scheduledPosts = []
                   const Icon = platform.icon;
                   const isAuto = !!autoPublished[pId];
                   const isChecked = checkedPlatforms.includes(pId);
-                  
+
                   let statusBadge = (
                     <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600">
                       Not Published
@@ -193,15 +245,14 @@ function ManualPublishModal({ isOpen, onClose, onSave, item, scheduledPosts = []
                   }
 
                   return (
-                    <div 
-                      key={pId} 
-                      className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl border transition-all duration-200 ${
-                        isChecked 
-                          ? isAuto 
-                            ? 'border-blue-100 bg-blue-50/20' 
+                    <div
+                      key={pId}
+                      className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl border transition-all duration-200 ${isChecked
+                          ? isAuto
+                            ? 'border-blue-100 bg-blue-50/20'
                             : 'border-emerald-100 bg-emerald-50/20'
                           : 'border-gray-100 hover:border-gray-200 bg-gray-50/10'
-                      }`}
+                        }`}
                     >
                       {/* Left: Checkbox + Icon + Label */}
                       <div className="flex items-center gap-3 flex-shrink-0">
@@ -213,7 +264,7 @@ function ManualPublishModal({ isOpen, onClose, onSave, item, scheduledPosts = []
                           onChange={() => handleTogglePlatform(pId)}
                           className="w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500 disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
                         />
-                        <label 
+                        <label
                           htmlFor={`check-${pId}`}
                           className="flex items-center gap-2 cursor-pointer select-none font-semibold text-gray-700 text-sm"
                         >
@@ -230,17 +281,23 @@ function ManualPublishModal({ isOpen, onClose, onSave, item, scheduledPosts = []
                         <input
                           type="url"
                           placeholder={
-                            isAuto 
-                              ? "Auto-generated link" 
-                              : isChecked 
-                                ? "Paste manually published URL here" 
+                            isAuto
+                              ? "Auto-generated link"
+                              : isChecked
+                                ? "Paste manually published URL here"
                                 : "Check platform to add URL"
                           }
                           value={manualPlatformUrls[pId] || ''}
                           onChange={(e) => handleUrlChange(pId, e.target.value)}
                           disabled={isAuto || !isChecked}
-                          className="w-full text-xs px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500 disabled:bg-gray-100 disabled:text-gray-400 placeholder-gray-400 transition-all duration-200"
+                          className={`w-full text-xs px-3 py-2 border rounded-lg focus:outline-none focus:ring-1 transition-all duration-200 disabled:bg-gray-100 disabled:text-gray-400 ${urlErrors[pId]
+                              ? 'border-red-300 focus:ring-red-500 placeholder-red-300'
+                              : 'border-gray-200 focus:ring-emerald-500 placeholder-gray-400'
+                            }`}
                         />
+                        {urlErrors[pId] && (
+                          <p className="text-[10px] text-red-500 mt-1 pl-1 font-medium">{urlErrors[pId]}</p>
+                        )}
                       </div>
                     </div>
                   );
@@ -271,7 +328,7 @@ function ManualPublishModal({ isOpen, onClose, onSave, item, scheduledPosts = []
                 onChange={(e) => setSendEmailNotification(e.target.checked)}
                 className="w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500 cursor-pointer"
               />
-              <label 
+              <label
                 htmlFor="email-notify"
                 className="flex items-center gap-1.5 text-xs font-semibold text-gray-650 cursor-pointer select-none"
               >

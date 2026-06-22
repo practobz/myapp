@@ -8,47 +8,47 @@ function ContentReview() {
   const targetItemId = searchParams.get('itemId');
   const filterStatus = searchParams.get('filter');
 
-    // Scheduled posts state
-    const [scheduledPosts, setScheduledPosts] = useState([]);
-    const [scheduledPostsLoading, setScheduledPostsLoading] = useState(false);
-    const [scheduledPostsError, setScheduledPostsError] = useState(null);
-    // Calendars state for checking manual publish status
-    const [calendars, setCalendars] = useState([]);
-    
-    // Fetch scheduled posts and calendars on mount
-    useEffect(() => {
-      const fetchScheduledPosts = async () => {
-        setScheduledPostsLoading(true);
-        setScheduledPostsError(null);
-        try {
+  // Scheduled posts state
+  const [scheduledPosts, setScheduledPosts] = useState([]);
+  const [scheduledPostsLoading, setScheduledPostsLoading] = useState(false);
+  const [scheduledPostsError, setScheduledPostsError] = useState(null);
+  // Calendars state for checking manual publish status
+  const [calendars, setCalendars] = useState([]);
+
+  // Fetch scheduled posts and calendars on mount
+  useEffect(() => {
+    const fetchScheduledPosts = async () => {
+      setScheduledPostsLoading(true);
+      setScheduledPostsError(null);
+      try {
         const res = await fetch(`${process.env.REACT_APP_API_URL}/api/scheduled-posts`);
-          if (!res.ok) throw new Error('Failed to fetch scheduled posts');
+        if (!res.ok) throw new Error('Failed to fetch scheduled posts');
+        const data = await res.json();
+        setScheduledPosts(Array.isArray(data) ? data : []);
+      } catch (err) {
+        setScheduledPostsError(err.message);
+        setScheduledPosts([]);
+      } finally {
+        setScheduledPostsLoading(false);
+      }
+    };
+
+    const fetchCalendars = async () => {
+      try {
+        const res = await fetch(`${process.env.REACT_APP_API_URL}/calendars`);
+        if (res.ok) {
           const data = await res.json();
-          setScheduledPosts(Array.isArray(data) ? data : []);
-        } catch (err) {
-          setScheduledPostsError(err.message);
-          setScheduledPosts([]);
-        } finally {
-          setScheduledPostsLoading(false);
+          setCalendars(Array.isArray(data) ? data : []);
         }
-      };
-      
-      const fetchCalendars = async () => {
-        try {
-          const res = await fetch(`${process.env.REACT_APP_API_URL}/calendars`);
-          if (res.ok) {
-            const data = await res.json();
-            setCalendars(Array.isArray(data) ? data : []);
-          }
-        } catch (err) {
-          console.error('Failed to fetch calendars:', err);
-          setCalendars([]);
-        }
-      };
-      
-      fetchScheduledPosts();
-      fetchCalendars();
-    }, []);
+      } catch (err) {
+        console.error('Failed to fetch calendars:', err);
+        setCalendars([]);
+      }
+    };
+
+    fetchScheduledPosts();
+    fetchCalendars();
+  }, []);
   const navigate = useNavigate();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [selectedContentIndex, setSelectedContentIndex] = useState(0);
@@ -65,7 +65,7 @@ function ContentReview() {
   const [hoveredComment, setHoveredComment] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  
+
   // Ref for image container to properly position comments
   const imageContainerRef = useRef(null);
   const videoRef = useRef(null);
@@ -108,12 +108,12 @@ function ContentReview() {
         isNew: false, // Mark as existing comment (already saved)
         done: comment.done || comment.status === 'completed' || false
       }));
-      
+
       // Remove duplicate comments by ID (in case backend has duplicates)
       const uniqueComments = normalizedComments.filter((comment, index, self) =>
         index === self.findIndex((c) => c.id === comment.id)
       );
-      
+
       setComments(uniqueComments);
     } else {
       setComments([]);
@@ -192,48 +192,48 @@ function ContentReview() {
 
       // Create content items with versions
       // Create content items with versions
-const contentData = [];
-Object.keys(groupedSubmissions).forEach(assignmentId => {
-  const versions = groupedSubmissions[assignmentId].sort((a, b) =>
-    new Date(a.created_at) - new Date(b.created_at)
-  );
-  const baseItem = versions[0];
-  const latestVersion = versions[versions.length - 1];
-  
-  // Use latest version's status for the overall content status
-  const currentStatus = latestVersion.status || baseItem.status || 'under_review';
-  
-  contentData.push({
-    id: assignmentId,
-    title: baseItem.caption || 'Untitled Post',
-    description: baseItem.notes || '',
-    createdBy: baseItem.created_by || 'Unknown',
-    createdAt: baseItem.created_at || '',
-    status: currentStatus,  // Now uses latest version status
-    approvalNotes: latestVersion.approvalNotes || baseItem.approvalNotes || '',
-    platform: baseItem.platform || 'Instagram',
-    type: baseItem.type || 'Post',
-    customer_id: baseItem.customer_id,
-    customer_name: baseItem.customer_name,
-    customer_email: baseItem.customer_email,
-    // Add calendar and item info for publish status checking
-    calendar_id: baseItem.calendar_id || '',
-    calendar_name: baseItem.calendar_name || '',
-    item_id: baseItem.item_id || '',
-    item_name: baseItem.item_name || '',
-    assignment_id: assignmentId,
-    versions: versions.map((version, index) => ({
-      id: version._id,
-      versionNumber: index + 1,
-      media: normalizeMedia(version.media || version.images || []),
-      caption: version.caption || '',
-      notes: version.notes || '',
-      createdAt: version.created_at,
-      status: version.status || 'under_review',
-      approvalNotes: version.approvalNotes || '',
-      comments: version.comments || []
-    })),
-    totalVersions: versions.length
+      const contentData = [];
+      Object.keys(groupedSubmissions).forEach(assignmentId => {
+        const versions = groupedSubmissions[assignmentId].sort((a, b) =>
+          new Date(a.created_at) - new Date(b.created_at)
+        );
+        const baseItem = versions[0];
+        const latestVersion = versions[versions.length - 1];
+
+        // Use latest version's status for the overall content status
+        const currentStatus = latestVersion.status || baseItem.status || 'under_review';
+
+        contentData.push({
+          id: assignmentId,
+          title: baseItem.caption || 'Untitled Post',
+          description: baseItem.notes || '',
+          createdBy: baseItem.created_by || 'Unknown',
+          createdAt: baseItem.created_at || '',
+          status: currentStatus,  // Now uses latest version status
+          approvalNotes: latestVersion.approvalNotes || baseItem.approvalNotes || '',
+          platform: baseItem.platform || 'Instagram',
+          type: baseItem.type || 'Post',
+          customer_id: baseItem.customer_id,
+          customer_name: baseItem.customer_name,
+          customer_email: baseItem.customer_email,
+          // Add calendar and item info for publish status checking
+          calendar_id: baseItem.calendar_id || '',
+          calendar_name: baseItem.calendar_name || '',
+          item_id: baseItem.item_id || '',
+          item_name: baseItem.item_name || '',
+          assignment_id: assignmentId,
+          versions: versions.map((version, index) => ({
+            id: version._id,
+            versionNumber: index + 1,
+            media: normalizeMedia(version.media || version.images || []),
+            caption: version.caption || '',
+            notes: version.notes || '',
+            createdAt: version.created_at,
+            status: version.status || 'under_review',
+            approvalNotes: version.approvalNotes || '',
+            comments: version.comments || []
+          })),
+          totalVersions: versions.length
         });
       });
 
@@ -247,16 +247,16 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
       }
       const displayData = targetItemId
         ? contentData.filter(item =>
-            (item.item_id && item.item_id === targetItemId) ||
-            (item.id && item.id === targetItemId) ||
-            (item.assignment_id && item.assignment_id === targetItemId)
-          )
+          (item.item_id && item.item_id === targetItemId) ||
+          (item.id && item.id === targetItemId) ||
+          (item.assignment_id && item.assignment_id === targetItemId)
+        )
         : filterStatus
-        ? contentData.filter(item => item.status === filterStatus)
-        : contentData;
+          ? contentData.filter(item => item.status === filterStatus)
+          : contentData;
 
       setContentItems(displayData);
-      
+
       // Group content by calendar
       const grouped = {};
       displayData.forEach(item => {
@@ -267,7 +267,7 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
         grouped[calendarKey].push(item);
       });
       setGroupedContentItems(grouped);
-      
+
       // Auto-select only when filtered by a specific itemId from URL
       if (displayData.length > 0 && targetItemId) {
         setSelectedContent(displayData[0]);
@@ -286,7 +286,7 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
   // Add helper function to normalize media URLs
   const normalizeMedia = (media) => {
     if (!media || !Array.isArray(media)) return [];
-    
+
     return media.map(item => {
       // If item is already a string (URL), convert to object
       if (typeof item === 'string') {
@@ -295,11 +295,11 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
           type: getMediaType(item)
         };
       }
-      
+
       // If item is an object with url property
       if (item && typeof item === 'object') {
         const url = item.url || item.src || item.href || String(item);
-        
+
         // Validate URL is actually a string
         if (typeof url === 'string' && url.trim()) {
           return {
@@ -308,7 +308,7 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
           };
         }
       }
-      
+
       return null;
     }).filter(Boolean); // Remove any null/invalid entries
   };
@@ -316,12 +316,12 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
   // Add helper function to determine media type
   const getMediaType = (url) => {
     if (!url || typeof url !== 'string') return 'image';
-    
+
     // Strip query string and fragment before checking extension (handles GCS signed URLs)
     const cleanUrl = url.split('?')[0].split('#')[0];
     const extension = cleanUrl.toLowerCase().split('.').pop();
     const videoExtensions = ['mp4', 'webm', 'ogg', 'mov', 'avi'];
-    
+
     return videoExtensions.includes(extension) ? 'video' : 'image';
   };
 
@@ -380,9 +380,9 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
     const contentW = nw * scale, contentH = nh * scale;
     const ox = (rect.width - contentW) / 2, oy = (rect.height - contentH) / 2;
     const x = Math.max(0, Math.min(1, (e.clientX - rect.left - ox) / contentW));
-    const y = Math.max(0, Math.min(1, (e.clientY - rect.top  - oy) / contentH));
+    const y = Math.max(0, Math.min(1, (e.clientY - rect.top - oy) / contentH));
     if (commentsForCurrentMedia.some((c) => c.editing)) return;
-    
+
     // Capture video timestamp if this is a video and pause it while the user types
     const mediaType = selectedContent?.versions?.[selectedVersionIndex]?.media?.[selectedMediaIndex]?.type;
     const videoTimestamp = (mediaType === 'video' && videoRef.current && !isNaN(videoRef.current.currentTime))
@@ -431,9 +431,9 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
 
         // Check if this is a new comment or an edit (use isNew flag)
         const isNewComment = comment.isNew === true;
-        
+
         let response;
-        
+
         if (!isNewComment) {
           // Update existing comment using PUT
           response = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(assignmentId)}/comments/${comment.id}`, {
@@ -464,7 +464,7 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
             status: 'active',
             ...(comment.videoTimestamp != null && { videoTimestamp: comment.videoTimestamp })
           };
-          
+
           response = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(assignmentId)}/comment`, {
             method: 'PATCH',
             headers: {
@@ -479,29 +479,29 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
 
         if (response.ok) {
           const result = await response.json();
-          
+
           // Resume video from the exact point it was paused
           if (videoRef.current && videoRef.current.paused) {
             if (videoPausedAtRef.current != null) {
               videoRef.current.currentTime = videoPausedAtRef.current;
               videoPausedAtRef.current = null;
             }
-            videoRef.current.play().catch(() => {});
+            videoRef.current.play().catch(() => { });
           }
 
           // Update the local state to reflect the saved comment
           setComments(comments.map((c) => (c.id === id ? { ...c, editing: false } : c)));
           setCommentsForCurrentMedia(commentsForCurrentMedia.map((c) => (c.id === id ? { ...c, editing: false } : c)));
           setActiveComment(null);
-          
+
           // Store current selection before refresh (use assignment ID, not index)
           const currentAssignmentId = selectedContent.id;
           const currentVersionIndex = selectedVersionIndex;
           const currentMediaIndex = selectedMediaIndex;
-          
+
           // Refresh the content submissions to get updated data
           await fetchContentSubmissions();
-          
+
           // Restore the selection after refresh by finding the item with the same assignment ID
           setContentItems(prevItems => {
             const itemIndex = prevItems.findIndex(item => item.id === currentAssignmentId);
@@ -551,7 +551,7 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
         videoRef.current.currentTime = videoPausedAtRef.current;
         videoPausedAtRef.current = null;
       }
-      videoRef.current.play().catch(() => {});
+      videoRef.current.play().catch(() => { });
     }
   };
 
@@ -569,15 +569,15 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
         });
 
         if (response.ok) {
-          
+
           // Store current selection before refresh (use assignment ID, not index)
           const currentAssignmentId = selectedContent.id;
           const currentVersionIndex = selectedVersionIndex;
           const currentMediaIndex = selectedMediaIndex;
-          
+
           // Refresh the content submissions to get updated data
           await fetchContentSubmissions();
-          
+
           // Restore the selection after refresh by finding the item with the same assignment ID
           setContentItems(prevItems => {
             const itemIndex = prevItems.findIndex(item => item.id === currentAssignmentId);
@@ -601,7 +601,7 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
         setComments(comments.filter((c) => c.id !== id));
         setCommentsForCurrentMedia(commentsForCurrentMedia.filter((c) => c.id !== id));
       }
-      
+
       setActiveComment(null);
     }
   };
@@ -675,8 +675,8 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
       const contentW = nw * scale, contentH = nh * scale;
       const ox = (rect.width - contentW) / 2, oy = (rect.height - contentH) / 2;
       const x = Math.max(0, Math.min(1, (e.clientX - rect.left - ox) / contentW));
-      const y = Math.max(0, Math.min(1, (e.clientY - rect.top  - oy) / contentH));
-      
+      const y = Math.max(0, Math.min(1, (e.clientY - rect.top - oy) / contentH));
+
       // Update local state first for immediate UI feedback
       setComments(
         comments.map((c) =>
@@ -689,7 +689,7 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
         )
       );
       setActiveComment(null);
-      
+
       // Save new position to backend
       try {
         const response = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(selectedContent.id)}/comments/${repositioningComment.id}`, {
@@ -703,17 +703,17 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
             y
           })
         });
-        
+
         if (response.ok) {
-          
+
           // Store current selection before refresh (use assignment ID, not index)
           const currentAssignmentId = selectedContent.id;
           const currentVersionIndex = selectedVersionIndex;
           const currentMediaIndex = selectedMediaIndex;
-          
+
           // Refresh the content submissions to get updated data
           await fetchContentSubmissions();
-          
+
           // Restore the selection after refresh by finding the item with the same assignment ID
           setContentItems(prevItems => {
             const itemIndex = prevItems.findIndex(item => item.id === currentAssignmentId);
@@ -757,12 +757,12 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
       isNew: false, // Mark as existing comment
       done: comment.done || comment.status === 'completed' || false
     }));
-    
+
     // Remove duplicate comments by ID
     const uniqueComments = normalizedComments.filter((comment, index, self) =>
       index === self.findIndex((c) => c.id === comment.id)
     );
-    
+
     setComments(uniqueComments);
     setActiveComment(null);
   };
@@ -788,12 +788,12 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
       isNew: false, // Mark as existing comment
       done: comment.done || comment.status === 'completed' || false
     }));
-    
+
     // Remove duplicate comments by ID
     const uniqueComments = normalizedComments.filter((comment, index, self) =>
       index === self.findIndex((c) => c.id === comment.id)
     );
-    
+
     setComments(uniqueComments);
     setActiveComment(null);
   };
@@ -822,7 +822,7 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
   const handleMediaChange = (direction) => {
     const currentVersion = selectedContent.versions[selectedVersionIndex];
     const mediaLength = currentVersion.media.length;
-    
+
     if (direction === 'prev' && selectedMediaIndex > 0) {
       setSelectedMediaIndex(selectedMediaIndex - 1);
     } else if (direction === 'next' && selectedMediaIndex < mediaLength - 1) {
@@ -935,7 +935,7 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
   // Handle approve content - updates status to 'approved' on backend
   const handleApproveContent = async () => {
     if (!selectedContent) return;
-    
+
     setApprovingContent(true);
     try {
       const response = await fetch(
@@ -956,15 +956,15 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
 
       if (response.ok) {
         alert('Content approved successfully!');
-        
+
         // Store current selection before refreshing data
         const currentAssignmentId = selectedContent.id;
         const currentVersionIndex = selectedVersionIndex;
         const currentMediaIndex = selectedMediaIndex;
-        
+
         // Refetch all data from backend to ensure consistency
         await fetchContentSubmissions();
-        
+
         // Restore selection after data refresh
         setContentItems(prevItems => {
           const itemIndex = prevItems.findIndex(item => item.id === currentAssignmentId);
@@ -1021,8 +1021,8 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
     if (!dateString) return 'N/A';
     try {
       const date = new Date(dateString);
-      return date.toLocaleDateString('en-US', { 
-        month: 'short', 
+      return date.toLocaleDateString('en-US', {
+        month: 'short',
         day: 'numeric',
         hour: '2-digit',
         minute: '2-digit'
@@ -1036,31 +1036,31 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
   const isContentPublished = (contentOrId) => {
     const content = typeof contentOrId === 'object' ? contentOrId : selectedContent;
     if (!content) return false;
-    
+
     // Check manual publish flag first
     if (content.published === true) return true;
-    
+
     // Check if the associated calendar item is marked as published
     if (calendars && calendars.length > 0 && (content.calendar_id || content.item_id)) {
       // Find the calendar by calendar_id
-      const calendar = calendars.find(cal => 
+      const calendar = calendars.find(cal =>
         cal._id === content.calendar_id || cal.id === content.calendar_id
       );
-      
+
       if (calendar && Array.isArray(calendar.contentItems)) {
         // Find the item in the calendar by item_id or item_name
-        const calendarItem = calendar.contentItems.find(item => 
+        const calendarItem = calendar.contentItems.find(item =>
           (content.item_id && item.id === content.item_id) ||
           (content.item_name && (item.title === content.item_name || item.description === content.item_name))
         );
-        
+
         // Check if the calendar item is marked as published
         if (calendarItem && calendarItem.published === true) {
           return true;
         }
       }
     }
-    
+
     // Check scheduledPosts for published status
     if (scheduledPosts && scheduledPosts.length > 0) {
       // Try to match by assignmentId, item_id, or contentId
@@ -1239,8 +1239,8 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
   // All comments across every version of the selected item (for the right panel)
   const allVersionComments = selectedContent
     ? selectedContent.versions.flatMap((v, i) =>
-        (v.comments || []).map(c => ({ ...c, _versionNumber: i + 1 }))
-      )
+      (v.comments || []).map(c => ({ ...c, _versionNumber: i + 1 }))
+    )
     : [];
 
   return (
@@ -1292,21 +1292,19 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
                 <span className="text-[10px] text-slate-400 font-medium mr-0.5">Sort:</span>
                 <button
                   onClick={() => setSortOrder('latest')}
-                  className={`flex-1 py-1 text-[10px] font-semibold rounded-md transition-all ${
-                    sortOrder === 'latest'
-                      ? 'bg-indigo-600 text-white shadow-sm'
-                      : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                  }`}
+                  className={`flex-1 py-1 text-[10px] font-semibold rounded-md transition-all ${sortOrder === 'latest'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                    }`}
                 >
                   Latest
                 </button>
                 <button
                   onClick={() => setSortOrder('oldest')}
-                  className={`flex-1 py-1 text-[10px] font-semibold rounded-md transition-all ${
-                    sortOrder === 'oldest'
-                      ? 'bg-indigo-600 text-white shadow-sm'
-                      : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                  }`}
+                  className={`flex-1 py-1 text-[10px] font-semibold rounded-md transition-all ${sortOrder === 'oldest'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                    }`}
                 >
                   Oldest
                 </button>
@@ -1323,18 +1321,16 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
                 <button
                   key={tab.key}
                   onClick={() => setSidebarTab(tab.key)}
-                  className={`flex-1 flex flex-col items-center gap-0.5 pb-2 pt-1.5 text-[10px] font-semibold rounded-t transition-all relative ${
-                    sidebarTab === tab.key
-                      ? 'text-indigo-700 border-b-2 border-indigo-600'
-                      : 'text-slate-500 hover:text-slate-700'
-                  }`}
+                  className={`flex-1 flex flex-col items-center gap-0.5 pb-2 pt-1.5 text-[10px] font-semibold rounded-t transition-all relative ${sidebarTab === tab.key
+                    ? 'text-indigo-700 border-b-2 border-indigo-600'
+                    : 'text-slate-500 hover:text-slate-700'
+                    }`}
                 >
                   <tab.icon className="h-3.5 w-3.5" />
                   {tab.label}
                   {tab.count > 0 && (
-                    <span className={`absolute -top-0.5 right-2.5 min-w-[16px] h-4 px-1 rounded-full text-[9px] font-bold flex items-center justify-center ${
-                      sidebarTab === tab.key ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-600'
-                    }`}>
+                    <span className={`absolute -top-0.5 right-2.5 min-w-[16px] h-4 px-1 rounded-full text-[9px] font-bold flex items-center justify-center ${sidebarTab === tab.key ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-600'
+                      }`}>
                       {tab.count}
                     </span>
                   )}
@@ -1358,16 +1354,14 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
                         <div
                           key={item.id}
                           onClick={() => handleContentSelect(item, itemIndex)}
-                          className={`mx-2 mb-1.5 rounded-xl cursor-pointer transition-all border ${
-                            isActive
-                              ? 'bg-indigo-50 border-indigo-200 shadow-sm'
-                              : 'bg-white border-slate-100 hover:border-indigo-100 hover:bg-slate-50'
-                          }`}
+                          className={`mx-2 mb-1.5 rounded-xl cursor-pointer transition-all border ${isActive
+                            ? 'bg-indigo-50 border-indigo-200 shadow-sm'
+                            : 'bg-white border-slate-100 hover:border-indigo-100 hover:bg-slate-50'
+                            }`}
                         >
                           <div className="p-3 flex items-start gap-2.5">
-                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-                              isActive ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'
-                            }`}>
+                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${isActive ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'
+                              }`}>
                               {itemIndex + 1}
                             </div>
                             <div className="flex-1 min-w-0">
@@ -1422,15 +1416,13 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
                                   <div
                                     key={item.id}
                                     onClick={() => handleContentSelect(item, itemIndex)}
-                                    className={`mx-2 mb-1 rounded-lg cursor-pointer transition-all border px-3 py-2 flex items-center gap-2 ${
-                                      isActive
-                                        ? 'bg-indigo-50 border-indigo-200'
-                                        : 'bg-white border-slate-100 hover:bg-slate-50'
-                                    }`}
+                                    className={`mx-2 mb-1 rounded-lg cursor-pointer transition-all border px-3 py-2 flex items-center gap-2 ${isActive
+                                      ? 'bg-indigo-50 border-indigo-200'
+                                      : 'bg-white border-slate-100 hover:bg-slate-50'
+                                      }`}
                                   >
-                                    <div className={`w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${
-                                      isActive ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'
-                                    }`}>
+                                    <div className={`w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${isActive ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'
+                                      }`}>
                                       {itemIndex + 1}
                                     </div>
                                     <div className="flex-1 min-w-0">
@@ -1467,11 +1459,10 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
                         <div
                           key={`list-${comment.id}`}
                           onClick={() => handleCommentListClick(comment.id)}
-                          className={`rounded-xl cursor-pointer transition-all border overflow-hidden ${
-                            activeComment === comment.id
-                              ? 'bg-blue-50 border-blue-200 shadow-sm'
-                              : 'bg-white border-slate-100 hover:bg-slate-50'
-                          }`}
+                          className={`rounded-xl cursor-pointer transition-all border overflow-hidden ${activeComment === comment.id
+                            ? 'bg-blue-50 border-blue-200 shadow-sm'
+                            : 'bg-white border-slate-100 hover:bg-slate-50'
+                            }`}
                         >
                           <div className="p-2.5 flex items-start gap-2">
                             <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-[10px] font-bold flex items-center justify-center flex-shrink-0">
@@ -1483,18 +1474,17 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
                                 {comment.done && <span className="ml-1 text-green-600 text-[10px]">✓</span>}
                               </p>
                               <div className="flex items-center gap-1 mt-0.5 flex-wrap">
-                              {comment.videoTimestamp != null && (
-                                <span className="inline-flex items-center gap-0.5 bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full text-[9px] font-bold">
-                                  ▶ {formatVideoTime(comment.videoTimestamp)}
-                                </span>
-                              )}
-                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
-                                comment.reviewType === 'internal'
+                                {comment.videoTimestamp != null && (
+                                  <span className="inline-flex items-center gap-0.5 bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full text-[9px] font-bold">
+                                    ▶ {formatVideoTime(comment.videoTimestamp)}
+                                  </span>
+                                )}
+                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${comment.reviewType === 'internal'
                                   ? 'bg-purple-100 text-purple-700'
                                   : 'bg-blue-100 text-blue-700'
-                              }`}>
-                                {comment.reviewType === 'internal' ? 'Internal' : 'External'}
-                              </span>
+                                  }`}>
+                                  {comment.reviewType === 'internal' ? 'Internal' : 'External'}
+                                </span>
                               </div>
                               {comment.reply && (
                                 <div className="mt-1.5 p-1.5 bg-indigo-50 border border-indigo-100 rounded-lg">
@@ -1526,21 +1516,19 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
             <div className="md:hidden sticky top-0 z-10 flex border-b border-slate-200 bg-white shadow-sm flex-shrink-0">
               <button
                 onClick={() => setMobileView('content')}
-                className={`flex-1 py-3 text-sm font-semibold transition-colors ${
-                  mobileView === 'content'
-                    ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/60'
-                    : 'text-slate-500 hover:text-slate-700'
-                }`}
+                className={`flex-1 py-3 text-sm font-semibold transition-colors ${mobileView === 'content'
+                  ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/60'
+                  : 'text-slate-500 hover:text-slate-700'
+                  }`}
               >
                 Content
               </button>
               <button
                 onClick={() => setMobileView('comments')}
-                className={`flex-1 py-3 text-sm font-semibold transition-colors relative ${
-                  mobileView === 'comments'
-                    ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/60'
-                    : 'text-slate-500 hover:text-slate-700'
-                }`}
+                className={`flex-1 py-3 text-sm font-semibold transition-colors relative ${mobileView === 'comments'
+                  ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/60'
+                  : 'text-slate-500 hover:text-slate-700'
+                  }`}
               >
                 Comments
                 {allVersionComments.length > 0 && (
@@ -1591,456 +1579,450 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
               const currentVersion = selectedContent.versions[selectedVersionIndex];
               const currentMedia = currentVersion?.media?.[selectedMediaIndex];
               return (
-              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-              {/* Content Header */}
-              <div className="px-6 py-5 border-b border-slate-100 bg-gradient-to-r from-[#e6f2fb] to-[#bae6fd]">
-                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                  <div className="min-w-0">
-                    <h2 className="text-xl font-bold text-slate-900 tracking-tight truncate">{selectedContent.title}</h2>
-                    <div className="flex items-center gap-2 mt-1 text-sm text-slate-500">
-                      <span className="truncate">{getAssignedCreator(selectedContent)}</span>
-                      <span>•</span>
-                      <span>{selectedContent.platform}</span>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2 flex-shrink-0">
-                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border ${getStatusColor(getDisplayStatus(selectedContent))}`}>
-                      {getStatusLabel(getDisplayStatus(selectedContent))}
-                    </span>
-                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800 border border-indigo-200">
-                      <Image className="h-3.5 w-3.5 mr-1" />
-                      {selectedContent.totalVersions} Ver.
-                    </span>
-                    {/* Comment count badge in header */}
-                    {totalComments > 0 && (
-                      <button
-                        onClick={() => { setSidebarTab('comments'); }}
-                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-violet-100 text-violet-800 border border-violet-200 hover:bg-violet-200 transition"
-                      >
-                        <Bell className="h-3.5 w-3.5" />
-                        {totalComments} Comment{totalComments !== 1 ? 's' : ''}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Version Controls — Pills */}
-              {selectedContent.totalVersions > 1 && (
-                <div className="px-6 py-3 border-b border-slate-100 bg-slate-50 flex items-center gap-3 flex-wrap">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Version</span>
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {selectedContent.versions.map((version, index) => (
-                      <button
-                        key={version.id || index}
-                        onClick={() => handleVersionSelect(index)}
-                        className={`px-3 py-1 rounded-full text-xs font-semibold transition-all border ${
-                          selectedVersionIndex === index
-                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-                            : 'bg-white text-slate-500 border-slate-200 hover:border-indigo-300 hover:text-indigo-600'
-                        }`}
-                      >
-                        V{version.versionNumber}
-                      </button>
-                    ))}
-                  </div>
-                  {currentVersion && (
-                    <span className="text-xs text-slate-400 ml-auto">{formatDate(currentVersion.createdAt)}</span>
-                  )}
-                </div>
-              )}
-
-              {/* Media + Comments */}
-              <div className="p-6">
-                {/* Video comment mode toggle */}
-                {currentMedia?.type === 'video' && (
-                  <div className="flex justify-center mb-4">
-                    <button
-                      onClick={() => setIsVideoCommentMode(v => !v)}
-                      className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold transition-all border ${
-                        isVideoCommentMode
-                          ? 'bg-blue-600 text-white border-blue-600 shadow-md ring-2 ring-blue-300'
-                          : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200'
-                      }`}
-                    >
-                      <MessageSquare className="h-3.5 w-3.5" />
-                      {isVideoCommentMode ? '✓ Comment Mode ON — click video to pin comment' : 'Add Comment at Timestamp'}
-                    </button>
-                  </div>
-                )}
-
-                {/* Multi-media navigation */}
-                {currentVersion?.media && currentVersion.media.length > 1 && (
-                  <div className="flex items-center justify-center gap-3 mb-4">
-                    <button
-                      onClick={() => handleMediaChange('prev')}
-                      disabled={selectedMediaIndex === 0}
-                      className="p-2 rounded-lg bg-white hover:bg-slate-100 disabled:opacity-40 border border-slate-200 transition"
-                    >
-                      <ChevronLeft className="h-4 w-4 text-slate-600" />
-                    </button>
-                    <span className="text-xs font-semibold text-slate-600">
-                      {selectedMediaIndex + 1} / {currentVersion.media.length}
-                    </span>
-                    <button
-                      onClick={() => handleMediaChange('next')}
-                      disabled={selectedMediaIndex === currentVersion.media.length - 1}
-                      className="p-2 rounded-lg bg-white hover:bg-slate-100 disabled:opacity-40 border border-slate-200 transition"
-                    >
-                      <ChevronRight className="h-4 w-4 text-slate-600" />
-                    </button>
-                  </div>
-                )}
-
-                {/* Media Display */}
-                <div className="flex justify-center mb-6">
-                  <div
-                    ref={imageContainerRef}
-                    className="relative w-full"
-                    style={{ position: 'relative', maxWidth: '720px' }}
-                  >
-                    {currentMedia ? (
-                      currentMedia.url && typeof currentMedia.url === 'string' ? (
-                        currentMedia.type === 'image' ? (
-                          <img
-                            src={currentMedia.url}
-                            alt={`${selectedContent.title} - Version ${currentVersion?.versionNumber} - Media ${selectedMediaIndex + 1}`}
-                            className="max-w-full h-auto max-h-[65vh] rounded-xl shadow-lg border border-slate-200 object-contain cursor-crosshair"
-                            onClick={handleImageClickWithReposition}
-                            onLoad={handleImageLoad}
-                            onError={(e) => {
-                              e.target.style.display = 'none';
-                              if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex';
-                            }}
-                          />
-                        ) : (
-                          <>
-                            {videoTranscoding && (
-                              <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 rounded-xl z-20">
-                                <svg className="animate-spin h-12 w-12 text-yellow-400 mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-                                </svg>
-                                <p className="text-white text-sm font-semibold mb-1">Converting video for your browser…</p>
-                                <p className="text-white/60 text-xs">This video uses H.265 encoding. Converting to H.264, please wait.</p>
-                              </div>
-                            )}
-                            {videoLoading && !videoTranscoding && (
-                              <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 rounded-xl z-10">
-                                <svg className="animate-spin h-12 w-12 text-indigo-400 mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-                                </svg>
-                                <p className="text-white text-xs font-semibold">Loading video…</p>
-                              </div>
-                            )}
-                            <video
-                              ref={videoRef}
-                              src={videoCompatibleUrl || currentMedia.url}
-                              controls
-                              playsInline
-                              preload="auto"
-                              className="rounded-xl shadow-lg border border-slate-200 bg-black"
-                              style={{ display: 'block', maxWidth: '100%', width: '100%', height: 'auto', maxHeight: '65vh' }}
-                              onLoadStart={() => setVideoLoading(true)}
-                              onLoadedMetadata={(e) => {
-                                handleImageLoad(e);
-                                setVideoLoading(false);
-                                const vid = e.target;
-                                if (vid && vid.duration > 0 && vid.currentTime === 0) {
-                                  vid.currentTime = 0.001;
-                                }
-                                // Detect H.265/unsupported codec: videoWidth===0 means the browser
-                                // can parse metadata but can't decode the video track (e.g. HEVC on Chrome).
-                                // Skip if we already have a compatible URL to avoid infinite loops.
-                                if (!videoCompatibleUrl && vid.videoWidth === 0 && vid.duration > 0) {
-                                  setVideoTranscoding(true);
-                                  fetch(`${process.env.REACT_APP_API_URL}/api/video/transcode`, {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ videoUrl: currentMedia.url }),
-                                  })
-                                    .then((r) => r.json())
-                                    .then((data) => {
-                                      setVideoTranscoding(false);
-                                      if (data.url && data.url !== currentMedia.url) {
-                                        setVideoCompatibleUrl(data.url);
-                                      }
-                                    })
-                                    .catch(() => setVideoTranscoding(false));
-                                }
-                              }}
-                              onCanPlay={() => setVideoLoading(false)}
-                              onWaiting={() => setVideoLoading(true)}
-                              onPlaying={() => setVideoLoading(false)}
-                              onError={(e) => {
-                                setVideoLoading(false);
-                                e.target.style.display = 'none';
-                                const fallback = e.target.parentNode?.querySelector('.video-error-fallback');
-                                if (fallback) fallback.style.display = 'flex';
-                              }}
-                            />
-                            <div className="video-error-fallback w-96 h-72 bg-slate-100 rounded-xl items-center justify-center border border-slate-200" style={{ display: 'none' }}>
-                              <div className="text-center">
-                                <svg className="h-10 w-10 text-slate-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10l4.553-2.069A1 1 0 0121 8.87v6.26a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" /></svg>
-                                <p className="text-slate-500 text-sm font-medium">Unable to load video</p>
-                                <a href={currentMedia.url} target="_blank" rel="noopener noreferrer" className="text-indigo-600 text-xs hover:underline mt-1 inline-block">Open video in new tab</a>
-                              </div>
-                            </div>
-                            {/* Download link for large videos that can't render inline */}
-                            <div className="mt-2 flex justify-end">
-                              <a
-                                href={currentMedia.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                download
-                                className="inline-flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-indigo-600 transition-colors"
-                              >
-                                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                                Download video
-                              </a>
-                            </div>
-                            {/* Overlay — only active in comment mode to avoid blocking native video controls */}
-                            <div
-                              style={{
-                                position: 'absolute',
-                                top: 0,
-                                left: 0,
-                                right: 0,
-                                bottom: 44,
-                                cursor: isVideoCommentMode ? 'crosshair' : 'default',
-                                zIndex: isVideoCommentMode ? 5 : -1,
-                                pointerEvents: isVideoCommentMode ? 'auto' : 'none',
-                                WebkitTapHighlightColor: 'transparent',
-                                background: isVideoCommentMode ? 'rgba(59,130,246,0.04)' : 'transparent',
-                              }}
-                              onClick={(e) => {
-                                if (!isVideoCommentMode) return;
-                                if (touchFiredRef.current) { touchFiredRef.current = false; return; }
-                                handleImageClickWithReposition(e);
-                              }}
-                              onTouchEnd={(e) => {
-                                if (!isVideoCommentMode) return;
-                                const touch = e.changedTouches[0];
-                                if (!touch || !videoRef.current) return;
-                                touchFiredRef.current = true;
-                                handleImageClickWithReposition({ target: videoRef.current, clientX: touch.clientX, clientY: touch.clientY });
-                              }}
-                            />
-                            {/* Comment mode indicator badge */}
-                            {isVideoCommentMode && (
-                              <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', zIndex: 10, pointerEvents: 'none' }}
-                                className="bg-blue-600 text-white text-[10px] font-bold px-3 py-1 rounded-full shadow-md flex items-center gap-1">
-                                <MessageSquare className="h-3 w-3" /> Click anywhere on video to add comment
-                              </div>
-                            )}
-                          </>
-                        )
-                      ) : (
-                        <div className="w-96 h-72 bg-slate-100 rounded-xl flex items-center justify-center border border-slate-200">
-                          <div className="text-center">
-                            <Image className="h-10 w-10 text-slate-400 mx-auto mb-2" />
-                            <p className="text-slate-500 text-sm">No media available</p>
-                          </div>
-                        </div>
-                      )
-                    ) : (
-                      <div className="w-96 h-72 bg-slate-100 rounded-xl flex items-center justify-center border border-slate-200">
-                        <div className="text-center">
-                          <Image className="h-10 w-10 text-slate-400 mx-auto mb-2" />
-                          <p className="text-slate-500 text-sm">No media available</p>
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                  {/* Content Header */}
+                  <div className="px-6 py-5 border-b border-slate-100 bg-gradient-to-r from-[#e6f2fb] to-[#bae6fd]">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                      <div className="min-w-0">
+                        <h2 className="text-xl font-bold text-slate-900 tracking-tight truncate">{selectedContent.title}</h2>
+                        <div className="flex items-center gap-2 mt-1 text-sm text-slate-500">
+                          <span className="truncate">{getAssignedCreator(selectedContent)}</span>
+                          <span>•</span>
+                          <span>{selectedContent.platform}</span>
                         </div>
                       </div>
-                    )}
-
-                    {/* Comment Markers */}
-                    {currentMedia && currentMedia.url && (
-                      commentsForCurrentMedia.map((comment, index) => {
-                        const commentX = comment.x ?? comment.position?.x ?? 0;
-                        const commentY = comment.y ?? comment.position?.y ?? 0;
-                        const isFrac = commentX <= 1 && commentY <= 1;
-                        const { contentW: imgW = 0, contentH: imgH = 0, offsetX: imgOX = 0, offsetY: imgOY = 0 } = imageDimensions;
-                        const px = isFrac && imgW > 0 ? commentX * imgW + imgOX : commentX;
-                        const py = isFrac && imgH > 0 ? commentY * imgH + imgOY : commentY;
-                        let boxLeft = 30;
-                        let boxRight = "auto";
-                        if (commentX > 0.5) {
-                          boxLeft = "auto";
-                          boxRight = 30;
-                        }
-                        return (
-                          <div
-                            key={`marker-${comment.id}`}
-                            style={{
-                              position: "absolute",
-                              top: py - 12,
-                              left: px - 12,
-                              width: 24,
-                              height: 24,
-                              background: comment.done ? "#10b981" : comment.repositioning ? "#8b5cf6" : comment.editing ? "#3b82f6" : "#ef4444",
-                              color: "#fff",
-                              borderRadius: "50%",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              fontWeight: "bold",
-                              fontSize: "11px",
-                              boxShadow: comment.repositioning ? "0 0 0 3px rgba(139, 92, 246, 0.3), 0 2px 8px rgba(0,0,0,0.2)" : "0 2px 8px rgba(0,0,0,0.2)",
-                              cursor: comment.repositioning ? "move" : "pointer",
-                              zIndex: 10,
-                              border: "2px solid #fff",
-                              transition: "all 0.2s",
-                              animation: comment.repositioning ? "pulse 1.5s ease-in-out infinite" : "none",
-                            }}
-                            onMouseEnter={(e) => {
-                              const r = e.currentTarget.getBoundingClientRect();
-                              setActiveMarkerRect({ top: r.top, left: r.left, right: r.right, bottom: r.bottom });
-                              setHoveredComment(comment.id);
-                            }}
-                            onMouseLeave={() => setHoveredComment(null)}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (!comment.repositioning) {
-                                const r = e.currentTarget.getBoundingClientRect();
-                                setActiveMarkerRect({ top: r.top, left: r.left, right: r.right, bottom: r.bottom });
-                                handleCommentListClick(comment.id);
-                              }
-                            }}
+                      <div className="flex flex-wrap gap-2 flex-shrink-0">
+                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border ${getStatusColor(getDisplayStatus(selectedContent))}`}>
+                          {getStatusLabel(getDisplayStatus(selectedContent))}
+                        </span>
+                        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800 border border-indigo-200">
+                          <Image className="h-3.5 w-3.5 mr-1" />
+                          {selectedContent.totalVersions} Ver.
+                        </span>
+                        {/* Comment count badge in header */}
+                        {totalComments > 0 && (
+                          <button
+                            onClick={() => { setSidebarTab('comments'); }}
+                            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-violet-100 text-violet-800 border border-violet-200 hover:bg-violet-200 transition"
                           >
-                            {index + 1}
-                            {comment.repositioning && (
-                              <div style={{
-                                position: "absolute", left: 30, top: "50%", transform: "translateY(-50%)",
-                                background: "#8b5cf6", color: "#fff", borderRadius: "6px", padding: "6px 10px",
-                                fontSize: "10px", fontWeight: "600", whiteSpace: "nowrap", zIndex: 20,
-                                boxShadow: "0 2px 10px rgba(139, 92, 246, 0.3)",
-                              }}>
-                                Click image to move
+                            <Bell className="h-3.5 w-3.5" />
+                            {totalComments} Comment{totalComments !== 1 ? 's' : ''}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Version Controls — Pills */}
+                  {selectedContent.totalVersions > 1 && (
+                    <div className="px-6 py-3 border-b border-slate-100 bg-slate-50 flex items-center gap-3 flex-wrap">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Version</span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {selectedContent.versions.map((version, index) => (
+                          <button
+                            key={version.id || index}
+                            onClick={() => handleVersionSelect(index)}
+                            className={`px-3 py-1 rounded-full text-xs font-semibold transition-all border ${selectedVersionIndex === index
+                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                              : 'bg-white text-slate-500 border-slate-200 hover:border-indigo-300 hover:text-indigo-600'
+                              }`}
+                          >
+                            V{version.versionNumber}
+                          </button>
+                        ))}
+                      </div>
+                      {currentVersion && (
+                        <span className="text-xs text-slate-400 ml-auto">{formatDate(currentVersion.createdAt)}</span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Media + Comments */}
+                  <div className="p-6">
+                    {/* Video comment mode toggle */}
+                    {currentMedia?.type === 'video' && (
+                      <div className="flex justify-center mb-4">
+                        <button
+                          onClick={() => setIsVideoCommentMode(v => !v)}
+                          className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold transition-all border ${isVideoCommentMode
+                            ? 'bg-blue-600 text-white border-blue-600 shadow-md ring-2 ring-blue-300'
+                            : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200'
+                            }`}
+                        >
+                          <MessageSquare className="h-3.5 w-3.5" />
+                          {isVideoCommentMode ? '✓ Comment Mode ON — click video to pin comment' : 'Add Comment at Timestamp'}
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Multi-media navigation */}
+                    {currentVersion?.media && currentVersion.media.length > 1 && (
+                      <div className="flex items-center justify-center gap-3 mb-4">
+                        <button
+                          onClick={() => handleMediaChange('prev')}
+                          disabled={selectedMediaIndex === 0}
+                          className="p-2 rounded-lg bg-white hover:bg-slate-100 disabled:opacity-40 border border-slate-200 transition"
+                        >
+                          <ChevronLeft className="h-4 w-4 text-slate-600" />
+                        </button>
+                        <span className="text-xs font-semibold text-slate-600">
+                          {selectedMediaIndex + 1} / {currentVersion.media.length}
+                        </span>
+                        <button
+                          onClick={() => handleMediaChange('next')}
+                          disabled={selectedMediaIndex === currentVersion.media.length - 1}
+                          className="p-2 rounded-lg bg-white hover:bg-slate-100 disabled:opacity-40 border border-slate-200 transition"
+                        >
+                          <ChevronRight className="h-4 w-4 text-slate-600" />
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Media Display */}
+                    <div className="flex justify-center mb-6">
+                      <div
+                        ref={imageContainerRef}
+                        className="relative w-full"
+                        style={{ position: 'relative', maxWidth: '720px' }}
+                      >
+                        {currentMedia ? (
+                          currentMedia.url && typeof currentMedia.url === 'string' ? (
+                            currentMedia.type === 'image' ? (
+                              <img
+                                src={currentMedia.url}
+                                alt={`${selectedContent.title} - Version ${currentVersion?.versionNumber} - Media ${selectedMediaIndex + 1}`}
+                                className="max-w-full h-auto max-h-[65vh] rounded-xl shadow-lg border border-slate-200 object-contain cursor-crosshair"
+                                onClick={handleImageClickWithReposition}
+                                onLoad={handleImageLoad}
+                                onError={(e) => {
+                                  e.target.style.display = 'none';
+                                  if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex';
+                                }}
+                              />
+                            ) : (
+                              <>
+                                {videoTranscoding && (
+                                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 rounded-xl z-20">
+                                    <svg className="animate-spin h-12 w-12 text-yellow-400 mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                                    </svg>
+                                    <p className="text-white text-sm font-semibold mb-1">Converting video for your browser…</p>
+                                    <p className="text-white/60 text-xs">This video uses H.265 encoding. Converting to H.264, please wait.</p>
+                                  </div>
+                                )}
+                                {videoLoading && !videoTranscoding && (
+                                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 rounded-xl z-10">
+                                    <svg className="animate-spin h-12 w-12 text-indigo-400 mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                                    </svg>
+                                    <p className="text-white text-xs font-semibold">Loading video…</p>
+                                  </div>
+                                )}
+                                <video
+                                  ref={videoRef}
+                                  src={videoCompatibleUrl || currentMedia.url}
+                                  controls
+                                  playsInline
+                                  preload="auto"
+                                  className="rounded-xl shadow-lg border border-slate-200 bg-black"
+                                  style={{ display: 'block', maxWidth: '100%', width: '100%', height: 'auto', maxHeight: '65vh' }}
+                                  onLoadStart={() => setVideoLoading(true)}
+                                  onLoadedMetadata={(e) => {
+                                    handleImageLoad(e);
+                                    setVideoLoading(false);
+                                    const vid = e.target;
+                                    if (vid && vid.duration > 0 && vid.currentTime === 0) {
+                                      vid.currentTime = 0.001;
+                                    }
+                                    // Detect H.265/unsupported codec: videoWidth===0 means the browser
+                                    // can parse metadata but can't decode the video track (e.g. HEVC on Chrome).
+                                    // Skip if we already have a compatible URL to avoid infinite loops.
+                                    if (!videoCompatibleUrl && vid.videoWidth === 0 && vid.duration > 0) {
+                                      setVideoTranscoding(true);
+                                      fetch(`${process.env.REACT_APP_API_URL}/api/video/transcode`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ videoUrl: currentMedia.url }),
+                                      })
+                                        .then((r) => r.json())
+                                        .then((data) => {
+                                          setVideoTranscoding(false);
+                                          if (data.url && data.url !== currentMedia.url) {
+                                            setVideoCompatibleUrl(data.url);
+                                          }
+                                        })
+                                        .catch(() => setVideoTranscoding(false));
+                                    }
+                                  }}
+                                  onCanPlay={() => setVideoLoading(false)}
+                                  onWaiting={() => setVideoLoading(true)}
+                                  onPlaying={() => setVideoLoading(false)}
+                                  onError={(e) => {
+                                    setVideoLoading(false);
+                                    e.target.style.display = 'none';
+                                    const fallback = e.target.parentNode?.querySelector('.video-error-fallback');
+                                    if (fallback) fallback.style.display = 'flex';
+                                  }}
+                                />
+                                <div className="video-error-fallback w-96 h-72 bg-slate-100 rounded-xl items-center justify-center border border-slate-200" style={{ display: 'none' }}>
+                                  <div className="text-center">
+                                    <svg className="h-10 w-10 text-slate-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10l4.553-2.069A1 1 0 0121 8.87v6.26a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" /></svg>
+                                    <p className="text-slate-500 text-sm font-medium">Unable to load video</p>
+                                    <a href={currentMedia.url} target="_blank" rel="noopener noreferrer" className="text-indigo-600 text-xs hover:underline mt-1 inline-block">Open video in new tab</a>
+                                  </div>
+                                </div>
+                                {/* Download link for large videos that can't render inline */}
+                                <div className="mt-2 flex justify-end">
+                                  <a
+                                    href={currentMedia.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    download
+                                    className="inline-flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-indigo-600 transition-colors"
+                                  >
+                                    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                                    Download video
+                                  </a>
+                                </div>
+                                {/* Overlay — only active in comment mode to avoid blocking native video controls */}
+                                <div
+                                  style={{
+                                    position: 'absolute',
+                                    top: 0,
+                                    left: 0,
+                                    right: 0,
+                                    bottom: 44,
+                                    cursor: isVideoCommentMode ? 'crosshair' : 'default',
+                                    zIndex: isVideoCommentMode ? 5 : -1,
+                                    pointerEvents: isVideoCommentMode ? 'auto' : 'none',
+                                    WebkitTapHighlightColor: 'transparent',
+                                    background: isVideoCommentMode ? 'rgba(59,130,246,0.04)' : 'transparent',
+                                  }}
+                                  onClick={(e) => {
+                                    if (!isVideoCommentMode) return;
+                                    if (touchFiredRef.current) { touchFiredRef.current = false; return; }
+                                    handleImageClickWithReposition(e);
+                                  }}
+                                  onTouchEnd={(e) => {
+                                    if (!isVideoCommentMode) return;
+                                    const touch = e.changedTouches[0];
+                                    if (!touch || !videoRef.current) return;
+                                    touchFiredRef.current = true;
+                                    handleImageClickWithReposition({ target: videoRef.current, clientX: touch.clientX, clientY: touch.clientY });
+                                  }}
+                                />
+                                {/* Comment mode indicator badge */}
+                                {isVideoCommentMode && (
+                                  <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', zIndex: 10, pointerEvents: 'none' }}
+                                    className="bg-blue-600 text-white text-[10px] font-bold px-3 py-1 rounded-full shadow-md flex items-center gap-1">
+                                    <MessageSquare className="h-3 w-3" /> Click anywhere on video to add comment
+                                  </div>
+                                )}
+                              </>
+                            )
+                          ) : (
+                            <div className="w-96 h-72 bg-slate-100 rounded-xl flex items-center justify-center border border-slate-200">
+                              <div className="text-center">
+                                <Image className="h-10 w-10 text-slate-400 mx-auto mb-2" />
+                                <p className="text-slate-500 text-sm">No media available</p>
+                              </div>
+                            </div>
+                          )
+                        ) : (
+                          <div className="w-96 h-72 bg-slate-100 rounded-xl flex items-center justify-center border border-slate-200">
+                            <div className="text-center">
+                              <Image className="h-10 w-10 text-slate-400 mx-auto mb-2" />
+                              <p className="text-slate-500 text-sm">No media available</p>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Comment Markers */}
+                        {currentMedia && currentMedia.url && (
+                          commentsForCurrentMedia.map((comment, index) => {
+                            const commentX = comment.x ?? comment.position?.x ?? 0;
+                            const commentY = comment.y ?? comment.position?.y ?? 0;
+                            const isFrac = commentX <= 1 && commentY <= 1;
+                            const { contentW: imgW = 0, contentH: imgH = 0, offsetX: imgOX = 0, offsetY: imgOY = 0 } = imageDimensions;
+                            const px = isFrac && imgW > 0 ? commentX * imgW + imgOX : commentX;
+                            const py = isFrac && imgH > 0 ? commentY * imgH + imgOY : commentY;
+                            let boxLeft = 30;
+                            let boxRight = "auto";
+                            if (commentX > 0.5) {
+                              boxLeft = "auto";
+                              boxRight = 30;
+                            }
+                            return (
+                              <div
+                                key={`marker-${comment.id}`}
+                                style={{
+                                  position: "absolute",
+                                  top: py - 12,
+                                  left: px - 12,
+                                  width: 24,
+                                  height: 24,
+                                  background: comment.done ? "#10b981" : comment.repositioning ? "#8b5cf6" : comment.editing ? "#3b82f6" : "#ef4444",
+                                  color: "#fff",
+                                  borderRadius: "50%",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  fontWeight: "bold",
+                                  fontSize: "11px",
+                                  boxShadow: comment.repositioning ? "0 0 0 3px rgba(139, 92, 246, 0.3), 0 2px 8px rgba(0,0,0,0.2)" : "0 2px 8px rgba(0,0,0,0.2)",
+                                  cursor: comment.repositioning ? "move" : "pointer",
+                                  zIndex: 10,
+                                  border: "2px solid #fff",
+                                  transition: "all 0.2s",
+                                  animation: comment.repositioning ? "pulse 1.5s ease-in-out infinite" : "none",
+                                }}
+                                onMouseEnter={(e) => {
+                                  const r = e.currentTarget.getBoundingClientRect();
+                                  setActiveMarkerRect({ top: r.top, left: r.left, right: r.right, bottom: r.bottom });
+                                  setHoveredComment(comment.id);
+                                }}
+                                onMouseLeave={() => setHoveredComment(null)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (!comment.repositioning) {
+                                    const r = e.currentTarget.getBoundingClientRect();
+                                    setActiveMarkerRect({ top: r.top, left: r.left, right: r.right, bottom: r.bottom });
+                                    handleCommentListClick(comment.id);
+                                  }
+                                }}
+                              >
+                                {index + 1}
+                                {comment.repositioning && (
+                                  <div style={{
+                                    position: "absolute", left: 30, top: "50%", transform: "translateY(-50%)",
+                                    background: "#8b5cf6", color: "#fff", borderRadius: "6px", padding: "6px 10px",
+                                    fontSize: "10px", fontWeight: "600", whiteSpace: "nowrap", zIndex: 20,
+                                    boxShadow: "0 2px 10px rgba(139, 92, 246, 0.3)",
+                                  }}>
+                                    Click image to move
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Media Thumbnails */}
+                    {currentVersion?.media && currentVersion.media.length > 1 && (
+                      <div className="flex justify-center gap-2 mt-3 mb-5 flex-wrap">
+                        {currentVersion.media.map((media, index) => (
+                          <button
+                            key={index}
+                            onClick={() => setSelectedMediaIndex(index)}
+                            className={`w-12 h-12 rounded-lg overflow-hidden border-2 transition-all ${selectedMediaIndex === index
+                              ? 'border-indigo-500 ring-2 ring-indigo-200'
+                              : 'border-slate-200 hover:border-slate-300'
+                              }`}
+                          >
+                            {media.type === 'image' && media.url && typeof media.url === 'string' ? (
+                              <img src={media.url} alt={`Thumbnail ${index + 1}`} className="w-full h-full object-cover"
+                                onError={(e) => { e.target.style.display = 'none'; if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex'; }} />
+                            ) : (
+                              <div className="w-full h-full bg-slate-200 flex items-center justify-center">
+                                <Video className="h-5 w-5 text-slate-400" />
                               </div>
                             )}
+                            <div className="w-full h-full bg-slate-200 flex items-center justify-center" style={{ display: 'none' }}>
+                              <Video className="h-5 w-5 text-slate-400" />
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Caption & Notes */}
+                    {currentVersion && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+                        <div>
+                          <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wide">Caption</label>
+                          <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                            <p className="text-slate-800 text-sm leading-relaxed">{currentVersion.caption || 'No caption'}</p>
                           </div>
-                        );
-                      })
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wide">Notes</label>
+                          <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                            <p className="text-slate-800 text-sm leading-relaxed">{currentVersion.notes || 'No notes'}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Action Buttons — shown when not yet customer-approved or published */}
+                    {!['approved', 'approved_by_customer', 'published'].includes(getDisplayStatus(selectedContent)) && (
+                      <div className="flex flex-col sm:flex-row justify-center gap-3 mt-4">
+                        {commentsForCurrentMedia.length > 0 && (
+                          {/*  <button
+                            onClick={handleSendToCreator}
+                            disabled={sendingToCreator}
+                            className={`inline-flex items-center justify-center px-8 py-3 rounded-xl font-bold text-sm transition-all shadow-md hover:shadow-lg ${sendingToCreator ? 'bg-slate-300 cursor-not-allowed text-slate-500' : 'bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white'
+                              }`}
+                          >
+                            {sendingToCreator ? (
+                              <><div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2"></div>Sending...</>
+                            ) : (
+                              <><Send className="h-4 w-4 mr-2" />Send to Creator</>
+                            )}
+                          </button>*/}
+                        )}
+                        <button
+                          onClick={handleApproveContent}
+                          disabled={approvingContent}
+                          className={`inline-flex items-center justify-center px-8 py-3 rounded-xl font-bold text-sm transition-all shadow-md hover:shadow-lg ${approvingContent ? 'bg-slate-300 cursor-not-allowed text-slate-500' : 'bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white'
+                            }`}
+                        >
+                          {approvingContent ? (
+                            <><div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2"></div>Approving...</>
+                          ) : (
+                            <><ThumbsUp className="h-4 w-4 mr-2" />Approve Content</>
+                          )}
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Approved by Admin banner — customer can still give their own approval */}
+                    {getDisplayStatus(selectedContent) === 'approved_by_admin' && (
+                      <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-4">
+                        <div className="inline-flex items-center px-6 py-3 bg-orange-50 border-2 border-orange-300 rounded-xl">
+                          <CheckCircle className="h-5 w-5 text-orange-600 mr-2" />
+                          <span className="text-orange-800 font-bold text-sm">Approved by Admin</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Approved by Customer banner + Undo */}
+                    {['approved', 'approved_by_customer'].includes(getDisplayStatus(selectedContent)) && (
+                      <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-4">
+                        <div className="inline-flex items-center px-6 py-3 bg-emerald-50 border-2 border-emerald-200 rounded-xl">
+                          <CheckCircle className="h-5 w-5 text-emerald-600 mr-2" />
+                          <span className="text-emerald-800 font-bold text-sm">Approved by Customer</span>
+                        </div>
+                        <button
+                          onClick={handleUndoApprove}
+                          disabled={undoingApprove}
+                          className={`inline-flex items-center justify-center px-5 py-3 rounded-xl font-semibold text-sm transition-all border-2 ${undoingApprove ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed' : 'bg-white border-amber-400 text-amber-700 hover:bg-amber-50'
+                            }`}
+                        >
+                          {undoingApprove ? (
+                            <><div className="animate-spin rounded-full h-4 w-4 border-2 border-amber-400 border-t-transparent mr-2"></div>Undoing...</>
+                          ) : (
+                            <><RotateCcw className="h-4 w-4 mr-2" />Undo Approve</>
+                          )}
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
-
-                {/* Media Thumbnails */}
-                {currentVersion?.media && currentVersion.media.length > 1 && (
-                  <div className="flex justify-center gap-2 mt-3 mb-5 flex-wrap">
-                    {currentVersion.media.map((media, index) => (
-                      <button
-                        key={index}
-                        onClick={() => setSelectedMediaIndex(index)}
-                        className={`w-12 h-12 rounded-lg overflow-hidden border-2 transition-all ${
-                          selectedMediaIndex === index
-                            ? 'border-indigo-500 ring-2 ring-indigo-200'
-                            : 'border-slate-200 hover:border-slate-300'
-                        }`}
-                      >
-                        {media.type === 'image' && media.url && typeof media.url === 'string' ? (
-                          <img src={media.url} alt={`Thumbnail ${index + 1}`} className="w-full h-full object-cover"
-                            onError={(e) => { e.target.style.display = 'none'; if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex'; }} />
-                        ) : (
-                          <div className="w-full h-full bg-slate-200 flex items-center justify-center">
-                            <Video className="h-5 w-5 text-slate-400" />
-                          </div>
-                        )}
-                        <div className="w-full h-full bg-slate-200 flex items-center justify-center" style={{ display: 'none' }}>
-                          <Video className="h-5 w-5 text-slate-400" />
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {/* Caption & Notes */}
-                {currentVersion && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wide">Caption</label>
-                      <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
-                        <p className="text-slate-800 text-sm leading-relaxed">{currentVersion.caption || 'No caption'}</p>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wide">Notes</label>
-                      <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
-                        <p className="text-slate-800 text-sm leading-relaxed">{currentVersion.notes || 'No notes'}</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Action Buttons — shown when not yet customer-approved or published */}
-                {!['approved', 'approved_by_customer', 'published'].includes(getDisplayStatus(selectedContent)) && (
-                  <div className="flex flex-col sm:flex-row justify-center gap-3 mt-4">
-                    {commentsForCurrentMedia.length > 0 && (
-                      <button
-                        onClick={handleSendToCreator}
-                        disabled={sendingToCreator}
-                        className={`inline-flex items-center justify-center px-8 py-3 rounded-xl font-bold text-sm transition-all shadow-md hover:shadow-lg ${
-                          sendingToCreator ? 'bg-slate-300 cursor-not-allowed text-slate-500' : 'bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white'
-                        }`}
-                      >
-                        {sendingToCreator ? (
-                          <><div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2"></div>Sending...</>
-                        ) : (
-                          <><Send className="h-4 w-4 mr-2" />Send to Creator</>
-                        )}
-                      </button>
-                    )}
-                    <button
-                      onClick={handleApproveContent}
-                      disabled={approvingContent}
-                      className={`inline-flex items-center justify-center px-8 py-3 rounded-xl font-bold text-sm transition-all shadow-md hover:shadow-lg ${
-                        approvingContent ? 'bg-slate-300 cursor-not-allowed text-slate-500' : 'bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white'
-                      }`}
-                    >
-                      {approvingContent ? (
-                        <><div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2"></div>Approving...</>
-                      ) : (
-                        <><ThumbsUp className="h-4 w-4 mr-2" />Approve Content</>
-                      )}
-                    </button>
-                  </div>
-                )}
-
-                {/* Approved by Admin banner — customer can still give their own approval */}
-                {getDisplayStatus(selectedContent) === 'approved_by_admin' && (
-                  <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-4">
-                    <div className="inline-flex items-center px-6 py-3 bg-orange-50 border-2 border-orange-300 rounded-xl">
-                      <CheckCircle className="h-5 w-5 text-orange-600 mr-2" />
-                      <span className="text-orange-800 font-bold text-sm">Approved by Admin</span>
-                    </div>
-                  </div>
-                )}
-
-                {/* Approved by Customer banner + Undo */}
-                {['approved', 'approved_by_customer'].includes(getDisplayStatus(selectedContent)) && (
-                  <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-4">
-                    <div className="inline-flex items-center px-6 py-3 bg-emerald-50 border-2 border-emerald-200 rounded-xl">
-                      <CheckCircle className="h-5 w-5 text-emerald-600 mr-2" />
-                      <span className="text-emerald-800 font-bold text-sm">Approved by Customer</span>
-                    </div>
-                    <button
-                      onClick={handleUndoApprove}
-                      disabled={undoingApprove}
-                      className={`inline-flex items-center justify-center px-5 py-3 rounded-xl font-semibold text-sm transition-all border-2 ${
-                        undoingApprove ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed' : 'bg-white border-amber-400 text-amber-700 hover:bg-amber-50'
-                      }`}
-                    >
-                      {undoingApprove ? (
-                        <><div className="animate-spin rounded-full h-4 w-4 border-2 border-amber-400 border-t-transparent mr-2"></div>Undoing...</>
-                      ) : (
-                        <><RotateCcw className="h-4 w-4 mr-2" />Undo Approve</>
-                      )}
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-            );
+              );
             })()} {/* end selectedContent conditional */}
           </div>
         </main>
@@ -2107,24 +2089,21 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
                             return (
                               <div
                                 key={comment.id || `${vn}-${idx}`}
-                                className={`rounded-lg border transition-colors overflow-hidden cursor-pointer ${
-                                  isActive
-                                    ? isAdminComment ? 'bg-purple-50 border-purple-200' : 'bg-blue-50 border-blue-200'
-                                    : isAdminComment ? 'bg-white border-purple-100 hover:bg-purple-50/40' : 'bg-gray-50 border-gray-200 hover:bg-blue-50/40'
-                                }`}
+                                className={`rounded-lg border transition-colors overflow-hidden cursor-pointer ${isActive
+                                  ? isAdminComment ? 'bg-purple-50 border-purple-200' : 'bg-blue-50 border-blue-200'
+                                  : isAdminComment ? 'bg-white border-purple-100 hover:bg-purple-50/40' : 'bg-gray-50 border-gray-200 hover:bg-blue-50/40'
+                                  }`}
                                 onClick={() => setPanelActiveComment(isActive ? null : comment.id)}
                               >
                                 <div className="p-2 flex items-start gap-2">
                                   {/* Index badge */}
-                                  <span className={`font-bold rounded-full w-5 h-5 flex items-center justify-center text-[10px] flex-shrink-0 border ${
-                                    isAdminComment ? 'text-purple-700 bg-purple-100 border-purple-200' : 'text-blue-700 bg-blue-100 border-blue-200'
-                                  }`}>{idx + 1}</span>
+                                  <span className={`font-bold rounded-full w-5 h-5 flex items-center justify-center text-[10px] flex-shrink-0 border ${isAdminComment ? 'text-purple-700 bg-purple-100 border-purple-200' : 'text-blue-700 bg-blue-100 border-blue-200'
+                                    }`}>{idx + 1}</span>
                                   <div className="flex-1 min-w-0">
                                     {/* Author row */}
                                     <div className="flex items-center gap-1 mb-0.5 flex-wrap">
-                                      <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold ${
-                                        isAdminComment ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
-                                      }`}>
+                                      <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold ${isAdminComment ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                                        }`}>
                                         {isAdminComment ? <UserCog className="h-2 w-2" /> : <User className="h-2 w-2" />}
                                         {isAdminComment ? 'Admin' : 'Customer'}
                                       </span>
@@ -2133,9 +2112,8 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
                                           {comment.authorEmail || comment.authorName || comment.author}
                                         </span>
                                       )}
-                                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ml-auto ${
-                                        isInternal ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
-                                      }`}>
+                                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ml-auto ${isInternal ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                                        }`}>
                                         {isInternal ? 'Internal' : 'External'}
                                       </span>
                                     </div>
@@ -2298,9 +2276,8 @@ Object.keys(groupedSubmissions).forEach(assignmentId => {
                       {comment.authorEmail || comment.authorName}
                     </span>
                   )}
-                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ml-auto ${
-                    (isAdminComment || comment.reviewType === 'internal') ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
-                  }`}>
+                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ml-auto ${(isAdminComment || comment.reviewType === 'internal') ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                    }`}>
                     {(isAdminComment || comment.reviewType === 'internal') ? 'Internal' : 'External'}
                   </span>
                 </div>

@@ -1961,7 +1961,7 @@ function ContentReview() {
                     {!['approved', 'approved_by_customer', 'published'].includes(getDisplayStatus(selectedContent)) && (
                       <div className="flex flex-col sm:flex-row justify-center gap-3 mt-4">
                         {commentsForCurrentMedia.length > 0 && (
-                          {/*  <button
+                          <button
                             onClick={handleSendToCreator}
                             disabled={sendingToCreator}
                             className={`inline-flex items-center justify-center px-8 py-3 rounded-xl font-bold text-sm transition-all shadow-md hover:shadow-lg ${sendingToCreator ? 'bg-slate-300 cursor-not-allowed text-slate-500' : 'bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white'
@@ -1972,7 +1972,7 @@ function ContentReview() {
                             ) : (
                               <><Send className="h-4 w-4 mr-2" />Send to Creator</>
                             )}
-                          </button>*/}
+                          </button>
                         )}
                         <button
                           onClick={handleApproveContent}

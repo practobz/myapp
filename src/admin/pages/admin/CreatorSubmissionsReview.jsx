@@ -208,9 +208,6 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
   const [hoveredComment, setHoveredComment] = useState(null);
 
   const [approving, setApproving] = useState(false);
-  const [revising, setRevising] = useState(false);
-  const [revisionNotes, setRevisionNotes] = useState('');
-  const [showRevisionInput, setShowRevisionInput] = useState(false);
 
   const [localStatus, setLocalStatus] = useState(activeVersion.status);
   const [toast, setToast] = useState(null);
@@ -239,8 +236,6 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
     setHoveredComment(null);
     setLocalStatus(localVersions[activeVersionIdx].status);
     setSentToCustomer(localVersions[activeVersionIdx].submission_stage === 'customer');
-    setShowRevisionInput(false);
-    setRevisionNotes('');
     setDeleteConfirm(null);
     setCaptionDraft(localVersions[activeVersionIdx].caption || '');
     setHashtagsDraft(localVersions[activeVersionIdx].hashtags || '');
@@ -495,29 +490,6 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
     } finally { setApproving(false); }
   };
 
-  const handleRevision = async () => {
-    if (!revisionNotes.trim()) return;
-    setRevising(true);
-    try {
-      const res = await fetch(
-        `${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(activeVersion._id)}/status`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ versionId: activeVersion._id, status: 'revision_requested', rejectionReason: revisionNotes.trim() }),
-        }
-      );
-      if (!res.ok) throw new Error();
-      setLocalStatus('revision_requested');
-      setShowRevisionInput(false);
-      setRevisionNotes('');
-      showToast('Revision requested. Creator notified by email.');
-      onStatusUpdated(activeVersion._id, 'revision_requested');
-    } catch {
-      showToast('Failed to send revision request.', 'error');
-    } finally { setRevising(false); }
-  };
-
   // Derived
   const statusCfg = getStatusConfig(localStatus);
   const currentMedia = mediaItems[activeMediaIdx];
@@ -735,41 +707,13 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
 
             {/* Action area */}
             <div className="p-4 border-b border-gray-100 space-y-2 flex-shrink-0">
-              {!['approved', 'revision_requested', 'rejected'].includes(localStatus) && !showRevisionInput && (
-                <div className="flex gap-2">
-                  <button onClick={handleApprove} disabled={approving}
-                    className="flex-1 py-2.5 bg-green-500 text-white rounded-xl text-sm font-semibold hover:bg-green-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
-                    {approving
-                      ? <><div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Approving...</>
-                      : <><CheckCircle className="h-4 w-4" />Approve</>}
-                  </button>
-                  <button onClick={() => setShowRevisionInput(true)}
-                    className="flex-1 py-2.5 bg-orange-500 text-white rounded-xl text-sm font-semibold hover:bg-orange-600 transition-colors flex items-center justify-center gap-1.5">
-                    <MessageSquare className="h-4 w-4" />Request Revision
-                  </button>
-                </div>
-              )}
-
-              {!['approved', 'revision_requested', 'rejected'].includes(localStatus) && showRevisionInput && (
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-gray-700">Describe the revisions needed:</p>
-                  <textarea
-                    className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-orange-400 focus:border-orange-400 resize-none"
-                    rows={3}
-                    placeholder="e.g. Please change the caption and replace image 2..."
-                    value={revisionNotes}
-                    onChange={e => setRevisionNotes(e.target.value)}
-                    autoFocus
-                  />
-                  <div className="flex gap-2">
-                    <button onClick={handleRevision} disabled={revising || !revisionNotes.trim()}
-                      className="flex-1 py-2 bg-orange-500 text-white rounded-xl text-sm font-semibold hover:bg-orange-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
-                      {revising ? 'Sending...' : <><Send className="h-3.5 w-3.5" />Send Request</>}
-                    </button>
-                    <button onClick={() => { setShowRevisionInput(false); setRevisionNotes(''); }}
-                      className="px-4 py-2 border border-gray-200 rounded-xl text-sm hover:bg-gray-50">Cancel</button>
-                  </div>
-                </div>
+              {!['approved', 'revision_requested', 'rejected'].includes(localStatus) && (
+                <button onClick={handleApprove} disabled={approving}
+                  className="w-full py-2.5 bg-green-500 text-white rounded-xl text-sm font-semibold hover:bg-green-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
+                  {approving
+                    ? <><div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Approving...</>
+                    : <><CheckCircle className="h-4 w-4" />Approve</>}
+                </button>
               )}
 
               {localStatus === 'approved' && (

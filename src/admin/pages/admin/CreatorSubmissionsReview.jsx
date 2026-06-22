@@ -10,10 +10,10 @@ import {
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 const STATUS_CONFIG = {
-  submitted:          { label: 'Pending Review',     color: 'bg-amber-100  text-amber-700  border-amber-200'  },
-  approved:           { label: 'Approved',           color: 'bg-green-100  text-green-700  border-green-200'  },
+  submitted: { label: 'Pending Review', color: 'bg-amber-100  text-amber-700  border-amber-200' },
+  approved: { label: 'Approved', color: 'bg-green-100  text-green-700  border-green-200' },
   revision_requested: { label: 'Revision Requested', color: 'bg-orange-100 text-orange-700 border-orange-200' },
-  rejected:           { label: 'Rejected',           color: 'bg-red-100    text-red-700    border-red-200'    },
+  rejected: { label: 'Rejected', color: 'bg-red-100    text-red-700    border-red-200' },
 };
 
 const getStatusConfig = (status) =>
@@ -54,9 +54,9 @@ const Btn = ({ onClick, variant = 'primary', size = 'sm', children, disabled }) 
     primary: 'bg-blue-600 hover:bg-blue-700 text-white',
     success: 'bg-green-500 hover:bg-green-600 text-white',
     warning: 'bg-orange-500 hover:bg-orange-600 text-white',
-    danger:  'bg-red-500   hover:bg-red-600   text-white',
-    info:    'bg-cyan-500  hover:bg-cyan-600  text-white',
-    ghost:   'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50',
+    danger: 'bg-red-500   hover:bg-red-600   text-white',
+    info: 'bg-cyan-500  hover:bg-cyan-600  text-white',
+    ghost: 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50',
   };
   const s = { sm: 'px-2 py-1 text-[10px]', md: 'px-3 py-1.5 text-xs', lg: 'px-4 py-2 text-sm' };
   return (
@@ -79,12 +79,12 @@ function CommentPin({ comment, index, onActivate, activeId, hoveredId, setHovere
   const y = comment.y ?? 0;
   const isNormalized = x > 0 && x <= 1 && y > 0 && y <= 1;
 
-  const pinColor = comment.done        ? '#10b981'
-    : comment.repositioning            ? '#8b5cf6'
-    : comment.editing                  ? '#3b82f6'
-    :                                    '#ef4444';
+  const pinColor = comment.done ? '#10b981'
+    : comment.repositioning ? '#8b5cf6'
+      : comment.editing ? '#3b82f6'
+        : '#ef4444';
 
-  const popupLeft  = (isNormalized ? x > 0.5 : x > 150) ? 'auto' : 30;
+  const popupLeft = (isNormalized ? x > 0.5 : x > 150) ? 'auto' : 30;
   const popupRight = (isNormalized ? x > 0.5 : x > 150) ? 30 : 'auto';
 
   return (
@@ -207,24 +207,24 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
   const [activeComment, setActiveComment] = useState(null);
   const [hoveredComment, setHoveredComment] = useState(null);
 
-  const [approving, setApproving]          = useState(false);
-  const [revising, setRevising]            = useState(false);
-  const [revisionNotes, setRevisionNotes]  = useState('');
+  const [approving, setApproving] = useState(false);
+  const [revising, setRevising] = useState(false);
+  const [revisionNotes, setRevisionNotes] = useState('');
   const [showRevisionInput, setShowRevisionInput] = useState(false);
 
   const [localStatus, setLocalStatus] = useState(activeVersion.status);
-  const [toast, setToast]             = useState(null);
-  const [sidebarTab, setSidebarTab]   = useState('comments');
-  const [sentToCustomer, setSentToCustomer]       = useState(activeVersion.submission_stage === 'customer');
+  const [toast, setToast] = useState(null);
+  const [sidebarTab, setSidebarTab] = useState('comments');
+  const [sentToCustomer, setSentToCustomer] = useState(activeVersion.submission_stage === 'customer');
   const [sendingToCustomer, setSendingToCustomer] = useState(false);
-  const [deleteConfirm, setDeleteConfirm]         = useState(null); // null | 'version' | 'all'
-  const [deleting, setDeleting]                   = useState(false);
-  const [mobilePanelTab, setMobilePanelTab]       = useState('actions'); // 'media' | 'actions'
+  const [deleteConfirm, setDeleteConfirm] = useState(null); // null | 'version' | 'all'
+  const [deleting, setDeleting] = useState(false);
+  const [mobilePanelTab, setMobilePanelTab] = useState('actions'); // 'media' | 'actions'
 
   // Caption / hashtag editing
-  const [captionDraft, setCaptionDraft]           = useState(activeVersion.caption || '');
-  const [hashtagsDraft, setHashtagsDraft]         = useState(activeVersion.hashtags || '');
-  const [savingCaption, setSavingCaption]         = useState(false);
+  const [captionDraft, setCaptionDraft] = useState(activeVersion.caption || '');
+  const [hashtagsDraft, setHashtagsDraft] = useState(activeVersion.hashtags || '');
+  const [savingCaption, setSavingCaption] = useState(false);
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -285,7 +285,7 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
           `${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(submission.assignment_id)}/comments/${repositioning.id}`,
           { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ x, y, position: { x, y } }) }
         );
-      } catch {}
+      } catch { }
       return;
     }
     handleImageClick(e);
@@ -354,7 +354,7 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
         `${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(submission.assignment_id)}/comments/${id}`,
         { method: 'DELETE' }
       );
-    } catch {}
+    } catch { }
   };
 
   const handleMarkDone = async (id) => {
@@ -370,7 +370,7 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
           body: JSON.stringify({ done: newDone, status: newDone ? 'completed' : 'active' }),
         }
       );
-    } catch {}
+    } catch { }
   };
 
   const handleEditComment = (id) => {
@@ -519,10 +519,10 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
   };
 
   // Derived
-  const statusCfg   = getStatusConfig(localStatus);
+  const statusCfg = getStatusConfig(localStatus);
   const currentMedia = mediaItems[activeMediaIdx];
   const totalComments = comments.length;
-  const openComments  = comments.filter(c => !c.done).length;
+  const openComments = comments.filter(c => !c.done).length;
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/80 flex items-stretch overflow-hidden">
@@ -597,27 +597,24 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
                   <div key={v._id || i} className="flex items-center">
                     <button
                       onClick={() => setActiveVersionIdx(i)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-l-lg text-xs font-semibold border-y border-l transition-all ${
-                        i === activeVersionIdx
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-l-lg text-xs font-semibold border-y border-l transition-all ${i === activeVersionIdx
                           ? 'bg-blue-600 text-white border-blue-600 shadow'
                           : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:bg-blue-50'
-                      }`}
+                        }`}
                     >
                       v{i + 1}
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
-                        i === activeVersionIdx ? 'bg-white/20 text-white' : vCfg.color
-                      }`}>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${i === activeVersionIdx ? 'bg-white/20 text-white' : vCfg.color
+                        }`}>
                         {vCfg.label}
                       </span>
                     </button>
                     <button
                       onClick={() => { setActiveVersionIdx(i); setDeleteConfirm('version'); }}
                       title={`Delete v${i + 1}`}
-                      className={`p-1.5 border-y border-r rounded-r-lg transition-all ${
-                        i === activeVersionIdx
+                      className={`p-1.5 border-y border-r rounded-r-lg transition-all ${i === activeVersionIdx
                           ? 'bg-blue-700 border-blue-600 text-white/70 hover:text-white hover:bg-blue-800'
                           : 'bg-white border-gray-200 text-gray-300 hover:text-red-500 hover:border-red-300 hover:bg-red-50'
-                      }`}
+                        }`}
                     >
                       <Trash2 className="h-3 w-3" />
                     </button>
@@ -704,9 +701,8 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
               <div className="flex gap-2 flex-wrap justify-center">
                 {mediaItems.map((m, i) => (
                   <button key={i} onClick={() => setActiveMediaIdx(i)}
-                    className={`w-14 h-14 rounded-lg overflow-hidden border-2 transition-all flex-shrink-0 ${
-                      i === activeMediaIdx ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200 hover:border-gray-300'
-                    }`}>
+                    className={`w-14 h-14 rounded-lg overflow-hidden border-2 transition-all flex-shrink-0 ${i === activeMediaIdx ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200 hover:border-gray-300'
+                      }`}>
                     {isVideoUrl(m.url)
                       ? <div className="w-full h-full bg-gray-200 flex items-center justify-center"><Play className="h-4 w-4 text-gray-500" /></div>
                       : <img src={m.url} alt="" className="w-full h-full object-cover" loading="lazy" />}
@@ -887,14 +883,13 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
             <div className="flex border-b border-gray-100 flex-shrink-0">
               {[
                 { key: 'comments', label: 'Comments', count: totalComments },
-                { key: 'details',  label: 'Details',  count: null },
+                { key: 'details', label: 'Details', count: null },
               ].map(tab => (
                 <button key={tab.key} onClick={() => setSidebarTab(tab.key)}
-                  className={`flex-1 py-2.5 text-xs font-semibold transition-colors ${
-                    sidebarTab === tab.key
+                  className={`flex-1 py-2.5 text-xs font-semibold transition-colors ${sidebarTab === tab.key
                       ? 'text-blue-600 border-b-2 border-blue-600'
                       : 'text-gray-500 hover:text-gray-700'
-                  }`}>
+                    }`}>
                   {tab.label}
                   {tab.count !== null && tab.count > 0 && (
                     <span className={`ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full font-bold
@@ -927,9 +922,8 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
                             const cnt = comments.filter(c => (c.mediaIndex ?? 0) === i).length;
                             return (
                               <button key={i} onClick={() => setActiveMediaIdx(i)}
-                                className={`text-[10px] px-2 py-1 rounded-full transition-colors ${
-                                  i === activeMediaIdx ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                }`}>
+                                className={`text-[10px] px-2 py-1 rounded-full transition-colors ${i === activeMediaIdx ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                  }`}>
                                 Media {i + 1} {cnt > 0 && `(${cnt})`}
                               </button>
                             );
@@ -944,15 +938,13 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
                           </p>
                           {commentsForMedia.map((comment, idx) => (
                             <div key={comment.id} onClick={() => handleActivate(comment.id)}
-                              className={`rounded-xl cursor-pointer transition-all border overflow-hidden ${
-                                activeComment === comment.id
+                              className={`rounded-xl cursor-pointer transition-all border overflow-hidden ${activeComment === comment.id
                                   ? 'bg-blue-50 border-blue-200 shadow-sm'
                                   : 'bg-white border-gray-100 hover:bg-gray-50'
-                              }`}>
-                              <div className="p-2.5 flex items-start gap-2">
-                                <span className={`w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center flex-shrink-0 ${
-                                  comment.done ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
                                 }`}>
+                              <div className="p-2.5 flex items-start gap-2">
+                                <span className={`w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center flex-shrink-0 ${comment.done ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
+                                  }`}>
                                   {idx + 1}
                                 </span>
                                 <div className="flex-1 min-w-0">
@@ -1010,12 +1002,12 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
               {/* ── Details tab ── */}
               {sidebarTab === 'details' && (
                 <div className="p-4 space-y-3 text-sm">
-                  <SidebarRow icon={User}     label="Creator"   value={submission.created_by} />
-                  <SidebarRow icon={User}     label="Customer"  value={submission.customer_name} color="text-blue-600" />
-                  <SidebarRow icon={Calendar} label="Calendar"  value={submission.calendar_name} />
-                  <SidebarRow icon={FileText} label="Item"      value={submission.item_name} />
-                  <SidebarRow icon={Clock}    label="Submitted" value={fmtDate(submission.sent_to_admin_at || submission.created_at)} />
-                  <SidebarRow icon={FileText} label="Platform"  value={submission.platform} />
+                  <SidebarRow icon={User} label="Creator" value={submission.created_by} />
+                  <SidebarRow icon={User} label="Customer" value={submission.customer_name} color="text-blue-600" />
+                  <SidebarRow icon={Calendar} label="Calendar" value={submission.calendar_name} />
+                  <SidebarRow icon={FileText} label="Item" value={submission.item_name} />
+                  <SidebarRow icon={Clock} label="Submitted" value={fmtDate(submission.sent_to_admin_at || submission.created_at)} />
+                  <SidebarRow icon={FileText} label="Platform" value={submission.platform} />
                   {Array.isArray(submission.notify_admins) && submission.notify_admins.length > 0 && (
                     <SidebarRow icon={User} label="Notified Admins"
                       value={submission.notify_admins.map(a => a.name || a.email).join(', ')} />
@@ -1128,7 +1120,7 @@ function MediaPreview({ images }) {
 
 // ─── Submission Card ───────────────────────────────────────────────────────────
 function SubmissionCard({ submission, onView, onDelete }) {
-  const statusCfg    = getStatusConfig(submission.status);
+  const statusCfg = getStatusConfig(submission.status);
   const commentCount = Array.isArray(submission.comments) ? submission.comments.length : 0;
   const versionCount = submission.allVersions?.length || 1;
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -1234,25 +1226,33 @@ function SubmissionCard({ submission, onView, onDelete }) {
 }
 
 // ─── Main Page ─────────────────────────────────────────────────────────────────
-export default function CreatorSubmissionsReview() {
-  const [submissions,      setSubmissions]      = useState([]);
-  const [loading,          setLoading]          = useState(true);
-  const [refreshing,       setRefreshing]       = useState(false);
-  const [filterStatus,     setFilterStatus]     = useState('all');
+export default function CreatorSubmissionsReview({ embedded = false, customerId = null }) {
+  const [submissions, setSubmissions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [filterStatus, setFilterStatus] = useState('all');
   const [reviewSubmission, setReviewSubmission] = useState(null);
 
   const fetchSubmissions = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
-      const res  = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions`);
+      const res = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions`);
       const data = await res.json();
       const adminReview = Array.isArray(data)
         ? data.filter(s => Array.isArray(s.notify_admins) && s.notify_admins.length > 0)
         : [];
 
+      const reviewItems = customerId
+        ? adminReview.filter(s =>
+          s.customer_id === customerId ||
+          s.customerId === customerId ||
+          s.customer?._id === customerId
+        )
+        : adminReview;
+
       // Group by assignment_id so multiple versions appear as one card
       const grouped = {};
-      adminReview.forEach(s => {
+      reviewItems.forEach(s => {
         const key = s.assignment_id || s._id;
         if (!grouped[key]) grouped[key] = [];
         grouped[key].push(s);
@@ -1277,7 +1277,7 @@ export default function CreatorSubmissionsReview() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [customerId]);
 
   useEffect(() => { fetchSubmissions(); }, [fetchSubmissions]);
 
@@ -1289,7 +1289,7 @@ export default function CreatorSubmissionsReview() {
         `${process.env.REACT_APP_API_URL}/api/content-submissions/assignment/${encodeURIComponent(assignmentId)}`,
         { method: 'DELETE' }
       );
-    } catch {}
+    } catch { }
   }, []);
 
   const handleStatusUpdated = (submissionId, newStatus) => {
@@ -1318,103 +1318,109 @@ export default function CreatorSubmissionsReview() {
     : submissions.filter(s => s.status === filterStatus);
 
   const counts = {
-    all:                submissions.length,
-    submitted:          submissions.filter(s => s.status === 'submitted').length,
-    approved:           submissions.filter(s => s.status === 'approved').length,
+    all: submissions.length,
+    submitted: submissions.filter(s => s.status === 'submitted').length,
+    approved: submissions.filter(s => s.status === 'approved').length,
     revision_requested: submissions.filter(s => s.status === 'revision_requested').length,
   };
 
   if (loading) {
+    const loadingContent = (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div key={i} className="bg-white rounded-xl shadow-sm border border-gray-200/50 animate-pulse">
+            <div className="h-40 bg-gray-200 rounded-t-xl" />
+            <div className="p-3 space-y-2">
+              <div className="h-4 bg-gray-200 rounded w-2/3" />
+              <div className="h-3 bg-gray-200 rounded w-3/4" />
+              <div className="h-3 bg-gray-200 rounded w-1/2" />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+
+    if (embedded) {
+      return loadingContent;
+    }
+
     return (
       <AdminLayout title="Creator Submissions Review">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <div key={i} className="bg-white rounded-xl shadow-sm border border-gray-200/50 animate-pulse">
-              <div className="h-40 bg-gray-200 rounded-t-xl" />
-              <div className="p-3 space-y-2">
-                <div className="h-4 bg-gray-200 rounded w-2/3" />
-                <div className="h-3 bg-gray-200 rounded w-3/4" />
-                <div className="h-3 bg-gray-200 rounded w-1/2" />
-              </div>
-            </div>
-          ))}
-        </div>
+        {loadingContent}
       </AdminLayout>
     );
   }
 
-  return (
-    <AdminLayout title="Creator Submissions Review">
-      <div className="space-y-5">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">Creator Submissions</h1>
-            <p className="text-sm text-gray-500 mt-0.5">
-              Content submitted by creators for your review. Click any card to review, pin comments, approve or request revisions.
-            </p>
-          </div>
-          <button
-            onClick={() => fetchSubmissions(true)}
-            disabled={refreshing}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors shadow-sm disabled:opacity-50"
-          >
-            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
+  const content = (
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-gray-900">Creator Submissions</h1>
+          <p className="text-sm text-gray-500 mt-0.5">
+            Content submitted by creators for your review. Click any card to review, pin comments, approve or request revisions.
+          </p>
         </div>
+        <button
+          onClick={() => fetchSubmissions(true)}
+          disabled={refreshing}
+          className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors shadow-sm disabled:opacity-50"
+        >
+          <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+          Refresh
+        </button>
+      </div>
 
-        {/* Filter tabs */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1">
-          {[
-            { key: 'all',                label: 'All' },
-            { key: 'submitted',          label: 'Pending Review' },
-            { key: 'approved',           label: 'Approved' },
-            { key: 'revision_requested', label: 'Revision Requested' },
-          ].map(tab => (
-            <button
-              key={tab.key}
-              onClick={() => setFilterStatus(tab.key)}
-              className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors
+      {/* Filter tabs */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+        {[
+          { key: 'all', label: 'All' },
+          { key: 'submitted', label: 'Pending Review' },
+          { key: 'approved', label: 'Approved' },
+          { key: 'revision_requested', label: 'Revision Requested' },
+        ].map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => setFilterStatus(tab.key)}
+            className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors
                 ${filterStatus === tab.key
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
-            >
-              {tab.label}
-              <span className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-full
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
+          >
+            {tab.label}
+            <span className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-full
                 ${filterStatus === tab.key ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'}`}>
-                {counts[tab.key]}
-              </span>
-            </button>
+              {counts[tab.key]}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {/* Grid */}
+      {filtered.length === 0 ? (
+        <div className="text-center py-20">
+          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Image className="h-8 w-8 text-gray-300" />
+          </div>
+          <h3 className="text-lg font-semibold text-gray-700 mb-1">No submissions found</h3>
+          <p className="text-sm text-gray-400">
+            {filterStatus === 'all'
+              ? 'No content creators have submitted content for admin review yet.'
+              : `No submissions with status "${getStatusConfig(filterStatus).label}".`}
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {filtered.map(submission => (
+            <SubmissionCard
+              key={submission._id}
+              submission={submission}
+              onView={() => setReviewSubmission(submission)}
+              onDelete={handleDeleteSubmission}
+            />
           ))}
         </div>
-
-        {/* Grid */}
-        {filtered.length === 0 ? (
-          <div className="text-center py-20">
-            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Image className="h-8 w-8 text-gray-300" />
-            </div>
-            <h3 className="text-lg font-semibold text-gray-700 mb-1">No submissions found</h3>
-            <p className="text-sm text-gray-400">
-              {filterStatus === 'all'
-                ? 'No content creators have submitted content for admin review yet.'
-                : `No submissions with status "${getStatusConfig(filterStatus).label}".`}
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {filtered.map(submission => (
-              <SubmissionCard
-                key={submission._id}
-                submission={submission}
-                onView={() => setReviewSubmission(submission)}
-                onDelete={handleDeleteSubmission}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+      )}
 
       {/* Full-screen review panel */}
       {reviewSubmission && (
@@ -1428,6 +1434,16 @@ export default function CreatorSubmissionsReview() {
           }}
         />
       )}
+    </div>
+  );
+
+  if (embedded) {
+    return content;
+  }
+
+  return (
+    <AdminLayout title="Creator Submissions Review">
+      {content}
     </AdminLayout>
   );
 }

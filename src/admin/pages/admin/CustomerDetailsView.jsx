@@ -14,6 +14,7 @@ import SchedulePostModal from '../../components/modals/SchedulePostModal';
 import ManualPublishModal from '../../components/modals/ManualPublishModal';
 import SummaryReport from './SummaryReport';
 import CustomerSocialAccounts from './CustomerSocialAccounts';
+import CreatorSubmissionsReview from './CreatorSubmissionsReview';
 import MultiCustomerAnalytics from './MultiCustomerAnalytics';
 import {
   ArrowLeft,
@@ -95,6 +96,7 @@ SocialBadge.displayName = 'SocialBadge';
 const TABS_CONFIG = [
   { id: 'overview', label: 'Overview', icon: LayoutGrid },
   { id: 'portfolio', label: 'Total Posts', icon: Briefcase },
+  { id: 'internal_review', label: 'Internal Review', icon: Layers },
   { id: 'qr', label: 'QR Codes', icon: QrCode },
   { id: 'social', label: 'Social', icon: BarChart3 },
   { id: 'report', label: 'Report', icon: FileText },
@@ -2646,6 +2648,11 @@ function CustomerDetailsView() {
           </div>
         )}
 
+
+        {/* ══════════ TAB: QR CODES ══════════ */}
+        {activeTab === 'internal_review' && (
+          <CreatorSubmissionsReview embedded={true} customerId={id} />
+        )}
 
         {/* ══════════ TAB: QR CODES ══════════ */}
         {activeTab === 'qr' && (

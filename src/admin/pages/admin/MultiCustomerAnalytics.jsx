@@ -447,7 +447,7 @@ function MultiCustomerAnalytics({ embedded = false, customerId = null, accountId
 
   useEffect(() => {
     fetchCustomers();
-  }, [fetchCustomers]);
+  }, []);
 
   useEffect(() => {
     if (!customerId || !customers.length) return;

@@ -1194,7 +1194,7 @@ function CustomerSocialAccounts({ embedded = false, customerId = null }) {
     return () => {
       if (abortControllerRef.current) abortControllerRef.current.abort();
     };
-  }, [fetchData]);
+  }, []);
 
   // Filter customers by search + platform
   const filteredCustomers = useMemo(() => {
@@ -1308,63 +1308,57 @@ function CustomerSocialAccounts({ embedded = false, customerId = null }) {
     }
   };
 
-  const Wrapper = ({ children }) => (
-    embedded ? <>{children}</> : <AdminLayout title="Social Accounts">{children}</AdminLayout>
-  );
-
   // Loading state
   if (loading) {
-    return (
-      <Wrapper>
-        <div className="space-y-4">
-          <div className="bg-white rounded-xl border border-gray-200 p-6 animate-pulse">
-            <div className="h-6 bg-gray-200 rounded w-48 mb-4" />
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              {[...Array(4)].map((_, i) => (
-                <div key={i} className="h-20 bg-gray-100 rounded-xl" />
-              ))}
-            </div>
+    const loadingSkeleton = (
+      <div className="space-y-4">
+        <div className="bg-white rounded-xl border border-gray-200 p-6 animate-pulse">
+          <div className="h-6 bg-gray-200 rounded w-48 mb-4" />
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="h-20 bg-gray-100 rounded-xl" />
+            ))}
           </div>
-          {[...Array(3)].map((_, i) => (
-            <div key={i} className="bg-white rounded-xl border border-gray-200 p-5 animate-pulse">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gray-200 rounded-full" />
-                <div className="flex-1 space-y-2">
-                  <div className="h-4 bg-gray-200 rounded w-40" />
-                  <div className="h-3 bg-gray-200 rounded w-56" />
-                </div>
+        </div>
+        {[...Array(3)].map((_, i) => (
+          <div key={i} className="bg-white rounded-xl border border-gray-200 p-5 animate-pulse">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gray-200 rounded-full" />
+              <div className="flex-1 space-y-2">
+                <div className="h-4 bg-gray-200 rounded w-40" />
+                <div className="h-3 bg-gray-200 rounded w-56" />
               </div>
             </div>
-          ))}
-        </div>
-      </Wrapper>
+          </div>
+        ))}
+      </div>
     );
+    return embedded ? <>{loadingSkeleton}</> : <AdminLayout title="Social Accounts">{loadingSkeleton}</AdminLayout>;
   }
 
   // Error state
   if (error && customers.length === 0) {
-    return (
-      <Wrapper>
-        <div className="flex flex-col items-center justify-center h-96 space-y-4">
-          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
-            <AlertCircle className="h-8 w-8 text-red-500" />
-          </div>
-          <p className="text-lg font-medium text-gray-700">Failed to load social accounts</p>
-          <p className="text-sm text-gray-500">{error}</p>
-          <button
-            onClick={() => fetchData()}
-            className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-medium shadow-md hover:shadow-lg transition-all"
-          >
-            <RefreshCw className="w-4 h-4" />
-            Try Again
-          </button>
+    const errorContent = (
+      <div className="flex flex-col items-center justify-center h-96 space-y-4">
+        <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
+          <AlertCircle className="h-8 w-8 text-red-500" />
         </div>
-      </Wrapper>
+        <p className="text-lg font-medium text-gray-700">Failed to load social accounts</p>
+        <p className="text-sm text-gray-500">{error}</p>
+        <button
+          onClick={() => fetchData()}
+          className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-medium shadow-md hover:shadow-lg transition-all"
+        >
+          <RefreshCw className="w-4 h-4" />
+          Try Again
+        </button>
+      </div>
     );
+    return embedded ? <>{errorContent}</> : <AdminLayout title="Social Accounts">{errorContent}</AdminLayout>;
   }
 
-  return (
-    <Wrapper>
+  const mainContent = (
+    <>
       <div className="space-y-4 sm:space-y-6">
         {/* Stats banner */}
         {!embedded && (
@@ -1591,8 +1585,9 @@ function CustomerSocialAccounts({ embedded = false, customerId = null }) {
           </div>
         </div>
       )}
-    </Wrapper>
+    </>
   );
+  return embedded ? <>{mainContent}</> : <AdminLayout title="Social Accounts">{mainContent}</AdminLayout>;
 }
 
 export default CustomerSocialAccounts;

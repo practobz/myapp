@@ -843,17 +843,21 @@ function CustomerDetailsView() {
   useEffect(() => {
     let intervalId;
     if (id) {
-      fetchCustomer();
-      fetchCalendars();
+      // Run all critical fetches in parallel — no more sequential waterfall
+      Promise.all([
+        fetchCustomer(),
+        fetchCalendars(),
+        fetchScheduledPosts(),
+      ]);
+      // Non-critical fetches that don't block the main view
       fetchCreators();
-      fetchScheduledPosts();
       fetchSocialAccounts();
       fetchSubmissions();
 
-      // Poll for scheduled posts updates every 10 seconds to show real-time states (e.g. processing -> published)
+      // Poll for scheduled posts updates every 30 seconds (reduced from 10s)
       intervalId = setInterval(() => {
         fetchScheduledPosts();
-      }, 10000);
+      }, 30000);
     }
     return () => {
       if (intervalId) clearInterval(intervalId);
@@ -877,12 +881,10 @@ function CustomerDetailsView() {
 
   const fetchCalendars = async () => {
     try {
-      const response = await fetch(`${API_URL}/calendars`);
+      // Use scoped endpoint — only fetches calendars for this customer, not all calendars
+      const response = await fetch(`${API_URL}/calendars/customer/${encodeURIComponent(id)}`);
       if (!response.ok) throw new Error('Failed to fetch calendars');
-      const allCalendars = await response.json();
-
-      // Filter calendars for this customer
-      const customerCalendars = allCalendars.filter(calendar => calendar.customerId === id);
+      const customerCalendars = await response.json();
       setCalendars(customerCalendars);
     } catch (err) {
       console.error('Error fetching calendars:', err);
@@ -908,37 +910,29 @@ function CustomerDetailsView() {
       if (response.ok) {
         const data = await response.json();
         const posts = Array.isArray(data) ? data.filter(p => p.customerId === id) : [];
+        // Show posts immediately — don't block on live metrics
         setScheduledPosts(posts);
 
-        // Fetch live metrics for published posts to resolve the true permalink
+        // Fetch live metrics asynchronously in background (non-blocking)
         const publishedPosts = posts.filter(p => p.status === 'published' || p.publishedAt);
         if (publishedPosts.length > 0) {
-          try {
-            const res = await fetch(`${API_URL}/api/admin/post-metrics/live`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ customerId: id, posts: publishedPosts }),
-            });
-            if (res.ok) {
-              const json = await res.json();
+          fetch(`${API_URL}/api/admin/post-metrics/live`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ customerId: id, posts: publishedPosts }),
+          })
+            .then(res => res.ok ? res.json() : null)
+            .then(json => {
+              if (!json) return;
               const enriched = json.posts || [];
-              setScheduledPosts(currentPosts => {
-                return currentPosts.map(p => {
+              setScheduledPosts(currentPosts =>
+                currentPosts.map(p => {
                   const match = enriched.find(ep => ep._id === p._id);
-                  if (match) {
-                    return {
-                      ...p,
-                      ...match,
-                      instagramPermalink: match.metrics?.permalink || match.instagramPermalink || p.instagramPermalink
-                    };
-                  }
-                  return p;
-                });
-              });
-            }
-          } catch (liveErr) {
-            console.warn('Failed to fetch live metrics in CustomerDetailsView:', liveErr);
-          }
+                  return match ? { ...p, ...match, instagramPermalink: match.metrics?.permalink || match.instagramPermalink || p.instagramPermalink } : p;
+                })
+              );
+            })
+            .catch(liveErr => console.warn('Live metrics fetch failed (non-critical):', liveErr));
         }
       }
     } catch (error) {
@@ -979,7 +973,8 @@ function CustomerDetailsView() {
 
   const fetchSubmissions = async () => {
     try {
-      const response = await fetch(`${API_URL}/api/content-submissions`);
+      // Filter by customerId server-side to avoid fetching all submissions
+      const response = await fetch(`${API_URL}/api/content-submissions?customerId=${encodeURIComponent(id)}`);
       if (response.ok) {
         const data = await response.json();
         setAllSubmissions(Array.isArray(data) ? data : []);
@@ -1937,27 +1932,12 @@ function CustomerDetailsView() {
     fetchSubmissions();
   }, []);
 
-  const handleDeletePortfolioItem = useCallback(async (portfolioId) => {
-    if (!window.confirm('Are you sure you want to delete this portfolio item and all its submissions?')) return;
-    try {
-      const response = await fetch(`${API_URL}/api/content-submissions/assignment/${encodeURIComponent(portfolioId)}`, {
-        method: 'DELETE'
-      });
-      if (response.ok) {
-        fetchSubmissions();
-      } else {
-        alert('Could not delete the portfolio item. Please try again.');
-      }
-    } catch (error) {
-      console.error('Delete portfolio item error:', error);
-      alert('Could not delete the portfolio item. Please check your connection.');
-    }
-  }, [API_URL, fetchSubmissions]);
-
   const handleDeleteVersion = useCallback(async (versionId, portfolioId) => {
     try {
-      await fetch(`${API_URL}/api/content-submissions/${versionId}`, { method: 'DELETE' });
-      fetchSubmissions();
+      const response = await fetch(`${API_URL}/api/content-submissions/${versionId}`, { method: 'DELETE' });
+      if (response.ok) {
+        await fetchSubmissions();
+      }
     } catch (err) {
       console.error('Failed to delete version', err);
     }
@@ -1966,6 +1946,23 @@ function CustomerDetailsView() {
       const newVersions = prev.versions.filter(v => v.id !== versionId);
       return { ...prev, versions: newVersions, totalVersions: newVersions.length };
     });
+  }, [API_URL, fetchSubmissions]);
+
+  const handleDeletePortfolioItem = useCallback(async (portfolioId) => {
+    if (!window.confirm('Are you sure you want to delete this portfolio item and all its versions?')) return;
+    try {
+      const response = await fetch(`${API_URL}/api/content-submissions/assignment/${encodeURIComponent(portfolioId)}`, {
+        method: 'DELETE'
+      });
+      if (response.ok) {
+        await fetchSubmissions();
+      } else {
+        alert('Failed to delete the portfolio item. Please try again.');
+      }
+    } catch (err) {
+      console.error('Delete portfolio item error:', err);
+      alert('Could not delete the portfolio item. Please check your connection.');
+    }
   }, [API_URL, fetchSubmissions]);
 
   const openContentDetail = useCallback(async (item, calendar) => {
@@ -2645,7 +2642,7 @@ function CustomerDetailsView() {
                             <span className="capitalize">{item.platform || '—'}</span>
                             <span>{formatSimpleDate(item.lastUpdated)}</span>
                           </div>
-                          <div className="flex gap-2 mt-3">
+                          <div className="flex gap-2 mt-3 w-full">
                             <button
                               className="flex-1 bg-blue-600 text-white py-1.5 px-2 rounded-lg text-xs font-medium hover:bg-blue-700 transition-colors"
                               onClick={e => {
@@ -2658,12 +2655,12 @@ function CustomerDetailsView() {
                               View Details
                             </button>
                             <button
-                              className="p-1.5 text-red-500 hover:text-red-650 bg-red-50/50 hover:bg-red-50 border border-red-100 rounded-lg transition-colors"
+                              className="p-1.5 bg-red-50 text-red-600 border border-red-100 hover:bg-red-100 rounded-lg transition-colors flex items-center justify-center"
                               onClick={e => {
                                 e.stopPropagation();
                                 handleDeletePortfolioItem(item.id);
                               }}
-                              title="Delete Portfolio"
+                              title="Delete Portfolio Item"
                             >
                               <Trash2 className="h-4 w-4" />
                             </button>

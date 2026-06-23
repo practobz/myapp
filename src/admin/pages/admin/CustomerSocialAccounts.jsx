@@ -1000,8 +1000,8 @@ function AccountCard({ account, customer, onClick, onDisconnect }) {
           <div className="flex justify-between items-center">
             <span className="font-medium text-gray-400">Token Expires:</span>
             <span className={`font-mono ${account.tokenExpiresAt && new Date(account.tokenExpiresAt) < new Date()
-                ? 'text-red-500 font-bold'
-                : 'text-gray-750'
+              ? 'text-red-500 font-bold'
+              : 'text-gray-750'
               }`}>
               {account.tokenExpiresAt
                 ? (new Date(account.tokenExpiresAt) < new Date()
@@ -1111,6 +1111,7 @@ function CustomerSocialAccounts({ embedded = false, customerId = null }) {
   const { currentUser } = useAuth();
   const navigate = useNavigate();
   const abortControllerRef = useRef(null);
+  const isFirstLoadRef = useRef(true);
 
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1138,7 +1139,10 @@ function CustomerSocialAccounts({ embedded = false, customerId = null }) {
       abortControllerRef.current = new AbortController();
 
       if (isRefresh) setIsRefreshing(true);
-      else setLoading(true);
+      else if (isFirstLoadRef.current) {
+        setLoading(true);
+        isFirstLoadRef.current = false;
+      }
       setError('');
 
       try {
@@ -1182,7 +1186,7 @@ function CustomerSocialAccounts({ embedded = false, customerId = null }) {
         setIsRefreshing(false);
       }
     },
-    [apiUrl, currentUser]
+    [apiUrl, currentUser, customerId]
   );
 
   useEffect(() => {

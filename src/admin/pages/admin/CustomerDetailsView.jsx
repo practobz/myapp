@@ -1937,9 +1937,27 @@ function CustomerDetailsView() {
     fetchSubmissions();
   }, []);
 
+  const handleDeletePortfolioItem = useCallback(async (portfolioId) => {
+    if (!window.confirm('Are you sure you want to delete this portfolio item and all its submissions?')) return;
+    try {
+      const response = await fetch(`${API_URL}/api/content-submissions/assignment/${encodeURIComponent(portfolioId)}`, {
+        method: 'DELETE'
+      });
+      if (response.ok) {
+        fetchSubmissions();
+      } else {
+        alert('Could not delete the portfolio item. Please try again.');
+      }
+    } catch (error) {
+      console.error('Delete portfolio item error:', error);
+      alert('Could not delete the portfolio item. Please check your connection.');
+    }
+  }, [API_URL, fetchSubmissions]);
+
   const handleDeleteVersion = useCallback(async (versionId, portfolioId) => {
     try {
       await fetch(`${API_URL}/api/content-submissions/${versionId}`, { method: 'DELETE' });
+      fetchSubmissions();
     } catch (err) {
       console.error('Failed to delete version', err);
     }
@@ -1948,7 +1966,7 @@ function CustomerDetailsView() {
       const newVersions = prev.versions.filter(v => v.id !== versionId);
       return { ...prev, versions: newVersions, totalVersions: newVersions.length };
     });
-  }, []);
+  }, [API_URL, fetchSubmissions]);
 
   const openContentDetail = useCallback(async (item, calendar) => {
     setContentDetailLoading(true);
@@ -2627,17 +2645,29 @@ function CustomerDetailsView() {
                             <span className="capitalize">{item.platform || '—'}</span>
                             <span>{formatSimpleDate(item.lastUpdated)}</span>
                           </div>
-                          <button
-                            className="mt-3 w-full bg-blue-600 text-white py-1.5 px-2 rounded-lg text-xs font-medium hover:bg-blue-700 transition-colors"
-                            onClick={e => {
-                              e.stopPropagation();
-                              const fakeItem = { id: item.id, title: item.title, description: item.title, type: item.platform };
-                              const fakeCal = { customerId: id, name: item.calendarName };
-                              openContentDetail(fakeItem, fakeCal);
-                            }}
-                          >
-                            View Details
-                          </button>
+                          <div className="flex gap-2 mt-3">
+                            <button
+                              className="flex-1 bg-blue-600 text-white py-1.5 px-2 rounded-lg text-xs font-medium hover:bg-blue-700 transition-colors"
+                              onClick={e => {
+                                e.stopPropagation();
+                                const fakeItem = { id: item.id, title: item.title, description: item.title, type: item.platform };
+                                const fakeCal = { customerId: id, name: item.calendarName };
+                                openContentDetail(fakeItem, fakeCal);
+                              }}
+                            >
+                              View Details
+                            </button>
+                            <button
+                              className="p-1.5 text-red-500 hover:text-red-650 bg-red-50/50 hover:bg-red-50 border border-red-100 rounded-lg transition-colors"
+                              onClick={e => {
+                                e.stopPropagation();
+                                handleDeletePortfolioItem(item.id);
+                              }}
+                              title="Delete Portfolio"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     );

@@ -758,6 +758,7 @@ function CustomerDetailsView() {
   const navigate = useNavigate();
   const [customer, setCustomer] = useState(null);
   const [calendars, setCalendars] = useState([]);
+  const [calendarsLoading, setCalendarsLoading] = useState(true);
   const [creators, setCreators] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -881,6 +882,9 @@ function CustomerDetailsView() {
 
   const fetchCalendars = async () => {
     try {
+      if (calendars.length === 0) {
+        setCalendarsLoading(true);
+      }
       // Use scoped endpoint — only fetches calendars for this customer, not all calendars
       const response = await fetch(`${API_URL}/calendars/customer/${encodeURIComponent(id)}`);
       if (!response.ok) throw new Error('Failed to fetch calendars');
@@ -889,6 +893,8 @@ function CustomerDetailsView() {
     } catch (err) {
       console.error('Error fetching calendars:', err);
       setCalendars([]);
+    } finally {
+      setCalendarsLoading(false);
     }
   };
 
@@ -2209,7 +2215,12 @@ function CustomerDetailsView() {
               )}
 
               <div className="p-2 sm:p-3">
-                {calendars.length > 0 ? (
+                {calendarsLoading && calendars.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 gap-3">
+                    <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                    <p className="text-sm text-gray-500">Loading calendars...</p>
+                  </div>
+                ) : calendars.length > 0 ? (
                   <div className="space-y-1">
                     {[...calendars].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)).map((calendar) => {
                       const calStats = getCalendarStats(calendar);

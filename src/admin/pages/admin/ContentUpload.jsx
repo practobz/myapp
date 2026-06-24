@@ -51,10 +51,9 @@ function ContentUpload() {
 
   const creatorEmail = getCreatorEmail();
 
-  // Redirect to login if not authenticated
   useEffect(() => {
     if (!creatorEmail) {
-      navigate('/content-creator/login');
+      navigate('/login');
     }
   }, [creatorEmail, navigate]);
 
@@ -135,9 +134,9 @@ function ContentUpload() {
 
       try {
         console.log('🔍 Fetching previous submissions for assignment:', assignment.id, 'by admin:', creatorEmail);
-        
+
         const response = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions`);
-        
+
         if (!response.ok) {
           console.error('❌ Failed to fetch previous submissions:', response.status);
           setPreviousSubmissionLoaded(true);
@@ -146,11 +145,11 @@ function ContentUpload() {
 
         const data = await response.json();
         console.log('📦 Received submissions data:', data);
-        
+
         // Handle both array response and object with submissions property
         const submissions = Array.isArray(data) ? data : (data.submissions || []);
         console.log('📋 Total submissions count:', submissions.length);
-        
+
         if (submissions.length > 0) {
           console.log('🔍 Sample submission structure:', {
             assignment_id: submissions[0].assignment_id,
@@ -159,30 +158,30 @@ function ContentUpload() {
             hashtags: submissions[0].hashtags?.substring(0, 50)
           });
         }
-        
+
         // Filter submissions for this specific assignment (any creator)
         // Handle various possible field names
         const previousSubmissions = submissions.filter(sub => {
           const subAssignmentId = sub.assignment_id || sub.assignmentId || sub.assignmentID;
-          
-          const matchesAssignment = subAssignmentId === assignment.id || 
-                                   subAssignmentId === assignment._id ||
-                                   String(subAssignmentId) === String(assignment.id);
-          
+
+          const matchesAssignment = subAssignmentId === assignment.id ||
+            subAssignmentId === assignment._id ||
+            String(subAssignmentId) === String(assignment.id);
+
           console.log('🔎 Checking submission:', {
             subAssignmentId,
             assignmentId: assignment.id,
             matchesAssignment,
             creator: sub.created_by || sub.createdBy || sub.creator
           });
-          
+
           return matchesAssignment;
         });
 
         console.log('✅ Found', previousSubmissions.length, 'previous submissions for this assignment (any creator)');
 
         // Sort by date to get the most recent submission
-        previousSubmissions.sort((a, b) => 
+        previousSubmissions.sort((a, b) =>
           new Date(b.created_at || b.createdAt || 0) - new Date(a.created_at || a.createdAt || 0)
         );
 
@@ -194,7 +193,7 @@ function ContentUpload() {
             notes: latestSubmission.notes?.substring(0, 50),
             date: latestSubmission.created_at || latestSubmission.createdAt
           });
-          
+
           // Pre-fill caption and hashtags from previous submission
           if (latestSubmission.caption) {
             setCaption(latestSubmission.caption);
@@ -305,14 +304,14 @@ function ContentUpload() {
     try {
       const fileSizeMB = fileObj.file.size / (1024 * 1024);
       console.log(`📤 Starting upload for ${fileObj.name} (${formatFileSize(fileObj.size)})`);
-      
+
       // Validate file object
       if (!fileObj.file || !fileObj.file.size || fileObj.file.size === 0) {
         throw new Error(`Invalid file: ${fileObj.name} has no content or is corrupted`);
       }
 
       // Update file status to uploading
-      setUploadedFiles(prev => 
+      setUploadedFiles(prev =>
         prev.map(f => f.id === fileObj.id ? { ...f, uploading: true, error: null } : f)
       );
 
@@ -321,7 +320,7 @@ function ContentUpload() {
       // Use signed URL for large files (>=10MB) to bypass Cloud Run's 32MB limit
       if (fileSizeMB >= 10) {
         console.log(`📤 Using signed URL for large file: ${fileObj.name} (${fileSizeMB.toFixed(2)} MB)`);
-        
+
         // Step 1: Get signed URL from backend
         const signedUrlResponse = await fetch(`${process.env.REACT_APP_API_URL}/api/gcs/signed-url`, {
           method: 'POST',
@@ -347,7 +346,7 @@ function ContentUpload() {
         console.log(`📤 Uploading ${fileObj.name} directly to GCS...`);
         const uploadResponse = await fetch(signedUrl, {
           method: 'PUT',
-          headers: { 
+          headers: {
             'Content-Type': fileObj.file.type
           },
           body: fileObj.file  // Send the actual file, not base64
@@ -363,7 +362,7 @@ function ContentUpload() {
       } else {
         // Use base64 upload for small files (<10MB)
         console.log(`📤 Using base64 upload for small file: ${fileObj.name} (${fileSizeMB.toFixed(2)} MB)`);
-        
+
         // Convert file to base64
         const base64Data = await new Promise((resolve, reject) => {
           const reader = new FileReader();
@@ -410,7 +409,7 @@ function ContentUpload() {
 
         const responseData = await uploadResponse.json();
         publicUrl = responseData.publicUrl;
-        
+
         console.log(`✅ Successfully uploaded ${fileObj.name} via base64`);
       }
 
@@ -419,13 +418,13 @@ function ContentUpload() {
       }
 
       // Update file status to uploaded
-      setUploadedFiles(prev => 
-        prev.map(f => f.id === fileObj.id ? { 
-          ...f, 
-          uploading: false, 
-          uploaded: true, 
+      setUploadedFiles(prev =>
+        prev.map(f => f.id === fileObj.id ? {
+          ...f,
+          uploading: false,
+          uploaded: true,
           publicUrl: publicUrl,
-          error: null 
+          error: null
         } : f)
       );
 
@@ -439,14 +438,14 @@ function ContentUpload() {
 
     } catch (error) {
       console.error(`❌ Upload failed for ${fileObj.name}:`, error);
-      
+
       // Update file status to error
-      setUploadedFiles(prev => 
-        prev.map(f => f.id === fileObj.id ? { 
-          ...f, 
-          uploading: false, 
-          uploaded: false, 
-          error: error.message 
+      setUploadedFiles(prev =>
+        prev.map(f => f.id === fileObj.id ? {
+          ...f,
+          uploading: false,
+          uploaded: false,
+          error: error.message
         } : f)
       );
 
@@ -472,7 +471,7 @@ function ContentUpload() {
 
     if (!finalCustomerId || !finalCustomerName) {
       console.error('❌ Missing customer information in assignment');
-      
+
       // Use calendar data as fallback
       finalCustomerId = finalCustomerId || assignment.calendarId || '';
       finalCustomerName = finalCustomerName || assignment.calendarName || 'Unknown Customer';
@@ -480,11 +479,11 @@ function ContentUpload() {
 
     // Additional validation to ensure we have proper customer name
     if (!finalCustomerName || finalCustomerName === 'Unknown Customer') {
-      finalCustomerName = finalCustomerName || 
-                         assignment.customer || 
-                         assignment.client || 
-                         assignment.calendarName || 
-                         'Unknown Customer';
+      finalCustomerName = finalCustomerName ||
+        assignment.customer ||
+        assignment.client ||
+        assignment.calendarName ||
+        'Unknown Customer';
     }
 
     // CRITICAL: Ensure we have valid customer information before proceeding
@@ -583,10 +582,10 @@ function ContentUpload() {
       }
 
       // Additional validation for customer info quality
-      if (submissionData.customer_name === 'Unknown Customer' || 
-          submissionData.customer_name.length < 2 ||
-          !submissionData.customer_id ||
-          submissionData.customer_id.length < 5) {
+      if (submissionData.customer_name === 'Unknown Customer' ||
+        submissionData.customer_name.length < 2 ||
+        !submissionData.customer_id ||
+        submissionData.customer_id.length < 5) {
         console.error('❌ QUALITY CHECK FAILED: Invalid customer information quality');
         alert('Invalid customer information detected. Please refresh the page and try again.');
         setSubmitting(false);
@@ -625,7 +624,11 @@ function ContentUpload() {
       }
 
       alert('Content sent directly to customer successfully! The customer can now review your work.');
-      navigate('/content-creator/assignments');
+      if (assignment?.customerId) {
+        navigate(`/admin/customer-details/${assignment.customerId}`);
+      } else {
+        navigate('/admin/dashboard');
+      }
     } catch (err) {
       console.error('❌ Upload error:', err);
       alert(`Upload failed: ${err.message}. Please try again.`);
@@ -664,10 +667,10 @@ function ContentUpload() {
         <div className="text-center p-8 bg-white rounded-lg shadow-lg">
           <span className="text-lg text-red-600">Assignment not found.</span>
           <button
-            onClick={() => navigate('/content-creator/assignments')}
+            onClick={() => navigate('/admin/dashboard')}
             className="mt-4 px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors"
           >
-            Back to Assignments
+            Back to Dashboard
           </button>
         </div>
       </div>
@@ -682,7 +685,13 @@ function ContentUpload() {
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center">
               <button
-                onClick={() => navigate('/content-creator/assignments')}
+                onClick={() => {
+                  if (assignment?.customerId) {
+                    navigate(`/admin/customer-details/${assignment.customerId}`);
+                  } else {
+                    navigate('/admin/dashboard');
+                  }
+                }}
                 className="mr-4 text-gray-600 hover:text-gray-900 transition-colors"
               >
                 <ArrowLeft className="h-5 w-5" />
@@ -747,13 +756,12 @@ function ContentUpload() {
                 <Upload className="h-5 w-5 mr-2 text-purple-600" />
                 Upload Media
               </h2>
-              
+
               <div
-                className={`relative border-2 border-dashed rounded-lg p-6 text-center transition-all duration-200 ${
-                  dragActive 
-                    ? 'border-purple-400 bg-purple-50 scale-105' 
+                className={`relative border-2 border-dashed rounded-lg p-6 text-center transition-all duration-200 ${dragActive
+                    ? 'border-purple-400 bg-purple-50 scale-105'
                     : 'border-gray-300 hover:border-purple-400 hover:bg-purple-50/50'
-                }`}
+                  }`}
                 onDragEnter={handleDrag}
                 onDragLeave={handleDrag}
                 onDragOver={handleDrag}
@@ -767,7 +775,7 @@ function ContentUpload() {
                   onChange={handleChange}
                   className="hidden"
                 />
-                
+
                 <div className="space-y-3">
                   <div className="flex justify-center space-x-2">
                     <Upload className="h-8 w-8 text-gray-400" />
@@ -803,7 +811,7 @@ function ContentUpload() {
                 <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
                   {uploadedFiles.map((file) => (
                     <div key={file.id} className="relative group">
-                      <div 
+                      <div
                         className="aspect-square rounded-lg overflow-hidden bg-gray-100 ring-2 ring-transparent group-hover:ring-purple-200 transition-all relative cursor-pointer"
                         onClick={() => setSelectedMedia(file)}
                       >
@@ -828,7 +836,7 @@ function ContentUpload() {
                             </div>
                           </div>
                         )}
-                        
+
                         {/* Upload Status Overlay */}
                         {file.uploading && (
                           <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
@@ -838,13 +846,13 @@ function ContentUpload() {
                             </div>
                           </div>
                         )}
-                        
+
                         {file.uploaded && (
                           <div className="absolute top-2 right-2 bg-green-500 text-white rounded-full p-1">
                             <Check className="h-3 w-3" />
                           </div>
                         )}
-                        
+
                         {file.error && (
                           <div className="absolute inset-0 bg-red-500 bg-opacity-50 flex items-center justify-center">
                             <div className="text-white text-center p-2">
@@ -860,23 +868,22 @@ function ContentUpload() {
                           </div>
                         )}
                       </div>
-                      
+
                       <button
                         onClick={() => removeFile(file.id)}
                         className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
                       >
                         <X className="h-3 w-3" />
                       </button>
-                      
+
                       <div className="mt-2">
                         <p className="text-xs font-medium text-gray-900 truncate">{file.name}</p>
                         <div className="flex items-center justify-between">
                           <p className="text-xs text-gray-500">{formatFileSize(file.size)}</p>
-                          <span className={`text-xs px-2 py-1 rounded-full ${
-                            file.type === 'image' 
-                              ? 'bg-green-100 text-green-800' 
+                          <span className={`text-xs px-2 py-1 rounded-full ${file.type === 'image'
+                              ? 'bg-green-100 text-green-800'
                               : 'bg-blue-100 text-blue-800'
-                          }`}>
+                            }`}>
                             {file.type.toUpperCase()}
                           </span>
                         </div>
@@ -901,18 +908,18 @@ function ContentUpload() {
                 <FileText className="h-5 w-5 mr-2 text-purple-600" />
                 Assignment Details
               </h2>
-              
+
               <div className="space-y-3">
                 <div>
                   <h3 className="font-medium text-gray-900">{assignment.title}</h3>
                   <p className="text-sm text-gray-600 mt-1">{assignment.description}</p>
                 </div>
-                
+
                 <div className="flex items-center text-sm text-gray-500">
                   <MapPin className="h-4 w-4 mr-1" />
                   {assignment.customerName}
                 </div>
-                
+
                 <div className="flex items-center text-sm text-gray-500">
                   <Calendar className="h-4 w-4 mr-1" />
                   Due: {assignment.dueDate ? new Date(assignment.dueDate).toLocaleDateString() : 'N/A'}
@@ -940,7 +947,7 @@ function ContentUpload() {
                 <MessageSquare className="h-5 w-5 mr-2 text-purple-600" />
                 Content Details
               </h2>
-              
+
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1021,7 +1028,7 @@ function ContentUpload() {
 
       {/* Media Preview Modal */}
       {selectedMedia && (
-        <div 
+        <div
           className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4"
           onClick={() => setSelectedMedia(null)}
         >
@@ -1033,7 +1040,7 @@ function ContentUpload() {
             >
               <X className="h-8 w-8" />
             </button>
-            
+
             {/* Media Content */}
             <div className="bg-white rounded-lg overflow-hidden shadow-2xl">
               {selectedMedia.type === 'image' ? (
@@ -1050,7 +1057,7 @@ function ContentUpload() {
                   className="max-w-full max-h-[85vh] w-auto h-auto"
                 />
               )}
-              
+
               {/* Media Info */}
               <div className="p-4 bg-gray-50 border-t">
                 <div className="flex items-center justify-between">
@@ -1058,11 +1065,10 @@ function ContentUpload() {
                     <p className="font-medium text-gray-900">{selectedMedia.name}</p>
                     <p className="text-sm text-gray-500">{formatFileSize(selectedMedia.size)}</p>
                   </div>
-                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                    selectedMedia.type === 'image' 
-                      ? 'bg-green-100 text-green-800' 
+                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${selectedMedia.type === 'image'
+                      ? 'bg-green-100 text-green-800'
                       : 'bg-blue-100 text-blue-800'
-                  }`}>
+                    }`}>
                     {selectedMedia.type.toUpperCase()}
                   </span>
                 </div>

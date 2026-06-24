@@ -7,8 +7,10 @@ import {
   AlertCircle, Eye, CheckCircle, Video, ExternalLink, Clock, Filter,
   LayoutGrid, List, Search, X, ChevronRight, FileText, TrendingUp,
   Send, Image, Play, Calendar, User, Sparkles, BarChart3, Download,
-  UserCog, ChevronLeft, Shield
+  UserCog, ChevronLeft, Shield, PlusCircle, ArrowUpCircle
 } from 'lucide-react';
+import ContentReview from './ContentReview';
+
 
 // Helper to get default post URL if missing
 const getDefaultPostUrl = (post) => {
@@ -61,6 +63,158 @@ const isVideoUrl = (url) => {
   return ['mp4', 'webm', 'ogg', 'mov', 'avi'].includes(ext);
 };
 
+// Timeline component showing item lifecycle stages with dates
+const ItemTimeline = ({ item, itemStatus, scheduledPosts = [], submissions = [] }) => {
+  const nowTs = Date.now();
+
+  const matchedPost = scheduledPosts.find(post =>
+    ((post.item_id && post.item_id === item.id) ||
+      (post.contentId && post.contentId === item.id) ||
+      (post.item_name && post.item_name === (item.title || item.description))) &&
+    (post.status === 'published' || post.publishedAt)
+  );
+
+  const fmtDate = (d) => {
+    if (!d) return null;
+    try {
+      const dt = new Date(d);
+      if (isNaN(dt.getTime())) return null;
+      return `${dt.getDate()}/${dt.getMonth() + 1} ${dt.getHours().toString().padStart(2, '0')}:${dt.getMinutes().toString().padStart(2, '0')}`;
+    } catch { return null; }
+  };
+
+  const hasReachedDate = (d) => {
+    if (!d) return false;
+    const dt = new Date(d);
+    if (isNaN(dt.getTime())) return false;
+    return dt.getTime() <= nowTs;
+  };
+
+  // One upload node per submission â€” only shown when actual files were uploaded.
+  // Submissions with no media arrays or video URL are empty stubs and are excluded,
+  // so a brand-new calendar item shows only "Created" in its timeline.
+  const submissionsWithContent = submissions.filter(s => {
+    const media = s.media || s.images || s.files || s.imageUrls || s.mediaUrls || [];
+    const hasMedia = Array.isArray(media) && media.length > 0;
+    const hasVideo = !!(s.videoUrl || s.video_url);
+    return hasMedia || hasVideo;
+  });
+
+  const versionSteps = submissionsWithContent.map((s, idx) => {
+    // Prefer the uploader's name/email. Could be admin (notify_admins) or creator.
+    const uploaderEmail =
+      s.created_by || s.createdBy || s.creator_email ||
+      (Array.isArray(s.notify_admins) && s.notify_admins.length > 0
+        ? (s.notify_admins[0].name || s.notify_admins[0].email)
+        : null) ||
+      '';
+    const label = uploaderEmail
+      ? `V${idx + 1} (${uploaderEmail})`
+      : `V${idx + 1}`;
+    return {
+      key: `v${idx + 1}`,
+      label,
+      done: hasReachedDate(s.created_at || s.createdAt),
+      date: fmtDate(s.created_at || s.createdAt),
+      tone: 'blue',
+    };
+  });
+
+  const customerApprovedSub = submissions.find(s =>
+    s.approved_by_customer === true ||
+    s.status === 'approved_customer' ||
+    s.status === 'approved_both'
+  );
+
+  const isCustomerApproved = !!customerApprovedSub ||
+    itemStatus === 'published' ||
+    item.status === 'published' ||
+    item.published === true ||
+    (item.reviewedAt && submissions.length === 0);
+
+  const customerApprovedAt = customerApprovedSub?.approvedAt ||
+    customerApprovedSub?.updatedAt ||
+    (isCustomerApproved ? (item.reviewedAt || item.publishedAt) : null);
+
+  const customerApprovedDate = fmtDate(customerApprovedAt);
+  const publishedAt = matchedPost?.publishedAt || item.publishedAt;
+
+  // Order: Created â†’ V1 (uploader) â†’ V2 â†’ V3 ... â†’ Approved by Customer â†’ Published
+  const steps = [
+    { key: 'created', label: 'Created', done: hasReachedDate(item.createdAt), date: fmtDate(item.createdAt), tone: 'blue' },
+    ...versionSteps,
+    { key: 'reviewed', label: 'Approved by Customer', done: isCustomerApproved, date: customerApprovedDate, tone: 'green' },
+    { key: 'published', label: 'Published', done: hasReachedDate(publishedAt), date: fmtDate(publishedAt), tone: 'purple' },
+  ];
+
+  const toneClasses = {
+    blue: {
+      dotDone: 'bg-blue-500',
+      dotTodo: 'bg-blue-100',
+      labelDone: 'text-blue-700 font-medium',
+      labelTodo: 'text-blue-350',
+      dateDone: 'text-blue-550',
+      dateTodo: 'text-blue-200',
+      lineDone: 'bg-blue-400',
+      lineTodo: 'bg-blue-100',
+    },
+    orange: {
+      dotDone: 'bg-amber-500',
+      dotTodo: 'bg-amber-100',
+      labelDone: 'text-amber-700 font-medium',
+      labelTodo: 'text-amber-350',
+      dateDone: 'text-amber-550',
+      dateTodo: 'text-amber-200',
+      lineDone: 'bg-amber-400',
+      lineTodo: 'bg-amber-100',
+    },
+    green: {
+      dotDone: 'bg-emerald-500',
+      dotTodo: 'bg-emerald-100',
+      labelDone: 'text-emerald-700 font-medium',
+      labelTodo: 'text-emerald-355',
+      dateDone: 'text-emerald-550',
+      dateTodo: 'text-emerald-200',
+      lineDone: 'bg-emerald-400',
+      lineTodo: 'bg-emerald-100',
+    },
+    purple: {
+      dotDone: 'bg-purple-500',
+      dotTodo: 'bg-purple-100',
+      labelDone: 'text-purple-700 font-medium',
+      labelTodo: 'text-purple-350',
+      dateDone: 'text-purple-555',
+      dateTodo: 'text-purple-200',
+      lineDone: 'bg-purple-400',
+      lineTodo: 'bg-purple-100',
+    },
+  };
+
+  return (
+    <div className="flex items-start mt-3 overflow-x-auto pb-1 max-w-full no-scrollbar">
+      {steps.map((step, idx) => (
+        <React.Fragment key={step.key}>
+          <div className="flex flex-col items-center flex-shrink-0">
+            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${step.done ? (toneClasses[step.tone || 'blue']?.dotDone || 'bg-blue-500') : (toneClasses[step.tone || 'blue']?.dotTodo || 'bg-blue-100')}`} />
+            <span className={`text-[9px] leading-none mt-1.5 whitespace-nowrap ${step.done ? (toneClasses[step.tone || 'blue']?.labelDone || 'text-blue-705 font-semibold') : (toneClasses[step.tone || 'blue']?.labelTodo || 'text-blue-300')}`}>
+              {step.label}
+            </span>
+            <span className={`text-[8px] leading-none mt-1 whitespace-nowrap ${step.date ? (step.done ? (toneClasses[step.tone || 'blue']?.dateDone || 'text-blue-500') : (toneClasses[step.tone || 'blue']?.dateTodo || 'text-blue-200')) : 'text-transparent select-none'}`}>
+              {step.date || 'â€”'}
+            </span>
+          </div>
+          {idx < steps.length - 1 && (
+            <div
+              className={`flex-1 h-px mt-1 mx-1 ${step.done && steps[idx + 1].done ? (toneClasses[steps[idx + 1].tone || 'blue']?.lineDone || 'bg-blue-400') : (toneClasses[steps[idx + 1].tone || 'blue']?.lineTodo || 'bg-blue-100')}`}
+              style={{ minWidth: '12px' }}
+            />
+          )}
+        </React.Fragment>
+      ))}
+    </div>
+  );
+};
+
 function ContentCalendar() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -83,10 +237,8 @@ function ContentCalendar() {
   const [searchTerm, setSearchTerm] = useState('');
   const [viewMode, setViewMode] = useState('list');
 
-  // ── Review comments panel ────────────────────────────────────
-  const [reviewPanel, setReviewPanel] = useState(null);  // item | null
-  const [reviewPanelComments, setReviewPanelComments] = useState([]);
-  const [reviewPanelLoading, setReviewPanelLoading] = useState(false);
+  // â”€â”€ Review comments modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const [reviewItemId, setReviewItemId] = useState(null);
 
   let user = null;
   try { user = JSON.parse(localStorage.getItem('user')); } catch { user = null; }
@@ -213,10 +365,10 @@ function ContentCalendar() {
 
   const filteredItems = statusFilter === 'all' ? allItems : allItems.filter(i => i.status === statusFilter);
   const sortedItems = [...filteredItems].sort((a, b) => {
-    if (statusFilter === 'all') return 0;
-    if (a.status === statusFilter && b.status !== statusFilter) return -1;
-    if (a.status !== statusFilter && b.status === statusFilter) return 1;
-    return 0;
+    // Newest first: prefer createdAt, fall back to scheduled date
+    const aTime = new Date(a.createdAt || a.date || 0).getTime();
+    const bTime = new Date(b.createdAt || b.date || 0).getTime();
+    return bTime - aTime;
   });
 
   const stats = useMemo(() => ({
@@ -237,9 +389,9 @@ function ContentCalendar() {
     );
   }, [sortedItems, searchTerm]);
 
-  // ─────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // DOWNLOAD REPORT
-  // ─────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const downloadReport = () => {
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
@@ -279,7 +431,7 @@ function ContentCalendar() {
       }
     };
 
-    // ── Page 1: Hero header ──────────────────────────────────
+    // â”€â”€ Page 1: Hero header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     drawPageBg();
 
     // Hero band
@@ -317,7 +469,7 @@ function ContentCalendar() {
 
     y = 63;
 
-    // ── Stat cards ───────────────────────────────────────────
+    // â”€â”€ Stat cards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     setFont('bold', 11);
     setColor(C.dark);
     doc.text('Overview', MARGIN, y);
@@ -348,7 +500,7 @@ function ContentCalendar() {
 
     y += cH + 12;
 
-    // ── Progress bar ─────────────────────────────────────────
+    // â”€â”€ Progress bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (stats.total > 0) {
       const pct = stats.published / stats.total;
       const barW = CONTENT_W;
@@ -364,7 +516,7 @@ function ContentCalendar() {
       y += barH + 12;
     }
 
-    // ── Calendar breakdown ───────────────────────────────────
+    // â”€â”€ Calendar breakdown â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (calendars.length > 1) {
       newPageIfNeeded(50);
       setFont('bold', 11); setColor(C.dark);
@@ -393,7 +545,7 @@ function ContentCalendar() {
       y += 8;
     }
 
-    // ── Items table ──────────────────────────────────────────
+    // â”€â”€ Items table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     newPageIfNeeded(30);
 
     // Section header
@@ -445,7 +597,7 @@ function ContentCalendar() {
       doc.text(String(idx + 1), cols[0].x + 2, mid);
 
       // Date
-      let dateLabel = '—';
+      let dateLabel = 'â€”';
       try { dateLabel = new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }); } catch { }
       setColor(C.dark);
       doc.text(dateLabel, cols[1].x + 1, mid);
@@ -460,7 +612,7 @@ function ContentCalendar() {
       doc.text((item.calendarName || '').substring(0, 18), cols[3].x + 1, mid);
 
       // Platforms
-      const plats = (item.publishedPlatforms || []).join(', ').substring(0, 10) || '—';
+      const plats = (item.publishedPlatforms || []).join(', ').substring(0, 10) || 'â€”';
       doc.text(plats, cols[4].x + 1, mid);
 
       // Status pill
@@ -476,7 +628,7 @@ function ContentCalendar() {
 
     y += 10;
 
-    // ── Status breakdown ─────────────────────────────────────
+    // â”€â”€ Status breakdown â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     newPageIfNeeded(65);
     setFont('bold', 11); setColor(C.dark);
     doc.text('Status Breakdown', MARGIN, y); y += 7;
@@ -517,19 +669,19 @@ function ContentCalendar() {
       y += rH + 2;
     });
 
-    // ── Footer on every page ──────────────────────────────────
+    // â”€â”€ Footer on every page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const total = doc.internal.getNumberOfPages();
     for (let p = 1; p <= total; p++) {
       doc.setPage(p);
       hLine(PAGE_H - 14);
       setFont('normal', 7); setColor(C.mid);
-      doc.text('Content Calendar Report  •  Confidential', MARGIN, PAGE_H - 8);
+      doc.text('Content Calendar Report  â€¢  Confidential', MARGIN, PAGE_H - 8);
       doc.text(`Page ${p} of ${total}`, PAGE_W - MARGIN, PAGE_H - 8, { align: 'right' });
     }
 
     doc.save(`content-calendar-report-${now.toISOString().slice(0, 10)}.pdf`);
   };
-  // ─────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center text-gray-500">Loading...</div>;
@@ -571,44 +723,9 @@ function ContentCalendar() {
     return { imageUrl: null, imageUrls: [] };
   };
 
-  const handleOpenReviewPanel = async (item, e) => {
+  const handleOpenReviewPanel = (item, e) => {
     e.stopPropagation();
-    setReviewPanel(item);
-    setReviewPanelLoading(true);
-    setReviewPanelComments([]);
-    try {
-      const res = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions`);
-      if (!res.ok) throw new Error();
-      const all = await res.json();
-      const matching = Array.isArray(all)
-        ? all.filter(sub => {
-          const subId = sub.assignment_id || sub.item_id;
-          if (subId) {
-            return subId === item.id;
-          }
-          const subCalId = sub.calendar_id || sub.calendarId;
-          if (subCalId && item.calendarId && subCalId !== item.calendarId) return false;
-          return sub.item_name && sub.item_name === item.title;
-        })
-        : [];
-      // Sort submissions oldest → newest (version order)
-      matching.sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));
-      const allComments = [];
-      matching.forEach((sub, si) => {
-        (sub.comments || []).forEach(c => {
-          allComments.push({
-            ...c,
-            _versionNumber: si + 1,
-            _submissionId: sub._id,
-          });
-        });
-      });
-      setReviewPanelComments(allComments);
-    } catch {
-      setReviewPanelComments([]);
-    } finally {
-      setReviewPanelLoading(false);
-    }
+    setReviewItemId(item.id);
   };
 
   const handleContentClick = (item) => {
@@ -643,87 +760,11 @@ function ContentCalendar() {
     setSelectedContent({ ...item, publishedPosts: [...scheduledPublishedPosts, ...manualPublishedPosts] });
   };
 
+
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-gray-50 to-slate-100">
-      {/* Header Section */}
-      <div className="bg-white border-b border-gray-200 sticky top-0 z-40">
-        <div className="px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg">
-                <Calendar className="h-6 w-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Content Calendar</h1>
-                <p className="text-sm text-gray-500">Manage and track your content schedule</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              {/* Search */}
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search content..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full sm:w-64 pl-10 pr-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-gray-50 transition-all"
-                />
-                {searchTerm && (
-                  <button onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                    <X className="h-4 w-4" />
-                  </button>
-                )}
-              </div>
-
-              {/* View Toggle */}
-              <div className="hidden sm:flex items-center bg-gray-100 rounded-lg p-1">
-                <button onClick={() => setViewMode('list')} className={`p-2 rounded-md transition-all ${viewMode === 'list' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}>
-                  <List className="h-4 w-4" />
-                </button>
-                <button onClick={() => setViewMode('grid')} className={`p-2 rounded-md transition-all ${viewMode === 'grid' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}>
-                  <LayoutGrid className="h-4 w-4" />
-                </button>
-              </div>
-
-              {/* ── DOWNLOAD REPORT BUTTON ── */}
-              <button
-                onClick={downloadReport}
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white rounded-xl text-sm font-medium shadow-sm transition-all active:scale-95 select-none"
-              >
-                <Download className="h-4 w-4" />
-                <span className="hidden sm:inline">Download Report</span>
-                <span className="sm:hidden">Report</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <div className="px-4 sm:px-6 lg:px-8 py-6">
-        {/* Stats Overview */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-4 mb-6">
-          {[
-            { value: stats.total, label: 'Total Items', icon: <FileText className="h-5 w-5 text-gray-600" />, from: 'from-gray-100', to: 'to-gray-200', text: 'text-gray-900' },
-            { value: stats.published, label: 'Published', icon: <CheckCircle className="h-5 w-5 text-emerald-600" />, from: 'from-emerald-50', to: 'to-green-100', text: 'text-emerald-600' },
-            { value: stats.underReview, label: 'Under Review', icon: <Eye className="h-5 w-5 text-amber-600" />, from: 'from-amber-50', to: 'to-yellow-100', text: 'text-amber-600' },
-            { value: stats.scheduled, label: 'Scheduled', icon: <Clock className="h-5 w-5 text-blue-600" />, from: 'from-blue-50', to: 'to-indigo-100', text: 'text-blue-600' },
-            { value: stats.pending, label: 'Pending', icon: <Clock className="h-5 w-5 text-gray-500" />, from: 'from-gray-50', to: 'to-slate-100', text: 'text-gray-600', hidden: true },
-          ].map((s, i) => (
-            <div key={i} className={`${s.hidden ? 'hidden lg:block' : ''} bg-white rounded-xl p-4 border border-gray-100 shadow-sm hover:shadow-md transition-shadow`}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className={`text-2xl font-bold ${s.text}`}>{s.value}</p>
-                  <p className="text-xs text-gray-500 mt-1">{s.label}</p>
-                </div>
-                <div className={`h-10 w-10 rounded-lg bg-gradient-to-br ${s.from} ${s.to} flex items-center justify-center`}>
-                  {s.icon}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
 
         <div className="flex flex-col lg:flex-row gap-6">
           {/* Sidebar */}
@@ -769,36 +810,76 @@ function ContentCalendar() {
           {/* Main Content */}
           <div className="flex-1 min-w-0">
             {/* Filter Bar */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-2">
-                  <Filter className="h-4 w-4 text-gray-500" />
-                  <span className="text-sm font-medium text-gray-700">Filter by Status:</span>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 px-4 py-2.5 mb-4">
+              <div className="flex items-center gap-2 overflow-x-auto">
+                {/* Filter label */}
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <Filter className="h-3.5 w-3.5 text-gray-500" />
+                  <span className="text-xs font-medium text-gray-600 whitespace-nowrap">Filter by Status:</span>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    { key: 'all', label: 'All', count: stats.total, color: '' },
-                    { key: 'published', label: 'Published', count: stats.published, color: 'emerald' },
-                    { key: 'under_review', label: 'Under Review', count: stats.underReview, color: 'amber' },
-                    { key: 'scheduled', label: 'Scheduled', count: stats.scheduled, color: 'blue' },
-                    { key: 'pending', label: 'Pending', count: stats.pending, color: 'gray' },
-                  ].map(option => (
-                    <button
-                      key={option.key}
-                      onClick={() => setStatusFilter(option.key)}
-                      className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${statusFilter === option.key
-                          ? option.color === 'emerald' ? 'bg-emerald-600 text-white'
-                            : option.color === 'amber' ? 'bg-amber-500 text-white'
-                              : option.color === 'blue' ? 'bg-blue-600 text-white'
-                                : 'bg-gray-800 text-white'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                        }`}
-                    >
-                      {option.label}
-                      <span className={`text-xs px-1.5 py-0.5 rounded-full ${statusFilter === option.key ? 'bg-white/20' : 'bg-gray-200'}`}>{option.count}</span>
+
+                {/* Status pills */}
+                {[
+                  { key: 'all', label: 'All', count: stats.total, color: '' },
+                  { key: 'published', label: 'Published', count: stats.published, color: 'emerald' },
+                  { key: 'under_review', label: 'Under Review', count: stats.underReview, color: 'amber' },
+                  { key: 'scheduled', label: 'Scheduled', count: stats.scheduled, color: 'blue' },
+                  { key: 'pending', label: 'Pending', count: stats.pending, color: 'gray' },
+                ].map(option => (
+                  <button
+                    key={option.key}
+                    onClick={() => setStatusFilter(option.key)}
+                    className={`flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${statusFilter === option.key
+                      ? option.color === 'emerald' ? 'bg-emerald-600 text-white'
+                        : option.color === 'amber' ? 'bg-amber-500 text-white'
+                          : option.color === 'blue' ? 'bg-blue-600 text-white'
+                            : 'bg-gray-800 text-white'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                  >
+                    {option.label}
+                    <span className={`text-[10px] px-1 py-0.5 rounded-full ${statusFilter === option.key ? 'bg-white/20' : 'bg-gray-200'}`}>{option.count}</span>
+                  </button>
+                ))}
+
+                {/* Divider */}
+                <div className="flex-shrink-0 w-px h-5 bg-gray-200 mx-1" />
+
+                {/* Search */}
+                <div className="relative flex-shrink-0">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-36 pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-gray-50 transition-all"
+                  />
+                  {searchTerm && (
+                    <button onClick={() => setSearchTerm('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                      <X className="h-3 w-3" />
                     </button>
-                  ))}
+                  )}
                 </div>
+
+                {/* View Toggle */}
+                <div className="flex-shrink-0 flex items-center bg-gray-100 rounded-lg p-0.5">
+                  <button onClick={() => setViewMode('list')} className={`p-1.5 rounded-md transition-all ${viewMode === 'list' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}>
+                    <List className="h-3.5 w-3.5" />
+                  </button>
+                  <button onClick={() => setViewMode('grid')} className={`p-1.5 rounded-md transition-all ${viewMode === 'grid' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}>
+                    <LayoutGrid className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+
+                {/* Download */}
+                <button
+                  onClick={downloadReport}
+                  className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white rounded-lg text-xs font-medium shadow-sm transition-all active:scale-95 select-none"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  <span> Report</span>
+                </button>
               </div>
             </div>
 
@@ -821,8 +902,8 @@ function ContentCalendar() {
                         )}
                         <div className="absolute top-3 left-3">
                           <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold shadow-sm ${item.status === 'published' ? 'bg-emerald-500 text-white' :
-                              item.status === 'under_review' ? 'bg-amber-500 text-white' :
-                                item.status === 'scheduled' ? 'bg-blue-500 text-white' : 'bg-gray-600 text-white'
+                            item.status === 'under_review' ? 'bg-amber-500 text-white' :
+                              item.status === 'scheduled' ? 'bg-blue-500 text-white' : 'bg-gray-600 text-white'
                             }`}>
                             {item.status === 'published' && <CheckCircle className="h-3 w-3" />}
                             {getStatusLabel(item.status)}
@@ -872,8 +953,8 @@ function ContentCalendar() {
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
                               <div className="flex items-center gap-3">
                                 <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${item.status === 'published' ? 'bg-emerald-100 text-emerald-700' :
-                                    item.status === 'under_review' ? 'bg-amber-100 text-amber-700' :
-                                      item.status === 'scheduled' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
+                                  item.status === 'under_review' ? 'bg-amber-100 text-amber-700' :
+                                    item.status === 'scheduled' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
                                   }`}>
                                   {item.status === 'published' && <CheckCircle className="h-3 w-3" />}
                                   {item.status === 'scheduled' && <Clock className="h-3 w-3" />}
@@ -918,6 +999,12 @@ function ContentCalendar() {
                                 </div>
                               )}
                             </div>
+                            <ItemTimeline
+                              item={item}
+                              itemStatus={item.status}
+                              scheduledPosts={scheduledPosts}
+                              submissions={submissions.filter(sub => { if (sub.reviewType === 'internal') return false; const subId = sub.assignment_id || sub.item_id; if (subId) return subId === item.id; return sub.item_name && sub.item_name === item.title; })}
+                            />
                           </div>
                           <div className="hidden sm:flex items-center">
                             <ChevronRight className="h-5 w-5 text-gray-300 group-hover:text-indigo-500 group-hover:translate-x-1 transition-all" />
@@ -1103,197 +1190,11 @@ function ContentCalendar() {
           </div>
         </div>
       )}
-      {/* ── Review Comments Panel ── */}
-      {reviewPanel && (
-        <>
-          {/* Backdrop */}
-          <div
-            className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50"
-            onClick={() => setReviewPanel(null)}
-          />
-          {/* Side Panel */}
-          <div className="fixed right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl z-50 flex flex-col">
-
-            {/* Panel Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-purple-50 to-indigo-50 flex-shrink-0">
-              <div className="min-w-0 flex-1">
-                <h3 className="text-base font-bold text-gray-900 truncate">{reviewPanel.title || reviewPanel.description || 'Content Review'}</h3>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${reviewPanel.status === 'published' ? 'bg-emerald-100 text-emerald-700' :
-                      reviewPanel.status === 'under_review' ? 'bg-amber-100 text-amber-700' :
-                        reviewPanel.status === 'scheduled' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
-                    }`}>{getStatusLabel(reviewPanel.status)}</span>
-                  {reviewPanel.platform && <span className="text-[10px] text-gray-400 capitalize">{reviewPanel.platform}</span>}
-                </div>
-              </div>
-              <button
-                onClick={() => setReviewPanel(null)}
-                className="ml-3 p-2 rounded-lg hover:bg-white/60 transition-colors flex-shrink-0"
-              >
-                <X className="h-4 w-4 text-gray-500" />
-              </button>
-            </div>
-
-            {/* Legend */}
-            <div className="flex items-center gap-4 px-5 py-2.5 bg-gray-50 border-b border-gray-100 flex-shrink-0">
-              <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">Legend:</span>
-              <div className="flex items-center gap-1">
-                <div className="w-2 h-2 rounded-full bg-purple-500" />
-                <span className="text-[10px] text-gray-500">Internal Review</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <div className="w-2 h-2 rounded-full bg-blue-500" />
-                <span className="text-[10px] text-gray-500">External Review</span>
-              </div>
-            </div>
-
-            {/* Comments body */}
-            <div className="flex-1 overflow-y-auto p-4">
-              {reviewPanelLoading ? (
-                <div className="flex flex-col items-center justify-center h-48">
-                  <div className="animate-spin rounded-full h-8 w-8 border-2 border-purple-200 border-t-purple-600 mb-3" />
-                  <p className="text-sm text-gray-400">Loading comments…</p>
-                </div>
-              ) : reviewPanelComments.filter(c => c.reviewType !== 'internal' && c.authorRole !== 'admin' && c.author !== 'Admin').length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-48 text-center">
-                  <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-3">
-                    <MessageSquare className="h-6 w-6 text-gray-300" />
-                  </div>
-                  <p className="text-sm font-medium text-gray-500">No comments yet</p>
-                  <p className="text-xs text-gray-400 mt-1">Comments added during review will appear here</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {(() => {
-                    const byVersion = {};
-                    reviewPanelComments
-                      .filter(c => c.reviewType !== 'internal' && c.authorRole !== 'admin' && c.author !== 'Admin')
-                      .forEach(c => {
-                        const key = c._versionNumber || 1;
-                        if (!byVersion[key]) byVersion[key] = [];
-                        byVersion[key].push(c);
-                      });
-                    return Object.keys(byVersion).sort((a, b) => Number(a) - Number(b)).map(vn => (
-                      <div key={vn}>
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Version {vn}</span>
-                          <div className="flex-1 h-px bg-gray-100" />
-                          <span className="text-[10px] text-gray-400">{byVersion[vn].length} comment{byVersion[vn].length !== 1 ? 's' : ''}</span>
-                        </div>
-                        <div className="space-y-2">
-                          {byVersion[vn].map((comment, idx) => {
-                            const isInternal = comment.reviewType === 'internal' || comment.authorRole === 'admin' || comment.author === 'Admin';
-                            const isDone = comment.done || comment.status === 'completed';
-                            return (
-                              <div
-                                key={comment.id || `${vn}-${idx}`}
-                                className={`rounded-xl border overflow-hidden ${isDone ? 'bg-emerald-50/60 border-emerald-100' :
-                                    isInternal ? 'bg-purple-50/60 border-purple-100' :
-                                      'bg-blue-50/60   border-blue-100'
-                                  }`}
-                              >
-                                <div className="p-3">
-                                  {/* Header row */}
-                                  <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                                    <span
-                                      className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 text-white"
-                                      style={{ background: isInternal ? '#7c3aed' : '#3b82f6' }}
-                                    >
-                                      {idx + 1}
-                                    </span>
-                                    <span className={`inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full ${isInternal ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
-                                      }`}>
-                                      {isInternal
-                                        ? <><UserCog className="h-2 w-2" />&nbsp;Internal Review</>
-                                        : <><User className="h-2 w-2" />&nbsp;External Review</>
-                                      }
-                                    </span>
-                                    {isDone && (
-                                      <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 ml-auto">
-                                        <CheckCircle className="h-2 w-2" />&nbsp;Done
-                                      </span>
-                                    )}
-                                    {(comment.mediaIndex !== undefined && comment.mediaIndex > 0) && (
-                                      <span className="text-[9px] text-gray-400 ml-auto">Media {comment.mediaIndex + 1}</span>
-                                    )}
-                                  </div>
-                                  {/* Comment text */}
-                                  <p className="text-xs text-gray-800 leading-relaxed break-words">
-                                    {comment.message || comment.comment}
-                                  </p>
-                                  {/* Author + timestamp */}
-                                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                                    {(comment.author || comment.authorName || comment.authorEmail) && (
-                                      <span className="text-[9px] text-gray-400 truncate">
-                                        — {comment.authorName || comment.author || comment.authorEmail}
-                                      </span>
-                                    )}
-                                    {comment.timestamp && (
-                                      <span className="text-[9px] text-gray-400 ml-auto">
-                                        {new Date(comment.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                                      </span>
-                                    )}
-                                  </div>
-                                  {/* Admin reply */}
-                                  {comment.adminReply && (
-                                    <div className="mt-2 p-2 bg-purple-50 border border-purple-200 rounded-lg">
-                                      <div className="flex items-center gap-1 mb-0.5">
-                                        <UserCog className="h-2.5 w-2.5 text-purple-600" />
-                                        <span className="text-[10px] font-bold text-purple-700">{comment.adminReply.adminName || 'Admin'}</span>
-                                      </div>
-                                      <p className="text-[10px] text-gray-700 break-words">{comment.adminReply.text}</p>
-                                    </div>
-                                  )}
-                                  {/* Creator reply */}
-                                  {comment.reply && (
-                                    <div className="mt-2 p-2 bg-indigo-50 border border-indigo-200 rounded-lg">
-                                      <div className="flex items-center gap-1 mb-0.5">
-                                        <User className="h-2.5 w-2.5 text-indigo-600" />
-                                        <span className="text-[10px] font-bold text-indigo-700">{comment.reply.creatorName || 'Creator'}</span>
-                                      </div>
-                                      <p className="text-[10px] text-gray-700 break-words">{comment.reply.text}</p>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ));
-                  })()}
-                </div>
-              )}
-            </div>
-
-            {/* Panel Footer */}
-            <div className="px-5 py-4 border-t border-gray-100 bg-gray-50 flex items-center justify-between flex-shrink-0">
-              <div className="text-xs text-gray-500">
-                {(() => {
-                  const visibleComments = reviewPanelComments.filter(c => c.reviewType !== 'internal' && c.authorRole !== 'admin' && c.author !== 'Admin');
-                  return visibleComments.length > 0 && (
-                    <>
-                      <span className="font-semibold text-gray-700">{visibleComments.length}</span>{' '}
-                      comment{visibleComments.length !== 1 ? 's' : ''}
-                      {visibleComments.filter(c => c.done || c.status === 'completed').length > 0 && (
-                        <span className="ml-2 text-emerald-600 font-medium">
-                          · {visibleComments.filter(c => c.done || c.status === 'completed').length} resolved
-                        </span>
-                      )}
-                    </>
-                  );
-                })()}
-              </div>
-              <button
-                onClick={() => { setReviewPanel(null); navigate(`/customer/content-review?itemId=${reviewPanel.id}`); }}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold rounded-lg transition-colors shadow-sm"
-              >
-                <MessageSquare className="h-3.5 w-3.5" />
-                Open Full Review
-              </button>
-            </div>
-          </div>
-        </>
+      {reviewItemId && (
+        <ContentReview
+          itemId={reviewItemId}
+          onClose={() => setReviewItemId(null)}
+        />
       )}
     </div>
   );

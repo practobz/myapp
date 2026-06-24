@@ -1322,7 +1322,7 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
                               <img
                                 src={currentMedia.url}
                                 alt=""
-                                className="max-w-full h-auto max-h-[45vh] rounded-lg shadow border border-gray-200 object-contain cursor-crosshair"
+                                className="max-w-full h-auto max-h-[60vh] rounded-lg shadow border border-gray-200 object-contain cursor-crosshair"
                                 onClick={handleImageClickWithReposition}
                                 onLoad={handleImageLoad}
                               />
@@ -1345,7 +1345,7 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
                                   src={videoCompatibleUrl || currentMedia.url}
                                   controls
                                   playsInline
-                                  className="rounded-lg shadow border border-gray-200 bg-black max-w-full h-auto max-h-[45vh] object-contain"
+                                  className="rounded-lg shadow border border-gray-200 bg-black max-w-full h-auto max-h-[60vh] object-contain"
                                   style={{ display: 'block', width: '100%' }}
                                   onLoadStart={() => setVideoLoading(true)}
                                   onLoadedMetadata={(e) => {
@@ -1485,7 +1485,7 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
 
               {/* Caption, Hashtags & Notes card */}
               {currentVersion && (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="flex flex-col gap-3">
                   <div className="bg-white rounded-xl p-3 border border-gray-200/50 shadow-sm">
                     <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Caption</label>
                     <p className="text-gray-855 text-xs leading-relaxed whitespace-pre-wrap">{currentVersion.caption || 'No caption'}</p>

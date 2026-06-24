@@ -345,7 +345,30 @@ function ContentCalendar() {
         const postsRes = await fetch(`${process.env.REACT_APP_API_URL}/api/scheduled-posts`);
         let postsData = await postsRes.json();
         if (!Array.isArray(postsData)) postsData = [];
-        setScheduledPosts(postsData.filter(p => p.customerId === customerId));
+        const filteredPosts = postsData.filter(p => p.customerId === customerId);
+        setScheduledPosts(filteredPosts);
+
+        // Fetch live metrics in background to enrich permalinks
+        const publishedPosts = filteredPosts.filter(p => p.status === 'published' || p.publishedAt);
+        if (publishedPosts.length > 0) {
+          fetch(`${process.env.REACT_APP_API_URL}/api/admin/post-metrics/live`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ customerId, posts: publishedPosts }),
+          })
+            .then(res => res.ok ? res.json() : null)
+            .then(json => {
+              if (!json) return;
+              const enriched = json.posts || [];
+              setScheduledPosts(currentPosts =>
+                currentPosts.map(p => {
+                  const match = enriched.find(ep => ep._id === p._id);
+                  return match ? { ...p, ...match, instagramPermalink: match.metrics?.permalink || match.instagramPermalink || p.instagramPermalink } : p;
+                })
+              );
+            })
+            .catch(liveErr => console.warn('Live metrics fetch failed (non-critical):', liveErr));
+        }
 
         const submissionsRes = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions`);
         let submissionsData = await submissionsRes.json();

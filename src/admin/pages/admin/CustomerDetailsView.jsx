@@ -1637,8 +1637,12 @@ function CustomerDetailsView() {
       }
 
       const now = new Date().toISOString();
+      const generatedItemId = item.id || (typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`);
       const itemWithTimestamp = {
         ...item,
+        id: generatedItemId,
         createdAt: item.createdAt || now,
         assignedAt: item.assignedAt || (item.assignedTo ? now : undefined),
       };

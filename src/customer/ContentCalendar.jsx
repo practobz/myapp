@@ -12,17 +12,86 @@ import {
 import ContentReview from './ContentReview';
 
 
-// Helper to get default post URL if missing
-const getDefaultPostUrl = (post) => {
-  if (post.postUrl) return post.postUrl;
-  if (!post.platform || !post.postId) return null;
-  switch (post.platform) {
-    case 'instagram': return `https://www.instagram.com/p/${post.postId}`;
-    case 'facebook': return `https://www.facebook.com/${post.postId}`;
-    case 'linkedin': return `https://www.linkedin.com/feed/update/${post.postId}`;
-    case 'youtube': return `https://www.youtube.com/watch?v=${post.postId}`;
-    default: return null;
+// Helper to validate ID values
+const isIdValid = (id) => id && id !== 'null' && id !== 'undefined' && id !== 'none' && id !== 'N/A';
+
+// Convert Instagram Media ID to shortcode URL
+const instagramMediaIdToUrl = (mediaId, postType) => {
+  if (!mediaId) return null;
+  const type = (postType || '').toLowerCase();
+  if (type === 'story') return null;
+  try {
+    const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+    let shortcode = '';
+    let n = BigInt(String(mediaId));
+    while (n > 0n) {
+      shortcode = ALPHABET[Number(n % 64n)] + shortcode;
+      n = n / 64n;
+    }
+    if (!shortcode) return null;
+    const path = type === 'reel' ? 'reel' : 'p';
+    return `https://www.instagram.com/${path}/${shortcode}/`;
+  } catch {
+    return null;
   }
+};
+
+// Helper to get published post URL across all platforms
+const getPostPublishedUrl = (post, item) => {
+  if (!post) return null;
+
+  // 1. Manual Platform URLs
+  if (post.isManualPublish && item?.manualPlatformUrls) {
+    const platformKey = Object.keys(item.manualPlatformUrls).find(
+      k => k.toLowerCase() === post.platform?.toLowerCase()
+    );
+    if (platformKey) {
+      const url = item.manualPlatformUrls[platformKey];
+      if (url && isIdValid(url)) return url;
+    }
+  }
+
+  // 2. Direct postUrl / postId from the post object
+  if (post.postUrl && isIdValid(post.postUrl)) return post.postUrl;
+
+  // 3. Platform specific IDs
+  if (post.platform === 'facebook' && isIdValid(post.facebookPostId) && !post.facebookPostId.startsWith('fb_shared_from_')) {
+    const fbId = post.facebookPostId;
+    return fbId.includes('_')
+      ? `https://www.facebook.com/permalink.php?story_fbid=${fbId.split('_')[1]}&id=${fbId.split('_')[0]}`
+      : `https://www.facebook.com/${fbId}`;
+  }
+
+  if (post.platform === 'instagram') {
+    if (isIdValid(post.instagramPostId)) {
+      const igUrl = post.instagramPermalink || instagramMediaIdToUrl(post.instagramPostId, post.postType);
+      const isLiveButUnavailable = post.metricsSource === 'live' && !post.instagramPermalink;
+      if (igUrl && !isLiveButUnavailable) return igUrl;
+    } else if (isIdValid(post.instagramPermalink)) {
+      return post.instagramPermalink;
+    }
+  }
+
+  if (post.platform === 'youtube' && isIdValid(post.youtubePostId)) {
+    return `https://www.youtube.com/watch?v=${post.youtubePostId}`;
+  }
+
+  if (post.platform === 'linkedin' && isIdValid(post.linkedinPostId)) {
+    return `https://www.linkedin.com/feed/update/${post.linkedinPostId}`;
+  }
+
+  // Fallback to basic platform URLs
+  if (post.platform && post.postId) {
+    switch (post.platform) {
+      case 'instagram': return `https://www.instagram.com/p/${post.postId}`;
+      case 'facebook': return `https://www.facebook.com/${post.postId}`;
+      case 'linkedin': return `https://www.linkedin.com/feed/update/${post.postId}`;
+      case 'youtube': return `https://www.youtube.com/watch?v=${post.postId}`;
+      default: return null;
+    }
+  }
+
+  return null;
 };
 
 const getPlatformIcon = (platform) => {
@@ -1160,7 +1229,7 @@ function ContentCalendar() {
                         {selectedContent.publishedPosts.length} post{selectedContent.publishedPosts.length !== 1 ? 's' : ''}
                       </span>
                     </div>
-                    <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {selectedContent.publishedPosts.map((post, idx) => (
                         <div key={post._id || idx} className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
                           <div className="px-4 py-3 bg-gradient-to-r from-gray-50 to-slate-50 border-b border-gray-100">
@@ -1174,8 +1243,8 @@ function ContentCalendar() {
                                   <p className="text-xs text-gray-500 capitalize">{post.platform}</p>
                                 </div>
                               </div>
-                              {getDefaultPostUrl(post) && (
-                                <a href={getDefaultPostUrl(post)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-3 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium">
+                              {getPostPublishedUrl(post, selectedContent) && (
+                                <a href={getPostPublishedUrl(post, selectedContent)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-3 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium">
                                   <span>View Post</span><ExternalLink className="h-3.5 w-3.5" />
                                 </a>
                               )}
@@ -1215,12 +1284,12 @@ function ContentCalendar() {
                                 </div>
                               </div>
                             ) : post.imageUrl && isVideoUrl(post.imageUrl) ? (
-                              <div className="mb-4 rounded-lg overflow-hidden bg-gray-900">
-                                <video src={post.imageUrl} controls className="w-full max-h-72 object-contain" />
+                              <div className="mb-4 rounded-lg overflow-hidden bg-black flex items-center justify-center h-44">
+                                <video src={post.imageUrl} controls className="max-w-full max-h-full object-contain" />
                               </div>
                             ) : post.imageUrl ? (
-                              <div className="mb-4 rounded-lg overflow-hidden">
-                                <img src={post.imageUrl} alt="Post content" className="w-full max-h-72 object-cover" />
+                              <div className="mb-4 rounded-lg overflow-hidden bg-gray-50 border border-gray-100 flex items-center justify-center h-44">
+                                <img src={post.imageUrl} alt="Post content" className="max-w-full max-h-full object-contain" />
                               </div>
                             ) : null}
                             {post.caption && <div className="mb-4"><p className="text-sm text-gray-700 bg-gray-50 p-3 rounded-lg border border-gray-100">{post.caption}</p></div>}

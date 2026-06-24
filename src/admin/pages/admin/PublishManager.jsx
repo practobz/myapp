@@ -482,21 +482,25 @@ function PublishManager({ embedded = false, customerId = null }) {
   }, [fetchData, isRefreshing]);
 
   // Check if item is published (either manually or via scheduled post)
-  const isItemPublished = useCallback((item) => {
+  const isItemPublished = useCallback((item, calendarId = null) => {
     // Check manual publish flag
     if (item.published === true) return true;
 
     // Check scheduled posts
-    return scheduledPosts.some(post =>
-      ((post.item_id && post.item_id === item.id) ||
+    return scheduledPosts.some(post => {
+      if (calendarId) {
+        const postCalId = post.calendarId || post.calendar_id;
+        if (postCalId && postCalId !== calendarId) return false;
+      }
+      return ((post.item_id && post.item_id === item.id) ||
         (post.contentId && post.contentId === item.id) ||
         (post.item_name && post.item_name === item.title)) &&
-      (post.status === 'published' || post.publishedAt)
-    );
+        (post.status === 'published' || post.publishedAt);
+    });
   }, [scheduledPosts]);
 
   // Get published platforms for an item
-  const getPublishedPlatforms = useCallback((item) => {
+  const getPublishedPlatforms = useCallback((item, calendarId = null) => {
     const platforms = new Set();
 
     // From manual publish
@@ -506,12 +510,16 @@ function PublishManager({ embedded = false, customerId = null }) {
 
     // From scheduled posts
     scheduledPosts
-      .filter(post =>
-        ((post.item_id && post.item_id === item.id) ||
+      .filter(post => {
+        if (calendarId) {
+          const postCalId = post.calendarId || post.calendar_id;
+          if (postCalId && postCalId !== calendarId) return false;
+        }
+        return ((post.item_id && post.item_id === item.id) ||
           (post.contentId && post.contentId === item.id) ||
           (post.item_name && post.item_name === item.title)) &&
-        (post.status === 'published' || post.publishedAt)
-      )
+          (post.status === 'published' || post.publishedAt);
+      })
       .forEach(post => {
         if (post.platform) platforms.add(post.platform);
       });
@@ -526,10 +534,12 @@ function PublishManager({ embedded = false, customerId = null }) {
       // Match by calendar and item ID
       if (sub.calendar_id === calendarId && sub.assignment_id === item.id) return true;
       if (sub.calendarId === calendarId && sub.assignmentId === item.id) return true;
-      // Match by item title/name
-      if (sub.assignment_title === item.title || sub.item_name === item.title) return true;
-      // Match by customer and approximate title
-      if ((sub.customer_id === customerId || sub.customerId === customerId) &&
+      // Match by item title/name within the same calendar
+      if ((sub.calendar_id === calendarId || sub.calendarId === calendarId) &&
+        (sub.assignment_title === item.title || sub.item_name === item.title)) return true;
+      // Match by customer and approximate title within the same calendar
+      if ((sub.calendar_id === calendarId || sub.calendarId === calendarId) &&
+        (sub.customer_id === customerId || sub.customerId === customerId) &&
         sub.assignment_title && item.title &&
         sub.assignment_title.toLowerCase().includes(item.title.toLowerCase())) return true;
       return false;
@@ -559,8 +569,8 @@ function PublishManager({ embedded = false, customerId = null }) {
         calendarId: calendar._id,
         calendarName: calendar.name,
         customerName: calendar.customerName || '',
-        isPublished: isItemPublished(item),
-        publishedPlatforms: getPublishedPlatforms(item),
+        isPublished: isItemPublished(item, calendar._id),
+        publishedPlatforms: getPublishedPlatforms(item, calendar._id),
         // Add media from submissions
         submissionMedia: getMediaForItem(item, calendar._id, calendar.customerId)
       }));

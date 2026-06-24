@@ -45,6 +45,7 @@ function Dashboard() {
               allItems.push({
                 ...item,
                 calendarName: calendar.name || '',
+                calendarId: calendar._id || calendar.id,
                 id: item.id || item._id || Math.random().toString(36).slice(2),
                 creator: item.assignedToName || item.assignedTo || calendar.assignedToName || calendar.assignedTo || '',
               });
@@ -77,19 +78,23 @@ function Dashboard() {
         // Helper: check if item is published (via scheduled posts OR manual publish)
         const isItemPublished = (item) => {
           if (item.published === true) return true;
-          return customerPosts.some(post =>
-            (post.item_id && post.item_id === item.id) ||
-            (post.contentId && post.contentId === item.id) ||
-            (post.item_name && post.item_name === item.title)
-          );
+          return customerPosts.some(post => {
+            const postCalId = post.calendarId || post.calendar_id;
+            if (postCalId && item.calendarId && postCalId !== item.calendarId) return false;
+            return (post.item_id && post.item_id === item.id) ||
+              (post.contentId && post.contentId === item.id) ||
+              (post.item_name && post.item_name === item.title);
+          });
         };
         // Helper: check if item has a submission (content uploaded for review)
         const hasContentSubmitted = (item) =>
-          customerSubmissions.some(sub =>
-            (sub.item_id && sub.item_id === item.id) ||
-            (sub.assignment_id && sub.assignment_id === item.id) ||
-            (sub.item_name && sub.item_name === item.title)
-          );
+          customerSubmissions.some(sub => {
+            const subCalId = sub.calendarId || sub.calendar_id;
+            if (subCalId && item.calendarId && subCalId !== item.calendarId) return false;
+            return (sub.item_id && sub.item_id === item.id) ||
+              (sub.assignment_id && sub.assignment_id === item.id) ||
+              (sub.item_name && sub.item_name === item.title);
+          });
         // --- End ---
 
         // Stats calculation

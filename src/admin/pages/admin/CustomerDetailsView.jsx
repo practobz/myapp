@@ -1122,16 +1122,20 @@ function CustomerDetailsView() {
 
   // ── Publish Manager helpers ───────────────────────────────────────────────
   // Check if item is published (manual or via scheduled post)
-  const isItemPublished = useCallback((item) => {
+  const isItemPublished = useCallback((item, calendarId = null) => {
     // Check manual publish flag
     if (item.published === true) return true;
     // Check scheduled posts
-    return scheduledPosts.some(post =>
-      ((post.item_id && post.item_id === item.id) ||
+    return scheduledPosts.some(post => {
+      if (calendarId) {
+        const postCalId = post.calendarId || post.calendar_id;
+        if (postCalId && postCalId !== calendarId) return false;
+      }
+      return ((post.item_id && post.item_id === item.id) ||
         (post.contentId && post.contentId === item.id) ||
         (post.item_name && post.item_name === (item.title || item.description))) &&
-      (post.status === 'published' || post.publishedAt)
-    );
+        (post.status === 'published' || post.publishedAt);
+    });
   }, [scheduledPosts]);
 
   const togglePmCalendar = useCallback((calId) => {
@@ -1143,7 +1147,7 @@ function CustomerDetailsView() {
   }, []);
 
   const handleMarkPublished = useCallback(async (calendarId, item) => {
-    const newState = !isItemPublished(item);
+    const newState = !isItemPublished(item, calendarId);
     try {
       const res = await fetch(`${API_URL}/calendars/item/${calendarId}/publish`, {
         method: 'PUT',
@@ -1167,7 +1171,7 @@ function CustomerDetailsView() {
     return calendars.map(cal => {
       const items = (cal.contentItems || []).map(item => ({
         ...item,
-        isPublished: isItemPublished(item),
+        isPublished: isItemPublished(item, cal._id),
         calendarId: cal._id,
       }));
       const filtered = pmFilter === 'published' ? items.filter(i => i.isPublished)
@@ -1314,7 +1318,7 @@ function CustomerDetailsView() {
       const cal = calendars.find(c => c._id === calId);
       if (!cal?.contentItems) return;
       cal.contentItems.forEach((item, index) => {
-        if (isItemPublished(item)) {
+        if (isItemPublished(item, cal._id)) {
           const itemKey = item.id || `${cal._id}_${index}`;
           fetchPostTrend(itemKey, item);
         }
@@ -1366,7 +1370,7 @@ function CustomerDetailsView() {
         if (ci) {
           calendarName = calendarName || cal.name;
           itemName = itemName || ci.title || ci.description;
-          publishedStatus = isItemPublished(ci);
+          publishedStatus = isItemPublished(ci, cal._id);
           break;
         }
       }
@@ -1410,12 +1414,12 @@ function CustomerDetailsView() {
   // Check if all items in a calendar are published
   const isCalendarPublished = useCallback((calendar) => {
     if (!calendar.contentItems || calendar.contentItems.length === 0) return false;
-    return calendar.contentItems.every(item => isItemPublished(item));
+    return calendar.contentItems.every(item => isItemPublished(item, calendar._id));
   }, [isItemPublished]);
 
   // Get item status with published check
-  const getItemStatus = useCallback((item) => {
-    if (isItemPublished(item)) return 'published';
+  const getItemStatus = useCallback((item, calendarId = null) => {
+    if (isItemPublished(item, calendarId)) return 'published';
     return item.status || 'pending';
   }, [isItemPublished]);
 
@@ -1433,7 +1437,7 @@ function CustomerDetailsView() {
     if (calendar.contentItems) {
       calendar.contentItems.forEach(item => {
         total++;
-        if (isItemPublished(item)) {
+        if (isItemPublished(item, calendar._id)) {
           published++;
         } else {
           pending++;
@@ -1449,11 +1453,15 @@ function CustomerDetailsView() {
 
         // Calculate review counts from submissions
         const itemTitle = item.title || item.description;
-        const itemSubmissions = allSubmissions.filter(s =>
-          (s.assignment_id && s.assignment_id === item.id) ||
-          (s.item_id && s.item_id === item.id) ||
-          (s.item_name && s.item_name === itemTitle)
-        );
+        const itemSubmissions = allSubmissions.filter(s => {
+          const sCalId = s.calendar_id || s.calendarId;
+          if (sCalId && sCalId !== calendar._id) return false;
+          const sCustId = s.customer_id || s.customerId;
+          if (sCustId && sCustId !== (calendar.customerId || id)) return false;
+          return (s.assignment_id && s.assignment_id === item.id) ||
+            (s.item_id && s.item_id === item.id) ||
+            (s.item_name && s.item_name === itemTitle);
+        });
 
         if (itemSubmissions && itemSubmissions.length > 0) {
           const sorted = [...itemSubmissions].sort((a, b) => new Date(a.created_at || a.createdAt) - new Date(b.created_at || b.createdAt));
@@ -1505,7 +1513,7 @@ function CustomerDetailsView() {
     calendars.forEach(cal => {
       cal.contentItems?.forEach(item => {
         totalItems++;
-        const isPublished = isItemPublished(item);
+        const isPublished = isItemPublished(item, cal._id);
         if (isPublished) {
           publishedItems++;
         } else {
@@ -1521,11 +1529,15 @@ function CustomerDetailsView() {
 
         // Calculate review counts from submissions
         const itemTitle = item.title || item.description;
-        const itemSubmissions = allSubmissions.filter(s =>
-          (s.assignment_id && s.assignment_id === item.id) ||
-          (s.item_id && s.item_id === item.id) ||
-          (s.item_name && s.item_name === itemTitle)
-        );
+        const itemSubmissions = allSubmissions.filter(s => {
+          const sCalId = s.calendar_id || s.calendarId;
+          if (sCalId && sCalId !== cal._id) return false;
+          const sCustId = s.customer_id || s.customerId;
+          if (sCustId && sCustId !== (cal.customerId || id)) return false;
+          return (s.assignment_id && s.assignment_id === item.id) ||
+            (s.item_id && s.item_id === item.id) ||
+            (s.item_name && s.item_name === itemTitle);
+        });
 
         if (itemSubmissions && itemSubmissions.length > 0) {
           const sorted = [...itemSubmissions].sort((a, b) => new Date(a.created_at || a.createdAt) - new Date(b.created_at || b.createdAt));
@@ -2081,18 +2093,20 @@ function CustomerDetailsView() {
     setContentDetailLoading(true);
     setSelectedContentDetail({ _loading: true });
     try {
-      const res = await fetch(`${API_URL}/api/content-submissions`);
+      const res = await fetch(`${API_URL}/api/content-submissions?customerId=${encodeURIComponent(calendar.customerId || id)}`);
       if (res.ok) {
         const submissionsData = await res.json();
         const allSubmissions = Array.isArray(submissionsData) ? submissionsData : [];
         const itemId = item.id;
         const itemTitle = item.title || item.description;
         const matching = allSubmissions
-          .filter(s =>
-            (s.assignment_id && s.assignment_id === itemId) ||
-            (s.item_name && s.item_name === itemTitle) ||
-            (s.item_id && s.item_id === itemId)
-          )
+          .filter(s => {
+            const sCalId = s.calendar_id || s.calendarId;
+            if (sCalId && sCalId !== calendar._id) return false;
+            return (s.assignment_id && s.assignment_id === itemId) ||
+              (s.item_name && s.item_name === itemTitle) ||
+              (s.item_id && s.item_id === itemId);
+          })
           .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
         const normalizeMedia = (media) => {
           if (!Array.isArray(media)) return [];
@@ -2486,11 +2500,15 @@ function CustomerDetailsView() {
                                     // Filter submissions for this item (for version nodes in timeline)
                                     const itemTitle = item.title || item.description;
                                     const itemSubmissions = allSubmissions
-                                      .filter(s =>
-                                        (s.assignment_id && s.assignment_id === item.id) ||
-                                        (s.item_id && s.item_id === item.id) ||
-                                        (s.item_name && s.item_name === itemTitle)
-                                      )
+                                      .filter(s => {
+                                        const sCalId = s.calendar_id || s.calendarId;
+                                        if (sCalId && sCalId !== calendar._id) return false;
+                                        const sCustId = s.customer_id || s.customerId;
+                                        if (sCustId && sCustId !== (calendar.customerId || id)) return false;
+                                        return (s.assignment_id && s.assignment_id === item.id) ||
+                                          (s.item_id && s.item_id === item.id) ||
+                                          (s.item_name && s.item_name === itemTitle);
+                                      })
                                       .sort((a, b) => new Date(a.created_at || a.createdAt) - new Date(b.created_at || b.createdAt));
                                     return (
                                       <div key={itemKey} className="bg-white rounded-lg border border-gray-100 hover:border-gray-200 transition-colors overflow-hidden">

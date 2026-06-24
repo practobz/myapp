@@ -133,44 +133,52 @@ function ContentCalendar() {
     if (customerId) fetchCustomerAndCalendars();
   }, [customerId]);
 
-  const hasContentSubmitted = (item) =>
-    submissions.some(sub =>
-      (sub.item_id && sub.item_id === item.id) ||
-      (sub.assignment_id && sub.assignment_id === item.id) ||
-      (sub.item_name && sub.item_name === item.title)
-    );
+  const hasContentSubmitted = (item, calendarId) =>
+    submissions.some(sub => {
+      const subCalId = sub.calendar_id || sub.calendarId;
+      if (subCalId && subCalId !== calendarId) return false;
+      return (sub.item_id && sub.item_id === item.id) ||
+        (sub.assignment_id && sub.assignment_id === item.id) ||
+        (sub.item_name && sub.item_name === item.title);
+    });
 
-  const isItemScheduled = (item) =>
-    scheduledPosts.some(post =>
-      ((post.item_id && post.item_id === item.id) ||
+  const isItemScheduled = (item, calendarId) =>
+    scheduledPosts.some(post => {
+      const postCalId = post.calendar_id || post.calendarId;
+      if (postCalId && postCalId !== calendarId) return false;
+      return ((post.item_id && post.item_id === item.id) ||
         (post.contentId && post.contentId === item.id) ||
         (post.item_name && post.item_name === item.title)) &&
-      (post.status === 'scheduled' || post.status === 'pending' || (post.scheduledDate && !post.publishedAt))
-    );
+        (post.status === 'scheduled' || post.status === 'pending' || (post.scheduledDate && !post.publishedAt));
+    });
 
-  const getPublishedPlatformsForItem = (item) =>
+  const getPublishedPlatformsForItem = (item, calendarId) =>
     scheduledPosts
-      .filter(post =>
-        ((post.item_id && post.item_id === item.id) ||
+      .filter(post => {
+        const postCalId = post.calendar_id || post.calendarId;
+        if (postCalId && postCalId !== calendarId) return false;
+        return ((post.item_id && post.item_id === item.id) ||
           (post.contentId && post.contentId === item.id) ||
           (post.item_name && post.item_name === item.title)) &&
-        (post.status === 'published' || post.publishedAt)
-      )
+          (post.status === 'published' || post.publishedAt);
+      })
       .map(post => post.platform);
 
-  const isItemPublished = (item) =>
-    scheduledPosts.some(post =>
-      ((post.item_id && post.item_id === item.id) ||
+  const isItemPublished = (item, calendarId) =>
+    scheduledPosts.some(post => {
+      const postCalId = post.calendar_id || post.calendarId;
+      if (postCalId && postCalId !== calendarId) return false;
+      return ((post.item_id && post.item_id === item.id) ||
         (post.contentId && post.contentId === item.id) ||
         (post.item_name && post.item_name === item.title)) &&
-      (post.status === 'published' || post.publishedAt)
-    );
+        (post.status === 'published' || post.publishedAt);
+    });
 
-  const getItemStatus = (item) => {
+  const getItemStatus = (item, calendarId) => {
     if (item.published === true) return 'published';
-    if (isItemPublished(item)) return 'published';
-    if (isItemScheduled(item)) return 'scheduled';
-    if (hasContentSubmitted(item)) return 'under_review';
+    if (isItemPublished(item, calendarId)) return 'published';
+    if (isItemScheduled(item, calendarId)) return 'scheduled';
+    if (hasContentSubmitted(item, calendarId)) return 'under_review';
     return item.status || 'pending';
   };
 
@@ -179,15 +187,16 @@ function ContentCalendar() {
     if (Array.isArray(calendar.contentItems)) {
       if (!selectedCalendarId || calendar._id === selectedCalendarId || calendar.id === selectedCalendarId) {
         calendar.contentItems.forEach(item => {
-          const itemStatus = getItemStatus(item);
-          const published = item.published === true || isItemPublished(item);
+          const itemStatus = getItemStatus(item, calendar._id);
+          const published = item.published === true || isItemPublished(item, calendar._id);
           allItems.push({
             ...item,
             calendarName: calendar.name || '',
+            calendarId: calendar._id,
             id: item.id || item._id || Math.random().toString(36).slice(2),
             creator: item.assignedToName || item.assignedTo || calendar.assignedToName || calendar.assignedTo || '',
             status: itemStatus,
-            publishedPlatforms: published ? (item.publishedPlatforms || getPublishedPlatformsForItem(item)) : [],
+            publishedPlatforms: published ? (item.publishedPlatforms || getPublishedPlatformsForItem(item, calendar._id)) : [],
           });
         });
       }

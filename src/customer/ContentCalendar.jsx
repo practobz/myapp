@@ -126,15 +126,12 @@ const ItemTimeline = ({ item, itemStatus, scheduledPosts = [], submissions = [] 
     s.status === 'approved_both'
   );
 
-  const isCustomerApproved = !!customerApprovedSub ||
-    itemStatus === 'published' ||
-    item.status === 'published' ||
-    item.published === true ||
-    (item.reviewedAt && submissions.length === 0);
+  // Only mark as approved when there is an actual customer approval record.
+  // Being published alone does NOT count as customer approval.
+  const isCustomerApproved = !!customerApprovedSub;
 
   const customerApprovedAt = customerApprovedSub?.approvedAt ||
-    customerApprovedSub?.updatedAt ||
-    (isCustomerApproved ? (item.reviewedAt || item.publishedAt) : null);
+    customerApprovedSub?.updatedAt || null;
 
   const customerApprovedDate = fmtDate(customerApprovedAt);
   const publishedAt = matchedPost?.publishedAt || item.publishedAt;
@@ -244,6 +241,22 @@ function ContentCalendar() {
   try { user = JSON.parse(localStorage.getItem('user')); } catch { user = null; }
   const customerId = user?.id || user?._id;
   const customerName = user?.name;
+
+  // Refresh only submissions — called after ContentReview closes so the
+  // timeline updates immediately without a full page reload.
+  const refreshSubmissions = React.useCallback(async () => {
+    if (!customerId) return;
+    try {
+      const submissionsRes = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions`);
+      let submissionsData = await submissionsRes.json();
+      if (!Array.isArray(submissionsData)) submissionsData = [];
+      setSubmissions(submissionsData.filter(s =>
+        s.customer_id === customerId ||
+        s.customer_email === user?.email ||
+        (s.created_by && user?.email && s.created_by === user.email && !s.customer_id && !s.customer_email)
+      ));
+    } catch { /* silent — stale data is acceptable */ }
+  }, [customerId, user?.email]);
 
   useEffect(() => {
     const fetchCustomerAndCalendars = async () => {
@@ -1193,7 +1206,12 @@ function ContentCalendar() {
       {reviewItemId && (
         <ContentReview
           itemId={reviewItemId}
-          onClose={() => setReviewItemId(null)}
+          onClose={() => {
+            setReviewItemId(null);
+            // Re-fetch submissions so the timeline reflects any approval
+            // made in ContentReview without requiring a manual page refresh.
+            refreshSubmissions();
+          }}
         />
       )}
     </div>

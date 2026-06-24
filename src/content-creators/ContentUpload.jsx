@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Upload, Image, X, Check, CheckCircle, FileText, Calendar, Clock, Palette, Send, MapPin, Tag, MessageSquare, Play, Video, Bell, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, User, ShieldCheck, AlertCircle, History, Search, Globe } from 'lucide-react';
 import { Facebook, Instagram, Linkedin, Youtube, Twitter } from 'lucide-react';
 
@@ -38,7 +38,9 @@ function getUserRole() {
 function ContentUpload() {
   const navigate = useNavigate();
   const { calendarId, itemIndex } = useParams();
+  const [searchParams] = useSearchParams();
   const fileInputRef = useRef(null);
+  const [activeTab, setActiveTab] = useState('admin');
 
   // State for assignment details
   const [assignment, setAssignment] = useState(null);
@@ -56,7 +58,17 @@ function ContentUpload() {
   const [uploadProgress, setUploadProgress] = useState({});
   const [previousSubmissionLoaded, setPreviousSubmissionLoaded] = useState(false);
   const [selectedMedia, setSelectedMedia] = useState(null);
-  const [previousVersions, setPreviousVersions] = useState([]);
+  const [allPreviousVersions, setAllPreviousVersions] = useState([]);
+  const previousVersions = allPreviousVersions
+    .filter(v =>
+      activeTab === 'admin'
+        ? (v.submissionStage !== 'customer')
+        : (v.submissionStage === 'customer' || v.submissionStage === '')
+    )
+    .map((v, idx) => ({
+      ...v,
+      versionNumber: idx + 1
+    }));
   const [versionsAccordionOpen, setVersionsAccordionOpen] = useState(false);
   const [selectedVersionIndex, setSelectedVersionIndex] = useState(0);
   const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
@@ -77,9 +89,14 @@ function ContentUpload() {
 
   // Admin notification state
   const [adminsList, setAdminsList] = useState([]);
-  const [selectedAdmins, setSelectedAdmins] = useState([]);
-  const [adminsDropdownOpen, setAdminsDropdownOpen] = useState(false);
   const [adminsLoading, setAdminsLoading] = useState(false);
+
+  const displayAdminsList = useMemo(() => {
+    if (!assignment || !assignment.customerId) return [];
+    return adminsList.filter(admin =>
+      admin.assignedCustomers && admin.assignedCustomers.includes(assignment.customerId)
+    );
+  }, [adminsList, assignment]);
 
   const creatorEmail = getCreatorEmail();
 
@@ -102,7 +119,8 @@ function ContentUpload() {
           setAdminsList(admins.map(a => ({
             id: a._id || a.id,
             name: a.name || a.email || 'Admin',
-            email: a.email || ''
+            email: a.email || '',
+            assignedCustomers: a.assignedCustomers || []
           })).filter(a => a.email));
         }
       } catch (err) {
@@ -114,24 +132,155 @@ function ContentUpload() {
     fetchAdmins();
   }, []);
 
-  const toggleAdminSelection = (admin) => {
-    setSelectedAdmins(prev => {
-      const exists = prev.find(a => a.id === admin.id);
-      if (exists) return prev.filter(a => a.id !== admin.id);
-      return [...prev, admin];
-    });
-  };
+
 
   // Assignment picker state (used when no params provided)
   const [pickerAssignments, setPickerAssignments] = useState([]);
+  const [pickerCustomers, setPickerCustomers] = useState([]);
   const [pickerLoading, setPickerLoading] = useState(false);
   const [pickerSearch, setPickerSearch] = useState('');
   const [pickerPlatform, setPickerPlatform] = useState('all');
   const [pickerStatus, setPickerStatus] = useState('all');
-  const [pickerCustomer, setPickerCustomer] = useState('all');
+  const [pickerCustomer, setPickerCustomer] = useState(() => searchParams.get('customer') || 'all');
   const [pickerSort, setPickerSort] = useState('due');
   const [pickerSubmissions, setPickerSubmissions] = useState([]);
   const [pickerScheduledPosts, setPickerScheduledPosts] = useState([]);
+
+  // Helper: flatten platform (string or array) into a lowercase string array
+  const flatPlatforms = (val) => {
+    if (!val) return [];
+    if (Array.isArray(val)) return val.map(v => String(v).trim().toLowerCase()).filter(Boolean);
+    return [String(val).trim().toLowerCase()];
+  };
+
+  // Helper: get normalized display status (mirrors Assignments.jsx getFilterStatus)
+  const getPickerFilterStatus = (a) => {
+    // Check published flag or scheduled post
+    if (a.published === true) return 'published';
+    const aid = a.id || a._id || '';
+    if (aid && pickerScheduledPosts.some(post => post.contentId === aid && post.status === 'published')) return 'published';
+    // Check customer-approval via submissions
+    const subs = pickerSubmissions.filter(sub => {
+      const subCal = sub.calendar_id || sub.calendarId;
+      const subIdx = sub.item_index !== undefined ? String(sub.item_index) : undefined;
+      if (subCal && subIdx !== undefined) {
+        return subCal === a.calendarId && subIdx === String(a.itemIndex);
+      }
+      const subId = sub.assignment_id || sub.assignmentId;
+      return subId && String(subId) === String(a.id);
+    });
+    const isCustomerApproved = subs.some(s => s.status === 'approved' && (s.submission_stage || s.submissionStage || '') === 'customer');
+    if (isCustomerApproved) return 'approved';
+    return 'pending';
+  };
+
+  const getPickerItemApproval = (a) => {
+    const filterStatus = getPickerFilterStatus(a);
+    if (filterStatus === 'published') {
+      return {
+        label: 'Published',
+        color: 'bg-purple-100 text-purple-800'
+      };
+    }
+    if (filterStatus === 'pending') {
+      return {
+        label: 'Pending',
+        color: 'bg-orange-100 text-orange-800'
+      };
+    }
+
+    const subs = pickerSubmissions.filter(sub => {
+      const subCal = sub.calendar_id || sub.calendarId;
+      const subIdx = sub.item_index !== undefined ? String(sub.item_index) : undefined;
+      if (subCal && subIdx !== undefined) {
+        return subCal === a.calendarId && subIdx === String(a.itemIndex);
+      }
+      const subId = sub.assignment_id || sub.assignmentId;
+      return subId && String(subId) === String(a.id);
+    });
+
+    const isCustomerApproved = subs.some(s => s.status === 'approved' && (s.submission_stage || s.submissionStage || '') === 'customer') || a.status === 'approved';
+    const isAdminApproved = subs.some(s => s.status === 'approved' && (s.submission_stage || s.submissionStage || 'internal') !== 'customer');
+
+    if (isCustomerApproved && isAdminApproved) {
+      return {
+        label: 'Both Approved',
+        color: 'bg-green-100 text-green-800'
+      };
+    }
+    if (isCustomerApproved) {
+      return {
+        label: 'Customer Approved',
+        color: 'bg-green-100 text-green-800'
+      };
+    }
+    if (isAdminApproved) {
+      return {
+        label: 'Admin Approved',
+        color: 'bg-indigo-100 text-indigo-800'
+      };
+    }
+
+    return {
+      label: 'Approved',
+      color: 'bg-green-100 text-green-800'
+    };
+  };
+
+  // Helper: get latest internal-stage submission status for a picker assignment
+  const getPickerReviewStatus = (a) => {
+    const subs = pickerSubmissions.filter(sub => {
+      const subCal = sub.calendar_id || sub.calendarId;
+      const subIdx = sub.item_index !== undefined ? String(sub.item_index) : undefined;
+      if (subCal && subIdx !== undefined) {
+        return subCal === a.calendarId && subIdx === String(a.itemIndex);
+      }
+      const subId = sub.assignment_id || sub.assignmentId;
+      return subId && String(subId) === String(a.id);
+    });
+    if (subs.length === 0) return null;
+    const latest = [...subs].sort((x, y) => new Date(y.created_at || 0) - new Date(x.created_at || 0))[0];
+    if (latest.submission_stage === 'customer' || latest.submissionStage === 'customer') {
+      return { label: 'Admin Directly Sent to Customer', color: 'bg-blue-100 text-blue-700' };
+    }
+    if (latest.status === 'approved') {
+      return { label: 'Approved by Admin', color: 'bg-orange-100 text-orange-700' };
+    }
+    if (latest.status === 'revision_requested') {
+      return { label: 'Revision Requested', color: 'bg-red-100 text-red-700' };
+    }
+    return { label: 'Under Admin Review', color: 'bg-amber-100 text-amber-700' };
+  };
+
+  const selectedCustomer = useMemo(() => {
+    if (!pickerCustomer || pickerCustomer === 'all') return null;
+    return pickerCustomers.find(c => (c._id || c.id) === pickerCustomer);
+  }, [pickerCustomers, pickerCustomer]);
+
+  const pickerStats = useMemo(() => {
+    const customerAssignments = pickerAssignments.filter(a => pickerCustomer === 'all' || a.customerId === pickerCustomer);
+
+    const adminApprovedCount = customerAssignments.filter(a => {
+      const subs = pickerSubmissions.filter(sub => {
+        const subCal = sub.calendar_id || sub.calendarId;
+        const subIdx = sub.item_index !== undefined ? String(sub.item_index) : undefined;
+        if (subCal && subIdx !== undefined) {
+          return subCal === a.calendarId && subIdx === String(a.itemIndex);
+        }
+        const subId = sub.assignment_id || sub.assignmentId;
+        return subId && String(subId) === String(a.id);
+      });
+      return subs.some(s => s.status === 'approved' && (s.submission_stage || s.submissionStage || 'internal') !== 'customer');
+    }).length;
+
+    return {
+      total: customerAssignments.length,
+      pending: customerAssignments.filter(a => getPickerFilterStatus(a) === 'pending').length,
+      approved: customerAssignments.filter(a => getPickerFilterStatus(a) === 'approved').length,
+      published: customerAssignments.filter(a => getPickerFilterStatus(a) === 'published').length,
+      adminApproved: adminApprovedCount
+    };
+  }, [pickerAssignments, pickerSubmissions, pickerScheduledPosts, pickerCustomer]);
 
   // When no params, fetch assignments for the picker
   useEffect(() => {
@@ -149,6 +298,7 @@ function ContentUpload() {
         const calendars = await calRes.json();
         const subData = await subRes.json();
         const schedData = schedRes.ok ? await schedRes.json() : [];
+        setPickerCustomers(custData.customers || []);
         const customerMap = {};
         if (Array.isArray(custData.customers)) {
           custData.customers.forEach(c => {
@@ -168,6 +318,7 @@ function ContentUpload() {
                   calendarId: calendar._id || calendar.id,
                   calendarName: calendar.name || calendar.customerName || calendar.customer || '',
                   customerName: customerMap[custId] || calendar.customerName || calendar.name || '',
+                  customerId: custId,
                   itemIndex: index,
                   id: item.id || item._id || `${calendar._id || calendar.id}::${index}`,
                   stableItemId: item.id || item._id || `${calendar._id || calendar.id}::${index}`,
@@ -191,7 +342,7 @@ function ContentUpload() {
   // Reset version state whenever we switch to a different assignment
   useEffect(() => {
     setPreviousSubmissionLoaded(false);
-    setPreviousVersions([]);
+    setAllPreviousVersions([]);
     setSelectedVersionIndex(0);
     setSelectedMediaIndex(0);
     setCommentsForVersion([]);
@@ -395,10 +546,21 @@ function ContentUpload() {
               comments: sub.comments || [],
               id: sub._id || sub.id || idx,
             }));
-          setPreviousVersions(normalized);
-          setSelectedVersionIndex(normalized.length - 1);
-          setSelectedMediaIndex(0);
+          setAllPreviousVersions(normalized);
+          const tabVersions = normalized.filter(v =>
+            activeTab === 'admin'
+              ? (v.submissionStage !== 'customer')
+              : (v.submissionStage === 'customer' || v.submissionStage === '')
+          );
+          if (tabVersions.length > 0) {
+            setSelectedVersionIndex(tabVersions.length - 1);
+            setSelectedMediaIndex(0);
+          }
         }
+
+        // Reset selected version when activeTab changes
+        // This is handled in a separate useEffect below
+
 
         // Pre-fill from latest submission regardless of stage
         const prefillSource = [...previousSubmissions].sort((a, b) =>
@@ -424,15 +586,35 @@ function ContentUpload() {
     }
   }, [assignment, creatorEmail, previousSubmissionLoaded]);
 
-  // Sync comments when version or media selection changes
+  // Reset selected version when activeTab changes
+  useEffect(() => {
+    const tabVersions = allPreviousVersions.filter(v =>
+      activeTab === 'admin'
+        ? (v.submissionStage !== 'customer')
+        : (v.submissionStage === 'customer' || v.submissionStage === '')
+    );
+    if (tabVersions.length > 0) {
+      setSelectedVersionIndex(tabVersions.length - 1);
+    } else {
+      setSelectedVersionIndex(0);
+    }
+    setSelectedMediaIndex(0);
+  }, [activeTab]);
+
+  // Sync comments when version or media selection changes and activeTab changes
   useEffect(() => {
     if (previousVersions.length > 0 && previousVersions[selectedVersionIndex]) {
-      setCommentsForVersion(previousVersions[selectedVersionIndex].comments || []);
+      const allComments = previousVersions[selectedVersionIndex].comments || [];
+      const filteredComments = allComments.filter(c => {
+        const isAdmin = c.reviewType === 'internal' || c.authorRole === 'admin' || c.author === 'Admin';
+        return activeTab === 'admin' ? isAdmin : !isAdmin;
+      });
+      setCommentsForVersion(filteredComments);
     } else {
       setCommentsForVersion([]);
     }
     setActiveVersionComment(null);
-  }, [previousVersions, selectedVersionIndex]);
+  }, [previousVersions, selectedVersionIndex, activeTab]);
 
   useEffect(() => {
     const filtered = commentsForVersion.filter(c => {
@@ -901,14 +1083,14 @@ function ContentUpload() {
         due_date: assignment.dueDate,
         status: 'submitted',
         // Content creators submit for internal review; customers/admins upload directly for customer review
-        submission_stage: getUserRole() === 'content_creator' ? 'internal' : 'customer',
+        submission_stage: activeTab === 'admin' ? 'internal' : 'customer',
         item_index: assignment.itemIndex !== undefined ? Number(assignment.itemIndex) : parseInt(itemIndex, 10),
         created_at: new Date().toISOString(),
         type: 'submission',
         geo_location: (geoLocation.latitude && geoLocation.longitude) ? geoLocation : undefined,
         address: address || undefined,
         contact_info: contactInfo || undefined,
-        notify_admins: selectedAdmins,
+        notify_admins: activeTab === 'admin' ? displayAdminsList : [],
       };
 
       // FINAL VALIDATION - Ensure all critical fields are present
@@ -955,11 +1137,15 @@ function ContentUpload() {
       const result = await response.json();
       console.log('✅ Content submission successful:', result);
 
-      const adminNames = selectedAdmins.map(a => a.name).join(', ');
-      const adminMsg = selectedAdmins.length > 0
-        ? `\n\nNotified admin(s): ${adminNames}`
-        : '';
-      alert(`Content submitted for admin review!${adminMsg}\n\nThe admin will review your submission and notify you with feedback or approval.`);
+      if (activeTab === 'admin') {
+        const adminNames = displayAdminsList.map(a => a.name).join(', ');
+        const adminMsg = displayAdminsList.length > 0
+          ? `\n\nNotified admin(s): ${adminNames}`
+          : '';
+        alert(`Content submitted for admin review!${adminMsg}\n\nThe admin will review your submission and notify you with feedback or approval.`);
+      } else {
+        alert('Content submitted directly for customer review!\n\nThe customer will review your submission.');
+      }
       navigate('/content-creator/assignments');
     } catch (err) {
       console.error('❌ Upload error:', err);
@@ -1003,59 +1189,6 @@ function ContentUpload() {
 
   // No params — show assignment picker
   if (!calendarId || itemIndex === undefined) {
-    // Helper: get normalized display status (mirrors Assignments.jsx getFilterStatus)
-    const getPickerFilterStatus = (a) => {
-      // Check published flag or scheduled post
-      if (a.published === true) return 'published';
-      const aid = a.id || a._id || '';
-      if (aid && pickerScheduledPosts.some(post => post.contentId === aid && post.status === 'published')) return 'published';
-      // Check customer-approval via submissions
-      const subs = pickerSubmissions.filter(sub => {
-        const subCal = sub.calendar_id || sub.calendarId;
-        const subIdx = sub.item_index !== undefined ? String(sub.item_index) : undefined;
-        if (subCal && subIdx !== undefined) {
-          return subCal === a.calendarId && subIdx === String(a.itemIndex);
-        }
-        const subId = sub.assignment_id || sub.assignmentId;
-        return subId && String(subId) === String(a.id);
-      });
-      const isCustomerApproved = subs.some(s => s.status === 'approved' && (s.submission_stage || s.submissionStage || '') === 'customer');
-      if (isCustomerApproved) return 'approved';
-      return 'pending';
-    };
-
-    // Helper: get latest internal-stage submission status for a picker assignment
-    const getPickerReviewStatus = (a) => {
-      const subs = pickerSubmissions.filter(sub => {
-        const subCal = sub.calendar_id || sub.calendarId;
-        const subIdx = sub.item_index !== undefined ? String(sub.item_index) : undefined;
-        if (subCal && subIdx !== undefined) {
-          return subCal === a.calendarId && subIdx === String(a.itemIndex);
-        }
-        const subId = sub.assignment_id || sub.assignmentId;
-        return subId && String(subId) === String(a.id);
-      });
-      if (subs.length === 0) return null;
-      const latest = [...subs].sort((x, y) => new Date(y.created_at || 0) - new Date(x.created_at || 0))[0];
-      if (latest.submission_stage === 'customer' || latest.submissionStage === 'customer') {
-        return { label: 'Admin Directly Sent to Customer', color: 'bg-blue-100 text-blue-700' };
-      }
-      if (latest.status === 'approved') {
-        return { label: 'Approved by Admin', color: 'bg-orange-100 text-orange-700' };
-      }
-      if (latest.status === 'revision_requested') {
-        return { label: 'Revision Requested', color: 'bg-red-100 text-red-700' };
-      }
-      return { label: 'Under Admin Review', color: 'bg-amber-100 text-amber-700' };
-    };
-
-    // Helper: flatten platform (string or array) into a lowercase string array
-    const flatPlatforms = (val) => {
-      if (!val) return [];
-      if (Array.isArray(val)) return val.map(v => String(v).trim().toLowerCase()).filter(Boolean);
-      return [String(val).trim().toLowerCase()];
-    };
-
     // Derived filter options
     const allPlatforms = [...new Set(pickerAssignments.flatMap(a => flatPlatforms(a.platform).map(p => p.charAt(0).toUpperCase() + p.slice(1))))].sort();
     const allStatuses = [...new Set(pickerAssignments.map(a => getPickerFilterStatus(a)))].sort();
@@ -1071,8 +1204,26 @@ function ContentUpload() {
           platforms.some(p => p.includes(q)) ||
           (a.description || '').toLowerCase().includes(q);
         const matchPlatform = pickerPlatform === 'all' || platforms.some(p => p === pickerPlatform.toLowerCase());
-        const matchStatus = pickerStatus === 'all' || getPickerFilterStatus(a) === pickerStatus;
-        const matchCustomer = pickerCustomer === 'all' || (a.customerName || a.calendarName || 'Unknown') === pickerCustomer;
+
+        let matchStatus = false;
+        if (pickerStatus === 'all') {
+          matchStatus = true;
+        } else if (pickerStatus === 'admin_approved') {
+          const subs = pickerSubmissions.filter(sub => {
+            const subCal = sub.calendar_id || sub.calendarId;
+            const subIdx = sub.item_index !== undefined ? String(sub.item_index) : undefined;
+            if (subCal && subIdx !== undefined) {
+              return subCal === a.calendarId && subIdx === String(a.itemIndex);
+            }
+            const subId = sub.assignment_id || sub.assignmentId;
+            return subId && String(subId) === String(a.id);
+          });
+          matchStatus = subs.some(s => s.status === 'approved' && (s.submission_stage || s.submissionStage || 'internal') !== 'customer');
+        } else {
+          matchStatus = getPickerFilterStatus(a) === pickerStatus;
+        }
+
+        const matchCustomer = pickerCustomer === 'all' || a.customerId === pickerCustomer;
         return matchSearch && matchPlatform && matchStatus && matchCustomer;
       })
       .sort((a, b) => {
@@ -1177,174 +1328,91 @@ function ContentUpload() {
           </div>
         ) : (
           <div className="flex flex-1 overflow-hidden h-[calc(100vh-64px)]">
-
-            {/* ── SIDEBAR ── */}
-            <aside className="w-64 flex-shrink-0 bg-white border-r border-gray-200 flex flex-col overflow-y-auto hidden md:flex">
-              {/* Search */}
-              <div className="p-4 border-b border-gray-100">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search assignments…"
-                    value={pickerSearch}
-                    onChange={e => setPickerSearch(e.target.value)}
-                    className="w-full pl-8 pr-3 py-2 text-xs rounded-lg bg-gray-50 border border-gray-200 text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-300 focus:border-purple-300"
-                  />
-                </div>
-              </div>
-
-              {/* Stats strip */}
-              <div className="px-4 py-3 border-b border-gray-100 grid grid-cols-2 gap-2">
-                <div className="bg-purple-50 rounded-lg p-2 text-center">
-                  <p className="text-lg font-bold text-purple-700">{filtered.length}</p>
-                  <p className="text-[10px] text-purple-500 font-medium">Showing</p>
-                </div>
-                <div className="bg-indigo-50 rounded-lg p-2 text-center">
-                  <p className="text-lg font-bold text-indigo-700">{pickerAssignments.length}</p>
-                  <p className="text-[10px] text-indigo-500 font-medium">Total</p>
-                </div>
-              </div>
-
-              {/* Sort */}
-              <div className="px-4 py-3 border-b border-gray-100">
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Sort By</p>
-                <div className="space-y-1">
-                  {[
-                    { key: 'due', label: 'Newest First' },
-                    { key: 'name', label: 'Name' },
-                    { key: 'customer', label: 'Customer' },
-                  ].map(opt => (
-                    <button
-                      key={opt.key}
-                      onClick={() => setPickerSort(opt.key)}
-                      className={`w-full text-left px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${pickerSort === opt.key
-                          ? 'bg-purple-600 text-white'
-                          : 'text-gray-600 hover:bg-gray-100'
-                        }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Platform filter */}
-              <div className="px-4 py-3 border-b border-gray-100">
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Platform</p>
-                <div className="space-y-1">
-                  <button
-                    onClick={() => setPickerPlatform('all')}
-                    className={`w-full text-left px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center justify-between ${pickerPlatform === 'all' ? 'bg-purple-600 text-white' : 'text-gray-600 hover:bg-gray-100'
-                      }`}
-                  >
-                    <span>All Platforms</span>
-                    <span className={`text-[10px] px-1.5 rounded-full ${pickerPlatform === 'all' ? 'bg-purple-500 text-white' : 'bg-gray-200 text-gray-600'}`}>
-                      {pickerAssignments.length}
-                    </span>
-                  </button>
-                  {allPlatforms.map(p => (
-                    <button
-                      key={p}
-                      onClick={() => setPickerPlatform(p)}
-                      className={`w-full text-left px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center justify-between ${pickerPlatform === p ? 'bg-purple-600 text-white' : 'text-gray-600 hover:bg-gray-100'
-                        }`}
-                    >
-                      <span>{p}</span>
-                      <span className={`text-[10px] px-1.5 rounded-full ${pickerPlatform === p ? 'bg-purple-500 text-white' : 'bg-gray-200 text-gray-600'}`}>
-                        {pickerAssignments.filter(a => flatPlatforms(a.platform).some(fp => fp === p.toLowerCase())).length}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Status filter */}
-              <div className="px-4 py-3 border-b border-gray-100">
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Status</p>
-                <div className="space-y-1">
-                  <button
-                    onClick={() => setPickerStatus('all')}
-                    className={`w-full text-left px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${pickerStatus === 'all' ? 'bg-purple-600 text-white' : 'text-gray-600 hover:bg-gray-100'
-                      }`}
-                  >All Statuses</button>
-                  {allStatuses.map(s => (
-                    <button
-                      key={s}
-                      onClick={() => setPickerStatus(s)}
-                      className={`w-full text-left px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${pickerStatus === s ? 'bg-purple-600 text-white' : 'text-gray-600 hover:bg-gray-100'
-                        }`}
-                    >
-                      {statusLabel(s)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Customer filter */}
-              <div className="px-4 py-3">
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Customer</p>
-                <div className="space-y-1">
-                  <button
-                    onClick={() => setPickerCustomer('all')}
-                    className={`w-full text-left px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${pickerCustomer === 'all' ? 'bg-purple-600 text-white' : 'text-gray-600 hover:bg-gray-100'
-                      }`}
-                  >All Customers</button>
-                  {allCustomers.map(c => (
-                    <button
-                      key={c}
-                      onClick={() => setPickerCustomer(c)}
-                      className={`w-full text-left px-3 py-1.5 rounded-lg text-xs font-medium transition-colors truncate ${pickerCustomer === c ? 'bg-purple-600 text-white' : 'text-gray-600 hover:bg-gray-100'
-                        }`}
-                      title={c}
-                    >
-                      {c}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </aside>
-
             {/* ── MAIN LIST ── */}
             <main className="flex-1 overflow-y-auto p-4 sm:p-6">
-              {/* Mobile search bar */}
-              <div className="relative mb-4 md:hidden">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search assignments…"
-                  value={pickerSearch}
-                  onChange={e => setPickerSearch(e.target.value)}
-                  className="w-full pl-8 pr-3 py-2 text-sm rounded-lg bg-white border border-gray-200 text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-300"
-                />
+              {/* banner */}
+              {selectedCustomer && (
+                <div className="bg-gradient-to-r from-purple-600 via-purple-500 to-indigo-600 rounded-2xl shadow-lg p-6 text-white mb-5 flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center text-2xl font-bold overflow-hidden">
+                      {selectedCustomer.profileImage ? (
+                        <img src={selectedCustomer.profileImage} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        (selectedCustomer.name || 'C').charAt(0).toUpperCase()
+                      )}
+                    </div>
+                    <div>
+                      <h1 className="text-xl sm:text-2xl font-bold">{selectedCustomer.name || 'Unnamed Customer'}</h1>
+                      <p className="text-purple-100 text-sm">{selectedCustomer.email}</p>
+                      {selectedCustomer.companyName && (
+                        <p className="text-purple-200 text-xs mt-1 bg-white/10 px-2 py-0.5 rounded-full inline-block">
+                          {selectedCustomer.companyName}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Filter Tabs + Search */}
+              <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-sm p-4 border border-gray-200/50 mb-4">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { key: 'all', label: 'All', count: pickerStats.total },
+                      { key: 'pending', label: 'Pending', count: pickerStats.pending },
+                      { key: 'approved', label: 'Customer Approved', count: pickerStats.approved },
+                      { key: 'published', label: 'Published', count: pickerStats.published },
+                      { key: 'admin_approved', label: 'Admin Approved', count: pickerStats.adminApproved },
+                    ].map(opt => (
+                      <button
+                        key={opt.key}
+                        onClick={() => setPickerStatus(opt.key)}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${pickerStatus === opt.key
+                            ? 'bg-purple-600 text-white shadow-sm'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                          }`}
+                      >
+                        {opt.label}
+                        <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${pickerStatus === opt.key ? 'bg-white/20 text-white' : 'bg-white text-gray-600'
+                          }`}>{opt.count}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="relative flex-shrink-0 w-full sm:w-56">
+                    <Search className="h-4 w-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      placeholder="Search assignments…"
+                      value={pickerSearch}
+                      onChange={e => setPickerSearch(e.target.value)}
+                      className="pl-9 pr-4 py-2 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent shadow-sm w-full"
+                    />
+                  </div>
+                </div>
               </div>
 
-              {/* Result count + active filters */}
-              <div className="flex items-center gap-2 mb-4 flex-wrap">
-                <span className="text-sm text-gray-500 font-medium">
-                  {filtered.length} of {pickerAssignments.length} assignments
-                </span>
-                {pickerPlatform !== 'all' && (
-                  <button onClick={() => setPickerPlatform('all')} className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-medium hover:bg-blue-200">
-                    {pickerPlatform} <X className="h-3 w-3" />
-                  </button>
-                )}
-                {pickerStatus !== 'all' && (
-                  <button onClick={() => setPickerStatus('all')} className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-orange-100 text-orange-700 rounded-full text-xs font-medium hover:bg-orange-200">
-                    {statusLabel(pickerStatus)} <X className="h-3 w-3" />
-                  </button>
-                )}
-                {pickerCustomer !== 'all' && (
-                  <button onClick={() => setPickerCustomer('all')} className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium hover:bg-green-200">
-                    {pickerCustomer} <X className="h-3 w-3" />
-                  </button>
-                )}
-                {pickerSearch && (
-                  <button onClick={() => setPickerSearch('')} className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-gray-200 text-gray-600 rounded-full text-xs font-medium hover:bg-gray-300">
-                    "{pickerSearch}" <X className="h-3 w-3" />
-                  </button>
-                )}
-              </div>
+              {/* Active filters strip */}
+              {(pickerPlatform !== 'all' || pickerStatus !== 'all' || pickerCustomer !== 'all' || pickerSearch) && (
+                <div className="flex items-center gap-2 mb-4 flex-wrap">
+                  <span className="text-xs text-gray-500 font-medium">Active Filters:</span>
+                  {pickerPlatform !== 'all' && (
+                    <button onClick={() => setPickerPlatform('all')} className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-medium hover:bg-blue-200">
+                      {pickerPlatform} <X className="h-3 w-3" />
+                    </button>
+                  )}
+                  {pickerCustomer !== 'all' && (
+                    <button onClick={() => setPickerCustomer('all')} className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium hover:bg-green-200">
+                      {selectedCustomer ? (selectedCustomer.name || selectedCustomer.customerName) : pickerCustomer} <X className="h-3 w-3" />
+                    </button>
+                  )}
+                  {pickerSearch && (
+                    <button onClick={() => setPickerSearch('')} className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-gray-200 text-gray-600 rounded-full text-xs font-medium hover:bg-gray-300">
+                      "{pickerSearch}" <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+              )}
 
               {filtered.length === 0 ? (
                 <div className="bg-white rounded-xl shadow-sm p-10 text-center">
@@ -1389,25 +1457,26 @@ function ContentUpload() {
                                     {p.charAt(0).toUpperCase() + p.slice(1)}
                                   </span>
                                 ))}
-                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${statusColor(getPickerFilterStatus(a))}`}>
-                                  {statusLabel(getPickerFilterStatus(a))}
-                                </span>
+                                {(() => {
+                                  const approval = getPickerItemApproval(a);
+                                  return (
+                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${approval.color}`}>
+                                      {approval.label}
+                                    </span>
+                                  );
+                                })()}
                               </div>
                             </div>
 
-                            {/* Customer + Calendar row */}
-                            <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                              <span className="flex items-center gap-1 text-xs text-gray-500">
-                                <User className="h-3 w-3 text-gray-400 flex-shrink-0" />
-                                {a.customerName || 'Unknown Customer'}
-                              </span>
-                              {a.calendarName && (
+                            {/* Calendar Name row */}
+                            {a.calendarName && (
+                              <div className="flex items-center gap-3 mt-1.5 flex-wrap">
                                 <span className="flex items-center gap-1 text-xs text-gray-400">
                                   <Calendar className="h-3 w-3 flex-shrink-0" />
                                   {a.calendarName}
                                 </span>
-                              )}
-                            </div>
+                              </div>
+                            )}
 
                             {/* Description */}
                             {a.description && (
@@ -1494,7 +1563,13 @@ function ContentUpload() {
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center">
               <button
-                onClick={() => navigate('/content-creator/upload')}
+                onClick={() => {
+                  if (assignment && assignment.customerId) {
+                    navigate(`/content-creator/assignments?expand=${assignment.customerId}`);
+                  } else {
+                    navigate('/content-creator/assignments');
+                  }
+                }}
                 className="mr-4 text-gray-600 hover:text-gray-900 transition-colors"
               >
                 <ArrowLeft className="h-5 w-5" />
@@ -1504,8 +1579,12 @@ function ContentUpload() {
                   <Palette className="h-5 w-5 text-purple-600" />
                 </div>
                 <div className="ml-3">
-                  <span className="text-xl font-bold text-gray-900">Submit for Admin Review</span>
-                  <p className="text-xs text-gray-400 leading-none mt-0.5">Admin must approve before content goes to customer</p>
+                  <span className="text-xl font-bold text-gray-900">
+                    {activeTab === 'admin' ? 'Submit for Admin Review' : 'Content Details'}
+                  </span>
+                  <p className="text-xs text-gray-400 leading-none mt-0.5">
+                    {activeTab === 'admin' ? 'Admin must approve before content goes to customer' : 'Review and manage customer-facing content submissions'}
+                  </p>
                 </div>
               </div>
             </div>
@@ -1546,6 +1625,29 @@ function ContentUpload() {
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {/* ── Tabs Selector ────────────────────────────────────────────────── */}
+        <div className="flex border-b border-gray-200 bg-white rounded-2xl p-1.5 shadow-sm border border-gray-200/50 mb-6">
+          <button
+            onClick={() => setActiveTab('admin')}
+            className={`flex-1 py-3 text-sm font-semibold rounded-xl transition-all duration-300 flex items-center justify-center gap-2 ${activeTab === 'admin'
+                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              }`}
+          >
+            <Palette className="h-4 w-4" />
+            Admin Review
+          </button>
+          <button
+            onClick={() => setActiveTab('customer')}
+            className={`flex-1 py-3 text-sm font-semibold rounded-xl transition-all duration-300 flex items-center justify-center gap-2 ${activeTab === 'customer'
+                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              }`}
+          >
+            <User className="h-4 w-4" />
+            Customer Review
+          </button>
+        </div>
         {/* Assignment Details - Compact */}
         <div className="bg-white rounded-lg shadow-sm p-4 mb-6 md:hidden">
           <div className="flex items-center justify-between">
@@ -1604,7 +1706,7 @@ function ContentUpload() {
         )}
 
         {/* Admin Approval Banner — shown when the latest version is approved */}
-        {(() => {
+        {activeTab === 'admin' && (() => {
           const latestApproved = [...previousVersions]
             .reverse()
             .find(v => v.status === 'approved' || v.status === 'approved_by_admin');
@@ -1631,20 +1733,22 @@ function ContentUpload() {
         })()}
 
         {/* Workflow Banner */}
-        <div className="bg-white border border-purple-100 rounded-xl shadow-sm px-5 py-4 mb-6 flex flex-col sm:flex-row sm:items-center gap-3">
-          <ShieldCheck className="h-6 w-6 text-purple-500 flex-shrink-0" />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-gray-800">Admin Review Required</p>
-            <p className="text-xs text-gray-500 mt-0.5">Your upload goes to the selected admin first. Once approved, the admin or you can submit the content to the customer's content calendar.</p>
+        {activeTab === 'admin' && (
+          <div className="bg-white border border-purple-100 rounded-xl shadow-sm px-5 py-4 mb-6 flex flex-col sm:flex-row sm:items-center gap-3">
+            <ShieldCheck className="h-6 w-6 text-purple-500 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-gray-800">Admin Review Required</p>
+              <p className="text-xs text-gray-500 mt-0.5">Your upload goes to the selected admin first. Once approved, the admin or you can submit the content to the customer's content calendar.</p>
+            </div>
+            <div className="hidden sm:flex items-center gap-1 text-xs text-gray-400 flex-shrink-0">
+              <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full font-medium">1 Upload</span>
+              <span>→</span>
+              <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded-full font-medium">2 Admin Review</span>
+              <span>→</span>
+              <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full font-medium">3 Customer</span>
+            </div>
           </div>
-          <div className="hidden sm:flex items-center gap-1 text-xs text-gray-400 flex-shrink-0">
-            <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full font-medium">1 Upload</span>
-            <span>→</span>
-            <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded-full font-medium">2 Admin Review</span>
-            <span>→</span>
-            <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full font-medium">3 Customer</span>
-          </div>
-        </div>
+        )}
 
         {/* Main Grid Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -2350,96 +2454,47 @@ function ContentUpload() {
 
           {/* Right Column - Content Details & Assignment Info */}
           <div className="space-y-6">
-            {/* Notify Admin Section — FIRST, most important */}
-            <div className="bg-white rounded-lg shadow-sm p-6 border-2 border-purple-100">
-              <h2 className="text-lg font-semibold mb-1 flex items-center">
-                <Bell className="h-5 w-5 mr-2 text-purple-600" />
-                Send to Admin
-                <span className="ml-2 text-xs font-medium text-red-500">*</span>
-              </h2>
-              <p className="text-xs text-gray-500 mb-3">
-                Select which admin(s) should review this content. They'll receive an email notification with your submission.
-              </p>
+            {/* Notification Recipients Section */}
+            {activeTab === 'admin' && (
+              <div className="bg-white rounded-lg shadow-sm p-6 border border-purple-100/80 bg-gradient-to-br from-white to-purple-50/20">
+                <h2 className="text-lg font-semibold mb-1.5 flex items-center gap-2">
+                  <Bell className="h-5 w-5 text-purple-600" />
+                  Notification Recipients
+                </h2>
+                <p className="text-xs text-gray-500 mb-4">
+                  The following admins are assigned to this customer and will be notified of your submission:
+                </p>
 
-              {adminsLoading ? (
-                <div className="flex items-center text-sm text-gray-500">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-500 mr-2"></div>
-                  Loading admins…
-                </div>
-              ) : adminsList.length === 0 ? (
-                <p className="text-sm text-gray-400 italic">No admins available.</p>
-              ) : (
-                <div className="border border-gray-200 rounded-md overflow-hidden">
-                  <button
-                    type="button"
-                    onClick={() => setAdminsDropdownOpen(prev => !prev)}
-                    className={`w-full flex items-center justify-between px-3 py-2.5 transition-colors text-sm ${selectedAdmins.length === 0 ? 'bg-red-50 hover:bg-red-100' : 'bg-gray-50 hover:bg-gray-100'
-                      }`}
-                  >
-                    <span className={selectedAdmins.length === 0 ? 'text-red-400' : 'text-gray-700'}>
-                      {selectedAdmins.length === 0
-                        ? 'Select at least one admin…'
-                        : `${selectedAdmins.length} admin${selectedAdmins.length > 1 ? 's' : ''} selected`}
-                    </span>
-                    {adminsDropdownOpen
-                      ? <ChevronUp className="h-4 w-4 text-gray-400" />
-                      : <ChevronDown className="h-4 w-4 text-gray-400" />}
-                  </button>
-
-                  {adminsDropdownOpen && (
-                    <div className="divide-y divide-gray-100 max-h-48 overflow-y-auto">
-                      {adminsList.map(admin => {
-                        const isSelected = selectedAdmins.some(a => a.id === admin.id);
-                        return (
-                          <label
-                            key={admin.id}
-                            className={`flex items-center px-3 py-2.5 cursor-pointer hover:bg-purple-50 transition-colors ${isSelected ? 'bg-purple-50' : 'bg-white'}`}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => toggleAdminSelection(admin)}
-                              className="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500 mr-3 flex-shrink-0"
-                            />
-                            <User className="h-4 w-4 text-gray-400 mr-2 flex-shrink-0" />
-                            <div className="min-w-0">
-                              <p className="text-sm font-medium text-gray-900 truncate">{admin.name}</p>
-                              <p className="text-xs text-gray-500 truncate">{admin.email}</p>
-                            </div>
-                            {isSelected && <Check className="h-4 w-4 text-purple-600 ml-auto flex-shrink-0" />}
-                          </label>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {selectedAdmins.length > 0 ? (
-                <div className="flex flex-wrap gap-1.5 mt-3">
-                  {selectedAdmins.map(admin => (
-                    <span
-                      key={admin.id}
-                      className="inline-flex items-center px-2.5 py-1 rounded-full text-xs bg-purple-100 text-purple-700 font-medium"
-                    >
-                      {admin.name}
-                      <button
-                        type="button"
-                        onClick={() => toggleAdminSelection(admin)}
-                        className="ml-1 hover:text-purple-900"
+                {adminsLoading ? (
+                  <div className="flex items-center text-sm text-gray-500 py-2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-500 mr-2"></div>
+                    Loading assigned admins…
+                  </div>
+                ) : displayAdminsList.length === 0 ? (
+                  <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-100 rounded-xl">
+                    <AlertCircle className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                    <p className="text-xs text-amber-700">No admins are currently assigned to this customer. System admins will handle the review.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {displayAdminsList.map(admin => (
+                      <div
+                        key={admin.id}
+                        className="flex items-center gap-3 p-2.5 bg-white border border-gray-100 rounded-xl shadow-sm hover:border-purple-200 transition-all"
                       >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <div className="flex items-start gap-2 mt-3 p-2.5 bg-amber-50 border border-amber-100 rounded-md">
-                  <AlertCircle className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
-                  <p className="text-xs text-amber-700">Please select at least one admin so they can review and approve your content before it reaches the customer.</p>
-                </div>
-              )}
-            </div>
+                        <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center text-purple-700 font-bold text-xs flex-shrink-0">
+                          {admin.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-gray-800 truncate">{admin.name}</p>
+                          <p className="text-xs text-gray-500 truncate">{admin.email}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Assignment Details - Desktop */}
             <div className="bg-white rounded-lg shadow-sm p-6 hidden md:block">
@@ -2580,21 +2635,29 @@ function ContentUpload() {
             {/* Submit Button */}
             <div className="bg-white rounded-lg shadow-sm p-6">
               <div className="text-center">
-                <h3 className="font-semibold text-gray-900 mb-1">Submit for Admin Review</h3>
-                {selectedAdmins.length > 0 ? (
-                  <p className="text-sm text-gray-600 mb-4">
-                    Will be sent to <span className="font-medium text-purple-700">{selectedAdmins.map(a => a.name).join(', ')}</span> for review.
-                    Content only reaches the customer after admin approval.
-                  </p>
+                <h3 className="font-semibold text-gray-900 mb-1">
+                  {activeTab === 'admin' ? 'Submit for Admin Review' : 'Submit for Customer Review'}
+                </h3>
+                {activeTab === 'admin' ? (
+                  displayAdminsList.length > 0 ? (
+                    <p className="text-sm text-gray-600 mb-4">
+                      Will be sent to <span className="font-medium text-purple-700">{displayAdminsList.map(a => a.name).join(', ')}</span> for review.
+                      Content only reaches the customer after admin approval.
+                    </p>
+                  ) : (
+                    <p className="text-sm text-gray-600 mb-4 flex items-center justify-center gap-1">
+                      <AlertCircle className="h-4 w-4 text-amber-500 flex-shrink-0" />
+                      No assigned admins. Submission will be reviewed by System Admins.
+                    </p>
+                  )
                 ) : (
-                  <p className="text-sm text-amber-600 mb-4 flex items-center justify-center gap-1">
-                    <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                    Select an admin above before submitting
+                  <p className="text-sm text-gray-600 mb-4">
+                    Will be sent directly to the customer for review, bypassing the internal admin review process.
                   </p>
                 )}
                 <button
                   onClick={handleSubmit}
-                  disabled={submitting || uploadedFiles.length === 0 || uploadedFiles.some(f => f.uploading) || selectedAdmins.length === 0}
+                  disabled={submitting || uploadedFiles.length === 0 || uploadedFiles.some(f => f.uploading)}
                   className="w-full inline-flex items-center justify-center px-6 py-3 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
                 >
                   {submitting ? (
@@ -2605,7 +2668,7 @@ function ContentUpload() {
                   ) : (
                     <>
                       <Send className="h-4 w-4 mr-2" />
-                      Submit to Admin for Review
+                      {activeTab === 'admin' ? 'Submit to Admin for Review' : 'Submit to Customer'}
                     </>
                   )}
                 </button>
@@ -2613,9 +2676,6 @@ function ContentUpload() {
                   <p className="text-xs text-gray-500 mt-2">
                     Please wait for all uploads to complete
                   </p>
-                )}
-                {selectedAdmins.length === 0 && !adminsLoading && adminsList.length > 0 && (
-                  <p className="text-xs text-amber-600 mt-2">Select an admin above to enable submit</p>
                 )}
               </div>
             </div>

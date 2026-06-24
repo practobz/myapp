@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { PlusCircle, Clock, MessageSquare, CheckCircle, Globe, User, ChevronDown, Palette, Eye, Image, FolderOpen, Users, ClipboardList, Send, Bell, ShieldCheck } from 'lucide-react';
+import { PlusCircle, Clock, MessageSquare, CheckCircle, Globe, User, ChevronDown, Palette, Eye, Image, FolderOpen, Users, ClipboardList, Send, Bell, ShieldCheck, ArrowUpRight, UserCheck } from 'lucide-react';
 import { format } from 'date-fns';
 import { useAuth } from "../admin/contexts/AuthContext";
 import Logo from '../admin/components/layout/Logo';
@@ -26,6 +26,83 @@ const platformColor = (p) => {
     default: return 'bg-gray-100 text-gray-700';
   }
 };
+
+/* ─── Skeleton ─────────────────────────────────────────────────────── */
+const CardSkeleton = () => (
+  <div className="aur-card aur-card--skeleton">
+    <div className="aur-avatar sk-block" />
+    <div className="aur-card__body">
+      <div className="sk-line sk-line--70" />
+      <div className="sk-line sk-line--45" />
+    </div>
+  </div>
+);
+
+/* ─── Person Card ──────────────────────────────────────────────────── */
+const PersonCard = React.memo(({ person, variant, href, contentCount, yetToUploadCount }) => {
+  const isCustomer = variant === 'customer';
+  const Icon = isCustomer ? Users : UserCheck;
+  const displayName = person.name || `${person.firstName || ''} ${person.lastName || ''}`.trim() || 'Unnamed';
+  const navigate = useNavigate();
+
+  const handleOpen = () => {
+    if (variant === 'customer') {
+      const targetUrl = `${window.location.origin}${window.location.pathname}#${href}`;
+      window.open(targetUrl, '_blank');
+    } else {
+      navigate(href);
+    }
+  };
+
+  return (
+    <div onClick={handleOpen} className={`aur-card aur-card--${variant} group`}>
+      <div className="aur-avatar">
+        {person.profileImage
+          ? <img src={person.profileImage} alt={displayName} className="aur-avatar__img" />
+          : <Icon className="aur-avatar__icon" />}
+      </div>
+      <div className="aur-card__body">
+        <p className="aur-card__name">{displayName}</p>
+        <p className="aur-card__email">{person.email}</p>
+        {person.companyName && <p className="aur-card__company">{person.companyName}</p>}
+        {variant === 'customer' && (
+          <div className="flex gap-2 flex-wrap items-center">
+            {typeof contentCount === 'number' && (
+              <div className="aur-card__count">
+                <span className="aur-card__count-num">{contentCount}</span>
+                <span className="aur-card__count-label">{contentCount === 1 ? 'Content Item' : 'Content Items'}</span>
+              </div>
+            )}
+            {typeof yetToUploadCount === 'number' && (
+              <div className="aur-card__count aur-card__count--pending">
+                <span className="aur-card__count-num">{yetToUploadCount}</span>
+                <span className="aur-card__count-label">Yet to Upload</span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+      <ArrowUpRight className="aur-card__arrow" />
+    </div>
+  );
+});
+PersonCard.displayName = 'PersonCard';
+
+/* ─── Section ──────────────────────────────────────────────────────── */
+const Section = ({ icon: Icon, label, count, variant, children, empty }) => (
+  <section className={`aur-section aur-section--${variant}`}>
+    <div className="aur-section__header">
+      <div className="aur-section__title">
+        <Icon className="aur-section__icon" />
+        <span>{label}</span>
+      </div>
+      <span className={`aur-badge aur-badge--${variant}`}>{count}</span>
+    </div>
+    {count > 0
+      ? <div className="aur-grid">{children}</div>
+      : <div className="aur-empty">{empty}</div>}
+  </section>
+);
 
 // Helper to get creator email from localStorage
 function getCreatorEmail() {
@@ -55,7 +132,8 @@ function Dashboard() {
   // Real assignments data
   const [assignments, setAssignments] = useState([]);
   const [loading, setLoading] = useState(true);
-  
+  const [customers, setCustomers] = useState([]);
+
   // Scheduled posts to check published status
   const [scheduledPosts, setScheduledPosts] = useState([]);
   const [submissions, setSubmissions] = useState([]);
@@ -80,6 +158,7 @@ function Dashboard() {
         ]);
         const calendars = await calRes.json();
         const custData = custRes.ok ? await custRes.json() : { customers: [] };
+        setCustomers(custData.customers || []);
         const customerMap = {};
         (custData.customers || []).forEach(c => {
           customerMap[c._id || c.id] = c.name || '';
@@ -114,7 +193,7 @@ function Dashboard() {
         setLoading(false);
       }
     };
-    
+
     const fetchScheduledPosts = async () => {
       try {
         const res = await fetch(`${process.env.REACT_APP_API_URL}/api/scheduled-posts`);
@@ -128,7 +207,7 @@ function Dashboard() {
         setScheduledPosts([]); // Ensure scheduledPosts is an empty array on error
       }
     };
-    
+
     const fetchSubmissions = async () => {
       try {
         const res = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions`);
@@ -176,6 +255,14 @@ function Dashboard() {
     return { adminApprovedKeys, customerApprovedKeys, reviewKeys, anySubmissionKeys };
   }, [submissions]);
 
+  const assignedCustomerIds = useMemo(() => {
+    return new Set(assignments.map(a => a.customerId).filter(Boolean));
+  }, [assignments]);
+
+  const assignedCustomers = useMemo(() => {
+    return customers.filter(c => assignedCustomerIds.has(c._id || c.id));
+  }, [customers, assignedCustomerIds]);
+
   const assignmentMatchesSet = (assignment, set) => {
     if (!set.size) return false;
     const id = String(assignment.id || assignment._id || '');
@@ -190,7 +277,7 @@ function Dashboard() {
   const isContentPublished = (assignmentId) => {
     return scheduledPosts.some(post => post.contentId === assignmentId && post.status === 'published');
   };
-  
+
   // Helper: get actual status considering published posts and item.published field
   const getActualStatus = (assignment) => {
     // Check if the item itself is marked as published
@@ -219,7 +306,7 @@ function Dashboard() {
 
   const { stats, adminApprovedCount, customerApprovedCount, reviewCount } = useMemo(() => {
     return {
-      adminApprovedCount:  assignments.filter(a => assignmentMatchesSet(a, submissionFilterSets.adminApprovedKeys)).length,
+      adminApprovedCount: assignments.filter(a => assignmentMatchesSet(a, submissionFilterSets.adminApprovedKeys)).length,
       customerApprovedCount: assignments.filter(a => assignmentMatchesSet(a, submissionFilterSets.customerApprovedKeys)).length,
       reviewCount: assignments.filter(a => assignmentMatchesSet(a, submissionFilterSets.reviewKeys)).length,
       stats: {
@@ -244,7 +331,7 @@ function Dashboard() {
         .filter(s => {
           if (s.assignment_id && String(s.assignment_id) === String(a.id || a._id || '')) return true;
           if (a.calendarId && a.itemIndex !== undefined &&
-              s.calendar_id === a.calendarId && String(s.item_index) === String(a.itemIndex)) return true;
+            s.calendar_id === a.calendarId && String(s.item_index) === String(a.itemIndex)) return true;
           return false;
         })
         .sort((x, y) => new Date(y.created_at || 0) - new Date(x.created_at || 0))[0];
@@ -286,6 +373,7 @@ function Dashboard() {
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col">
+      <style>{CSS}</style>
       {/* Header */}
       <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-10">
         <div className="w-full px-4 sm:px-6 lg:px-8">
@@ -339,298 +427,32 @@ function Dashboard() {
               <p className="text-purple-100 text-sm sm:text-base max-w-xl">Manage your content assignments and track your progress</p>
             </div>
 
-            {/* Stats Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-4">
-              {/* Total Assigned */}
-              <div 
-                className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-5 cursor-pointer hover:shadow-md hover:border-indigo-200 transition-all"
-                onClick={() => goToAssignments('all')}
-              >
-                <div className="flex items-center gap-3 sm:gap-4">
-                  <div className="p-2.5 sm:p-3 bg-indigo-50 rounded-xl flex-shrink-0">
-                    <Users className="h-5 w-5 sm:h-6 sm:w-6 text-indigo-600" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs sm:text-sm font-medium text-gray-500 leading-tight">Total Assigned</p>
-                    <h3 className="text-xl sm:text-2xl font-bold text-gray-900">{stats.totalAssigned}</h3>
-                  </div>
-                </div>
-              </div>
-
-              {/* New Assigned This Week */}
-              <div 
-                className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-5 cursor-pointer hover:shadow-md hover:border-blue-200 transition-all"
-                onClick={() => goToAssignments('assigned')}
-              >
-                <div className="flex items-center gap-3 sm:gap-4">
-                  <div className="p-2.5 sm:p-3 bg-blue-50 rounded-xl flex-shrink-0">
-                    <PlusCircle className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs sm:text-sm font-medium text-gray-500 leading-tight">New This Week</p>
-                    <h3 className="text-xl sm:text-2xl font-bold text-gray-900">{stats.newContentAssigned}</h3>
-                  </div>
-                </div>
-              </div>
-
-              {/* Pending */}
-              <div 
-                className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-5 cursor-pointer hover:shadow-md hover:border-orange-200 transition-all"
-                onClick={() => goToAssignments('pending')}
-              >
-                <div className="flex items-center gap-3 sm:gap-4">
-                  <div className="p-2.5 sm:p-3 bg-orange-50 rounded-xl flex-shrink-0">
-                    <MessageSquare className="h-5 w-5 sm:h-6 sm:w-6 text-orange-600" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs sm:text-sm font-medium text-gray-500 leading-tight">Pending</p>
-                    <h3 className="text-xl sm:text-2xl font-bold text-gray-900">{stats.contentWaitingInputs}</h3>
-                  </div>
-                </div>
-              </div>
-
-              {/* Approved */}
-              <div 
-                className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-5 cursor-pointer hover:shadow-md hover:border-green-200 transition-all"
-                onClick={() => goToAssignments('approved')}
-              >
-                <div className="flex items-center gap-3 sm:gap-4">
-                  <div className="p-2.5 sm:p-3 bg-green-50 rounded-xl flex-shrink-0">
-                    <CheckCircle className="h-5 w-5 sm:h-6 sm:w-6 text-green-600" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs sm:text-sm font-medium text-gray-500 leading-tight">Customer Approved</p>
-                    <h3 className="text-xl sm:text-2xl font-bold text-gray-900">{customerApprovedCount}</h3>
-                  </div>
-                </div>
-              </div>
-
-              {/* Published */}
-              <div 
-                className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-5 cursor-pointer hover:shadow-md hover:border-purple-200 transition-all"
-                onClick={() => goToAssignments('published')}
-              >
-                <div className="flex items-center gap-3 sm:gap-4">
-                  <div className="p-2.5 sm:p-3 bg-purple-50 rounded-xl flex-shrink-0">
-                    <Globe className="h-5 w-5 sm:h-6 sm:w-6 text-purple-600" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs sm:text-sm font-medium text-gray-500 leading-tight">Published</p>
-                    <h3 className="text-xl sm:text-2xl font-bold text-gray-900">{stats.contentPublished}</h3>
-                  </div>
-                </div>
-              </div>
-
-              {/* Admin Approved */}
-              <div
-                className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-5 cursor-pointer hover:shadow-md hover:border-emerald-200 transition-all"
-                onClick={() => navigate('/content-creator/assignments')}
-              >
-                <div className="flex items-center gap-3 sm:gap-4">
-                  <div className="p-2.5 sm:p-3 bg-emerald-50 rounded-xl flex-shrink-0">
-                    <ShieldCheck className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-600" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs sm:text-sm font-medium text-gray-500 leading-tight">Admin Approved</p>
-                    <h3 className="text-xl sm:text-2xl font-bold text-gray-900">{adminApprovedCount}</h3>
-                  </div>
-                </div>
-              </div>
-
-              {/* Review Updates */}
-              <div 
-                className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-5 cursor-pointer hover:shadow-md hover:border-rose-200 transition-all"
-                onClick={() => navigate('/content-creator/customer-feedback')}
-              >
-                <div className="flex items-center gap-3 sm:gap-4">
-                  <div className="p-2.5 sm:p-3 bg-rose-50 rounded-xl flex-shrink-0">
-                    <Bell className="h-5 w-5 sm:h-6 sm:w-6 text-rose-600" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs sm:text-sm font-medium text-gray-500 leading-tight">Review Updates</p>
-                    <h3 className="text-xl sm:text-2xl font-bold text-gray-900">{reviewCount}</h3>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Content Grid - 50/50 Layout */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Recent Assignments */}
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="px-6 py-4 border-b border-purple-100 bg-gradient-to-r from-purple-50 to-indigo-50">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-purple-100 rounded-lg">
-                        <Clock className="h-5 w-5 text-purple-600" />
-                      </div>
-                      <h2 className="text-lg font-bold text-gray-900">Recent Assignments</h2>
+            {/* Customers Section */}
+            <Section icon={Users} label="Customers" count={assignedCustomers.length} variant="customer" empty="No customers assigned yet.">
+              {loading ? (
+                [1, 2, 3].map(j => <CardSkeleton key={j} />)
+              ) : (
+                assignedCustomers.map((c, i) => {
+                  const customerId = c._id || c.id;
+                  const customerAssignments = assignments.filter(item => item.customerId === customerId);
+                  const count = customerAssignments.length;
+                  const yetToUploadCount = customerAssignments.filter(a => !assignmentMatchesSet(a, submissionFilterSets.anySubmissionKeys)).length;
+                  return (
+                    <div key={customerId} className="aur-enter" style={{ animationDelay: `${i * 35}ms` }}>
+                      <PersonCard
+                        person={c}
+                        variant="customer"
+                        href={`/content-creator/assignments?expand=${customerId}`}
+                        contentCount={count}
+                        yetToUploadCount={yetToUploadCount}
+                      />
                     </div>
-                    <span className="px-3 py-1 bg-purple-100 text-purple-700 text-xs font-semibold rounded-full">
-                      {recentAssignments.length} items
-                    </span>
-                  </div>
-                </div>
-                <div className="p-5">
-                  {loading ? (
-                    <div className="flex items-center justify-center py-12">
-                      <div className="animate-spin rounded-full h-10 w-10 border-3 border-purple-200 border-t-purple-600"></div>
-                    </div>
-                  ) : recentAssignments.length === 0 ? (
-                    <div className="text-center py-12">
-                      <div className="bg-gradient-to-br from-purple-100 to-indigo-100 rounded-2xl w-16 h-16 flex items-center justify-center mx-auto mb-4">
-                        <Palette className="h-8 w-8 text-purple-500" />
-                      </div>
-                      <p className="text-gray-600 font-medium">No assignments yet</p>
-                      <p className="text-gray-400 text-sm mt-1">Your assignments will appear here</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {recentAssignments.map((assignment) => {
-                        const status = getFilterStatus(assignment);
-                        const platforms = parsePlatforms(assignment.platform || assignment.type);
-                        return (
-                          <div 
-                            key={assignment.id} 
-                            className="group p-4 bg-gradient-to-r from-gray-50 to-slate-50 rounded-xl hover:from-purple-50 hover:to-indigo-50 border border-gray-100 hover:border-purple-200 transition-all duration-300 cursor-pointer"
-                            onClick={() => navigate(`/content-creator/content-details/${assignment.calendarId}/${assignment.itemIndex}`)}
-                          >
-                            {/* Title + Status Badge */}
-                            <div className="flex items-start justify-between gap-2">
-                              <p className="font-bold text-gray-900 truncate group-hover:text-purple-900 flex-1">
-                                {assignment.title || assignment.description || 'Untitled'}
-                              </p>
-                              <span className={`px-2.5 py-1 rounded-lg text-xs font-bold flex-shrink-0 shadow-sm ${
-                                status === 'assigned' ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white' :
-                                status === 'in_progress' ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white' :
-                                status === 'pending' ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white' :
-                                status === 'approved' ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white' :
-                                status === 'published' ? 'bg-gradient-to-r from-purple-500 to-indigo-500 text-white' :
-                                'bg-gray-500 text-white'
-                              }`}>
-                                {typeof status === 'string'
-                                  ? (status.replace('_', ' ').charAt(0).toUpperCase() + status.replace('_', ' ').slice(1))
-                                  : 'Pending'}
-                              </span>
-                            </div>
-                            {/* Customer Name */}
-                            <div className="flex items-center gap-1 mt-1">
-                              <User className="h-3 w-3 text-gray-400 flex-shrink-0" />
-                              <p className="text-xs text-gray-500 truncate">{assignment.customerName || assignment.customer || 'Unknown Customer'}</p>
-                            </div>
-                            {/* Platform Pills */}
-                            {platforms.length > 0 && (
-                              <div className="flex flex-wrap gap-1 mt-2">
-                                {platforms.map((p, i) => (
-                                  <span key={i} className={`px-2 py-0.5 rounded-full text-xs font-medium ${platformColor(p)}`}>
-                                    {p.charAt(0).toUpperCase() + p.slice(1)}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                            {/* Due Date + Upload Button row */}
-                            <div className="flex items-center justify-between gap-2 mt-2">
-                              <div className="flex items-center gap-1.5">
-                                <Clock className="h-3 w-3 text-gray-400" />
-                                <p className="text-xs text-gray-500">
-                                  Due: {assignment.dueDate ? format(new Date(assignment.dueDate), 'MMM dd, yyyy') : 'N/A'}
-                                </p>
-                              </div>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  navigate(`/content-creator/upload/${assignment.calendarId}/${assignment.itemIndex}`);
-                                }}
-                                className="flex items-center gap-1 px-2.5 py-1 bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold rounded-lg transition-colors flex-shrink-0"
-                              >
-                                <Send className="h-3 w-3" />
-                                Upload
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                      
-                      {/* View All Button */}
-                      <button 
-                        onClick={() => navigate('/content-creator/assignments')}
-                        className="w-full mt-2 py-3 text-sm font-semibold text-purple-600 hover:text-purple-700 hover:bg-purple-50 rounded-xl transition-colors"
-                      >
-                        View All Assignments →
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
+                  );
+                })
+              )}
+            </Section>
 
-              {/* Quick Actions */}
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="px-6 py-4 border-b border-purple-100 bg-gradient-to-r from-purple-50 to-indigo-50">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-purple-100 rounded-lg">
-                      <PlusCircle className="h-5 w-5 text-purple-600" />
-                    </div>
-                    <h2 className="text-lg font-bold text-gray-900">Quick Actions</h2>
-                  </div>
-                </div>
-                <div className="p-5">
-                  <div className="space-y-3">
-                    <button 
-                      onClick={() => navigate('/content-creator/assignments')}
-                      className="w-full flex items-center gap-4 p-4 rounded-xl bg-gradient-to-r from-purple-50 to-indigo-50 hover:from-purple-100 hover:to-indigo-100 border border-purple-100 hover:border-purple-200 transition-all duration-300 group"
-                    >
-                      <div className="p-3 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl shadow-lg group-hover:shadow-purple-200 transition-shadow">
-                        <PlusCircle className="h-5 w-5 text-white" />
-                      </div>
-                      <div className="text-left">
-                        <span className="text-sm font-bold text-gray-900 group-hover:text-purple-900">View All Assignments</span>
-                        <p className="text-xs text-gray-500 mt-0.5">Browse and manage your tasks</p>
-                      </div>
-                    </button>
-                     <button 
-                      onClick={() => navigate('/content-creator/upload')}
-                      className="w-full flex items-center gap-4 p-4 rounded-xl bg-gradient-to-r from-rose-50 to-pink-50 hover:from-rose-100 hover:to-pink-100 border border-rose-100 hover:border-rose-200 transition-all duration-300 group"
-                    >
-                      <div className="p-3 bg-gradient-to-br from-rose-500 to-pink-600 rounded-xl shadow-lg group-hover:shadow-rose-200 transition-shadow">
-                        <Send className="h-5 w-5 text-white" />
-                      </div>
-                      <div className="text-left">
-                        <span className="text-sm font-bold text-gray-900 group-hover:text-rose-900">Internal Review</span>
-                        <p className="text-xs text-gray-500 mt-0.5">Pick an assignment to submit media</p>
-                      </div>
-                    </button>
-                    <button 
-                      onClick={() => navigate('/content-creator/profile')}
-                      className="w-full flex items-center gap-4 p-4 rounded-xl bg-gradient-to-r from-green-50 to-emerald-50 hover:from-green-100 hover:to-emerald-100 border border-green-100 hover:border-green-200 transition-all duration-300 group"
-                    >
-                      <div className="p-3 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl shadow-lg group-hover:shadow-green-200 transition-shadow">
-                        <User className="h-5 w-5 text-white" />
-                      </div>
-                      <div className="text-left">
-                        <span className="text-sm font-bold text-gray-900 group-hover:text-green-900">Manage Profile</span>
-                        <p className="text-xs text-gray-500 mt-0.5">Update your information</p>
-                      </div>
-                    </button>
-                    
-                    <button 
-                      onClick={() => navigate('/content-creator/media-library')}
-                      className="w-full flex items-center gap-4 p-4 rounded-xl bg-gradient-to-r from-amber-50 to-orange-50 hover:from-amber-100 hover:to-orange-100 border border-amber-100 hover:border-amber-200 transition-all duration-300 group"
-                    >
-                      <div className="p-3 bg-gradient-to-br from-amber-500 to-orange-600 rounded-xl shadow-lg group-hover:shadow-amber-200 transition-shadow">
-                        <FolderOpen className="h-5 w-5 text-white" />
-                      </div>
-                      <div className="text-left">
-                        <span className="text-sm font-bold text-gray-900 group-hover:text-amber-900">Media Library</span>
-                        <p className="text-xs text-gray-500 mt-0.5">Upload and manage your files</p>
-                      </div>
-                    </button>
 
-                   
-
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       </div>
@@ -639,13 +461,251 @@ function Dashboard() {
 
       {/* Click outside to close menu */}
       {isUserMenuOpen && (
-        <div 
-          className="fixed inset-0 z-[9]" 
+        <div
+          className="fixed inset-0 z-[9]"
           onClick={() => setIsUserMenuOpen(false)}
         ></div>
       )}
     </div>
   );
 }
+
+const CSS = `
+/* ── Tokens ── */
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&display=swap');
+
+:root {
+  --aur-c-terra:   #2374AB; /* Spanish Blue */
+  --aur-c-olive:   #4DCCBD; /* Medium Turquoise */
+  --aur-c-forest:  #231651; /* Russian Violet */
+  --aur-c-warm:    #D6FFF6; /* Light Cyan */
+  --aur-c-cream:   #F3F1F8; /* Soft Lavender page bg */
+  --aur-c-white:   #FFFFFF;
+  --aur-c-ink:     #231651; /* Russian Violet for text */
+  --aur-c-muted:   #504E63;
+  --aur-c-border:  #E2DFEB;
+  --aur-c-terra-light: #E9F1F7;
+  --aur-c-olive-light: #EBFAF7;
+  --aur-c-coral:   #FF8484; /* Light Coral */
+  --aur-r-card: 10px;
+  --aur-r-banner: 14px;
+}
+
+/* ── Section ── */
+.aur-section {
+  background: var(--aur-c-white);
+  border: 1px solid var(--aur-c-border);
+  border-radius: 12px;
+  padding: 16px 18px;
+}
+.aur-section--customer { border-top: 3px solid var(--aur-c-terra); }
+.aur-section--creator  { border-top: 3px solid var(--aur-c-olive); }
+
+.aur-section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.aur-section__title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--aur-c-ink);
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.aur-section__icon {
+  width: 14px;
+  height: 14px;
+  color: var(--aur-c-muted);
+}
+.aur-section--customer .aur-section__icon { color: var(--aur-c-terra); }
+.aur-section--creator  .aur-section__icon { color: var(--aur-c-olive); }
+
+/* ── Badge ── */
+.aur-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 20px;
+}
+.aur-badge--customer { background: var(--aur-c-terra-light); color: var(--aur-c-terra); }
+.aur-badge--creator  { background: var(--aur-c-olive-light); color: var(--aur-c-olive); }
+
+/* ── Grid ── */
+.aur-grid {
+  display: grid;
+  grid-template-columns: repeat(1, 1fr);
+  gap: 8px;
+}
+@media (min-width: 580px)  { .aur-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 1024px) { .aur-grid { grid-template-columns: repeat(3, 1fr); } }
+
+/* ── Card ── */
+.aur-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--aur-c-white);
+  border: 1px solid var(--aur-c-border);
+  border-radius: var(--aur-r-card);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+  position: relative;
+}
+.aur-card:hover {
+  background: #F9FFFD;
+  border-color: #9CE3D5;
+  box-shadow: 0 4px 12px rgba(35, 22, 81, 0.08);
+}
+.aur-card--skeleton { cursor: default; pointer-events: none; }
+
+/* ── Avatar ── */
+.aur-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.aur-card--customer .aur-avatar { background: var(--aur-c-terra-light); }
+.aur-card--creator  .aur-avatar { background: var(--aur-c-olive-light); }
+.aur-avatar__img  { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+.aur-avatar__icon { width: 18px; height: 18px; }
+.aur-card--customer .aur-avatar__icon { color: var(--aur-c-terra); }
+.aur-card--creator  .aur-avatar__icon { color: var(--aur-c-olive); }
+
+/* ── Card body ── */
+.aur-card__body  { flex: 1; min-width: 0; }
+.aur-card__name  { font-size: 15px; font-weight: 600; color: var(--aur-c-ink); truncate; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: color 0.15s; }
+.aur-card:hover .aur-card__name { color: var(--aur-c-terra); }
+.aur-card--creator:hover .aur-card__name { color: var(--aur-c-olive); }
+.aur-card__email   { font-size: 13px; color: var(--aur-c-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px; }
+.aur-card__company { font-size: 11.5px; color: #A9A79F; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px; }
+
+/* ── Customer Content Count Pill ── */
+.aur-card__count {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 2px 6px;
+  background: var(--aur-c-terra-light);
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--aur-c-terra);
+  width: fit-content;
+  transition: background-color 0.15s, color 0.15s;
+}
+.aur-card:hover .aur-card__count {
+  background: var(--aur-c-terra);
+  color: var(--aur-c-white);
+}
+.aur-card__count--pending {
+  background: #FEF3C7;
+  color: #D97706;
+}
+.aur-card:hover .aur-card__count--pending {
+  background: #D97706;
+  color: var(--aur-c-white);
+}
+
+/* ── Card Action Buttons ── */
+.aur-card__actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+.aur-card__btn {
+  font-family: 'Outfit', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+.aur-card__btn--customer {
+  background-color: var(--aur-c-terra-light);
+  color: var(--aur-c-terra);
+  border-color: rgba(35, 116, 171, 0.2);
+}
+.aur-card__btn--customer:hover {
+  background-color: var(--aur-c-terra);
+  color: var(--aur-c-white);
+  box-shadow: 0 2px 6px rgba(35, 116, 171, 0.15);
+}
+.aur-card__btn--internal {
+  background-color: var(--aur-c-olive-light);
+  color: var(--aur-c-olive);
+  border-color: rgba(77, 204, 189, 0.2);
+}
+.aur-card__btn--internal:hover {
+  background-color: var(--aur-c-olive);
+  color: var(--aur-c-white);
+  box-shadow: 0 2px 6px rgba(77, 204, 189, 0.15);
+}
+
+/* ── Arrow ── */
+.aur-card__arrow {
+  width: 13px;
+  height: 13px;
+  color: #C8C4BC;
+  flex-shrink: 0;
+  opacity: 0;
+  transform: translateX(-3px);
+  transition: opacity 0.15s, transform 0.15s;
+}
+.aur-card:hover .aur-card__arrow { opacity: 1; transform: translateX(0); }
+.aur-card--customer:hover .aur-card__arrow { color: var(--aur-c-terra); }
+.aur-card--creator:hover  .aur-card__arrow { color: var(--aur-c-olive); }
+
+/* ── Empty ── */
+.aur-empty {
+  padding: 18px 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--aur-c-muted);
+  border: 1.5px dashed var(--aur-c-border);
+  border-radius: 8px;
+}
+
+/* ── Skeleton blocks ── */
+.sk-block {
+  background: var(--aur-c-border);
+  border-radius: 50%;
+  width: 34px;
+  height: 34px;
+  animation: aurPulse 1.4s ease-in-out infinite;
+}
+.sk-block--badge { border-radius: 20px; width: 28px; height: 16px; }
+.sk-line {
+  background: var(--aur-c-border);
+  border-radius: 4px;
+  height: 10px;
+  animation: aurPulse 1.4s ease-in-out infinite;
+}
+.sk-line--70 { width: 70%; }
+.sk-line--45 { width: 45%; margin-top: 5px; }
+.sk-line--30 { width: 30%; height: 12px; }
+@keyframes aurPulse { 0%,100%{opacity:1} 50%{opacity:0.45} }
+
+/* ── Enter animation ── */
+.aur-enter { animation: aurUp 0.3s ease-out both; }
+@keyframes aurUp {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+`;
 
 export default Dashboard;

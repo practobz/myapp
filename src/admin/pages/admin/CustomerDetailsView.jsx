@@ -114,6 +114,9 @@ const PLATFORMS_QR = [
 // ── Portfolio status helpers ───────────────────────────────────────────────────
 const getPortfolioStatusColor = (status) => {
   switch (status) {
+    case 'under_admin_review': return 'bg-yellow-100 text-yellow-800 border-yellow-250';
+    case 'approved_admin_under_customer_review': return 'bg-orange-100 text-orange-850 border-orange-200';
+    case 'approved_admin_and_customer': return 'bg-teal-100 text-teal-800 border-teal-200';
     case 'under_review': return 'bg-yellow-100 text-yellow-800';
     case 'approved_admin': return 'bg-orange-100 text-orange-800';
     case 'approved_customer': return 'bg-green-100 text-green-800';
@@ -128,6 +131,9 @@ const getPortfolioStatusColor = (status) => {
 
 const getPortfolioStatusLabel = (status) => {
   switch (status) {
+    case 'under_admin_review': return 'Under Admin Review';
+    case 'approved_admin_under_customer_review': return 'Approved by Admin & Under Customer Review';
+    case 'approved_admin_and_customer': return 'Approved by Admin & Customer';
     case 'approved_admin': return 'Admin Approved';
     case 'approved_customer': return 'Customer Approved';
     case 'approved_both': return 'Fully Approved';
@@ -1383,6 +1389,9 @@ function CustomerDetailsView() {
         title: base.caption || '',
         platform: base.platform || '',
         status: latest.status || 'submitted',
+        approved_by_admin: latest.approved_by_admin,
+        approved_by_customer: latest.approved_by_customer,
+        submission_stage: latest.submission_stage || latest.submissionStage || 'internal',
         createdDate: base.created_at,
         lastUpdated: latest.created_at,
         totalVersions: versions.length,
@@ -1395,6 +1404,9 @@ function CustomerDetailsView() {
           notes: v.notes || '',
           createdAt: v.created_at,
           status: v.status || 'submitted',
+          approved_by_admin: v.approved_by_admin,
+          approved_by_customer: v.approved_by_customer,
+          submission_stage: v.submission_stage || v.submissionStage || 'internal',
           comments: v.comments || [],
         })),
         calendarId,
@@ -2762,7 +2774,22 @@ function CustomerDetailsView() {
                     const latestVersion = item.versions[item.versions.length - 1];
                     const firstMedia = latestVersion?.media?.[0];
                     const isPublished = item.published || isContentPublished(item.id, item);
-                    const displayStatus = isPublished ? 'published' : item.status;
+                    let displayStatus = isPublished ? 'published' : item.status;
+                    if (!isPublished) {
+                      if (
+                        (item.approved_by_customer === true || item.status === 'approved_both' || item.status === 'approved_customer')
+                      ) {
+                        displayStatus = 'approved_admin_and_customer';
+                      } else if (
+                        item.submission_stage === 'customer' ||
+                        item.approved_by_admin === true ||
+                        item.status === 'approved_admin'
+                      ) {
+                        displayStatus = 'approved_admin_under_customer_review';
+                      } else if (item.status === 'submitted') {
+                        displayStatus = 'under_admin_review';
+                      }
+                    }
                     return (
                       <div
                         key={item.id}

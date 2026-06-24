@@ -39,6 +39,7 @@ const instagramMediaIdToUrl = (mediaId, postType) => {
 // Helper to get published post URL across all platforms
 const getPostPublishedUrl = (post, item) => {
   if (!post) return null;
+  const platform = (post.platform || '').toLowerCase();
 
   // 1. Manual Platform URLs
   if (post.isManualPublish && item?.manualPlatformUrls) {
@@ -51,39 +52,41 @@ const getPostPublishedUrl = (post, item) => {
     }
   }
 
-  // 2. Direct postUrl / postId from the post object
-  if (post.postUrl && isIdValid(post.postUrl)) return post.postUrl;
-
-  // 3. Platform specific IDs
-  if (post.platform === 'facebook' && isIdValid(post.facebookPostId) && !post.facebookPostId.startsWith('fb_shared_from_')) {
+  // 2. Platform specific IDs
+  if (platform === 'facebook' && isIdValid(post.facebookPostId) && !post.facebookPostId.startsWith('fb_shared_from_')) {
     const fbId = post.facebookPostId;
     return fbId.includes('_')
       ? `https://www.facebook.com/permalink.php?story_fbid=${fbId.split('_')[1]}&id=${fbId.split('_')[0]}`
       : `https://www.facebook.com/${fbId}`;
   }
 
-  if (post.platform === 'instagram') {
-    if (isIdValid(post.instagramPostId)) {
-      const igUrl = post.instagramPermalink || instagramMediaIdToUrl(post.instagramPostId, post.postType);
-      const isLiveButUnavailable = post.metricsSource === 'live' && !post.instagramPermalink;
-      if (igUrl && !isLiveButUnavailable) return igUrl;
-    } else if (isIdValid(post.instagramPermalink)) {
+  if (platform === 'instagram') {
+    // Prefer canonical permalink first; generic postUrl is often stale for Instagram.
+    if (isIdValid(post.instagramPermalink)) {
       return post.instagramPermalink;
     }
+    if (isIdValid(post.instagramPostId)) {
+      const igUrl = instagramMediaIdToUrl(post.instagramPostId, post.postType);
+      const isLiveButUnavailable = post.metricsSource === 'live' && !post.instagramPermalink;
+      if (igUrl && !isLiveButUnavailable) return igUrl;
+    }
+    if (post.postUrl && isIdValid(post.postUrl)) return post.postUrl;
   }
 
-  if (post.platform === 'youtube' && isIdValid(post.youtubePostId)) {
+  if (platform === 'youtube' && isIdValid(post.youtubePostId)) {
     return `https://www.youtube.com/watch?v=${post.youtubePostId}`;
   }
 
-  if (post.platform === 'linkedin' && isIdValid(post.linkedinPostId)) {
+  if (platform === 'linkedin' && isIdValid(post.linkedinPostId)) {
     return `https://www.linkedin.com/feed/update/${post.linkedinPostId}`;
   }
 
+  // 3. Direct postUrl fallback for non-Instagram platforms
+  if (platform !== 'instagram' && post.postUrl && isIdValid(post.postUrl)) return post.postUrl;
+
   // Fallback to basic platform URLs
   if (post.platform && post.postId) {
-    switch (post.platform) {
-      case 'instagram': return `https://www.instagram.com/p/${post.postId}`;
+    switch (platform) {
       case 'facebook': return `https://www.facebook.com/${post.postId}`;
       case 'linkedin': return `https://www.linkedin.com/feed/update/${post.postId}`;
       case 'youtube': return `https://www.youtube.com/watch?v=${post.postId}`;

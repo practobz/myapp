@@ -2797,7 +2797,7 @@ function CustomerDetailsView() {
                             <span className="capitalize">{item.platform || '—'}</span>
                             <span>{formatSimpleDate(item.lastUpdated)}</span>
                           </div>
-                          <div className="flex gap-2 mt-3 w-full">
+                          <div className="flex gap-2 mt-auto pt-3 w-full">
                             <button
                               className="flex-1 bg-blue-600 text-white py-1.5 px-2 rounded-lg text-xs font-medium hover:bg-blue-700 transition-colors"
                               onClick={e => {

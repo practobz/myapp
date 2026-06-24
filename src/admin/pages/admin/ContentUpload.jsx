@@ -91,6 +91,7 @@ function ContentUpload() {
             const idx = parseInt(itemIndex, 10);
             if (!isNaN(idx) && calendar._id === calendarId && calendar.contentItems[idx]) {
               const item = calendar.contentItems[idx];
+              const stableItemId = item.id || item._id || `${calendar._id}::${idx}`;
               found = {
                 ...item,
                 calendarName: calendar.name || calendar.customerName || calendar.customer || '',
@@ -98,7 +99,9 @@ function ContentUpload() {
                 customerId: customerId,
                 customerName: customerInfo.name || calendar.customerName || calendar.name || '',
                 customerEmail: customerInfo.email || '',
-                id: item.id || item._id || item.title,
+                id: stableItemId,
+                stableItemId,
+                itemIndex: idx,
                 dueDate: item.dueDate || item.due_date || item.date,
                 platform: item.platform || 'Instagram',
                 requirements: item.requirements || [],
@@ -162,7 +165,16 @@ function ContentUpload() {
         // Filter submissions for this specific assignment (any creator)
         // Handle various possible field names
         const previousSubmissions = submissions.filter(sub => {
+          const subCalendarId = sub.calendar_id || sub.calendarId;
+          const subItemIndex = (sub.item_index !== undefined && sub.item_index !== null)
+            ? String(sub.item_index)
+            : undefined;
           const subAssignmentId = sub.assignment_id || sub.assignmentId || sub.assignmentID;
+
+          // Primary: calendar + item index uniquely identifies duplicate-titled items.
+          if (subCalendarId && subItemIndex !== undefined) {
+            return subCalendarId === calendarId && subItemIndex === String(itemIndex);
+          }
 
           const matchesAssignment = subAssignmentId === assignment.id ||
             subAssignmentId === assignment._id ||
@@ -547,14 +559,14 @@ function ContentUpload() {
         platform: assignment.platform || 'Instagram',
         calendar_id: assignment.calendarId,
         calendar_name: assignment.calendarName,
-        item_id: assignment._id || assignment.id || assignment.itemId || '',
+        item_id: assignment.stableItemId || assignment._id || assignment.id || assignment.itemId || '',
         item_name: assignment.title || assignment.itemName || assignment.description || '',
         assignment_title: assignment.title,
         assignment_description: assignment.description,
         due_date: assignment.dueDate,
         status: 'submitted',
         submission_stage: 'customer',
-        item_index: itemIndex !== undefined ? parseInt(itemIndex, 10) : null,
+        item_index: assignment.itemIndex !== undefined ? Number(assignment.itemIndex) : (itemIndex !== undefined ? parseInt(itemIndex, 10) : null),
         created_at: new Date().toISOString(),
         type: 'submission',
         geo_location: (geoLocation.latitude && geoLocation.longitude) ? geoLocation : undefined,

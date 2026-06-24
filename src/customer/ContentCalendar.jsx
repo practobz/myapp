@@ -359,14 +359,16 @@ function ContentCalendar() {
   calendars.forEach(calendar => {
     if (Array.isArray(calendar.contentItems)) {
       if (!selectedCalendarId || calendar._id === selectedCalendarId || calendar.id === selectedCalendarId) {
-        calendar.contentItems.forEach(item => {
+        calendar.contentItems.forEach((item, index) => {
           const itemStatus = getItemStatus(item, calendar._id);
           const published = item.published === true || isItemPublished(item, calendar._id);
+          const stableItemId = item.id || item._id || `${calendar._id}::${index}`;
           allItems.push({
             ...item,
             calendarName: calendar.name || '',
             calendarId: calendar._id,
-            id: item.id || item._id || Math.random().toString(36).slice(2),
+            id: stableItemId,
+            calendarItemIndex: index,
             creator: item.assignedToName || item.assignedTo || calendar.assignedToName || calendar.assignedTo || '',
             status: itemStatus,
             publishedPlatforms: published ? (item.publishedPlatforms || getPublishedPlatformsForItem(item, calendar._id)) : [],
@@ -717,20 +719,38 @@ function ContentCalendar() {
       return { imageUrl: urls[0], imageUrls: urls };
     }
     if (item.imageUrls?.length > 0) return { imageUrl: item.imageUrls[0], imageUrls: item.imageUrls };
-    const matchingSub = submissions.find(sub => {
-      const subId = sub.assignment_id || sub.item_id;
-      if (subId) {
-        return subId === item.id;
-      }
-      const subCalId = sub.calendar_id || sub.calendarId;
-      if (subCalId && item.calendarId && subCalId !== item.calendarId) return false;
-      return sub.item_name && sub.item_name === item.title;
-    });
-    if (matchingSub) {
-      const subMedia = matchingSub.media || matchingSub.images || [];
+    const matchingSubs = submissions
+      .filter(sub => {
+        const subCalId = sub.calendar_id || sub.calendarId;
+        if (subCalId && item.calendarId && subCalId !== item.calendarId) return false;
+
+        const subItemIndex = sub.item_index !== undefined && sub.item_index !== null
+          ? Number(sub.item_index)
+          : null;
+        if (subItemIndex !== null && item.calendarItemIndex !== undefined) {
+          if (subItemIndex === Number(item.calendarItemIndex)) return true;
+        }
+
+        const subId = sub.assignment_id || sub.item_id;
+        if (subId && item.id) {
+          return String(subId) === String(item.id);
+        }
+
+        return sub.item_name && sub.item_name === item.title;
+      })
+      .sort((a, b) => new Date(b.created_at || b.createdAt || 0) - new Date(a.created_at || a.createdAt || 0));
+
+    const latestSubmission = matchingSubs[0];
+    if (latestSubmission) {
+      const subMedia = latestSubmission.media || latestSubmission.images || [];
       if (subMedia.length > 0) {
         const urls = subMedia.map(m => typeof m === 'string' ? m : m?.url).filter(Boolean);
         if (urls.length > 0) return { imageUrl: urls[0], imageUrls: urls };
+      }
+
+      if (latestSubmission.videoUrl || latestSubmission.video_url) {
+        const videoUrl = latestSubmission.videoUrl || latestSubmission.video_url;
+        return { imageUrl: videoUrl, imageUrls: [videoUrl] };
       }
     }
     return { imageUrl: null, imageUrls: [] };
@@ -906,7 +926,18 @@ function ContentCalendar() {
                       <div className="relative h-40 bg-gradient-to-br from-gray-100 to-gray-200">
                         {itemMedia.imageUrl ? (
                           isVideoUrl(itemMedia.imageUrl) ? (
-                            <div className="w-full h-full flex items-center justify-center bg-gray-900"><Play className="h-10 w-10 text-white/80" /></div>
+                            <div className="relative w-full h-full bg-black">
+                              <video
+                                src={itemMedia.imageUrl}
+                                muted
+                                playsInline
+                                preload="metadata"
+                                className="w-full h-full object-cover"
+                              />
+                              <div className="absolute inset-0 flex items-center justify-center bg-black/15">
+                                <Play className="h-10 w-10 text-white/85" />
+                              </div>
+                            </div>
                           ) : (
                             <img src={itemMedia.imageUrl} alt="" className="w-full h-full object-cover" />
                           )
@@ -954,7 +985,18 @@ function ContentCalendar() {
                           <div className="w-full sm:w-24 h-24 rounded-lg bg-gradient-to-br from-gray-100 to-gray-200 overflow-hidden flex-shrink-0">
                             {itemMedia.imageUrl ? (
                               isVideoUrl(itemMedia.imageUrl) ? (
-                                <div className="w-full h-full flex items-center justify-center bg-gray-900"><Play className="h-8 w-8 text-white/80" /></div>
+                                <div className="relative w-full h-full bg-black">
+                                  <video
+                                    src={itemMedia.imageUrl}
+                                    muted
+                                    playsInline
+                                    preload="metadata"
+                                    className="w-full h-full object-cover"
+                                  />
+                                  <div className="absolute inset-0 flex items-center justify-center bg-black/15">
+                                    <Play className="h-8 w-8 text-white/85" />
+                                  </div>
+                                </div>
                               ) : (
                                 <img src={itemMedia.imageUrl} alt="" className="w-full h-full object-cover" />
                               )
@@ -1145,8 +1187,17 @@ function ContentCalendar() {
                                 <div className="grid grid-cols-3 gap-2">
                                   {post.imageUrls.slice(0, 6).map((url, mi) =>
                                     isVideoUrl(url) ? (
-                                      <div key={mi} className="relative aspect-square bg-gray-900 rounded-lg flex items-center justify-center overflow-hidden">
-                                        <Play className="h-8 w-8 text-white/80" />
+                                      <div key={mi} className="relative aspect-square bg-black rounded-lg overflow-hidden">
+                                        <video
+                                          src={url}
+                                          muted
+                                          playsInline
+                                          preload="metadata"
+                                          className="w-full h-full object-cover"
+                                        />
+                                        <div className="absolute inset-0 flex items-center justify-center bg-black/15">
+                                          <Play className="h-8 w-8 text-white/85" />
+                                        </div>
                                         <span className="absolute top-2 left-2 bg-black/50 text-white text-xs px-2 py-0.5 rounded-full">{mi + 1}</span>
                                       </div>
                                     ) : (

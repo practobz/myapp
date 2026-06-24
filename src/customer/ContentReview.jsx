@@ -3,10 +3,147 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { MessageSquare, CheckCircle, Edit3, Trash2, Move, ChevronLeft, ChevronRight, Image, Video, AlertCircle, ThumbsUp, Calendar, ChevronDown, ChevronUp, Send, RotateCcw, Search, FileText, Bell, UserCog, User, X, Play, Edit } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
-function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
+// Helper functions declared outside ContentReview to avoid closures/state duplication issues
+const getMediaType = (url) => {
+  if (!url || typeof url !== 'string') return 'image';
+  const cleanUrl = url.split('?')[0].split('#')[0];
+  const extension = cleanUrl.toLowerCase().split('.').pop();
+  const videoExtensions = ['mp4', 'webm', 'ogg', 'mov', 'avi'];
+  return videoExtensions.includes(extension) ? 'video' : 'image';
+};
+
+const normalizeMedia = (media) => {
+  if (!media || !Array.isArray(media)) return [];
+  return media.map(item => {
+    if (typeof item === 'string') {
+      return { url: item, type: getMediaType(item) };
+    }
+    if (item && typeof item === 'object') {
+      const url = item.url || item.src || item.href || String(item);
+      if (typeof url === 'string' && url.trim()) {
+        return { url: url, type: item.type || getMediaType(url) };
+      }
+    }
+    return null;
+  }).filter(Boolean);
+};
+
+const processSubmissionsData = (submissions, user, targetItemId, filterStatus) => {
+  if (!Array.isArray(submissions)) return { displayData: [], grouped: {} };
+
+  const filteredSubmissions = submissions.filter(sub => {
+    let matches = false;
+    if (user && (user._id || user.id) && sub.customer_id && (sub.customer_id === user._id || sub.customer_id === user.id)) {
+      matches = true;
+    } else if (user && user.email && sub.customer_email && sub.customer_email === user.email) {
+      matches = true;
+    } else if (user && user.email && sub.created_by && sub.created_by === user.email && !sub.customer_id && !sub.customer_email) {
+      matches = true;
+    }
+    return matches;
+  });
+
+  if (filteredSubmissions.length === 0) {
+    return { displayData: [], grouped: {} };
+  }
+
+  const groupedSubmissions = {};
+  filteredSubmissions.forEach(submission => {
+    const assignmentId = submission.assignment_id || submission.assignmentId || 'unknown';
+    if (!groupedSubmissions[assignmentId]) {
+      groupedSubmissions[assignmentId] = [];
+    }
+    groupedSubmissions[assignmentId].push(submission);
+  });
+
+  const contentData = [];
+  Object.keys(groupedSubmissions).forEach(assignmentId => {
+    const versions = groupedSubmissions[assignmentId].sort((a, b) =>
+      new Date(a.created_at) - new Date(b.created_at)
+    );
+    const baseItem = versions[0];
+    const latestVersion = versions[versions.length - 1];
+    const currentStatus = latestVersion.status || baseItem.status || 'under_review';
+
+    contentData.push({
+      id: assignmentId,
+      title: baseItem.caption || 'Untitled Post',
+      description: baseItem.notes || '',
+      createdBy: baseItem.created_by || 'Unknown',
+      createdAt: baseItem.created_at || '',
+      status: currentStatus,
+      approvalNotes: latestVersion.approvalNotes || baseItem.approvalNotes || '',
+      platform: baseItem.platform || 'Instagram',
+      type: baseItem.type || 'Post',
+      customer_id: baseItem.customer_id,
+      customer_name: baseItem.customer_name,
+      customer_email: baseItem.customer_email,
+      calendar_id: baseItem.calendar_id || '',
+      calendar_name: baseItem.calendar_name || '',
+      item_id: baseItem.item_id || '',
+      item_name: baseItem.item_name || '',
+      assignment_id: assignmentId,
+      versions: versions.map((version, index) => ({
+        id: version._id,
+        versionNumber: index + 1,
+        media: normalizeMedia(version.media || version.images || []),
+        caption: version.caption || '',
+        notes: version.notes || '',
+        hashtags: version.hashtags || '',
+        createdAt: version.created_at,
+        status: version.status || 'under_review',
+        approvalNotes: version.approvalNotes || '',
+        comments: version.comments || []
+      })),
+      totalVersions: versions.length
+    });
+  });
+
+  const displayData = targetItemId
+    ? contentData.filter(item =>
+      (item.item_id && item.item_id === targetItemId) ||
+      (item.id && item.id === targetItemId) ||
+      (item.assignment_id && item.assignment_id === targetItemId)
+    )
+    : filterStatus
+      ? contentData.filter(item => item.status === filterStatus)
+      : contentData;
+
+  const grouped = {};
+  displayData.forEach(item => {
+    const calendarKey = item.calendar_name || item.calendar_id || 'Uncategorized';
+    if (!grouped[calendarKey]) {
+      grouped[calendarKey] = [];
+    }
+    grouped[calendarKey].push(item);
+  });
+
+  return { displayData, grouped };
+};
+
+function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmissions }) {
   const [searchParams] = useSearchParams();
   const targetItemId = propItemId || searchParams.get('itemId');
   const filterStatus = searchParams.get('filter');
+
+  // Get logged-in customer info from localStorage (like in ContentCalendar)
+  let user = null;
+  try {
+    user = JSON.parse(localStorage.getItem('user'));
+  } catch {
+    user = null;
+  }
+
+  const customerId = user?.id || user?._id;
+  const customerEmail = user?.email;
+
+  // Process initial submissions if provided
+  const initialProcessed = useMemo(() => {
+    if (initialSubmissions && Array.isArray(initialSubmissions)) {
+      return processSubmissionsData(initialSubmissions, user, targetItemId, filterStatus);
+    }
+    return null;
+  }, [initialSubmissions, user, targetItemId, filterStatus]);
 
   // Scheduled posts state
   const [scheduledPosts, setScheduledPosts] = useState([]);
@@ -49,21 +186,39 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
     fetchScheduledPosts();
     fetchCalendars();
   }, []);
+
   const navigate = useNavigate();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [selectedContentIndex, setSelectedContentIndex] = useState(0);
-  const [selectedVersionIndex, setSelectedVersionIndex] = useState(0);
+
+  const [contentItems, setContentItems] = useState(() => {
+    return initialProcessed ? initialProcessed.displayData : [];
+  });
+  const [groupedContentItems, setGroupedContentItems] = useState(() => {
+    return initialProcessed ? initialProcessed.grouped : {};
+  });
+  const [collapsedCalendars, setCollapsedCalendars] = useState({});
+  const [selectedContent, setSelectedContent] = useState(() => {
+    if (initialProcessed && initialProcessed.displayData.length > 0 && targetItemId) {
+      return initialProcessed.displayData[0];
+    }
+    return null;
+  });
+  const [selectedVersionIndex, setSelectedVersionIndex] = useState(() => {
+    if (initialProcessed && initialProcessed.displayData.length > 0 && targetItemId) {
+      return initialProcessed.displayData[0].versions.length - 1;
+    }
+    return 0;
+  });
   const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
 
-  const [contentItems, setContentItems] = useState([]);
-  const [groupedContentItems, setGroupedContentItems] = useState({});
-  const [collapsedCalendars, setCollapsedCalendars] = useState({});
-  const [selectedContent, setSelectedContent] = useState(null);
   const [comments, setComments] = useState([]);
   const [commentsForCurrentMedia, setCommentsForCurrentMedia] = useState([]);
   const [activeComment, setActiveComment] = useState(null);
   const [hoveredComment, setHoveredComment] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => {
+    return !(initialSubmissions && Array.isArray(initialSubmissions) && initialSubmissions.length > 0);
+  });
   const [error, setError] = useState(null);
 
   // Ref for image container to properly position comments
@@ -72,17 +227,6 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
   const touchFiredRef = useRef(false);
   const videoPausedAtRef = useRef(null); // stores currentTime when video is paused for commenting
   const [imageDimensions, setImageDimensions] = useState({ contentW: 0, contentH: 0, offsetX: 0, offsetY: 0 });
-
-  // Get logged-in customer info from localStorage (like in ContentCalendar)
-  let user = null;
-  try {
-    user = JSON.parse(localStorage.getItem('user'));
-  } catch {
-    user = null;
-  }
-
-  const customerId = user?.id || user?._id;
-  const customerEmail = user?.email;
 
   useEffect(() => {
     if (customerId || customerEmail) {
@@ -142,7 +286,9 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
   }, [comments, selectedMediaIndex]);
 
   const fetchContentSubmissions = async () => {
-    setLoading(true);
+    if (contentItems.length === 0) {
+      setLoading(true);
+    }
     setError(null);
     try {
       const submissionsRes = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions`);
@@ -154,125 +300,28 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
         throw new Error('Invalid data received');
       }
 
-      // Filter submissions to only those belonging to the logged-in customer
-      const filteredSubmissions = submissions.filter(sub => {
-        // Check multiple possible fields for customer identification
-        let matches = false;
-        // Match by customer_id (user._id or user.id)
-        if (user && (user._id || user.id) && sub.customer_id && (sub.customer_id === user._id || sub.customer_id === user.id)) {
-          matches = true;
-        }
-        // Match by customer_email
-        else if (user && user.email && sub.customer_email && sub.customer_email === user.email) {
-          matches = true;
-        }
-        // Match by created_by (fallback)
-        else if (user && user.email && sub.created_by && sub.created_by === user.email && !sub.customer_id && !sub.customer_email) {
-          matches = true;
-        }
-        return matches;
-      });
-
-      if (filteredSubmissions.length === 0) {
-        setContentItems([]);
-        setSelectedContent(null);
-        setLoading(false);
-        return;
-      }
-
-      // Group submissions by assignment ID to handle versions
-      const groupedSubmissions = {};
-      filteredSubmissions.forEach(submission => {
-        const assignmentId = submission.assignment_id || submission.assignmentId || 'unknown';
-        if (!groupedSubmissions[assignmentId]) {
-          groupedSubmissions[assignmentId] = [];
-        }
-        groupedSubmissions[assignmentId].push(submission);
-      });
-
-      // Create content items with versions
-      // Create content items with versions
-      const contentData = [];
-      Object.keys(groupedSubmissions).forEach(assignmentId => {
-        const versions = groupedSubmissions[assignmentId].sort((a, b) =>
-          new Date(a.created_at) - new Date(b.created_at)
-        );
-        const baseItem = versions[0];
-        const latestVersion = versions[versions.length - 1];
-
-        // Use latest version's status for the overall content status
-        const currentStatus = latestVersion.status || baseItem.status || 'under_review';
-
-        contentData.push({
-          id: assignmentId,
-          title: baseItem.caption || 'Untitled Post',
-          description: baseItem.notes || '',
-          createdBy: baseItem.created_by || 'Unknown',
-          createdAt: baseItem.created_at || '',
-          status: currentStatus,  // Now uses latest version status
-          approvalNotes: latestVersion.approvalNotes || baseItem.approvalNotes || '',
-          platform: baseItem.platform || 'Instagram',
-          type: baseItem.type || 'Post',
-          customer_id: baseItem.customer_id,
-          customer_name: baseItem.customer_name,
-          customer_email: baseItem.customer_email,
-          // Add calendar and item info for publish status checking
-          calendar_id: baseItem.calendar_id || '',
-          calendar_name: baseItem.calendar_name || '',
-          item_id: baseItem.item_id || '',
-          item_name: baseItem.item_name || '',
-          assignment_id: assignmentId,
-          versions: versions.map((version, index) => ({
-            id: version._id,
-            versionNumber: index + 1,
-            media: normalizeMedia(version.media || version.images || []),
-            caption: version.caption || '',
-            notes: version.notes || '',
-            hashtags: version.hashtags || '',
-            createdAt: version.created_at,
-            status: version.status || 'under_review',
-            approvalNotes: version.approvalNotes || '',
-            comments: version.comments || []
-          })),
-          totalVersions: versions.length
-        });
-      });
-
-      // Filter to specific item if itemId is in the URL
-      // Submissions can reference calendar items via item_id, assignment_id, or id
-      if (targetItemId) {
-        console.log('[ContentReview] Filtering for itemId:', targetItemId);
-        console.log('[ContentReview] Available items:', contentData.map(i => ({
-          id: i.id, item_id: i.item_id, assignment_id: i.assignment_id, item_name: i.item_name
-        })));
-      }
-      const displayData = targetItemId
-        ? contentData.filter(item =>
-          (item.item_id && item.item_id === targetItemId) ||
-          (item.id && item.id === targetItemId) ||
-          (item.assignment_id && item.assignment_id === targetItemId)
-        )
-        : filterStatus
-          ? contentData.filter(item => item.status === filterStatus)
-          : contentData;
+      const { displayData, grouped } = processSubmissionsData(submissions, user, targetItemId, filterStatus);
 
       setContentItems(displayData);
-
-      // Group content by calendar
-      const grouped = {};
-      displayData.forEach(item => {
-        const calendarKey = item.calendar_name || item.calendar_id || 'Uncategorized';
-        if (!grouped[calendarKey]) {
-          grouped[calendarKey] = [];
-        }
-        grouped[calendarKey].push(item);
-      });
       setGroupedContentItems(grouped);
 
-      // Auto-select only when filtered by a specific itemId from URL
       if (displayData.length > 0 && targetItemId) {
-        setSelectedContent(displayData[0]);
-        setSelectedVersionIndex(displayData[0].versions.length - 1); // Show latest version by default
+        setSelectedContent(prev => {
+          if (prev) {
+            const match = displayData.find(item => item.id === prev.id);
+            return match || displayData[0];
+          }
+          return displayData[0];
+        });
+        setSelectedVersionIndex(prev => {
+          if (selectedContent) {
+            const match = displayData.find(item => item.id === selectedContent.id);
+            if (match) {
+              return Math.min(prev, match.versions.length - 1);
+            }
+          }
+          return displayData[0].versions.length - 1;
+        });
       }
     } catch (err) {
       console.error('Failed to fetch content submissions:', err);
@@ -282,48 +331,6 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
     } finally {
       setLoading(false);
     }
-  };
-
-  // Add helper function to normalize media URLs
-  const normalizeMedia = (media) => {
-    if (!media || !Array.isArray(media)) return [];
-
-    return media.map(item => {
-      // If item is already a string (URL), convert to object
-      if (typeof item === 'string') {
-        return {
-          url: item,
-          type: getMediaType(item)
-        };
-      }
-
-      // If item is an object with url property
-      if (item && typeof item === 'object') {
-        const url = item.url || item.src || item.href || String(item);
-
-        // Validate URL is actually a string
-        if (typeof url === 'string' && url.trim()) {
-          return {
-            url: url,
-            type: item.type || getMediaType(url)
-          };
-        }
-      }
-
-      return null;
-    }).filter(Boolean); // Remove any null/invalid entries
-  };
-
-  // Add helper function to determine media type
-  const getMediaType = (url) => {
-    if (!url || typeof url !== 'string') return 'image';
-
-    // Strip query string and fragment before checking extension (handles GCS signed URLs)
-    const cleanUrl = url.split('?')[0].split('#')[0];
-    const extension = cleanUrl.toLowerCase().split('.').pop();
-    const videoExtensions = ['mp4', 'webm', 'ogg', 'mov', 'avi'];
-
-    return videoExtensions.includes(extension) ? 'video' : 'image';
   };
 
   const handleUserMenuToggle = () => {
@@ -384,7 +391,6 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
     const y = Math.max(0, Math.min(1, (e.clientY - rect.top - oy) / contentH));
     if (commentsForCurrentMedia.some((c) => c.editing)) return;
 
-    // Capture video timestamp if this is a video and pause it while the user types
     const mediaType = selectedContent?.versions?.[selectedVersionIndex]?.media?.[selectedMediaIndex]?.type;
     const videoTimestamp = (mediaType === 'video' && videoRef.current && !isNaN(videoRef.current.currentTime))
       ? videoRef.current.currentTime
@@ -402,10 +408,10 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
       editing: true,
       done: false,
       repositioning: false,
-      isNew: true, // Mark as new comment (not yet saved)
+      isNew: true,
       versionId: selectedContent.versions[selectedVersionIndex]?.id,
       versionNumber: selectedContent.versions[selectedVersionIndex]?.versionNumber || 1,
-      mediaIndex: selectedMediaIndex, // Associate comment with current media item
+      mediaIndex: selectedMediaIndex,
       reviewType: 'external',
       timestamp: new Date().toISOString(),
       ...(videoTimestamp != null && { videoTimestamp })
@@ -413,7 +419,6 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
     setComments([...comments, newComment]);
     setCommentsForCurrentMedia([...commentsForCurrentMedia, newComment]);
     setActiveComment(newComment.id);
-    // Record viewport rect so the fixed popup positions correctly
     setActiveMarkerRect({ top: e.clientY - 12, left: e.clientX - 12, right: e.clientX + 12, bottom: e.clientY + 12 });
   };
 
@@ -426,17 +431,14 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
     const comment = commentsForCurrentMedia.find(c => c.id === id);
     if (comment && comment.comment.trim()) {
       try {
-        // Use the assignment ID directly from selectedContent
         const assignmentId = selectedContent.id;
         const versionId = selectedContent.versions[selectedVersionIndex]?.id;
 
-        // Check if this is a new comment or an edit (use isNew flag)
         const isNewComment = comment.isNew === true;
 
         let response;
 
         if (!isNewComment) {
-          // Update existing comment using PUT
           response = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(assignmentId)}/comments/${comment.id}`, {
             method: 'PUT',
             headers: {
@@ -452,7 +454,6 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
             })
           });
         } else {
-          // Create new comment using PATCH
           const newCommentObj = {
             id: comment.id,
             comment: comment.comment,
@@ -479,9 +480,6 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
         }
 
         if (response.ok) {
-          const result = await response.json();
-
-          // Resume video from the exact point it was paused
           if (videoRef.current && videoRef.current.paused) {
             if (videoPausedAtRef.current != null) {
               videoRef.current.currentTime = videoPausedAtRef.current;
@@ -490,20 +488,16 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
             videoRef.current.play().catch(() => { });
           }
 
-          // Update the local state to reflect the saved comment
           setComments(comments.map((c) => (c.id === id ? { ...c, editing: false } : c)));
           setCommentsForCurrentMedia(commentsForCurrentMedia.map((c) => (c.id === id ? { ...c, editing: false } : c)));
           setActiveComment(null);
 
-          // Store current selection before refresh (use assignment ID, not index)
           const currentAssignmentId = selectedContent.id;
           const currentVersionIndex = selectedVersionIndex;
           const currentMediaIndex = selectedMediaIndex;
 
-          // Refresh the content submissions to get updated data
           await fetchContentSubmissions();
 
-          // Restore the selection after refresh by finding the item with the same assignment ID
           setContentItems(prevItems => {
             const itemIndex = prevItems.findIndex(item => item.id === currentAssignmentId);
             if (itemIndex !== -1) {
@@ -517,14 +511,12 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
         } else {
           const errorData = await response.json();
           console.error('Failed to save comment:', errorData);
-          // Still update UI even if save fails
           setComments(comments.map((c) => (c.id === id ? { ...c, editing: false } : c)));
           setCommentsForCurrentMedia(commentsForCurrentMedia.map((c) => (c.id === id ? { ...c, editing: false } : c)));
           setActiveComment(null);
         }
       } catch (error) {
         console.error('Error saving comment:', error);
-        // Update UI state
         setComments(comments.map((c) => (c.id === id ? { ...c, editing: false } : c)));
         setCommentsForCurrentMedia(commentsForCurrentMedia.map((c) => (c.id === id ? { ...c, editing: false } : c)));
         setActiveComment(null);
@@ -534,19 +526,14 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
 
   const handleCommentCancel = (id) => {
     const comment = commentsForCurrentMedia.find(c => c.id === id);
-    // If this is a new comment (no saved comment text), remove it
-    // If it's an existing comment being edited, just stop editing
     if (comment && comment.comment && comment.comment.trim() !== '') {
-      // Existing comment - just cancel editing mode
       setComments(comments.map((c) => (c.id === id ? { ...c, editing: false } : c)));
       setCommentsForCurrentMedia(commentsForCurrentMedia.map((c) => (c.id === id ? { ...c, editing: false } : c)));
     } else {
-      // New comment - remove it
       setComments(comments.filter((c) => c.id !== id));
       setCommentsForCurrentMedia(commentsForCurrentMedia.filter((c) => c.id !== id));
     }
     setActiveComment(null);
-    // Resume video from the exact point it was paused when comment is cancelled
     if (videoRef.current && videoRef.current.paused) {
       if (videoPausedAtRef.current != null) {
         videoRef.current.currentTime = videoPausedAtRef.current;
@@ -556,12 +543,10 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
     }
   };
 
-  // Handle delete comment - removes from backend and local state
   const handleDeleteComment = async (id) => {
     const comment = commentsForCurrentMedia.find(c => c.id === id);
     if (comment) {
       try {
-        // Delete comment from backend
         const response = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(selectedContent.id)}/comments/${comment.id}`, {
           method: 'DELETE',
           headers: {
@@ -571,15 +556,12 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
 
         if (response.ok) {
 
-          // Store current selection before refresh (use assignment ID, not index)
           const currentAssignmentId = selectedContent.id;
           const currentVersionIndex = selectedVersionIndex;
           const currentMediaIndex = selectedMediaIndex;
 
-          // Refresh the content submissions to get updated data
           await fetchContentSubmissions();
 
-          // Restore the selection after refresh by finding the item with the same assignment ID
           setContentItems(prevItems => {
             const itemIndex = prevItems.findIndex(item => item.id === currentAssignmentId);
             if (itemIndex !== -1) {
@@ -592,13 +574,11 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
           });
         } else {
           console.error('Failed to delete comment from backend');
-          // Still update local state
           setComments(comments.filter((c) => c.id !== id));
           setCommentsForCurrentMedia(commentsForCurrentMedia.filter((c) => c.id !== id));
         }
       } catch (error) {
         console.error('Error deleting comment:', error);
-        // Update local state on error
         setComments(comments.filter((c) => c.id !== id));
         setCommentsForCurrentMedia(commentsForCurrentMedia.filter((c) => c.id !== id));
       }
@@ -607,7 +587,6 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
     }
   };
 
-  // Handle image load to get dimensions for proper comment positioning
   const handleImageLoad = (e) => {
     const el = e.target;
     const ew = el.clientWidth, eh = el.clientHeight;
@@ -622,7 +601,6 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
     const comment = commentsForCurrentMedia.find(c => c.id === id);
     if (comment) {
       try {
-        // Update comment status on backend
         const response = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(selectedContent.id)}/comments/${comment.id}`, {
           method: 'PUT',
           headers: {
@@ -640,7 +618,6 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
           setActiveComment(null);
         } else {
           console.error('Failed to update comment status');
-          // Still update UI
           setComments(comments.map((c) => (c.id === id ? { ...c, done: true } : c)));
           setCommentsForCurrentMedia(commentsForCurrentMedia.map((c) => (c.id === id ? { ...c, done: true } : c)));
           setActiveComment(null);
@@ -663,7 +640,7 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
   const handleRepositionStart = (id) => {
     setComments(comments.map((c) => (c.id === id ? { ...c, repositioning: true } : c)));
     setCommentsForCurrentMedia(commentsForCurrentMedia.map((c) => (c.id === id ? { ...c, repositioning: true } : c)));
-    setActiveComment(null); // Close the popup when starting repositioning
+    setActiveComment(null);
   };
 
   const handleImageClickWithReposition = async (e) => {
@@ -678,7 +655,6 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
       const x = Math.max(0, Math.min(1, (e.clientX - rect.left - ox) / contentW));
       const y = Math.max(0, Math.min(1, (e.clientY - rect.top - oy) / contentH));
 
-      // Update local state first for immediate UI feedback
       setComments(
         comments.map((c) =>
           c.id === repositioningComment.id ? { ...c, x, y, repositioning: false } : c
@@ -691,7 +667,6 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
       );
       setActiveComment(null);
 
-      // Save new position to backend
       try {
         const response = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(selectedContent.id)}/comments/${repositioningComment.id}`, {
           method: 'PUT',
@@ -707,15 +682,12 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
 
         if (response.ok) {
 
-          // Store current selection before refresh (use assignment ID, not index)
           const currentAssignmentId = selectedContent.id;
           const currentVersionIndex = selectedVersionIndex;
           const currentMediaIndex = selectedMediaIndex;
 
-          // Refresh the content submissions to get updated data
           await fetchContentSubmissions();
 
-          // Restore the selection after refresh by finding the item with the same assignment ID
           setContentItems(prevItems => {
             const itemIndex = prevItems.findIndex(item => item.id === currentAssignmentId);
             if (itemIndex !== -1) {
@@ -741,13 +713,11 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
     setActiveComment(activeComment === id ? null : id);
   };
 
-  // When selecting a new content item, reset comments to those from the latest version
   const handleContentSelect = (item, index) => {
     setSelectedContent(item);
     setSelectedContentIndex(index);
-    setSelectedVersionIndex(item.versions.length - 1); // Show latest version
-    setSelectedMediaIndex(0); // Reset media index
-    // Normalize comments when selecting
+    setSelectedVersionIndex(item.versions.length - 1);
+    setSelectedMediaIndex(0);
     const version = item.versions[item.versions.length - 1];
     const normalizedComments = (version.comments || []).map(comment => ({
       ...comment,
@@ -755,11 +725,10 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
       y: comment.y ?? comment.position?.y ?? 0,
       editing: false,
       repositioning: false,
-      isNew: false, // Mark as existing comment
+      isNew: false,
       done: comment.done || comment.status === 'completed' || false
     }));
 
-    // Remove duplicate comments by ID
     const uniqueComments = normalizedComments.filter((comment, index, self) =>
       index === self.findIndex((c) => c.id === comment.id)
     );
@@ -768,7 +737,6 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
     setActiveComment(null);
   };
 
-  // When changing version, update comments to those for that version
   const handleVersionChange = (direction) => {
     let newIndex = selectedVersionIndex;
     if (direction === 'prev' && selectedVersionIndex > 0) {
@@ -777,8 +745,7 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
       newIndex = selectedVersionIndex + 1;
     }
     setSelectedVersionIndex(newIndex);
-    setSelectedMediaIndex(0); // Reset media index
-    // Normalize comments when changing version
+    setSelectedMediaIndex(0);
     const version = selectedContent.versions[newIndex];
     const normalizedComments = (version.comments || []).map(comment => ({
       ...comment,
@@ -786,11 +753,10 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
       y: comment.y ?? comment.position?.y ?? 0,
       editing: false,
       repositioning: false,
-      isNew: false, // Mark as existing comment
+      isNew: false,
       done: comment.done || comment.status === 'completed' || false
     }));
 
-    // Remove duplicate comments by ID
     const uniqueComments = normalizedComments.filter((comment, index, self) =>
       index === self.findIndex((c) => c.id === comment.id)
     );
@@ -831,24 +797,22 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
     }
   };
 
-  // State for approve loading
   const [approvingContent, setApprovingContent] = useState(false);
   const [sendingToCreator, setSendingToCreator] = useState(false);
   const [undoingApprove, setUndoingApprove] = useState(false);
   const [isVideoCommentMode, setIsVideoCommentMode] = useState(false);
   const [videoLoading, setVideoLoading] = useState(false);
-  const [videoCompatibleUrl, setVideoCompatibleUrl] = useState(null); // null = use original URL
-  const [videoTranscoding, setVideoTranscoding] = useState(false); // true while backend is transcoding
-  const [activeMarkerRect, setActiveMarkerRect] = useState(null); // viewport rect of the active marker
-  const [sidebarTab, setSidebarTab] = useState('content'); // 'content' | 'calendars' | 'comments'
+  const [videoCompatibleUrl, setVideoCompatibleUrl] = useState(null);
+  const [videoTranscoding, setVideoTranscoding] = useState(false);
+  const [activeMarkerRect, setActiveMarkerRect] = useState(null);
+  const [sidebarTab, setSidebarTab] = useState('content');
   const [sidebarSearch, setSidebarSearch] = useState('');
   const [expandedCalendars, setExpandedCalendars] = useState({});
-  const [sortOrder, setSortOrder] = useState('latest'); // 'latest' | 'oldest'
+  const [sortOrder, setSortOrder] = useState('latest');
   const [panelActiveComment, setPanelActiveComment] = useState(null);
-  const [mobileView, setMobileView] = useState('content'); // 'content' | 'comments' — mobile tab toggle for targetItemId
-  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false); // mobile drawer for non-targetItemId sidebar
+  const [mobileView, setMobileView] = useState('content');
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
-  // Handle send to creator - updates status to 'sent_to_creator'
   const handleSendToCreator = async () => {
     if (!selectedContent) return;
     setSendingToCreator(true);
@@ -891,7 +855,6 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
     }
   };
 
-  // Handle undo approve - reverts status back to 'under_review'
   const handleUndoApprove = async () => {
     if (!selectedContent) return;
     setUndoingApprove(true);
@@ -933,7 +896,6 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
     }
   };
 
-  // Handle approve content - updates status to 'approved' on backend
   const handleApproveContent = async () => {
     if (!selectedContent) return;
 
@@ -958,15 +920,12 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
       if (response.ok) {
         alert('Content approved successfully!');
 
-        // Store current selection before refreshing data
         const currentAssignmentId = selectedContent.id;
         const currentVersionIndex = selectedVersionIndex;
         const currentMediaIndex = selectedMediaIndex;
 
-        // Refetch all data from backend to ensure consistency
         await fetchContentSubmissions();
 
-        // Restore selection after data refresh
         setContentItems(prevItems => {
           const itemIndex = prevItems.findIndex(item => item.id === currentAssignmentId);
           if (itemIndex !== -1) {
@@ -990,9 +949,7 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
     }
   };
 
-  // Get the content creator assigned to this content item
   const getAssignedCreator = (item) => {
-    // Try to look up assignedTo from the calendar item
     if (calendars && calendars.length > 0 && item.calendar_id) {
       const calendar = calendars.find(cal =>
         cal._id === item.calendar_id || cal.id === item.calendar_id
@@ -1007,7 +964,6 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
         }
       }
     }
-    // Fall back to created_by (content creator's email)
     return item.createdBy || 'Unknown';
   };
 
@@ -1033,38 +989,30 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
     }
   };
 
-  // Published status detection logic (checks manual publish flag, scheduled posts, and calendar items)
   const isContentPublished = (contentOrId) => {
     const content = typeof contentOrId === 'object' ? contentOrId : selectedContent;
     if (!content) return false;
 
-    // Check manual publish flag first
     if (content.published === true) return true;
 
-    // Check if the associated calendar item is marked as published
     if (calendars && calendars.length > 0 && (content.calendar_id || content.item_id)) {
-      // Find the calendar by calendar_id
       const calendar = calendars.find(cal =>
         cal._id === content.calendar_id || cal.id === content.calendar_id
       );
 
       if (calendar && Array.isArray(calendar.contentItems)) {
-        // Find the item in the calendar by item_id or item_name
         const calendarItem = calendar.contentItems.find(item =>
           (content.item_id && item.id === content.item_id) ||
           (content.item_name && (item.title === content.item_name || item.description === content.item_name))
         );
 
-        // Check if the calendar item is marked as published
         if (calendarItem && calendarItem.published === true) {
           return true;
         }
       }
     }
 
-    // Check scheduledPosts for published status
     if (scheduledPosts && scheduledPosts.length > 0) {
-      // Try to match by assignmentId, item_id, or contentId
       const match = scheduledPosts.find(post => {
         return (
           (post.assignmentId && (post.assignmentId === content.id || post.assignmentId === content.assignment_id)) ||
@@ -1079,7 +1027,6 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
         return true;
       }
     }
-    // Fallback to local logic
     if (
       content.status === 'published' ||
       !!content.publishedAt
@@ -1101,11 +1048,9 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
     return false;
   };
 
-  // Get the appropriate status to display (checks latest version first)
   const getDisplayStatus = (content) => {
     if (!content) return 'under_review';
     if (isContentPublished(content)) return 'published';
-    // If not published, show latest version's status if available
     if (Array.isArray(content.versions) && content.versions.length > 0) {
       const latestVersion = content.versions[content.versions.length - 1];
       const status = latestVersion.status || content.status || 'under_review';
@@ -1157,19 +1102,12 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
       case 'published':
         return 'Published';
       case 'sent_to_creator':
-      case 'under_review': return 'Under Review';
-      case 'approved':
-      case 'approved_by_customer': return 'Approved by Customer';
-      case 'approved_by_admin': return 'Approved by Admin';
-      case 'rejected': return 'Rejected';
-      case 'published': return 'Published';
-      case 'sent_to_creator': return 'Sent to Creator';
+        return 'Sent to Creator';
       default: return 'Pending';
     }
   };
   const handleClose = propOnClose || (() => navigate('/customer/calendar'));
 
-  // Handle loading state
   if (loading) {
     if (targetItemId) {
       return (
@@ -1193,7 +1131,6 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
     );
   }
 
-  // Handle error state
   if (error) {
     if (targetItemId) {
       return (
@@ -1228,7 +1165,6 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
     );
   }
 
-  // Handle no content state
   if (contentItems.length === 0) {
     if (targetItemId) {
       return (
@@ -1278,7 +1214,6 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
   if (selectedContent) {
     const currentVersion = selectedContent.versions[selectedVersionIndex];
     const currentMedia = currentVersion?.media?.[selectedMediaIndex];
-    const totalComments = comments.length;
 
     return (
       <div
@@ -1296,7 +1231,6 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
           onClick={e => e.stopPropagation()}
           style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
         >
-          {/* Header */}
           <div className="flex items-center justify-between mb-3 pb-2 border-b border-gray-250/50 flex-shrink-0">
             <div className="min-w-0 flex-1">
               <h2 className="text-base font-bold text-gray-900 truncate flex items-center gap-2 flex-wrap">
@@ -1323,13 +1257,9 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
             </button>
           </div>
 
-          {/* Scrollable Modal Body: 2-Column Grid Layout */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 overflow-y-auto pr-1 min-h-0 flex-1">
-            {/* Left Column (lg:col-span-2) */}
             <div className="lg:col-span-2 space-y-3">
-              {/* Media Pane */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-200/50 overflow-hidden">
-                {/* Version Selector Bar inside Media Pane */}
                 <div className="px-3 py-2 sm:px-4 sm:py-3 border-b border-gray-200/50 bg-blue-50/50 flex items-center justify-between flex-wrap gap-2">
                   <h3 className="text-sm font-bold text-gray-900 flex items-center">
                     <Image className="h-4 w-4 text-blue-600 mr-1.5" />
@@ -1345,7 +1275,6 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
                   {currentVersion ? (
                     currentVersion.media?.length > 0 ? (
                       <>
-                        {/* Video comment mode toggle */}
                         {currentMedia?.type === 'video' && (
                           <div className="flex justify-center mb-3">
                             <button
@@ -1361,7 +1290,6 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
                           </div>
                         )}
 
-                        {/* Multi-media navigation */}
                         {currentVersion.media.length > 1 && (
                           <div className="flex items-center justify-between mb-3">
                             <span className="text-xs text-gray-500 font-semibold">{selectedMediaIndex + 1} / {currentVersion.media.length}</span>
@@ -1384,7 +1312,6 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
                           </div>
                         )}
 
-                        {/* Media display area */}
                         <div className="flex justify-center mb-4">
                           <div
                             ref={imageContainerRef}
@@ -1426,7 +1353,11 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
                                     setVideoLoading(false);
                                     const vid = e.target;
                                     if (vid && vid.duration > 0 && vid.currentTime === 0) vid.currentTime = 0.001;
-                                    if (!videoCompatibleUrl && vid.videoWidth === 0 && vid.duration > 0) {
+                                  }}
+                                  onError={(e) => {
+                                    const vid = e.target;
+                                    if (!videoCompatibleUrl && vid.error) {
+                                      console.log('Video error detected, requesting H.264 transcode:', vid.error);
                                       setVideoTranscoding(true);
                                       fetch(`${process.env.REACT_APP_API_URL}/api/video/transcode`, {
                                         method: 'POST',
@@ -1440,6 +1371,7 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose }) {
                                         })
                                         .catch(() => setVideoTranscoding(false));
                                     }
+                                    setVideoLoading(false);
                                   }}
                                   onCanPlay={() => setVideoLoading(false)}
                                   onWaiting={() => setVideoLoading(true)}

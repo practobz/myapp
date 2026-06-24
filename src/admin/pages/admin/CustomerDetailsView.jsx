@@ -1363,6 +1363,7 @@ function CustomerDetailsView() {
       const base = versions[0];
       const latest = versions[versions.length - 1];
       let calendarName = base.calendar_name || '';
+      let calendarId = base.calendar_id || base.calendarId || '';
       let itemName = base.item_name || '';
       let publishedStatus = false;
       for (const cal of calendars) {
@@ -1370,6 +1371,7 @@ function CustomerDetailsView() {
           ci.id === key || ci.title === base.caption || ci.description === base.notes
         );
         if (ci) {
+          calendarId = calendarId || cal._id;
           calendarName = calendarName || cal.name;
           itemName = itemName || ci.title || ci.description;
           publishedStatus = isItemPublished(ci, cal._id);
@@ -1395,6 +1397,7 @@ function CustomerDetailsView() {
           status: v.status || 'submitted',
           comments: v.comments || [],
         })),
+        calendarId,
         calendarName,
         itemName,
         published: publishedStatus,
@@ -2108,7 +2111,7 @@ function CustomerDetailsView() {
         const matching = allSubmissions
           .filter(s => {
             const sCalId = s.calendar_id || s.calendarId;
-            if (sCalId && sCalId !== calendar._id) return false;
+            if (sCalId && calendar?._id && sCalId !== calendar._id) return false;
             const subId = s.assignment_id || s.item_id;
             if (subId) {
               return subId === itemId;
@@ -2155,7 +2158,7 @@ function CustomerDetailsView() {
     } finally {
       setContentDetailLoading(false);
     }
-  }, [id]);
+  }, [id, API_URL]);
 
   const getPriorityColor = useCallback((priority) => {
     switch ((priority || '').toLowerCase()) {
@@ -2762,7 +2765,7 @@ function CustomerDetailsView() {
                         className="bg-white rounded-xl shadow-sm border border-gray-200/50 overflow-hidden hover:shadow-md transition-shadow flex flex-col cursor-pointer"
                         onClick={() => {
                           const fakeItem = { id: item.id, title: item.title, description: item.title, type: item.platform };
-                          const fakeCal = { customerId: id, name: item.calendarName };
+                          const fakeCal = { _id: item.calendarId, customerId: id, name: item.calendarName };
                           openContentDetail(fakeItem, fakeCal);
                         }}
                       >
@@ -2803,7 +2806,7 @@ function CustomerDetailsView() {
                               onClick={e => {
                                 e.stopPropagation();
                                 const fakeItem = { id: item.id, title: item.title, description: item.title, type: item.platform };
-                                const fakeCal = { customerId: id, name: item.calendarName };
+                                const fakeCal = { _id: item.calendarId, customerId: id, name: item.calendarName };
                                 openContentDetail(fakeItem, fakeCal);
                               }}
                             >

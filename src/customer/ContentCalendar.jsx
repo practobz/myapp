@@ -1206,6 +1206,7 @@ function ContentCalendar() {
       {reviewItemId && (
         <ContentReview
           itemId={reviewItemId}
+          initialSubmissions={submissions}
           onClose={() => {
             setReviewItemId(null);
             // Re-fetch submissions so the timeline reflects any approval

@@ -5,21 +5,61 @@ import {
   Image, Play, RefreshCw, CheckCircle, MessageSquare,
   Clock, XCircle, User, Calendar, FileText, Eye, X,
   ChevronLeft, ChevronRight, Trash2, Edit3, Check,
-  RotateCcw, Move, Send, AlertCircle
+  RotateCcw, Move, Send, AlertCircle, Loader2
 } from 'lucide-react';
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 const STATUS_CONFIG = {
-  submitted: { label: 'Pending Review', color: 'bg-amber-100  text-amber-700  border-amber-200' },
-  approved: { label: 'Approved', color: 'bg-green-100  text-green-700  border-green-200' },
-  revision_requested: { label: 'Revision Requested', color: 'bg-orange-100 text-orange-700 border-orange-200' },
-  rejected: { label: 'Rejected', color: 'bg-red-100    text-red-700    border-red-200' },
+  submitted: { label: 'Pending Review', color: 'bg-amber-50  text-amber-700  border-amber-200 shadow-sm shadow-amber-500/5' },
+  approved: { label: 'Approved', color: 'bg-emerald-50  text-emerald-700  border-emerald-250 shadow-sm shadow-emerald-500/5' },
+  revision_requested: { label: 'Revision Requested', color: 'bg-amber-50 text-amber-700 border-amber-200 shadow-sm shadow-amber-500/5' },
+  rejected: { label: 'Rejected', color: 'bg-rose-50    text-rose-700    border-rose-200 shadow-sm shadow-rose-500/5' },
 };
 
 const getStatusConfig = (status) =>
   STATUS_CONFIG[status] || STATUS_CONFIG['submitted'];
 
 const isVideoUrl = (url) => /\.(mp4|mov|webm|avi|mkv)(\?|$)/i.test(url || '');
+
+// Platform logo icon component
+const PlatformIcon = ({ platform, className = "w-4 h-4 flex-shrink-0" }) => {
+  if (!platform) return null;
+  let p = "";
+  if (Array.isArray(platform)) {
+    p = platform[0] ? String(platform[0]) : "";
+  } else if (typeof platform === "string") {
+    p = platform;
+  } else {
+    p = String(platform);
+  }
+  p = p.toLowerCase().trim();
+  if (p === 'facebook') return (
+    <svg viewBox="0 0 24 24" className={className} fill="#1877F2" aria-label="Facebook">
+      <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+    </svg>
+  );
+  if (p === 'instagram') return (
+    <svg viewBox="0 0 24 24" className={className} fill="#E1306C" aria-label="Instagram">
+      <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z" />
+    </svg>
+  );
+  if (p === 'linkedin') return (
+    <svg viewBox="0 0 24 24" className={className} fill="#0A66C2" aria-label="LinkedIn">
+      <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
+    </svg>
+  );
+  if (p === 'youtube') return (
+    <svg viewBox="0 0 24 24" className={className} fill="#FF0000" aria-label="YouTube">
+      <path d="M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+    </svg>
+  );
+  if (p === 'twitter' || p === 'x') return (
+    <svg viewBox="0 0 24 24" className={className} fill="#000000" aria-label="X (Twitter)">
+      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.73-8.835L1.254 2.25H8.08l4.253 5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+    </svg>
+  );
+  return null;
+};
 
 const fmtDate = (iso) => {
   if (!iso) return '—';
@@ -51,19 +91,19 @@ const normalizeComments = (raw = []) => {
 // ─── Mini action button ────────────────────────────────────────────────────────
 const Btn = ({ onClick, variant = 'primary', size = 'sm', children, disabled }) => {
   const v = {
-    primary: 'bg-blue-600 hover:bg-blue-700 text-white',
-    success: 'bg-green-500 hover:bg-green-600 text-white',
-    warning: 'bg-orange-500 hover:bg-orange-600 text-white',
-    danger: 'bg-red-500   hover:bg-red-600   text-white',
-    info: 'bg-cyan-500  hover:bg-cyan-600  text-white',
-    ghost: 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50',
+    primary: 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm shadow-blue-500/10',
+    success: 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-500/10',
+    warning: 'bg-amber-500 hover:bg-amber-600 text-white shadow-sm shadow-amber-500/10',
+    danger: 'bg-rose-500   hover:bg-rose-650   text-white shadow-sm shadow-rose-500/10',
+    info: 'bg-violet-600  hover:bg-violet-750  text-white shadow-sm shadow-violet-500/10',
+    ghost: 'bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-800 hover:border-slate-300',
   };
-  const s = { sm: 'px-2 py-1 text-[10px]', md: 'px-3 py-1.5 text-xs', lg: 'px-4 py-2 text-sm' };
+  const s = { sm: 'px-2 py-1 text-[10px]', md: 'px-2.5 py-1.5 text-xs', lg: 'px-4 py-2 text-sm' };
   return (
     <button
       onClick={onClick}
       disabled={disabled}
-      className={`${v[variant]} ${s[size]} rounded-md font-medium transition-all inline-flex items-center justify-center gap-0.5 disabled:opacity-50`}
+      className={`${v[variant]} ${s[size]} rounded-lg font-bold transition-all inline-flex items-center justify-center gap-1 disabled:opacity-50 active:scale-[0.97]`}
     >
       {children}
     </button>
@@ -84,8 +124,8 @@ function CommentPin({ comment, index, onActivate, activeId, hoveredId, setHovere
       : comment.editing ? '#3b82f6'
         : '#ef4444';
 
-  const popupLeft = (isNormalized ? x > 0.5 : x > 150) ? 'auto' : 30;
-  const popupRight = (isNormalized ? x > 0.5 : x > 150) ? 30 : 'auto';
+  const popupLeft = (isNormalized ? x > 0.5 : x > 150) ? 'auto' : 32;
+  const popupRight = (isNormalized ? x > 0.5 : x > 150) ? 32 : 'auto';
 
   return (
     <div
@@ -100,12 +140,12 @@ function CommentPin({ comment, index, onActivate, activeId, hoveredId, setHovere
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontWeight: 'bold', fontSize: '11px',
         boxShadow: comment.repositioning
-          ? '0 0 0 3px rgba(139,92,246,0.3), 0 2px 8px rgba(0,0,0,0.2)'
-          : '0 2px 8px rgba(0,0,0,0.2)',
+          ? '0 0 0 4px rgba(139,92,246,0.4), 0 4px 12px rgba(0,0,0,0.3)'
+          : '0 2px 8px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.3)',
         cursor: comment.repositioning ? 'move' : 'pointer',
         zIndex: 10,
         border: '2px solid #fff',
-        transition: 'all 0.2s',
+        transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
         animation: comment.repositioning ? 'pinPulse 1.5s ease-in-out infinite' : 'none',
       }}
       onMouseEnter={() => setHoveredId(comment.id)}
@@ -122,12 +162,13 @@ function CommentPin({ comment, index, onActivate, activeId, hoveredId, setHovere
             left: popupLeft, right: popupRight,
             top: '50%', transform: 'translateY(-50%)',
             background: '#fff',
-            border: '1px solid #3b82f6',
-            borderRadius: '8px',
-            padding: '10px',
-            minWidth: '180px', maxWidth: '220px',
+            border: '1px solid #e2e8f0',
+            borderRadius: '12px',
+            padding: '12px',
+            minWidth: '200px', maxWidth: '240px',
             zIndex: 20,
-            boxShadow: '0 4px 20px rgba(59,130,246,0.15)',
+            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+            boxSizing: 'border-box',
           }}
           onClick={(e) => e.stopPropagation()}
         >
@@ -137,42 +178,42 @@ function CommentPin({ comment, index, onActivate, activeId, hoveredId, setHovere
                 value={comment.comment}
                 onChange={(e) => onCommentChange(comment.id, e.target.value)}
                 placeholder="Add comment..."
-                className="w-full p-2 border border-gray-200 rounded-md resize-none text-xs text-gray-900 bg-white focus:border-blue-500 focus:outline-none"
+                className="w-full p-2 border border-slate-200 rounded-lg resize-none text-xs text-slate-800 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none transition-all"
                 rows={2}
                 autoFocus
               />
               <div className="flex gap-1.5 mt-2">
                 <Btn onClick={() => onSubmit(comment.id)} variant="success" size="sm">
-                  <Check className="h-2.5 w-2.5 mr-0.5" />Save
+                  <Check className="h-3 w-3" />Save
                 </Btn>
-                <Btn onClick={() => onCancel(comment.id)} variant="danger" size="sm">Cancel</Btn>
+                <Btn onClick={() => onCancel(comment.id)} variant="ghost" size="sm">Cancel</Btn>
               </div>
             </>
           ) : (
             <>
-              <p className="font-medium text-gray-900 text-xs leading-relaxed break-words mb-2">
+              <p className="font-semibold text-slate-800 text-xs leading-relaxed break-words mb-1.5">
                 {comment.comment}
-                {comment.done && <span className="text-green-600 ml-1">✓</span>}
+                {comment.done && <span className="text-emerald-600 ml-1 font-bold">✓</span>}
               </p>
-              {comment.author && <p className="text-[10px] text-gray-400 mb-2">— {comment.author}</p>}
-              <div className="grid grid-cols-2 gap-1">
+              {comment.author && <p className="text-[9px] font-bold text-slate-400 mb-2 uppercase tracking-wider">— {comment.author}</p>}
+              <div className="grid grid-cols-2 gap-1.5 pt-2 border-t border-slate-100">
                 {!comment.done ? (
                   <Btn onClick={(e) => { e.stopPropagation(); onMarkDone(comment.id); }} variant="success" size="sm">
-                    <CheckCircle className="h-2.5 w-2.5 mr-0.5" />Done
+                    <CheckCircle className="h-3 w-3" />Done
                   </Btn>
                 ) : (
                   <Btn onClick={(e) => { e.stopPropagation(); onMarkDone(comment.id); }} variant="warning" size="sm">
-                    <RotateCcw className="h-2.5 w-2.5 mr-0.5" />Undo
+                    <RotateCcw className="h-3 w-3" />Undo
                   </Btn>
                 )}
-                <Btn onClick={(e) => { e.stopPropagation(); onEdit(comment.id); }} variant="warning" size="sm">
-                  <Edit3 className="h-2.5 w-2.5 mr-0.5" />Edit
+                <Btn onClick={(e) => { e.stopPropagation(); onEdit(comment.id); }} variant="ghost" size="sm">
+                  <Edit3 className="h-3 w-3 text-slate-400" />Edit
                 </Btn>
                 <Btn onClick={(e) => { e.stopPropagation(); onDelete(comment.id); }} variant="danger" size="sm">
-                  <Trash2 className="h-2.5 w-2.5 mr-0.5" />Del
+                  <Trash2 className="h-3 w-3" />Delete
                 </Btn>
-                <Btn onClick={(e) => { e.stopPropagation(); onReposition(comment.id); }} variant="info" size="sm">
-                  <Move className="h-2.5 w-2.5 mr-0.5" />Move
+                <Btn onClick={(e) => { e.stopPropagation(); onReposition(comment.id); }} variant="ghost" size="sm">
+                  <Move className="h-3 w-3 text-slate-400" />Move
                 </Btn>
               </div>
             </>
@@ -182,11 +223,12 @@ function CommentPin({ comment, index, onActivate, activeId, hoveredId, setHovere
 
       {comment.repositioning && (
         <div style={{
-          position: 'absolute', left: 30, top: '50%', transform: 'translateY(-50%)',
-          background: '#8b5cf6', color: '#fff', borderRadius: '6px', padding: '4px 8px',
-          fontSize: '10px', fontWeight: 600, whiteSpace: 'nowrap', zIndex: 20,
+          position: 'absolute', left: 32, top: '50%', transform: 'translateY(-50%)',
+          background: '#8b5cf6', color: '#fff', borderRadius: '8px', padding: '6px 10px',
+          fontSize: '10px', fontWeight: 700, whiteSpace: 'nowrap', zIndex: 20,
+          boxShadow: '0 4px 12px rgba(139,92,246,0.3)',
         }}>
-          Click image to place
+          Click canvas to place
         </div>
       )}
     </div>
@@ -497,8 +539,22 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
   const openComments = comments.filter(c => !c.done).length;
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/80 flex items-stretch overflow-hidden">
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-0 sm:p-4 md:p-6 overflow-hidden animate-fade-in">
       <style>{`
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes modalScale {
+          from { transform: scale(0.96); opacity: 0; }
+          to { transform: scale(1); opacity: 1; }
+        }
+        .animate-fade-in {
+          animation: fadeIn 0.2s ease-out forwards;
+        }
+        .animate-modal-scale {
+          animation: modalScale 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
         @keyframes pinPulse {
           0%, 100% { transform: scale(1); opacity: 1; }
           50%       { transform: scale(1.15); opacity: 0.8; }
@@ -507,49 +563,75 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
 
       {/* Toast */}
       {toast && (
-        <div className={`fixed top-4 right-4 z-[60] px-4 py-3 rounded-xl shadow-lg text-sm font-medium text-white flex items-center gap-2
-          ${toast.type === 'success' ? 'bg-green-500' : 'bg-red-500'}`}>
+        <div className={`fixed top-4 right-4 z-[60] px-4 py-3 rounded-xl shadow-lg text-sm font-semibold text-white flex items-center gap-2
+          ${toast.type === 'success' ? 'bg-emerald-500 shadow-emerald-500/20' : 'bg-rose-500 shadow-rose-500/20'} animate-fade-in`}>
           {toast.type === 'success' ? <CheckCircle className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
           {toast.msg}
         </div>
       )}
 
-      <div className="bg-white flex flex-col w-full h-full">
+      <div className="bg-white flex flex-col w-full h-full sm:h-[85vh] sm:max-h-[800px] max-w-5xl sm:rounded-2xl shadow-2xl border border-slate-200 overflow-hidden relative animate-modal-scale">
 
         {/* ── Panel Header ── */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200 bg-gradient-to-r from-slate-50 to-blue-50 flex-shrink-0">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-150 bg-slate-50/50 flex-shrink-0">
           <div className="min-w-0 flex-1">
-            <h2 className="font-bold text-gray-900 text-base truncate">
-              {submission.item_name || submission.caption?.slice(0, 60) || 'Submission Review'}
-            </h2>
-            <div className="flex items-center gap-2 text-xs text-gray-500 mt-0.5">
-              <User className="h-3 w-3" />
-              <span className="truncate">{submission.created_by}</span>
-              {submission.platform && <><span>·</span><span>{submission.platform}</span></>}
-              {submission.customer_name && <><span>·</span><span className="text-blue-600">{submission.customer_name}</span></>}
+            <div className="flex items-center gap-2">
+              <FileText className="h-4.5 w-4.5 text-slate-500 flex-shrink-0" />
+              <h2 className="font-bold text-slate-900 text-base truncate">
+                {submission.item_name || submission.caption?.slice(0, 60) || 'Submission Review'}
+              </h2>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap text-xs text-slate-500 mt-1">
+              <span className="flex items-center gap-1">
+                <User className="w-3.5 h-3.5" />
+                <span className="truncate">{submission.created_by}</span>
+              </span>
+              <span>•</span>
+              {submission.customer_name && (
+                <>
+                  <span className="text-blue-650 font-semibold">{submission.customer_name}</span>
+                  <span>•</span>
+                </>
+              )}
+              {submission.calendar_name && (
+                <>
+                  <span className="text-slate-655 font-medium">{submission.calendar_name}</span>
+                  <span>•</span>
+                </>
+              )}
+              {submission.platform && (
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-slate-150/70 text-slate-700 rounded-md font-semibold text-[11px] capitalize">
+                  <PlatformIcon platform={submission.platform} className="w-3 h-3" />
+                  {Array.isArray(submission.platform) ? submission.platform.join(', ') : submission.platform}
+                </span>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-3 flex-shrink-0 ml-4">
-            <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${statusCfg.color}`}>
+            <span className={`text-xs font-bold px-3 py-1 rounded-full border shadow-sm ${statusCfg.color}`}>
               {statusCfg.label}
             </span>
-            <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
-              <X className="h-5 w-5 text-gray-500" />
+            <button
+              onClick={onClose}
+              className="p-1.5 hover:bg-slate-200/60 rounded-xl transition-all duration-200 text-slate-400 hover:text-slate-600"
+              title="Close modal"
+            >
+              <X className="h-5 w-5" />
             </button>
           </div>
         </div>
 
         {/* Mobile tab bar */}
-        <div className="flex md:hidden border-b border-gray-200 flex-shrink-0">
+        <div className="flex md:hidden border-b border-slate-200 flex-shrink-0">
           <button
             onClick={() => setMobilePanelTab('media')}
-            className={`flex-1 py-2.5 text-xs font-semibold transition-colors ${mobilePanelTab === 'media' ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50' : 'text-gray-500 hover:text-gray-700'}`}
+            className={`flex-1 py-3 text-xs font-bold transition-colors ${mobilePanelTab === 'media' ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/20' : 'text-slate-550 hover:text-slate-800'}`}
           >
             Media
           </button>
           <button
             onClick={() => setMobilePanelTab('actions')}
-            className={`flex-1 py-2.5 text-xs font-semibold transition-colors ${mobilePanelTab === 'actions' ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50' : 'text-gray-500 hover:text-gray-700'}`}
+            className={`flex-1 py-3 text-xs font-bold transition-colors ${mobilePanelTab === 'actions' ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/20' : 'text-slate-550 hover:text-slate-800'}`}
           >
             Actions &amp; Comments
           </button>
@@ -559,37 +641,42 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
         <div className="flex flex-1 overflow-hidden">
 
           {/* ── LEFT: Media area ── */}
-          <div className={`${mobilePanelTab === 'media' ? 'flex' : 'hidden'} md:flex flex-1 flex-col overflow-y-auto bg-slate-50 p-4 gap-4 items-center`}>
+          <div className={`${mobilePanelTab === 'media' ? 'flex' : 'hidden'} md:flex flex-1 flex-col overflow-y-auto bg-slate-950 p-4 gap-4 items-center`}>
 
             {/* Version selector */}
-            <div className="flex flex-wrap gap-2 justify-center">
+            <div className="flex items-center bg-slate-900 border border-slate-800 rounded-xl p-1 shadow-inner gap-1">
               {localVersions.map((v, i) => {
                 const vCfg = getStatusConfig(v.status);
+                const isActive = i === activeVersionIdx;
                 return (
-                  <div key={v._id || i} className="flex items-center">
+                  <div key={v._id || i} className="flex items-center relative group">
                     <button
                       onClick={() => setActiveVersionIdx(i)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-l-lg text-xs font-semibold border-y border-l transition-all ${i === activeVersionIdx
-                          ? 'bg-blue-600 text-white border-blue-600 shadow'
-                          : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:bg-blue-50'
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 ${isActive
+                          ? 'bg-blue-600 text-white shadow-md'
+                          : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
                         }`}
                     >
-                      v{i + 1}
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${i === activeVersionIdx ? 'bg-white/20 text-white' : vCfg.color
+                      <span>v{i + 1}</span>
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${isActive
+                          ? 'bg-white/20 text-white'
+                          : 'bg-slate-850 text-slate-450 group-hover:bg-slate-800 group-hover:text-slate-350'
                         }`}>
-                        {vCfg.label}
+                        {vCfg.label.replace(' Review', '')}
                       </span>
                     </button>
-                    <button
-                      onClick={() => { setActiveVersionIdx(i); setDeleteConfirm('version'); }}
-                      title={`Delete v${i + 1}`}
-                      className={`p-1.5 border-y border-r rounded-r-lg transition-all ${i === activeVersionIdx
-                          ? 'bg-blue-700 border-blue-600 text-white/70 hover:text-white hover:bg-blue-800'
-                          : 'bg-white border-gray-200 text-gray-300 hover:text-red-500 hover:border-red-300 hover:bg-red-50'
-                        }`}
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
+                    {localVersions.length > 1 && (
+                      <button
+                        onClick={() => { setActiveVersionIdx(i); setDeleteConfirm('version'); }}
+                        title={`Delete version v${i + 1}`}
+                        className={`p-1 rounded-md ml-0.5 transition-all duration-150 ${isActive
+                            ? 'text-white/60 hover:text-white hover:bg-blue-700'
+                            : 'text-slate-600 hover:text-rose-450 hover:bg-rose-500/10'
+                          }`}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -597,36 +684,42 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
 
             {/* Media nav */}
             {mediaItems.length > 1 && (
-              <div className="flex items-center gap-3">
-                <button onClick={() => setActiveMediaIdx(i => Math.max(0, i - 1))}
+              <div className="flex items-center gap-3 bg-slate-900/80 border border-slate-800 rounded-full px-3 py-1 shadow-lg">
+                <button
+                  onClick={() => setActiveMediaIdx(i => Math.max(0, i - 1))}
                   disabled={activeMediaIdx === 0}
-                  className="p-2 rounded-lg bg-white border border-gray-200 hover:bg-gray-50 disabled:opacity-40 transition">
-                  <ChevronLeft className="h-4 w-4 text-gray-600" />
+                  className="p-1.5 rounded-full hover:bg-slate-800 disabled:opacity-30 disabled:hover:bg-transparent text-slate-300 transition-all active:scale-90"
+                >
+                  <ChevronLeft className="h-4 w-4" />
                 </button>
-                <span className="text-sm font-medium text-gray-600">{activeMediaIdx + 1} / {mediaItems.length}</span>
-                <button onClick={() => setActiveMediaIdx(i => Math.min(mediaItems.length - 1, i + 1))}
+                <span className="text-xs font-semibold text-slate-300 tabular-nums">
+                  {activeMediaIdx + 1} <span className="text-slate-600">/</span> {mediaItems.length}
+                </span>
+                <button
+                  onClick={() => setActiveMediaIdx(i => Math.min(mediaItems.length - 1, i + 1))}
                   disabled={activeMediaIdx === mediaItems.length - 1}
-                  className="p-2 rounded-lg bg-white border border-gray-200 hover:bg-gray-50 disabled:opacity-40 transition">
-                  <ChevronRight className="h-4 w-4 text-gray-600" />
+                  className="p-1.5 rounded-full hover:bg-slate-800 disabled:opacity-30 disabled:hover:bg-transparent text-slate-300 transition-all active:scale-90"
+                >
+                  <ChevronRight className="h-4 w-4" />
                 </button>
               </div>
             )}
 
             {/* Media + pins */}
             {currentMedia ? (
-              <div className="relative inline-block w-full flex justify-center">
+              <div className="relative inline-block w-full flex justify-center group/canvas">
                 {isVideoUrl(currentMedia.url) ? (
                   <video
                     src={currentMedia.url}
                     controls
-                    className="w-full max-w-full h-auto max-h-[45vh] sm:max-h-[60vh] rounded-xl shadow-lg border border-gray-200 object-contain cursor-crosshair"
+                    className="w-full max-w-full h-auto max-h-[40vh] sm:max-h-[48vh] rounded-xl shadow-2xl border border-slate-800 object-contain cursor-crosshair transition-all"
                     onClick={handleImageClickWithReposition}
                   />
                 ) : (
                   <img
                     src={currentMedia.url}
                     alt="media"
-                    className="w-full max-w-full h-auto max-h-[45vh] sm:max-h-[60vh] rounded-xl shadow-lg border border-gray-200 object-contain cursor-crosshair"
+                    className="w-full max-w-full h-auto max-h-[40vh] sm:max-h-[48vh] rounded-xl shadow-2xl border border-slate-800 object-contain cursor-crosshair transition-all"
                     onClick={handleImageClickWithReposition}
                   />
                 )}
@@ -652,50 +745,70 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
                 ))}
               </div>
             ) : (
-              <div className="w-80 h-60 bg-gray-100 rounded-xl flex items-center justify-center border border-gray-200">
+              <div className="w-80 h-60 bg-slate-900 rounded-xl flex items-center justify-center border border-slate-800">
                 <div className="text-center">
-                  <Image className="h-10 w-10 text-gray-300 mx-auto mb-2" />
-                  <p className="text-sm text-gray-400">No media</p>
+                  <Image className="h-10 w-10 text-slate-600 mx-auto mb-2" />
+                  <p className="text-sm text-slate-500">No media uploaded</p>
                 </div>
               </div>
             )}
 
             {/* Hint */}
             {currentMedia && !isVideoUrl(currentMedia.url) && (
-              <p className="text-xs text-gray-400 flex items-center gap-1.5">
-                <MessageSquare className="h-3 w-3" />
-                Click anywhere on the image to pin a comment
-              </p>
+              <div className="px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg shadow-sm">
+                <p className="text-[11px] font-medium text-slate-400 flex items-center gap-1.5">
+                  <MessageSquare className="h-3.5 w-3.5 text-blue-500 animate-pulse" />
+                  Click anywhere on the image to pin a comment
+                </p>
+              </div>
             )}
 
             {/* Thumbnails */}
             {mediaItems.length > 1 && (
-              <div className="flex gap-2 flex-wrap justify-center">
-                {mediaItems.map((m, i) => (
-                  <button key={i} onClick={() => setActiveMediaIdx(i)}
-                    className={`w-14 h-14 rounded-lg overflow-hidden border-2 transition-all flex-shrink-0 ${i === activeMediaIdx ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200 hover:border-gray-300'
-                      }`}>
-                    {isVideoUrl(m.url)
-                      ? <div className="w-full h-full bg-gray-200 flex items-center justify-center"><Play className="h-4 w-4 text-gray-500" /></div>
-                      : <img src={m.url} alt="" className="w-full h-full object-cover" loading="lazy" />}
-                  </button>
-                ))}
+              <div className="flex gap-2 flex-wrap justify-center p-1 bg-slate-900/50 border border-slate-800/60 rounded-xl">
+                {mediaItems.map((m, i) => {
+                  const isActive = i === activeMediaIdx;
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => setActiveMediaIdx(i)}
+                      className={`w-12 h-12 rounded-lg overflow-hidden border-2 transition-all duration-150 flex-shrink-0 ${isActive
+                          ? 'border-blue-500 ring-2 ring-blue-500/20 scale-105'
+                          : 'border-slate-800 opacity-60 hover:opacity-100 hover:border-slate-700'
+                        }`}
+                    >
+                      {isVideoUrl(m.url) ? (
+                        <div className="w-full h-full bg-slate-800 flex items-center justify-center">
+                          <Play className="h-4 w-4 text-slate-355" />
+                        </div>
+                      ) : (
+                        <img src={m.url} alt="" className="w-full h-full object-cover" loading="lazy" />
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             )}
 
             {/* Caption / Notes */}
             {(activeVersion.caption || activeVersion.notes) && (
-              <div className="w-full max-w-2xl grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="w-full max-w-2xl grid grid-cols-1 sm:grid-cols-2 gap-3 mt-1">
                 {activeVersion.caption && (
-                  <div>
-                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1">Caption</p>
-                    <div className="bg-white rounded-xl p-3 border border-gray-200 text-sm text-gray-700 leading-relaxed">{activeVersion.caption}</div>
+                  <div className="bg-slate-900 border border-slate-850 rounded-xl p-3.5 shadow-sm">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                      <FileText className="w-3.5 h-3.5 text-blue-400" />
+                      Post Caption
+                    </p>
+                    <div className="text-xs text-slate-300 leading-relaxed max-h-[120px] overflow-y-auto whitespace-pre-wrap pr-1">{activeVersion.caption}</div>
                   </div>
                 )}
                 {activeVersion.notes && (
-                  <div>
-                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1">Notes for Admin</p>
-                    <div className="bg-white rounded-xl p-3 border border-gray-200 text-sm text-gray-700 leading-relaxed">{activeVersion.notes}</div>
+                  <div className="bg-slate-900 border border-slate-850 rounded-xl p-3.5 shadow-sm">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                      <MessageSquare className="w-3.5 h-3.5 text-indigo-400" />
+                      Notes from Creator
+                    </p>
+                    <div className="text-xs text-slate-300 leading-relaxed max-h-[120px] overflow-y-auto whitespace-pre-wrap pr-1">{activeVersion.notes}</div>
                   </div>
                 )}
               </div>
@@ -703,45 +816,52 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
           </div>
 
           {/* ── RIGHT: Sidebar ── */}
-          <div className={`${mobilePanelTab === 'actions' ? 'flex' : 'hidden'} md:flex w-full md:w-80 xl:w-96 flex-shrink-0 border-l border-gray-200 bg-white flex-col overflow-hidden`}>
+          <div className={`${mobilePanelTab === 'actions' ? 'flex' : 'hidden'} md:flex w-full md:w-80 xl:w-96 flex-shrink-0 border-l border-slate-150 bg-white flex-col overflow-hidden`}>
 
             {/* Action area */}
-            <div className="p-4 border-b border-gray-100 space-y-2 flex-shrink-0">
+            <div className="p-4 border-b border-slate-100 space-y-2 flex-shrink-0">
               {!['approved', 'revision_requested', 'rejected'].includes(localStatus) && (
-                <button onClick={handleApprove} disabled={approving}
-                  className="w-full py-2.5 bg-green-500 text-white rounded-xl text-sm font-semibold hover:bg-green-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
-                  {approving
-                    ? <><div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Approving...</>
-                    : <><CheckCircle className="h-4 w-4" />Approve</>}
+                <button
+                  onClick={handleApprove}
+                  disabled={approving}
+                  className="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-green-600 text-white rounded-xl text-xs font-semibold hover:from-emerald-700 hover:to-green-700 shadow-md hover:shadow-lg shadow-emerald-500/10 active:scale-[0.98] transition-all duration-200 disabled:opacity-50 flex items-center justify-center gap-1.5"
+                >
+                  {approving ? (
+                    <><Loader2 className="h-3.5 w-3.5 animate-spin" />Approving...</>
+                  ) : (
+                    <><CheckCircle className="h-3.5 w-3.5" />Approve Submission</>
+                  )}
                 </button>
               )}
 
               {localStatus === 'approved' && (
                 <div className="space-y-2">
-                  <div className="flex items-center gap-2 p-3 bg-green-50 rounded-xl border border-green-200">
-                    <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
+                  <div className="flex items-center gap-2.5 p-3 bg-emerald-50 rounded-xl border border-emerald-150">
+                    <CheckCircle className="h-5 w-5 text-emerald-600 flex-shrink-0" />
                     <div>
-                      <p className="text-sm font-semibold text-green-800">Approved</p>
-                      <p className="text-xs text-green-600">Creator has been notified</p>
+                      <p className="text-xs font-bold text-emerald-800">Approved</p>
+                      <p className="text-[10px] text-emerald-650 font-medium">Creator has been notified</p>
                     </div>
                   </div>
                   {sentToCustomer ? (
-                    <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-xl border border-blue-200">
+                    <div className="flex items-center gap-2.5 p-3 bg-blue-50 rounded-xl border border-blue-150">
                       <Send className="h-5 w-5 text-blue-600 flex-shrink-0" />
                       <div>
-                        <p className="text-sm font-semibold text-blue-800">Sent to Customer</p>
-                        <p className="text-xs text-blue-600">Customer can now review this content</p>
+                        <p className="text-xs font-bold text-blue-800">Sent to Customer</p>
+                        <p className="text-[10px] text-blue-650 font-medium">Customer can now review this content</p>
                       </div>
                     </div>
                   ) : (
                     <button
                       onClick={handleSendToCustomer}
                       disabled={sendingToCustomer}
-                      className="w-full py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+                      className="w-full py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl text-xs font-semibold hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg shadow-blue-500/10 active:scale-[0.98] transition-all duration-200 disabled:opacity-50 flex items-center justify-center gap-1.5"
                     >
-                      {sendingToCustomer
-                        ? <><div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Sending...</>
-                        : <><Send className="h-4 w-4" />Send to Customer</>}
+                      {sendingToCustomer ? (
+                        <><Loader2 className="h-3.5 w-3.5 animate-spin" />Sending...</>
+                      ) : (
+                        <><Send className="h-3.5 w-3.5" />Send to Customer</>
+                      )}
                     </button>
                   )}
                 </div>
@@ -749,35 +869,40 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
 
               {localStatus === 'revision_requested' && (
                 <div className="space-y-2">
-                  <div className="flex items-center gap-2 p-3 bg-orange-50 rounded-xl border border-orange-200">
-                    <AlertCircle className="h-5 w-5 text-orange-600 flex-shrink-0" />
+                  <div className="flex items-center gap-2.5 p-3 bg-amber-50 rounded-xl border border-amber-150">
+                    <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0" />
                     <div>
-                      <p className="text-sm font-semibold text-orange-800">Revision Requested</p>
-                      <p className="text-xs text-orange-600">Creator has been notified</p>
+                      <p className="text-xs font-bold text-amber-800">Revision Requested</p>
+                      <p className="text-[10px] text-amber-650 font-medium">Creator has been notified</p>
                     </div>
                   </div>
-                  <button onClick={handleApprove} disabled={approving}
-                    className="w-full py-2.5 bg-green-500 text-white rounded-xl text-sm font-semibold hover:bg-green-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
-                    {approving
-                      ? <><div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Approving...</>
-                      : <><CheckCircle className="h-4 w-4" />Approve Anyway</>}
+                  <button
+                    onClick={handleApprove}
+                    disabled={approving}
+                    className="w-full py-2 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-1.5"
+                  >
+                    {approving ? (
+                      <><Loader2 className="h-3.5 w-3.5 animate-spin" />Approving...</>
+                    ) : (
+                      <><CheckCircle className="h-3.5 w-3.5" />Approve Anyway</>
+                    )}
                   </button>
                 </div>
               )}
 
               {/* ── Delete section ── */}
-              <div className="border-t border-gray-100 pt-2 space-y-1.5">
+              <div className="border-t border-slate-100 pt-2 space-y-1.5">
                 {localVersions.length > 1 && (
                   <button
                     onClick={() => setDeleteConfirm('version')}
-                    className="w-full py-2 text-red-500 border border-red-200 rounded-xl text-xs font-semibold hover:bg-red-50 transition-colors flex items-center justify-center gap-1.5"
+                    className="w-full py-2 text-rose-600 border border-rose-100 rounded-xl text-[11px] font-semibold hover:bg-rose-50/50 hover:border-rose-200 transition-all flex items-center justify-center gap-1.5"
                   >
                     <Trash2 className="h-3.5 w-3.5" />Delete Version v{activeVersionIdx + 1}
                   </button>
                 )}
                 <button
                   onClick={() => setDeleteConfirm('all')}
-                  className="w-full py-2 text-red-600 border border-red-300 bg-red-50/50 rounded-xl text-xs font-semibold hover:bg-red-100 transition-colors flex items-center justify-center gap-1.5"
+                  className="w-full py-2 text-rose-700 border border-rose-200 bg-rose-50/20 rounded-xl text-[11px] font-semibold hover:bg-rose-50/80 hover:border-rose-300 transition-all flex items-center justify-center gap-1.5"
                 >
                   <Trash2 className="h-3.5 w-3.5" />Delete Entire Submission
                 </button>
@@ -785,16 +910,16 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
 
               {/* ── Delete confirmation ── */}
               {deleteConfirm && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded-xl space-y-2">
+                <div className="p-3 bg-rose-50/40 border border-rose-150 rounded-xl space-y-2.5 mt-2 animate-fade-in">
                   <div className="flex items-start gap-2">
-                    <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0 mt-0.5" />
+                    <AlertCircle className="h-4 w-4 text-rose-600 flex-shrink-0 mt-0.5" />
                     <div>
-                      <p className="text-xs font-semibold text-red-800">
+                      <p className="text-xs font-bold text-rose-900">
                         {deleteConfirm === 'version'
                           ? `Delete version v${activeVersionIdx + 1}?`
                           : `Delete entire submission?`}
                       </p>
-                      <p className="text-[10px] text-red-600 mt-0.5">
+                      <p className="text-[10px] text-rose-650 mt-0.5">
                         {deleteConfirm === 'version'
                           ? 'This version will be permanently removed.'
                           : `All ${localVersions.length} version(s) will be permanently removed.`}
@@ -805,16 +930,18 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
                     <button
                       onClick={deleteConfirm === 'version' ? handleDeleteVersion : handleDeleteSubmission}
                       disabled={deleting}
-                      className="flex-1 py-1.5 bg-red-600 text-white rounded-lg text-xs font-semibold hover:bg-red-700 disabled:opacity-50 flex items-center justify-center gap-1"
+                      className="flex-1 py-1.5 bg-rose-600 text-white rounded-lg text-xs font-semibold hover:bg-rose-700 active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-1 shadow-sm transition-all"
                     >
-                      {deleting
-                        ? <><div className="h-3 w-3 border-2 border-white border-t-transparent rounded-full animate-spin" />Deleting...</>
-                        : 'Yes, Delete'}
+                      {deleting ? (
+                        <><Loader2 className="h-3 w-3 animate-spin" />Deleting...</>
+                      ) : (
+                        'Yes, Delete'
+                      )}
                     </button>
                     <button
                       onClick={() => setDeleteConfirm(null)}
                       disabled={deleting}
-                      className="flex-1 py-1.5 border border-gray-200 rounded-lg text-xs hover:bg-gray-50 disabled:opacity-50"
+                      className="flex-1 py-1.5 border border-slate-200 bg-white rounded-lg text-xs text-slate-650 font-semibold hover:bg-slate-50 active:scale-[0.98] transition-all disabled:opacity-50"
                     >
                       Cancel
                     </button>
@@ -824,25 +951,34 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
             </div>
 
             {/* Tabs */}
-            <div className="flex border-b border-gray-100 flex-shrink-0">
+            <div className="flex border-b border-slate-100 bg-slate-50/40 flex-shrink-0">
               {[
                 { key: 'comments', label: 'Comments', count: totalComments },
                 { key: 'details', label: 'Details', count: null },
-              ].map(tab => (
-                <button key={tab.key} onClick={() => setSidebarTab(tab.key)}
-                  className={`flex-1 py-2.5 text-xs font-semibold transition-colors ${sidebarTab === tab.key
-                      ? 'text-blue-600 border-b-2 border-blue-600'
-                      : 'text-gray-500 hover:text-gray-700'
-                    }`}>
-                  {tab.label}
-                  {tab.count !== null && tab.count > 0 && (
-                    <span className={`ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full font-bold
-                      ${sidebarTab === tab.key ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'}`}>
-                      {tab.count}
-                    </span>
-                  )}
-                </button>
-              ))}
+              ].map(tab => {
+                const isActive = sidebarTab === tab.key;
+                return (
+                  <button
+                    key={tab.key}
+                    onClick={() => setSidebarTab(tab.key)}
+                    className={`flex-1 py-3 text-xs font-bold transition-all relative ${isActive
+                        ? 'text-blue-600'
+                        : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                  >
+                    {tab.label}
+                    {tab.count !== null && tab.count > 0 && (
+                      <span className={`ml-1.5 text-[9px] px-1.5 py-0.5 rounded-full font-bold transition-all ${isActive ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-655'
+                        }`}>
+                        {tab.count}
+                      </span>
+                    )}
+                    {isActive && (
+                      <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-full mx-6" />
+                    )}
+                  </button>
+                );
+              })}
             </div>
 
             {/* Tab body */}
@@ -850,24 +986,30 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
 
               {/* ── Comments tab ── */}
               {sidebarTab === 'comments' && (
-                <div className="p-3">
+                <div className="p-4 space-y-4">
                   {totalComments === 0 ? (
-                    <div className="text-center py-12">
-                      <MessageSquare className="h-8 w-8 text-gray-300 mx-auto mb-2" />
-                      <p className="text-sm text-gray-400 font-medium">No comments yet</p>
-                      <p className="text-xs text-gray-300 mt-1">Click on the image to add a comment pin</p>
+                    <div className="text-center py-16 px-4">
+                      <MessageSquare className="h-8 w-8 text-slate-350 mx-auto mb-2.5" />
+                      <p className="text-xs font-bold text-slate-500">No comments yet</p>
+                      <p className="text-[11px] text-slate-400 mt-1 max-w-[200px] mx-auto leading-relaxed">Click anywhere on the image preview to place a comment pin.</p>
                     </div>
                   ) : (
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                       {/* Per-media filter pills */}
                       {mediaItems.length > 1 && (
-                        <div className="flex gap-1.5 flex-wrap mb-3">
+                        <div className="flex gap-1.5 flex-wrap pb-1.5 border-b border-slate-100">
                           {mediaItems.map((_, i) => {
                             const cnt = comments.filter(c => (c.mediaIndex ?? 0) === i).length;
+                            const isCurrent = i === activeMediaIdx;
                             return (
-                              <button key={i} onClick={() => setActiveMediaIdx(i)}
-                                className={`text-[10px] px-2 py-1 rounded-full transition-colors ${i === activeMediaIdx ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                  }`}>
+                              <button
+                                key={i}
+                                onClick={() => setActiveMediaIdx(i)}
+                                className={`text-[10px] px-2.5 py-1 rounded-lg font-semibold transition-all ${isCurrent
+                                    ? 'bg-blue-50 text-blue-650 border border-blue-200 shadow-sm'
+                                    : 'bg-slate-50 text-slate-500 hover:bg-slate-100 border border-slate-150'
+                                  }`}
+                              >
                                 Media {i + 1} {cnt > 0 && `(${cnt})`}
                               </button>
                             );
@@ -876,68 +1018,89 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
                       )}
 
                       {commentsForMedia.length > 0 && (
-                        <>
-                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide px-1">
+                        <div className="space-y-2">
+                          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider px-1">
                             Media {activeMediaIdx + 1} — {commentsForMedia.length} comment{commentsForMedia.length !== 1 ? 's' : ''}
                           </p>
-                          {commentsForMedia.map((comment, idx) => (
-                            <div key={comment.id} onClick={() => handleActivate(comment.id)}
-                              className={`rounded-xl cursor-pointer transition-all border overflow-hidden ${activeComment === comment.id
-                                  ? 'bg-blue-50 border-blue-200 shadow-sm'
-                                  : 'bg-white border-gray-100 hover:bg-gray-50'
-                                }`}>
-                              <div className="p-2.5 flex items-start gap-2">
-                                <span className={`w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center flex-shrink-0 ${comment.done ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
-                                  }`}>
-                                  {idx + 1}
-                                </span>
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-xs font-medium text-gray-800 break-words line-clamp-2">
-                                    {comment.comment}
-                                    {comment.done && <span className="ml-1 text-green-600">✓</span>}
-                                  </p>
-                                  <div className="flex items-center gap-2 mt-1">
-                                    {comment.author && <span className="text-[10px] text-gray-400">{comment.author}</span>}
+                          {commentsForMedia.map((comment, idx) => {
+                            const isActive = activeComment === comment.id;
+                            return (
+                              <div
+                                key={comment.id}
+                                onClick={() => handleActivate(comment.id)}
+                                className={`rounded-xl cursor-pointer transition-all border overflow-hidden ${isActive
+                                    ? 'bg-blue-50/50 border-blue-200 shadow-sm ring-1 ring-blue-200/50'
+                                    : 'bg-white border-slate-100 hover:border-slate-200 hover:bg-slate-50/40'
+                                  }`}
+                              >
+                                <div className="p-3 flex items-start gap-2.5">
+                                  <span className={`w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center flex-shrink-0 shadow-sm ${comment.done ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-blue-50 text-blue-700 border border-blue-100'
+                                    }`}>
+                                    {idx + 1}
+                                  </span>
+                                  <div className="flex-1 min-w-0">
+                                    <p className={`text-xs leading-relaxed break-words text-slate-800 ${comment.done ? 'line-through text-slate-400 font-normal' : 'font-semibold'}`}>
+                                      {comment.comment}
+                                    </p>
+                                    <div className="flex items-center gap-2 mt-1">
+                                      {comment.author && (
+                                        <span className="text-[9px] font-semibold text-slate-400 flex items-center gap-0.5">
+                                          <User className="w-2.5 h-2.5" />
+                                          {comment.author}
+                                        </span>
+                                      )}
+                                      {comment.timestamp && (
+                                        <span className="text-[9px] text-slate-450">
+                                          {new Date(comment.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="flex gap-0.5 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                                    <button
+                                      onClick={() => handleMarkDone(comment.id)}
+                                      title={comment.done ? 'Undo / Reopen' : 'Mark as resolved'}
+                                      className={`p-1 rounded-md transition-colors ${comment.done
+                                          ? 'text-emerald-600 hover:bg-emerald-50'
+                                          : 'text-slate-350 hover:text-emerald-600 hover:bg-emerald-50/50'
+                                        }`}
+                                    >
+                                      <CheckCircle className="h-4 w-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteComment(comment.id)}
+                                      title="Delete comment"
+                                      className="p-1 rounded-md text-slate-350 hover:text-rose-605 hover:bg-rose-50/50 transition-colors"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </button>
                                   </div>
                                 </div>
-                                <div className="flex gap-1 flex-shrink-0">
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); handleMarkDone(comment.id); }}
-                                    title={comment.done ? 'Undo' : 'Mark done'}
-                                    className={`p-1 rounded ${comment.done ? 'text-green-500 hover:bg-green-50' : 'text-gray-300 hover:text-green-500 hover:bg-green-50'}`}>
-                                    <CheckCircle className="h-3.5 w-3.5" />
-                                  </button>
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); handleDeleteComment(comment.id); }}
-                                    title="Delete"
-                                    className="p-1 rounded text-gray-300 hover:text-red-500 hover:bg-red-50">
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </button>
-                                </div>
                               </div>
-                            </div>
-                          ))}
-                        </>
+                            );
+                          })}
+                        </div>
                       )}
 
                       {commentsForMedia.length === 0 && totalComments > 0 && (
-                        <div className="text-center py-6 text-xs text-gray-400">
-                          No comments on this media. Switch media or click the image to add one.
+                        <div className="text-center py-8 px-4 border border-dashed border-slate-200 rounded-xl bg-slate-50/50">
+                          <p className="text-xs text-slate-400 font-medium">No comments on this media item.</p>
+                          <p className="text-[10px] text-slate-400 mt-0.5">Use filters above or click on the image to add one.</p>
                         </div>
                       )}
 
                       {comments.filter(c => (c.mediaIndex ?? 0) !== activeMediaIdx).length > 0 && (
-                        <p className="text-center text-[10px] text-gray-400 py-2 border-t border-gray-100 mt-2">
-                          {comments.filter(c => (c.mediaIndex ?? 0) !== activeMediaIdx).length} comment(s) on other media
-                        </p>
+                        <div className="text-center text-[10px] text-slate-400 py-2 border-t border-slate-100 mt-3 font-medium">
+                          {comments.filter(c => (c.mediaIndex ?? 0) !== activeMediaIdx).length} other comment(s) on different media
+                        </div>
                       )}
                     </div>
                   )}
 
                   {totalComments > 0 && (
-                    <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
+                    <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400 font-semibold px-1">
                       <span>{openComments} open · {totalComments - openComments} resolved</span>
-                      <span className="text-[10px] text-gray-400">{totalComments} total</span>
+                      <span className="text-[10px] font-normal text-slate-450">{totalComments} total</span>
                     </div>
                   )}
                 </div>
@@ -945,38 +1108,40 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
 
               {/* ── Details tab ── */}
               {sidebarTab === 'details' && (
-                <div className="p-4 space-y-3 text-sm">
-                  <SidebarRow icon={User} label="Creator" value={submission.created_by} />
-                  <SidebarRow icon={User} label="Customer" value={submission.customer_name} color="text-blue-600" />
-                  <SidebarRow icon={Calendar} label="Calendar" value={submission.calendar_name} />
-                  <SidebarRow icon={FileText} label="Item" value={submission.item_name} />
-                  <SidebarRow icon={Clock} label="Submitted" value={fmtDate(submission.sent_to_admin_at || submission.created_at)} />
-                  <SidebarRow icon={FileText} label="Platform" value={submission.platform} />
-                  {Array.isArray(submission.notify_admins) && submission.notify_admins.length > 0 && (
-                    <SidebarRow icon={User} label="Notified Admins"
-                      value={submission.notify_admins.map(a => a.name || a.email).join(', ')} />
-                  )}
+                <div className="p-4 space-y-4">
+                  <div className="space-y-2">
+                    <SidebarRow icon={User} label="Creator" value={submission.created_by} />
+                    <SidebarRow icon={User} label="Customer" value={submission.customer_name} color="text-blue-650" />
+                    <SidebarRow icon={Calendar} label="Calendar" value={submission.calendar_name} />
+                    <SidebarRow icon={FileText} label="Item" value={submission.item_name} />
+                    <SidebarRow icon={Clock} label="Submitted" value={fmtDate(submission.sent_to_admin_at || submission.created_at)} />
+                    <SidebarRow icon={FileText} label="Platform" value={submission.platform} />
+                    {Array.isArray(submission.notify_admins) && submission.notify_admins.length > 0 && (
+                      <SidebarRow icon={User} label="Notified Admins"
+                        value={submission.notify_admins.map(a => a.name || a.email).join(', ')} />
+                    )}
+                  </div>
 
                   {/* ── Caption & Hashtags editor ── */}
-                  <div className="border-t border-gray-100 pt-3 space-y-3">
-                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
-                      <Edit3 className="h-3 w-3" />Caption &amp; Hashtags
+                  <div className="border-t border-slate-100 pt-4 space-y-3.5">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 px-1">
+                      <Edit3 className="h-3.5 w-3.5 text-blue-500" />Caption &amp; Hashtags
                     </p>
-                    <div className="space-y-2">
+                    <div className="space-y-3 p-1">
                       <div>
-                        <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide block mb-1">Caption</label>
+                        <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Caption</label>
                         <textarea
-                          className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-blue-400 focus:border-blue-400 resize-none bg-gray-50 focus:bg-white transition-colors"
-                          rows={4}
+                          className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 resize-none bg-slate-50 focus:bg-white transition-all outline-none"
+                          rows={3}
                           placeholder="Enter caption for this post…"
                           value={captionDraft}
                           onChange={e => setCaptionDraft(e.target.value)}
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide block mb-1">Hashtags</label>
+                        <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Hashtags</label>
                         <textarea
-                          className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-blue-400 focus:border-blue-400 resize-none bg-gray-50 focus:bg-white transition-colors"
+                          className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 resize-none bg-slate-50 focus:bg-white transition-all outline-none"
                           rows={2}
                           placeholder="#hashtag1 #hashtag2 …"
                           value={hashtagsDraft}
@@ -986,25 +1151,33 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
                       <button
                         onClick={handleSaveCaptionHashtags}
                         disabled={savingCaption}
-                        className="w-full py-2 bg-blue-600 text-white rounded-xl text-xs font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+                        className="w-full py-2 bg-blue-600 text-white rounded-xl text-xs font-semibold hover:bg-blue-700 active:scale-[0.98] transition-all shadow-md shadow-blue-500/10 disabled:opacity-50 flex items-center justify-center gap-1.5"
                       >
-                        {savingCaption
-                          ? <><div className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />Saving…</>
-                          : <><Check className="h-3.5 w-3.5" />Save Caption &amp; Hashtags</>}
+                        {savingCaption ? (
+                          <><Loader2 className="h-3.5 w-3.5 animate-spin" />Saving…</>
+                        ) : (
+                          <><Check className="h-3.5 w-3.5" />Save Changes</>
+                        )}
                       </button>
                     </div>
                   </div>
 
                   {activeVersion.approvalNotes && (
-                    <div>
-                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Approval Notes</p>
-                      <p className="text-xs text-gray-700 bg-green-50 rounded-lg p-2 border border-green-100">{activeVersion.approvalNotes}</p>
+                    <div className="p-3 bg-emerald-50/50 border border-emerald-150 rounded-xl space-y-1">
+                      <p className="text-[9px] font-bold text-emerald-800 uppercase tracking-wider flex items-center gap-1">
+                        <CheckCircle className="h-3 w-3 text-emerald-600" />
+                        Approval Notes
+                      </p>
+                      <p className="text-xs text-emerald-700 leading-relaxed font-medium">{activeVersion.approvalNotes}</p>
                     </div>
                   )}
                   {activeVersion.rejectionReason && (
-                    <div>
-                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Revision Notes</p>
-                      <p className="text-xs text-gray-700 bg-orange-50 rounded-lg p-2 border border-orange-100">{activeVersion.rejectionReason}</p>
+                    <div className="p-3 bg-amber-50/50 border border-amber-150 rounded-xl space-y-1">
+                      <p className="text-[9px] font-bold text-amber-800 uppercase tracking-wider flex items-center gap-1">
+                        <AlertCircle className="h-3 w-3 text-amber-650" />
+                        Revision Notes
+                      </p>
+                      <p className="text-xs text-amber-750 leading-relaxed font-medium">{activeVersion.rejectionReason}</p>
                     </div>
                   )}
                 </div>
@@ -1017,14 +1190,16 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
   );
 }
 
-function SidebarRow({ icon: Icon, label, value, color = 'text-gray-800' }) {
+function SidebarRow({ icon: Icon, label, value, color = 'text-slate-800' }) {
   if (!value) return null;
   return (
-    <div className="flex items-start gap-2">
-      <Icon className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
-      <div>
-        <div className="text-[10px] text-gray-400 uppercase tracking-wide">{label}</div>
-        <div className={`text-sm font-medium ${color} break-all`}>{value}</div>
+    <div className="flex items-start gap-3 p-2 bg-slate-50/50 rounded-xl border border-slate-100/50 transition-all hover:bg-slate-50 hover:border-slate-150">
+      <div className="p-1.5 bg-white rounded-lg border border-slate-100 shadow-sm flex-shrink-0">
+        <Icon className="h-3.5 w-3.5 text-slate-400" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">{label}</div>
+        <div className={`text-xs font-semibold ${color} break-all mt-0.5`}>{value}</div>
       </div>
     </div>
   );
@@ -1035,27 +1210,27 @@ function MediaPreview({ images }) {
   const items = normalizeMedia(images);
   if (!items.length) {
     return (
-      <div className="h-40 bg-gray-100 flex items-center justify-center rounded-t-xl">
-        <Image className="h-8 w-8 text-gray-300" />
+      <div className="h-full bg-slate-100 flex items-center justify-center rounded-t-xl">
+        <Image className="h-8 w-8 text-slate-300" />
       </div>
     );
   }
   const first = items[0];
   return (
-    <div className="relative h-40 bg-gray-100 rounded-t-xl overflow-hidden">
+    <div className="relative h-full bg-slate-150 rounded-t-xl overflow-hidden">
       {isVideoUrl(first.url) ? (
         <>
           <video src={first.url} className="w-full h-full object-cover" muted preload="metadata" />
-          <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-            <Play className="h-8 w-8 text-white" />
+          <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+            <Play className="h-7 w-7 text-white drop-shadow" />
           </div>
         </>
       ) : (
         <img src={first.url} alt="submission" className="w-full h-full object-cover" loading="lazy" />
       )}
       {items.length > 1 && (
-        <span className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-0.5 rounded-full">
-          +{items.length - 1} more
+        <span className="absolute bottom-2 right-2 bg-slate-900/70 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md">
+          +{items.length - 1}
         </span>
       )}
     </div>
@@ -1070,96 +1245,87 @@ function SubmissionCard({ submission, onView, onDelete }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200/50 overflow-hidden hover:shadow-md transition-shadow flex flex-col">
-      <div className="relative">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200/50 overflow-hidden hover:shadow-md transition-shadow flex flex-col cursor-pointer relative" onClick={onView}>
+      {/* Thumbnail */}
+      <div className="relative h-36 bg-slate-50 flex-shrink-0 border-b border-slate-100">
         <MediaPreview images={submission.images} />
+        <span className={`absolute top-2 left-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${statusCfg.color}`}>
+          {statusCfg.label.replace(' Review', '')}
+        </span>
         {versionCount > 1 && (
-          <span className="absolute top-2 left-2 bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow">
-            v{versionCount}
+          <span className="absolute top-2 right-2 px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-100 text-purple-700 shadow-sm">
+            V{versionCount}
           </span>
         )}
-        <button
-          onClick={(e) => { e.stopPropagation(); setConfirmDelete(true); }}
-          className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-red-600 text-white rounded-lg transition-colors"
-          title="Delete submission"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
       </div>
 
-      <div className="p-3 flex-1 flex flex-col gap-2">
-        <div className="flex items-center justify-between">
-          <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${statusCfg.color}`}>
-            {statusCfg.label}
-          </span>
-          <div className="flex items-center gap-1.5">
-            {versionCount > 1 && (
-              <span className="text-[10px] text-blue-500 font-medium">{versionCount} versions</span>
-            )}
-            {commentCount > 0 && (
-              <span className="flex items-center gap-0.5 text-xs text-gray-400">
-                <MessageSquare className="h-3 w-3" />{commentCount}
-              </span>
-            )}
+      {/* Body */}
+      <div className="p-3 flex-1 flex flex-col justify-between relative">
+        <div>
+          {/* Title */}
+          <p className="text-sm font-semibold text-slate-800 truncate mb-1" title={submission.item_name || 'Untitled submission'}>
+            {submission.item_name || 'Untitled submission'}
+          </p>
+        </div>
+
+        <div>
+          {/* Footer Info Row */}
+          <div className="flex items-center justify-between text-[10px] text-slate-400 mt-2.5 pt-2 border-t border-slate-100 flex-shrink-0">
+            <span className="capitalize inline-flex items-center gap-1">
+              <PlatformIcon platform={submission.platform} className="w-3 h-3" />
+              {Array.isArray(submission.platform) ? submission.platform.join(', ') : submission.platform}
+            </span>
+            <span className="tabular-nums">{fmtDate(submission.sent_to_admin_at || submission.created_at).slice(0, 12)}</span>
+          </div>
+
+          {/* Action Row */}
+          <div className="flex gap-2 mt-3 w-full flex-shrink-0">
+            <button
+              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-1.5 px-2 rounded-lg text-xs font-medium transition-colors flex items-center justify-center"
+              onClick={(e) => {
+                e.stopPropagation();
+                onView();
+              }}
+            >
+              Review
+            </button>
+            <button
+              className="p-1.5 bg-red-50 text-red-650 border border-red-100 hover:bg-red-100 hover:text-red-700 rounded-lg transition-colors flex items-center justify-center flex-shrink-0"
+              onClick={(e) => {
+                e.stopPropagation();
+                setConfirmDelete(true);
+              }}
+              title="Delete submission"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 text-xs text-gray-500">
-          <User className="h-3 w-3 flex-shrink-0" />
-          <span className="truncate">{submission.created_by || 'Unknown creator'}</span>
-        </div>
-
-        {submission.customer_name && (
-          <div className="flex items-center gap-1.5 text-xs text-blue-600">
-            <User className="h-3 w-3 flex-shrink-0 text-blue-400" />
-            <span className="truncate">{submission.customer_name}</span>
-          </div>
-        )}
-
-        {submission.calendar_name && (
-          <div className="flex items-center gap-1.5 text-xs text-gray-500">
-            <Calendar className="h-3 w-3 flex-shrink-0" />
-            <span className="truncate">{submission.calendar_name}</span>
-          </div>
-        )}
-
-        {submission.item_name && (
-          <div className="flex items-center gap-1.5 text-xs text-gray-400">
-            <FileText className="h-3 w-3 flex-shrink-0" />
-            <span className="truncate">{submission.item_name}</span>
-          </div>
-        )}
-
-        {submission.caption && (
-          <p className="text-xs text-gray-600 line-clamp-2">{submission.caption}</p>
-        )}
-
-        <div className="flex items-center gap-1 text-[10px] text-gray-400 mt-auto pt-1 border-t border-gray-100">
-          <Clock className="h-3 w-3" />
-          <span>{fmtDate(submission.sent_to_admin_at || submission.created_at)}</span>
-        </div>
-
-        <button
-          onClick={onView}
-          className="w-full py-2 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-1.5"
-        >
-          <Eye className="h-3.5 w-3.5" /> Review &amp; Comment
-        </button>
+        {/* Inline absolute delete confirm overlay */}
         {confirmDelete && (
-          <div className="mt-1 p-2.5 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-xs font-medium text-red-700 mb-2">Delete this submission?</p>
-            <div className="flex gap-2">
+          <div className="absolute inset-0 bg-white/95 backdrop-blur-sm p-3 flex flex-col justify-center items-center rounded-xl z-10 animate-fade-in" onClick={e => e.stopPropagation()}>
+            <p className="text-xs font-bold text-slate-805 text-center mb-1">Delete submission?</p>
+            <p className="text-[10px] text-slate-500 text-center mb-3">All versions will be deleted permanently.</p>
+            <div className="flex gap-2 w-full max-w-[160px]">
               <button
-                onClick={() => { onDelete(submission); setConfirmDelete(false); }}
-                className="flex-1 py-1.5 bg-red-600 text-white rounded-lg text-xs font-semibold hover:bg-red-700"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(submission);
+                  setConfirmDelete(false);
+                }}
+                className="flex-1 py-1.5 bg-rose-600 text-white rounded-lg text-xs font-bold hover:bg-rose-700 active:scale-95 transition-all shadow shadow-rose-500/10"
               >
-                Delete
+                Yes
               </button>
               <button
-                onClick={() => setConfirmDelete(false)}
-                className="flex-1 py-1.5 border border-gray-200 rounded-lg text-xs hover:bg-gray-50"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setConfirmDelete(false);
+                }}
+                className="flex-1 py-1.5 border border-slate-200 bg-slate-50 text-slate-655 rounded-lg text-xs font-bold hover:bg-slate-100 active:scale-95 transition-all"
               >
-                Cancel
+                No
               </button>
             </div>
           </div>
@@ -1270,7 +1436,7 @@ export default function CreatorSubmissionsReview({ embedded = false, customerId 
 
   if (loading) {
     const loadingContent = (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
         {Array.from({ length: 8 }).map((_, i) => (
           <div key={i} className="bg-white rounded-xl shadow-sm border border-gray-200/50 animate-pulse">
             <div className="h-40 bg-gray-200 rounded-t-xl" />
@@ -1354,7 +1520,7 @@ export default function CreatorSubmissionsReview({ embedded = false, customerId 
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
           {filtered.map(submission => (
             <SubmissionCard
               key={submission._id}

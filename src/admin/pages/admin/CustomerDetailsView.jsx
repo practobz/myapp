@@ -458,46 +458,75 @@ const ItemTimeline = ({ item, itemStatus, scheduledPosts = [], submissions = [] 
   };
 
   // Version steps — one node per submission, shown between Due and Reviewed
-  // Each version also gets a "→ Admin" step if admins were notified
+  // Each version also gets a "→ Admin" step if admins were notified,
+  // followed by "Admin Approved" and "Sent to Customer" milestones.
   const versionSteps = [];
   submissions.forEach((s, idx) => {
-    // The upload/version node
+    // The upload/version node showing the creator who uploaded this
+    const creatorEmail = s.created_by || s.createdBy || s.creator_email || '';
+    const label = creatorEmail ? `V${idx + 1} (${creatorEmail})` : `V${idx + 1}`;
     versionSteps.push({
       key: `v${idx + 1}`,
-      label: `V${idx + 1}`,
+      label: label,
       done: hasReachedDate(s.created_at || s.createdAt),
       date: fmtDate(s.created_at || s.createdAt),
       tone: 'blue',
     });
-    // If admins were notified, add a "Sent" node right after
-    const notifiedAdmins = Array.isArray(s.notify_admins) ? s.notify_admins : [];
-    if (notifiedAdmins.length > 0) {
-      const adminLabel = notifiedAdmins.length === 1
-        ? notifiedAdmins[0].name || 'Admin'
-        : `${notifiedAdmins.length} Admins`;
+
+    // Admin Approved Step
+    const isAdminApproved = s.approved_by_admin === true || s.status === 'approved_admin' || s.status === 'approved_both' || (s.status === 'approved' && !s.approved_by_customer) || s.submission_stage === 'customer';
+    if (isAdminApproved) {
+      const notifiedAdmins = Array.isArray(s.notify_admins) ? s.notify_admins : [];
+      const adminEmail = notifiedAdmins.length > 0 ? (notifiedAdmins[0].name || notifiedAdmins[0].email || 'Admin') : 'Admin';
+      const approvedLabel = `Admin Approved (${adminEmail})`;
       versionSteps.push({
-        key: `v${idx + 1}_admin`,
-        label: `→ ${adminLabel}`,
-        done: hasReachedDate(s.sent_to_admin_at || s.created_at || s.createdAt),
-        date: fmtDate(s.sent_to_admin_at || s.created_at || s.createdAt),
+        key: `v${idx + 1}_admin_approved`,
+        label: approvedLabel,
+        done: true,
+        date: fmtDate(s.approvedAt || s.updatedAt || s.created_at || s.createdAt),
+        tone: 'green',
+      });
+    }
+
+    // Sent to Customer Step
+    if (s.submission_stage === 'customer') {
+      versionSteps.push({
+        key: `v${idx + 1}_sent_customer`,
+        label: `Sent to Customer`,
+        done: true,
+        date: fmtDate(s.sent_to_customer_at || s.updatedAt || s.created_at || s.createdAt),
         tone: 'purple',
       });
     }
   });
 
-  // Derive review date from the approved submission if not stored on item
-  const approvedSub = submissions.find(s => s.status === 'approved');
-  const reviewedAt = item.reviewedAt || approvedSub?.approvedAt || approvedSub?.updatedAt;
-  const reviewedDate = fmtDate(reviewedAt);
+  // Derive customer approval from submission or item status
+  const customerApprovedSub = submissions.find(s =>
+    s.approved_by_customer === true ||
+    s.status === 'approved_customer' ||
+    s.status === 'approved_both'
+  );
+
+  const isCustomerApproved = !!customerApprovedSub ||
+    itemStatus === 'published' ||
+    item.status === 'published' ||
+    item.published === true ||
+    (item.reviewedAt && submissions.length === 0);
+
+  const customerApprovedAt = customerApprovedSub?.approvedAt ||
+    customerApprovedSub?.updatedAt ||
+    (isCustomerApproved ? (item.reviewedAt || item.publishedAt) : null);
+
+  const customerApprovedDate = fmtDate(customerApprovedAt);
   const publishedAt = matchedPost?.publishedAt || item.publishedAt;
 
-  // Order: Created → Assigned → Due → V1 → V2 → ... → Reviewed → Published
+  // Order: Created → Assigned → Due → V1 → V2 → ... → Approved by Customer → Published
   const steps = [
     { key: 'created', label: 'Created', done: hasReachedDate(item.createdAt), date: fmtDate(item.createdAt), tone: 'blue' },
     { key: 'assigned', label: 'Assigned', done: hasReachedDate(item.assignedAt), date: fmtDate(item.assignedAt), tone: 'blue' },
     { key: 'due', label: 'Due', done: hasReachedDate(item.date), date: fmtDate(item.date), tone: 'orange' },
     ...versionSteps,
-    { key: 'reviewed', label: 'Reviewed', done: hasReachedDate(reviewedAt), date: reviewedDate, tone: 'blue' },
+    { key: 'reviewed', label: 'Approved by Customer', done: isCustomerApproved, date: customerApprovedDate, tone: 'blue' },
     { key: 'published', label: 'Published', done: hasReachedDate(publishedAt), date: fmtDate(publishedAt), tone: 'green' },
   ];
 
@@ -1391,9 +1420,9 @@ function CustomerDetailsView() {
   }, [isItemPublished]);
 
   // Get published count for a calendar
-  // Get published count for a calendar
   const getCalendarStats = useCallback((calendar) => {
     let total = 0, published = 0, pending = 0, upcomingDue = 0, overdue = 0;
+    let adminReviewCount = 0, customerReviewCount = 0;
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
@@ -1417,16 +1446,55 @@ function CustomerDetailsView() {
             }
           }
         }
+
+        // Calculate review counts from submissions
+        const itemTitle = item.title || item.description;
+        const itemSubmissions = allSubmissions.filter(s =>
+          (s.assignment_id && s.assignment_id === item.id) ||
+          (s.item_id && s.item_id === item.id) ||
+          (s.item_name && s.item_name === itemTitle)
+        );
+
+        if (itemSubmissions && itemSubmissions.length > 0) {
+          const sorted = [...itemSubmissions].sort((a, b) => new Date(a.created_at || a.createdAt) - new Date(b.created_at || b.createdAt));
+          const latest = sorted[sorted.length - 1];
+          const status = latest.status || 'submitted';
+          const stage = latest.submission_stage || latest.submissionStage || 'internal';
+
+          const approvedByAdmin = latest.approved_by_admin === true || status === 'approved_admin' || status === 'approved_both';
+          const approvedByCustomer = latest.approved_by_customer === true || status === 'approved_customer' || status === 'approved_both';
+
+          const isAdminRev = (stage !== 'customer') &&
+            !approvedByAdmin &&
+            status !== 'approved' &&
+            status !== 'rejected' &&
+            status !== 'revision_requested' &&
+            status !== 'sent_to_creator' &&
+            status !== 'published';
+
+          const isCustomerRev = (stage === 'customer') &&
+            !approvedByCustomer &&
+            status !== 'approved_customer' &&
+            status !== 'approved_both' &&
+            status !== 'rejected' &&
+            status !== 'revision_requested' &&
+            status !== 'sent_to_creator' &&
+            status !== 'published';
+
+          if (isAdminRev) adminReviewCount++;
+          if (isCustomerRev) customerReviewCount++;
+        }
       });
     }
 
     const progressPercent = total > 0 ? Math.round((published / total) * 100) : 0;
-    return { total, published, pending, upcomingDue, overdue, progressPercent };
-  }, [isItemPublished]);
+    return { total, published, pending, upcomingDue, overdue, progressPercent, adminReviewCount, customerReviewCount };
+  }, [isItemPublished, allSubmissions]);
 
   // Overall stats for all calendars
   const overallStats = useMemo(() => {
     let totalItems = 0, publishedItems = 0, upcomingDue = 0, overdue = 0;
+    let adminReviewCount = 0, customerReviewCount = 0;
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
@@ -1450,6 +1518,44 @@ function CustomerDetailsView() {
             }
           }
         }
+
+        // Calculate review counts from submissions
+        const itemTitle = item.title || item.description;
+        const itemSubmissions = allSubmissions.filter(s =>
+          (s.assignment_id && s.assignment_id === item.id) ||
+          (s.item_id && s.item_id === item.id) ||
+          (s.item_name && s.item_name === itemTitle)
+        );
+
+        if (itemSubmissions && itemSubmissions.length > 0) {
+          const sorted = [...itemSubmissions].sort((a, b) => new Date(a.created_at || a.createdAt) - new Date(b.created_at || b.createdAt));
+          const latest = sorted[sorted.length - 1];
+          const status = latest.status || 'submitted';
+          const stage = latest.submission_stage || latest.submissionStage || 'internal';
+
+          const approvedByAdmin = latest.approved_by_admin === true || status === 'approved_admin' || status === 'approved_both';
+          const approvedByCustomer = latest.approved_by_customer === true || status === 'approved_customer' || status === 'approved_both';
+
+          const isAdminRev = (stage !== 'customer') &&
+            !approvedByAdmin &&
+            status !== 'approved' &&
+            status !== 'rejected' &&
+            status !== 'revision_requested' &&
+            status !== 'sent_to_creator' &&
+            status !== 'published';
+
+          const isCustomerRev = (stage === 'customer') &&
+            !approvedByCustomer &&
+            status !== 'approved_customer' &&
+            status !== 'approved_both' &&
+            status !== 'rejected' &&
+            status !== 'revision_requested' &&
+            status !== 'sent_to_creator' &&
+            status !== 'published';
+
+          if (isAdminRev) adminReviewCount++;
+          if (isCustomerRev) customerReviewCount++;
+        }
       });
     });
     return {
@@ -1459,9 +1565,11 @@ function CustomerDetailsView() {
       pendingItems: totalItems - publishedItems,
       upcomingDue,
       overdue,
+      adminReviewCount,
+      customerReviewCount,
       completionRate: totalItems > 0 ? Math.round((publishedItems / totalItems) * 100) : 0
     };
-  }, [calendars, isItemPublished]);
+  }, [calendars, isItemPublished, allSubmissions]);
 
   const handleCreateCalendar = async (calendarData) => {
     try {
@@ -2044,7 +2152,7 @@ function CustomerDetailsView() {
 
   if (loading) {
     return (
-      <AdminLayout title="Customer Details">
+      <AdminLayout title="Customer Details" showBackButton={false}>
         <div className="flex items-center justify-center h-48">
           <div className="flex flex-col items-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-2"></div>
@@ -2057,7 +2165,7 @@ function CustomerDetailsView() {
 
   if (error || !customer) {
     return (
-      <AdminLayout title="Customer Details">
+      <AdminLayout title="Customer Details" showBackButton={false}>
         <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200 max-w-sm mx-auto mt-10">
           <div className="text-center">
             <div className="bg-red-100 rounded-full w-12 h-12 flex items-center justify-center mx-auto mb-3">
@@ -2079,7 +2187,7 @@ function CustomerDetailsView() {
   }
 
   return (
-    <AdminLayout title={`${customer.name || 'Customer'} - Details`}>
+    <AdminLayout title={`${customer.name || 'Customer'} - Details`} showBackButton={false}>
       <div className="space-y-2 sm:space-y-3">
         {/* Header + Tab Nav */}
         <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm p-2 sm:p-3 border border-gray-200/50">
@@ -2162,6 +2270,14 @@ function CustomerDetailsView() {
                         <div className="flex items-center gap-1.5 px-2 py-1 bg-amber-50 rounded-md border border-amber-200 whitespace-nowrap">
                           <span className="text-sm font-bold text-amber-700">{overallStats.pendingItems}</span>
                           <span className="text-[10px] font-medium text-amber-600 uppercase tracking-wide">Pending</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 px-2 py-1 bg-indigo-50 rounded-md border border-indigo-200 whitespace-nowrap">
+                          <span className="text-sm font-bold text-indigo-700">{overallStats.adminReviewCount}</span>
+                          <span className="text-[10px] font-medium text-indigo-600 uppercase tracking-wide">Admin Review</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 px-2 py-1 bg-pink-50 rounded-md border border-pink-200 whitespace-nowrap">
+                          <span className="text-sm font-bold text-pink-700">{overallStats.customerReviewCount}</span>
+                          <span className="text-[10px] font-medium text-pink-600 uppercase tracking-wide">Customer Review</span>
                         </div>
                         <div className="flex items-center gap-1.5 px-2 py-1 bg-orange-50 rounded-md border border-orange-200 whitespace-nowrap">
                           <span className="text-sm font-bold text-orange-700">{overallStats.upcomingDue}</span>
@@ -2247,6 +2363,8 @@ function CustomerDetailsView() {
                                       <div className="flex items-center gap-1.5 ml-1">
                                         <span className="text-[11px] font-medium text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">Published: {calStats.published}</span>
                                         <span className="text-[11px] font-medium text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">Pending: {calStats.pending}</span>
+                                        <span className="text-[11px] font-medium text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">Admin Review: {calStats.adminReviewCount}</span>
+                                        <span className="text-[11px] font-medium text-pink-600 bg-pink-50 px-1.5 py-0.5 rounded">Customer Review: {calStats.customerReviewCount}</span>
                                         <span className="text-[11px] font-medium text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded">Upcoming: {calStats.upcomingDue}</span>
                                         <span className="text-[11px] font-medium text-red-600 bg-red-50 px-1.5 py-0.5 rounded">Overdue: {calStats.overdue}</span>
                                       </div>

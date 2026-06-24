@@ -1,15 +1,30 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ChevronDown, Settings, LogOut, ArrowLeft } from 'lucide-react';
 import Footer from './Footer';
 import Logo from './Logo';
 import { useAuth } from '../../contexts/AuthContext';
 
-function AdminLayoutInner({ children, title }) {
+function AdminLayoutInner({ children, title, showBackButton = true }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef(null);
   const { logout, currentUser } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setDropdownOpen(false);
+      }
+    };
+    if (dropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [dropdownOpen]);
 
   const handleLogout = async () => {
     await logout?.();
@@ -35,7 +50,7 @@ function AdminLayoutInner({ children, title }) {
         <div className="px-3 sm:px-4 lg:px-6">
           <div className="flex items-center justify-between h-14">
             <div className="flex items-center">
-              {!isDashboard && (
+              {!isDashboard && showBackButton && (
                 <button
                   onClick={handleBack}
                   className="mr-3 text-[#475569] hover:text-[#0F172A] p-2 hover:bg-[#F4F9FF] rounded-lg"
@@ -65,7 +80,7 @@ function AdminLayoutInner({ children, title }) {
 
 
               {/* Profile */}
-              <div className="relative">
+              <div className="relative" ref={dropdownRef}>
                 <button
                   onClick={() => setDropdownOpen(!dropdownOpen)}
                   className="flex items-center space-x-3 p-2 rounded-lg hover:bg-[#F4F9FF]"
@@ -115,8 +130,8 @@ function AdminLayoutInner({ children, title }) {
   );
 }
 
-function AdminLayout({ children, title }) {
-  return <AdminLayoutInner title={title}>{children}</AdminLayoutInner>;
+function AdminLayout({ children, title, showBackButton = true }) {
+  return <AdminLayoutInner title={title} showBackButton={showBackButton}>{children}</AdminLayoutInner>;
 }
 
 export default AdminLayout;

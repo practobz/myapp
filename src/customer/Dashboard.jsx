@@ -81,9 +81,11 @@ function Dashboard() {
           return customerPosts.some(post => {
             const postCalId = post.calendarId || post.calendar_id;
             if (postCalId && item.calendarId && postCalId !== item.calendarId) return false;
-            return (post.item_id && post.item_id === item.id) ||
-              (post.contentId && post.contentId === item.id) ||
-              (post.item_name && post.item_name === item.title);
+            const postId = post.item_id || post.contentId;
+            if (postId) {
+              return postId === item.id;
+            }
+            return post.item_name && post.item_name === item.title;
           });
         };
         // Helper: check if item has a submission (content uploaded for review)
@@ -91,9 +93,11 @@ function Dashboard() {
           customerSubmissions.some(sub => {
             const subCalId = sub.calendarId || sub.calendar_id;
             if (subCalId && item.calendarId && subCalId !== item.calendarId) return false;
-            return (sub.item_id && sub.item_id === item.id) ||
-              (sub.assignment_id && sub.assignment_id === item.id) ||
-              (sub.item_name && sub.item_name === item.title);
+            const subId = sub.item_id || sub.assignment_id;
+            if (subId) {
+              return subId === item.id;
+            }
+            return sub.item_name && sub.item_name === item.title;
           });
         // --- End ---
 

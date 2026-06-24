@@ -1131,9 +1131,11 @@ function CustomerDetailsView() {
         const postCalId = post.calendarId || post.calendar_id;
         if (postCalId && postCalId !== calendarId) return false;
       }
-      return ((post.item_id && post.item_id === item.id) ||
-        (post.contentId && post.contentId === item.id) ||
-        (post.item_name && post.item_name === (item.title || item.description))) &&
+      const postId = post.item_id || post.contentId;
+      if (postId) {
+        return postId === item.id && (post.status === 'published' || post.publishedAt);
+      }
+      return post.item_name && post.item_name === (item.title || item.description) &&
         (post.status === 'published' || post.publishedAt);
     });
   }, [scheduledPosts]);
@@ -1458,9 +1460,11 @@ function CustomerDetailsView() {
           if (sCalId && sCalId !== calendar._id) return false;
           const sCustId = s.customer_id || s.customerId;
           if (sCustId && sCustId !== (calendar.customerId || id)) return false;
-          return (s.assignment_id && s.assignment_id === item.id) ||
-            (s.item_id && s.item_id === item.id) ||
-            (s.item_name && s.item_name === itemTitle);
+          const subId = s.assignment_id || s.item_id;
+          if (subId) {
+            return subId === item.id;
+          }
+          return s.item_name && s.item_name === itemTitle;
         });
 
         if (itemSubmissions && itemSubmissions.length > 0) {
@@ -1534,9 +1538,11 @@ function CustomerDetailsView() {
           if (sCalId && sCalId !== cal._id) return false;
           const sCustId = s.customer_id || s.customerId;
           if (sCustId && sCustId !== (cal.customerId || id)) return false;
-          return (s.assignment_id && s.assignment_id === item.id) ||
-            (s.item_id && s.item_id === item.id) ||
-            (s.item_name && s.item_name === itemTitle);
+          const subId = s.assignment_id || s.item_id;
+          if (subId) {
+            return subId === item.id;
+          }
+          return s.item_name && s.item_name === itemTitle;
         });
 
         if (itemSubmissions && itemSubmissions.length > 0) {
@@ -2103,9 +2109,11 @@ function CustomerDetailsView() {
           .filter(s => {
             const sCalId = s.calendar_id || s.calendarId;
             if (sCalId && sCalId !== calendar._id) return false;
-            return (s.assignment_id && s.assignment_id === itemId) ||
-              (s.item_name && s.item_name === itemTitle) ||
-              (s.item_id && s.item_id === itemId);
+            const subId = s.assignment_id || s.item_id;
+            if (subId) {
+              return subId === itemId;
+            }
+            return s.item_name && s.item_name === itemTitle;
           })
           .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
         const normalizeMedia = (media) => {
@@ -2505,9 +2513,11 @@ function CustomerDetailsView() {
                                         if (sCalId && sCalId !== calendar._id) return false;
                                         const sCustId = s.customer_id || s.customerId;
                                         if (sCustId && sCustId !== (calendar.customerId || id)) return false;
-                                        return (s.assignment_id && s.assignment_id === item.id) ||
-                                          (s.item_id && s.item_id === item.id) ||
-                                          (s.item_name && s.item_name === itemTitle);
+                                        const subId = s.assignment_id || s.item_id;
+                                        if (subId) {
+                                          return subId === item.id;
+                                        }
+                                        return (s.item_name && s.item_name === itemTitle);
                                       })
                                       .sort((a, b) => new Date(a.created_at || a.createdAt) - new Date(b.created_at || b.createdAt));
                                     return (

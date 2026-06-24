@@ -137,18 +137,22 @@ function ContentCalendar() {
     submissions.some(sub => {
       const subCalId = sub.calendar_id || sub.calendarId;
       if (subCalId && subCalId !== calendarId) return false;
-      return (sub.item_id && sub.item_id === item.id) ||
-        (sub.assignment_id && sub.assignment_id === item.id) ||
-        (sub.item_name && sub.item_name === item.title);
+      const subId = sub.item_id || sub.assignment_id;
+      if (subId) {
+        return subId === item.id;
+      }
+      return sub.item_name && sub.item_name === item.title;
     });
 
   const isItemScheduled = (item, calendarId) =>
     scheduledPosts.some(post => {
       const postCalId = post.calendar_id || post.calendarId;
       if (postCalId && postCalId !== calendarId) return false;
-      return ((post.item_id && post.item_id === item.id) ||
-        (post.contentId && post.contentId === item.id) ||
-        (post.item_name && post.item_name === item.title)) &&
+      const postId = post.item_id || post.contentId;
+      if (postId) {
+        return postId === item.id && (post.status === 'scheduled' || post.status === 'pending' || (post.scheduledDate && !post.publishedAt));
+      }
+      return post.item_name && post.item_name === item.title &&
         (post.status === 'scheduled' || post.status === 'pending' || (post.scheduledDate && !post.publishedAt));
     });
 
@@ -157,9 +161,11 @@ function ContentCalendar() {
       .filter(post => {
         const postCalId = post.calendar_id || post.calendarId;
         if (postCalId && postCalId !== calendarId) return false;
-        return ((post.item_id && post.item_id === item.id) ||
-          (post.contentId && post.contentId === item.id) ||
-          (post.item_name && post.item_name === item.title)) &&
+        const postId = post.item_id || post.contentId;
+        if (postId) {
+          return postId === item.id && (post.status === 'published' || post.publishedAt);
+        }
+        return post.item_name && post.item_name === item.title &&
           (post.status === 'published' || post.publishedAt);
       })
       .map(post => post.platform);
@@ -168,9 +174,11 @@ function ContentCalendar() {
     scheduledPosts.some(post => {
       const postCalId = post.calendar_id || post.calendarId;
       if (postCalId && postCalId !== calendarId) return false;
-      return ((post.item_id && post.item_id === item.id) ||
-        (post.contentId && post.contentId === item.id) ||
-        (post.item_name && post.item_name === item.title)) &&
+      const postId = post.item_id || post.contentId;
+      if (postId) {
+        return postId === item.id && (post.status === 'published' || post.publishedAt);
+      }
+      return post.item_name && post.item_name === item.title &&
         (post.status === 'published' || post.publishedAt);
     });
 
@@ -544,11 +552,15 @@ function ContentCalendar() {
       return { imageUrl: urls[0], imageUrls: urls };
     }
     if (item.imageUrls?.length > 0) return { imageUrl: item.imageUrls[0], imageUrls: item.imageUrls };
-    const matchingSub = submissions.find(sub =>
-      (sub.item_id && sub.item_id === item.id) ||
-      (sub.assignment_id && sub.assignment_id === item.id) ||
-      (sub.item_name && sub.item_name === item.title)
-    );
+    const matchingSub = submissions.find(sub => {
+      const subId = sub.assignment_id || sub.item_id;
+      if (subId) {
+        return subId === item.id;
+      }
+      const subCalId = sub.calendar_id || sub.calendarId;
+      if (subCalId && item.calendarId && subCalId !== item.calendarId) return false;
+      return sub.item_name && sub.item_name === item.title;
+    });
     if (matchingSub) {
       const subMedia = matchingSub.media || matchingSub.images || [];
       if (subMedia.length > 0) {
@@ -569,11 +581,15 @@ function ContentCalendar() {
       if (!res.ok) throw new Error();
       const all = await res.json();
       const matching = Array.isArray(all)
-        ? all.filter(sub =>
-          (sub.item_id && sub.item_id === item.id) ||
-          (sub.assignment_id && sub.assignment_id === item.id) ||
-          (sub.item_name && sub.item_name === item.title)
-        )
+        ? all.filter(sub => {
+          const subId = sub.assignment_id || sub.item_id;
+          if (subId) {
+            return subId === item.id;
+          }
+          const subCalId = sub.calendar_id || sub.calendarId;
+          if (subCalId && item.calendarId && subCalId !== item.calendarId) return false;
+          return sub.item_name && sub.item_name === item.title;
+        })
         : [];
       // Sort submissions oldest → newest (version order)
       matching.sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));
@@ -596,11 +612,15 @@ function ContentCalendar() {
   };
 
   const handleContentClick = (item) => {
-    const scheduledPublishedPosts = scheduledPosts.filter(post =>
-      (post.item_id && post.item_id === item.id) ||
-      (post.contentId && post.contentId === item.id) ||
-      (post.item_name && post.item_name === item.title)
-    );
+    const scheduledPublishedPosts = scheduledPosts.filter(post => {
+      const postId = post.item_id || post.contentId;
+      if (postId) {
+        return postId === item.id;
+      }
+      const postCalId = post.calendarId || post.calendar_id;
+      if (postCalId && item.calendarId && postCalId !== item.calendarId) return false;
+      return post.item_name && post.item_name === item.title;
+    });
     const manualPublishedPosts = [];
     if (item.published === true && item.publishedPlatforms?.length > 0) {
       const scheduledPlatforms = new Set(scheduledPublishedPosts.map(p => p.platform?.toLowerCase()));

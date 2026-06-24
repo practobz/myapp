@@ -7,7 +7,7 @@ import {
   AlertCircle, Eye, CheckCircle, Video, ExternalLink, Clock, Filter,
   LayoutGrid, List, Search, X, ChevronRight, FileText, TrendingUp,
   Send, Image, Play, Calendar, User, Sparkles, BarChart3, Download,
-  UserCog, ChevronLeft, Shield, PlusCircle, ArrowUpCircle
+  UserCog, ChevronLeft, Shield, PlusCircle, ArrowUpCircle, Loader2
 } from 'lucide-react';
 import ContentReview from './ContentReview';
 
@@ -794,10 +794,21 @@ function ContentCalendar() {
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center text-gray-500">Loading...</div>;
+    return (
+      <div className="h-64 flex flex-col items-center justify-center text-gray-500 gap-3">
+        <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+        <span className="text-sm font-medium">Loading content calendar...</span>
+      </div>
+    );
   }
   if (!customer) {
-    return <div className="min-h-screen flex items-center justify-center text-red-500">Customer not found.</div>;
+    return (
+      <div className="h-64 flex flex-col items-center justify-center text-red-500 gap-2 px-4 text-center">
+        <AlertCircle className="h-8 w-8 text-red-500 animate-pulse" />
+        <span className="text-sm font-semibold">Customer account not found.</span>
+        <p className="text-xs text-gray-400 max-w-sm">Please make sure the server is started and you are logged in correctly.</p>
+      </div>
+    );
   }
 
   const getItemMedia = (item) => {

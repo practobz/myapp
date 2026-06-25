@@ -184,7 +184,7 @@ function Dashboard() {
           }
         });
         const filtered = allAssignments.filter(item =>
-          (item.assignedTo || '').toLowerCase() === creatorEmail
+          String(item.assignedTo || '').toLowerCase() === creatorEmail
         );
         setAssignments(filtered);
       } catch (err) {
@@ -213,7 +213,7 @@ function Dashboard() {
         const res = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions`);
         const data = res.ok ? await res.json() : [];
         const creatorSubs = Array.isArray(data)
-          ? data.filter(sub => (sub.created_by || '').toLowerCase() === creatorEmail)
+          ? data.filter(sub => String(sub.created_by || '').toLowerCase() === creatorEmail)
           : [];
         setSubmissions(creatorSubs);
       } catch (err) {
@@ -242,10 +242,14 @@ function Dashboard() {
       const stage = s.submission_stage || s.submissionStage || '';
       // Track every assignment that has any submission
       keys.forEach(k => anySubmissionKeys.add(k));
-      if (s.status === 'approved' && stage !== 'customer') {
+
+      const isCustomerApproved = s.approved_by_customer === true || s.status === 'approved_customer' || s.status === 'approved_both';
+      const isAdminApproved = s.approved_by_admin === true || s.status === 'approved_admin' || s.status === 'approved_both' || (s.status === 'approved' && !s.approved_by_customer) || stage === 'customer';
+
+      if (isAdminApproved) {
         keys.forEach(k => adminApprovedKeys.add(k));
       }
-      if (s.status === 'approved' && stage === 'customer') {
+      if (isCustomerApproved) {
         keys.forEach(k => customerApprovedKeys.add(k));
       }
       if (stage === 'customer' && Array.isArray(s.comments) && s.comments.length > 0) {
@@ -296,7 +300,8 @@ function Dashboard() {
     if (actual === 'published') return 'published';
     if (assignmentMatchesSet(assignment, submissionFilterSets.customerApprovedKeys)) return 'approved';
     if (assignmentMatchesSet(assignment, submissionFilterSets.adminApprovedKeys)) return 'approved';
-    if (!submissionFilterSets.customerApprovedKeys.size && actual === 'approved') return 'approved';
+    const hasSubmission = assignmentMatchesSet(assignment, submissionFilterSets.anySubmissionKeys);
+    if (!hasSubmission && actual === 'approved') return 'approved';
     return 'pending';
   };
 

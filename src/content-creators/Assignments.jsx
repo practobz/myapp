@@ -403,20 +403,24 @@ function Assignments() {
   };
 
   const stats = useMemo(() => {
+    const listToCount = selectedCustomerId
+      ? assignments.filter(a => a.customerId === selectedCustomerId)
+      : assignments;
+
     return {
-      total: assignments.length,
-      pending: assignments.filter(a => getFilterStatus(a) === 'pending').length,
-      approved: assignments.filter(a => getFilterStatus(a) === 'approved').length,
-      published: assignments.filter(a => getFilterStatus(a) === 'published').length,
-      adminApproved: assignments.filter(a => assignmentMatchesSet(a, submissionFilterSets.adminApprovedKeys)).length,
-      reviewUpdates: assignments.filter(a => {
+      total: listToCount.length,
+      pending: listToCount.filter(a => getFilterStatus(a) === 'pending').length,
+      approved: listToCount.filter(a => getFilterStatus(a) === 'approved').length,
+      published: listToCount.filter(a => getFilterStatus(a) === 'published').length,
+      adminApproved: listToCount.filter(a => assignmentMatchesSet(a, submissionFilterSets.adminApprovedKeys)).length,
+      reviewUpdates: listToCount.filter(a => {
         const sub = getLatestSubmission(a);
         return sub &&
           (sub.submission_stage || sub.submissionStage || '') === 'customer' &&
           Array.isArray(sub.comments) && sub.comments.length > 0;
       }).length,
     };
-  }, [assignments, scheduledPosts, submissions, submissionFilterSets]);
+  }, [assignments, selectedCustomerId, scheduledPosts, submissions, submissionFilterSets]);
 
   const filteredAssignments = assignments.filter(assignment => {
     let matchesFilter = true;
@@ -561,14 +565,14 @@ function Assignments() {
                 { key: 'pending', label: 'Pending', count: stats.pending },
                 { key: 'approved', label: 'Customer Approved', count: stats.approved },
                 { key: 'published', label: 'Published', count: stats.published },
-                { key: 'admin_approved', label: 'Approved by Admin', count: adminApprovedCount },
+                { key: 'admin_approved', label: 'Approved by Admin', count: stats.adminApproved },
               ].map(opt => (
                 <button
                   key={opt.key}
                   onClick={() => setSelectedFilter(opt.key)}
                   className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${selectedFilter === opt.key
-                      ? 'bg-purple-600 text-white shadow-sm'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    ? 'bg-purple-600 text-white shadow-sm'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                     }`}
                 >
                   {opt.label}
@@ -582,7 +586,7 @@ function Assignments() {
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all bg-gray-100 text-gray-600 hover:bg-rose-100 hover:text-rose-700"
               >
                 Review Updates
-                <span className="text-xs px-1.5 py-0.5 rounded-full font-semibold bg-white text-gray-600">{reviewCount}</span>
+                <span className="text-xs px-1.5 py-0.5 rounded-full font-semibold bg-white text-gray-600">{stats.reviewUpdates}</span>
               </button>
             </div>
             <div className="relative flex-shrink-0">

@@ -5,6 +5,7 @@ import {
   Tag, X, Eye, Edit3, Trash2, Download, FolderOpen, Users, ChevronRight, Folder
 } from 'lucide-react';
 import Footer from '../admin/components/layout/Footer';
+import ContentCreatorLayout from './Layout';
 
 // Helper to get creator email from localStorage
 function getCreatorEmail() {
@@ -336,33 +337,12 @@ function MediaLibrary() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex flex-col">
-      {/* Header with Navigation */}
-      <header className="bg-white/80 backdrop-blur-sm shadow-sm border-b border-gray-200/50 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center">
-              <button
-                onClick={() => selectedCustomer ? handleBackToFolders() : navigate('/content-creator')}
-                className="mr-4 p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all duration-200"
-              >
-                <ArrowLeft className="h-5 w-5" />
-              </button>
-              <div className="flex items-center">
-                <div className="p-2 bg-gradient-to-r from-purple-500 to-indigo-600 rounded-xl shadow-lg">
-                  <FolderOpen className="h-6 w-6 text-white" />
-                </div>
-                <div className="ml-3">
-                  <span className="text-xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">
-                    Content Creator Portal
-                  </span>
-                  <p className="text-sm text-gray-500">Media Library</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </header>
+    <ContentCreatorLayout
+      title="Content Creator Portal"
+      subtitle="Media Library"
+      icon={<FolderOpen className="h-6 w-6 text-white" />}
+      onBack={() => selectedCustomer ? handleBackToFolders() : navigate('/content-creator')}
+    >
 
       {/* Main Content */}
       <div className="flex-1">
@@ -1033,7 +1013,7 @@ function MediaLibrary() {
           </div>
         </div>
       )}
-    </div>
+    </ContentCreatorLayout>
   );
 }
 

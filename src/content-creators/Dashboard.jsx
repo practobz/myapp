@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PlusCircle, Clock, MessageSquare, CheckCircle, Globe, User, ChevronDown, Palette, Eye, Image, FolderOpen, Users, ClipboardList, Send, Bell, ShieldCheck, ArrowUpRight, UserCheck } from 'lucide-react';
 import { format } from 'date-fns';
 import { useAuth } from "../admin/contexts/AuthContext";
 import Logo from '../admin/components/layout/Logo';
 import Footer from '../admin/components/layout/Footer';
+import ContentCreatorLayout from './Layout';
 
 const parsePlatforms = (val) => {
   if (!val) return [];
@@ -128,12 +129,25 @@ function Dashboard() {
   const navigate = useNavigate();
   const { logout } = useAuth();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const userMenuRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
+        setIsUserMenuOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   // Real assignments data
   const [assignments, setAssignments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [customers, setCustomers] = useState([]);
-
+  
   // Scheduled posts to check published status
   const [scheduledPosts, setScheduledPosts] = useState([]);
   const [submissions, setSubmissions] = useState([]);
@@ -193,7 +207,7 @@ function Dashboard() {
         setLoading(false);
       }
     };
-
+    
     const fetchScheduledPosts = async () => {
       try {
         const res = await fetch(`${process.env.REACT_APP_API_URL}/api/scheduled-posts`);
@@ -207,7 +221,7 @@ function Dashboard() {
         setScheduledPosts([]); // Ensure scheduledPosts is an empty array on error
       }
     };
-
+    
     const fetchSubmissions = async () => {
       try {
         const res = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions`);
@@ -242,7 +256,7 @@ function Dashboard() {
       const stage = s.submission_stage || s.submissionStage || '';
       // Track every assignment that has any submission
       keys.forEach(k => anySubmissionKeys.add(k));
-
+      
       const isCustomerApproved = s.approved_by_customer === true || s.status === 'approved_customer' || s.status === 'approved_both';
       const isAdminApproved = s.approved_by_admin === true || s.status === 'approved_admin' || s.status === 'approved_both' || (s.status === 'approved' && !s.approved_by_customer) || stage === 'customer';
 
@@ -281,7 +295,7 @@ function Dashboard() {
   const isContentPublished = (assignmentId) => {
     return scheduledPosts.some(post => post.contentId === assignmentId && post.status === 'published');
   };
-
+  
   // Helper: get actual status considering published posts and item.published field
   const getActualStatus = (assignment) => {
     // Check if the item itself is marked as published
@@ -311,7 +325,7 @@ function Dashboard() {
 
   const { stats, adminApprovedCount, customerApprovedCount, reviewCount } = useMemo(() => {
     return {
-      adminApprovedCount: assignments.filter(a => assignmentMatchesSet(a, submissionFilterSets.adminApprovedKeys)).length,
+      adminApprovedCount:  assignments.filter(a => assignmentMatchesSet(a, submissionFilterSets.adminApprovedKeys)).length,
       customerApprovedCount: assignments.filter(a => assignmentMatchesSet(a, submissionFilterSets.customerApprovedKeys)).length,
       reviewCount: assignments.filter(a => assignmentMatchesSet(a, submissionFilterSets.reviewKeys)).length,
       stats: {
@@ -336,7 +350,7 @@ function Dashboard() {
         .filter(s => {
           if (s.assignment_id && String(s.assignment_id) === String(a.id || a._id || '')) return true;
           if (a.calendarId && a.itemIndex !== undefined &&
-            s.calendar_id === a.calendarId && String(s.item_index) === String(a.itemIndex)) return true;
+              s.calendar_id === a.calendarId && String(s.item_index) === String(a.itemIndex)) return true;
           return false;
         })
         .sort((x, y) => new Date(y.created_at || 0) - new Date(x.created_at || 0))[0];
@@ -362,116 +376,42 @@ function Dashboard() {
     navigate('/content-creator/login');
   };
 
-  // Navigate to assignments with filter
-  const goToAssignments = (filter) => {
-    if (filter && filter !== 'all') {
-      navigate(`/content-creator/assignments?filter=${filter}`);
-    } else {
-      navigate('/content-creator/assignments');
-    }
-  };
-
-  const handleNavigation = (path) => {
-    setIsUserMenuOpen(false);
-    navigate(path);
-  };
-
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col">
+    <ContentCreatorLayout title="Content Creator Portal" subtitle="Manage assignments & progress">
       <style>{CSS}</style>
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-10">
-        <div className="w-full px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center min-w-0">
-              <button
-                className="mr-3 focus:outline-none flex-shrink-0"
-                onClick={() => navigate('/content-creator')}
-                aria-label="Go to Dashboard"
-                style={{ background: 'none', border: 'none', padding: 0 }}
-              >
-                <Logo size="small" />
-              </button>
-              <span className="text-lg sm:text-xl font-bold text-gray-900 truncate">Content Creator Portal</span>
-            </div>
-
-            <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-              {/* User Menu */}
-              <div className="relative">
-                <button
-                  onClick={handleUserMenuToggle}
-                  className="flex items-center gap-1 p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-                >
-                  <User className="h-5 w-5" />
-                  <ChevronDown className="h-4 w-4" />
-                </button>
-
-                {isUserMenuOpen && (
-                  <div className="absolute right-0 mt-2 w-40 bg-white rounded-xl shadow-lg py-2 z-50 border border-gray-200">
-                    <button
-                      onClick={handleLogout}
-                      className="block w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
-                    >
-                      Logout
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
+      <div className="space-y-6">
+        {/* Welcome Banner */}
+        <div className="bg-gradient-to-r from-purple-600 via-purple-500 to-indigo-600 rounded-2xl shadow-lg p-6 sm:p-8 text-white">
+          <h1 className="text-2xl sm:text-3xl font-bold mb-2">Welcome, Content Creator!</h1>
+          <p className="text-purple-100 text-sm sm:text-base max-w-xl">Manage your content assignments and track your progress</p>
         </div>
-      </header>
 
-      {/* Main Content */}
-      <div className="flex-1">
-        <div className="w-full px-4 sm:px-6 lg:px-8 py-6">
-          <div className="space-y-6">
-            {/* Welcome Banner */}
-            <div className="bg-gradient-to-r from-purple-600 via-purple-500 to-indigo-600 rounded-2xl shadow-lg p-6 sm:p-8 text-white">
-              <h1 className="text-2xl sm:text-3xl font-bold mb-2">Welcome, Content Creator!</h1>
-              <p className="text-purple-100 text-sm sm:text-base max-w-xl">Manage your content assignments and track your progress</p>
-            </div>
-
-            {/* Customers Section */}
-            <Section icon={Users} label="Customers" count={assignedCustomers.length} variant="customer" empty="No customers assigned yet.">
-              {loading ? (
-                [1, 2, 3].map(j => <CardSkeleton key={j} />)
-              ) : (
-                assignedCustomers.map((c, i) => {
-                  const customerId = c._id || c.id;
-                  const customerAssignments = assignments.filter(item => item.customerId === customerId);
-                  const count = customerAssignments.length;
-                  const yetToUploadCount = customerAssignments.filter(a => !assignmentMatchesSet(a, submissionFilterSets.anySubmissionKeys)).length;
-                  return (
-                    <div key={customerId} className="aur-enter" style={{ animationDelay: `${i * 35}ms` }}>
-                      <PersonCard
-                        person={c}
-                        variant="customer"
-                        href={`/content-creator/assignments?expand=${customerId}`}
-                        contentCount={count}
-                        yetToUploadCount={yetToUploadCount}
-                      />
-                    </div>
-                  );
-                })
-              )}
-            </Section>
-
-
-          </div>
-        </div>
+        {/* Customers Section */}
+        <Section icon={Users} label="Customers" count={assignedCustomers.length} variant="customer" empty="No customers assigned yet.">
+          {loading ? (
+            [1, 2, 3].map(j => <CardSkeleton key={j} />)
+          ) : (
+            assignedCustomers.map((c, i) => {
+              const customerId = c._id || c.id;
+              const customerAssignments = assignments.filter(item => item.customerId === customerId);
+              const count = customerAssignments.length;
+              const yetToUploadCount = customerAssignments.filter(a => !assignmentMatchesSet(a, submissionFilterSets.anySubmissionKeys)).length;
+              return (
+                <div key={customerId} className="aur-enter" style={{ animationDelay: `${i * 35}ms` }}>
+                  <PersonCard
+                    person={c}
+                    variant="customer"
+                    href={`/content-creator/assignments?expand=${customerId}`}
+                    contentCount={count}
+                    yetToUploadCount={yetToUploadCount}
+                  />
+                </div>
+              );
+            })
+          )}
+        </Section>
       </div>
-
-      <Footer />
-
-      {/* Click outside to close menu */}
-      {isUserMenuOpen && (
-        <div
-          className="fixed inset-0 z-[9]"
-          onClick={() => setIsUserMenuOpen(false)}
-        ></div>
-      )}
-    </div>
+    </ContentCreatorLayout>
   );
 }
 

@@ -5,6 +5,7 @@ import { ArrowLeft, Filter, Search, MessageSquare, CheckCircle, Clock, AlertCirc
 import { Facebook, Instagram, Linkedin, Youtube, Twitter } from 'lucide-react';
 import Footer from '../admin/components/layout/Footer';
 import Logo from '../admin/components/layout/Logo';
+import ContentCreatorLayout from './Layout';
 
 // Helper to get creator email from localStorage
 function getCreatorEmail() {
@@ -41,7 +42,7 @@ function Assignments() {
   const [expandedCustomers, setExpandedCustomers] = useState({});
   const [expandedCalendars, setExpandedCalendars] = useState({});
   const [selectedCustomerId, setSelectedCustomerId] = useState(null);
-  
+
   // Scheduled posts to check published status
   const [scheduledPosts, setScheduledPosts] = useState([]);
   // Submissions to show per-assignment review status
@@ -117,7 +118,7 @@ function Assignments() {
         setAssignments([]);
       }
     };
-    
+
     const fetchScheduledPosts = async () => {
       try {
         const res = await fetch(`${process.env.REACT_APP_API_URL}/api/scheduled-posts`);
@@ -157,7 +158,7 @@ function Assignments() {
         setSubmissions([]);
       }
     };
-    
+
     if (creatorEmail && creatorEmail.length > 0 && Object.keys(customerMap).length > 0) {
       fetchAssignments();
       fetchScheduledPosts();
@@ -177,7 +178,7 @@ function Assignments() {
       ? (assignmentOrId.id || assignmentOrId._id)
       : assignmentOrId;
     const calId = assignmentOrId && typeof assignmentOrId === 'object' ? assignmentOrId.calendarId : undefined;
-    const idx   = assignmentOrId && typeof assignmentOrId === 'object' ? assignmentOrId.itemIndex  : undefined;
+    const idx = assignmentOrId && typeof assignmentOrId === 'object' ? assignmentOrId.itemIndex : undefined;
     const subs = submissions.filter(s => {
       const sid = String(s.assignment_id || s.assignmentId || '');
       const iid = String(s.item_id || '');
@@ -217,7 +218,7 @@ function Assignments() {
         keys.push(`${s.calendar_id}::${Number(s.item_index)}`);
       }
       const stage = s.submission_stage || s.submissionStage || '';
-      
+
       // Track every assignment that has any submission
       keys.forEach(k => anySubmissionKeys.add(k));
 
@@ -264,7 +265,7 @@ function Assignments() {
     }
     return { label: 'Under Admin Review', color: 'bg-amber-100 text-amber-700 border-amber-200', icon: <Clock className="h-3 w-3" />, canReupload: false, revisionNotes: '' };
   };
-  
+
   // Helper: get actual status considering published posts and item.published field
   const getActualStatus = (assignment) => {
     // Check if the item itself is marked as published
@@ -311,12 +312,12 @@ function Assignments() {
 
   const PlatformIcon = ({ platform, className = 'h-3 w-3' }) => {
     switch ((platform || '').toLowerCase()) {
-      case 'facebook':  return <Facebook  className={className} />;
+      case 'facebook': return <Facebook className={className} />;
       case 'instagram': return <Instagram className={className} />;
-      case 'linkedin':  return <Linkedin  className={className} />;
-      case 'youtube':   return <Youtube   className={className} />;
-      case 'twitter':   return <Twitter   className={className} />;
-      default:          return <Globe     className={className} />;
+      case 'linkedin': return <Linkedin className={className} />;
+      case 'youtube': return <Youtube className={className} />;
+      case 'twitter': return <Twitter className={className} />;
+      default: return <Globe className={className} />;
     }
   };
 
@@ -358,7 +359,7 @@ function Assignments() {
     const hasSubmission = assignmentMatchesSet(assignment, submissionFilterSets.anySubmissionKeys);
     const isCustomerApproved = assignmentMatchesSet(assignment, submissionFilterSets.customerApprovedKeys) || (!hasSubmission && getActualStatus(assignment) === 'approved');
     const isAdminApproved = assignmentMatchesSet(assignment, submissionFilterSets.adminApprovedKeys);
-    
+
     if (isCustomerApproved && isAdminApproved) {
       return {
         label: 'Both Approved',
@@ -380,7 +381,7 @@ function Assignments() {
         icon: <CheckCircle className="h-4 w-4" />
       };
     }
-    
+
     return {
       label: 'Pending',
       color: 'bg-amber-50 text-amber-700 border-amber-200',
@@ -403,11 +404,11 @@ function Assignments() {
 
   const stats = useMemo(() => {
     return {
-      total:        assignments.length,
-      pending:      assignments.filter(a => getFilterStatus(a) === 'pending').length,
-      approved:     assignments.filter(a => getFilterStatus(a) === 'approved').length,
-      published:    assignments.filter(a => getFilterStatus(a) === 'published').length,
-      adminApproved:  assignments.filter(a => assignmentMatchesSet(a, submissionFilterSets.adminApprovedKeys)).length,
+      total: assignments.length,
+      pending: assignments.filter(a => getFilterStatus(a) === 'pending').length,
+      approved: assignments.filter(a => getFilterStatus(a) === 'approved').length,
+      published: assignments.filter(a => getFilterStatus(a) === 'published').length,
+      adminApproved: assignments.filter(a => assignmentMatchesSet(a, submissionFilterSets.adminApprovedKeys)).length,
       reviewUpdates: assignments.filter(a => {
         const sub = getLatestSubmission(a);
         return sub &&
@@ -433,8 +434,8 @@ function Assignments() {
       : String(assignment.type || '');
 
     const matchesSearch = customerStr.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         titleStr.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         typeStr.toLowerCase().includes(searchTerm.toLowerCase());
+      titleStr.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      typeStr.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCustomer = !selectedCustomerId || assignment.customerId === selectedCustomerId;
     return matchesFilter && matchesSearch && matchesCustomer;
   });
@@ -460,7 +461,7 @@ function Assignments() {
     if (!acc[custKey].calendars[calKey]) {
       acc[custKey].calendars[calKey] = { calendarName: calName, calendarId: calKey, assignments: [], maxDate: 0 };
     }
-    
+
     const date = getAssignmentDate(assignment);
     if (date > acc[custKey].maxDate) acc[custKey].maxDate = date;
     if (date > acc[custKey].calendars[calKey].maxDate) acc[custKey].calendars[calKey].maxDate = date;
@@ -522,209 +523,179 @@ function Assignments() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex flex-col">
-      {/* Header with Navigation */}
-      <header className="bg-white/80 backdrop-blur-sm shadow-sm border-b border-gray-200/50 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center">
-              <button
-                onClick={() => navigate('/content-creator')}
-                className="mr-4 p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all duration-200"
-              >
-                <ArrowLeft className="h-5 w-5" />
-              </button>
-              <div className="flex items-center">
-                <div className="p-2 bg-gradient-to-r from-purple-500 to-indigo-600 rounded-xl shadow-lg">
-                  <Palette className="h-6 w-6 text-white" />
-                </div>
-                <div className="ml-3">
-                  <span className="text-xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">
-                    Content Creator Portal
-                  </span>
-                  <p className="text-sm text-gray-500">Assignment Dashboard</p>
-                </div>
+    <ContentCreatorLayout
+      title="Content Creator Portal"
+      subtitle="Assignment Dashboard"
+      icon={<Palette className="h-6 w-6 text-white" />}
+    >
+      <div className="space-y-5">
+        {selectedCustomer && (
+          <div className="bg-gradient-to-r from-purple-600 via-purple-500 to-indigo-600 rounded-2xl shadow-lg p-6 text-white mb-5 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center text-2xl font-bold overflow-hidden">
+                {selectedCustomer.profileImage ? (
+                  <img src={selectedCustomer.profileImage} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  (selectedCustomer.name || 'C').charAt(0).toUpperCase()
+                )}
+              </div>
+              <div>
+                <h1 className="text-xl sm:text-2xl font-bold">{selectedCustomer.name || 'Unnamed Customer'}</h1>
+                <p className="text-purple-100 text-sm">{selectedCustomer.email}</p>
+                {selectedCustomer.companyName && (
+                  <p className="text-purple-200 text-xs mt-1 bg-white/10 px-2 py-0.5 rounded-full inline-block">
+                    {selectedCustomer.companyName}
+                  </p>
+                )}
               </div>
             </div>
           </div>
-        </div>
-      </header>
+        )}
 
-      {/* Main Content */}
-      <div className="flex-1 min-h-0">
-        {/* Content Area */}
-        <div className="flex-1 min-w-0">
-        <div className="px-3 py-4 sm:px-6 sm:py-6">
-          <div className="space-y-5">
-            {selectedCustomer && (
-              <div className="bg-gradient-to-r from-purple-600 via-purple-500 to-indigo-600 rounded-2xl shadow-lg p-6 text-white mb-5 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center text-2xl font-bold overflow-hidden">
-                    {selectedCustomer.profileImage ? (
-                      <img src={selectedCustomer.profileImage} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                      (selectedCustomer.name || 'C').charAt(0).toUpperCase()
-                    )}
-                  </div>
-                  <div>
-                    <h1 className="text-xl sm:text-2xl font-bold">{selectedCustomer.name || 'Unnamed Customer'}</h1>
-                    <p className="text-purple-100 text-sm">{selectedCustomer.email}</p>
-                    {selectedCustomer.companyName && (
-                      <p className="text-purple-200 text-xs mt-1 bg-white/10 px-2 py-0.5 rounded-full inline-block">
-                        {selectedCustomer.companyName}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Filter Tabs + Search */}
-            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-sm p-4 border border-gray-200/50">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    { key: 'all',           label: 'All',            count: stats.total         },
-                    { key: 'pending',       label: 'Pending',        count: stats.pending       },
-                    { key: 'approved',      label: 'Customer Approved', count: stats.approved      },
-                    { key: 'published',     label: 'Published',      count: stats.published     },
-                    { key: 'admin_approved',label: 'Approved by Admin', count: adminApprovedCount },
-                  ].map(opt => (
-                    <button
-                      key={opt.key}
-                      onClick={() => setSelectedFilter(opt.key)}
-                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                        selectedFilter === opt.key
-                          ? 'bg-purple-600 text-white shadow-sm'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}
-                    >
-                      {opt.label}
-                      <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${
-                        selectedFilter === opt.key ? 'bg-white/20 text-white' : 'bg-white text-gray-600'
-                      }`}>{opt.count}</span>
-                    </button>
-                  ))}
-                  {/* Review Updates tab — navigates to CustomerFeedback */}
-                  <button
-                    onClick={() => navigate('/content-creator/customer-feedback')}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all bg-gray-100 text-gray-600 hover:bg-rose-100 hover:text-rose-700"
-                  >
-                    Review Updates
-                    <span className="text-xs px-1.5 py-0.5 rounded-full font-semibold bg-white text-gray-600">{reviewCount}</span>
-                  </button>
-                </div>
-                <div className="relative flex-shrink-0">
-                  <Search className="h-4 w-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    placeholder="Search assignments..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-9 pr-4 py-2 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent shadow-sm w-full sm:w-56"
-                  />
-                </div>
-              </div>
+        {/* Filter Tabs + Search */}
+        <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-sm p-4 border border-gray-200/50">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex flex-wrap gap-2">
+              {[
+                { key: 'all', label: 'All', count: stats.total },
+                { key: 'pending', label: 'Pending', count: stats.pending },
+                { key: 'approved', label: 'Customer Approved', count: stats.approved },
+                { key: 'published', label: 'Published', count: stats.published },
+                { key: 'admin_approved', label: 'Approved by Admin', count: adminApprovedCount },
+              ].map(opt => (
+                <button
+                  key={opt.key}
+                  onClick={() => setSelectedFilter(opt.key)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${selectedFilter === opt.key
+                      ? 'bg-purple-600 text-white shadow-sm'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                >
+                  {opt.label}
+                  <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${selectedFilter === opt.key ? 'bg-white/20 text-white' : 'bg-white text-gray-600'
+                    }`}>{opt.count}</span>
+                </button>
+              ))}
+              {/* Review Updates tab — navigates to CustomerFeedback */}
+              <button
+                onClick={() => navigate('/content-creator/customer-feedback')}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all bg-gray-100 text-gray-600 hover:bg-rose-100 hover:text-rose-700"
+              >
+                Review Updates
+                <span className="text-xs px-1.5 py-0.5 rounded-full font-semibold bg-white text-gray-600">{reviewCount}</span>
+              </button>
             </div>
+            <div className="relative flex-shrink-0">
+              <Search className="h-4 w-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Search assignments..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9 pr-4 py-2 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent shadow-sm w-full sm:w-56"
+              />
+            </div>
+          </div>
+        </div>
 
-            {/* Assignments List - Customer > Calendar > Items */}
-            <div className="space-y-4">
-              {sortedCustomers.length > 0 ? (
-                sortedCustomers.map((custGroup) => {
-                  const isCustExpanded = expandedCustomers[custGroup.customerId] === true;
-                  const totalItems = Object.values(custGroup.calendars).reduce((sum, cal) => sum + cal.assignments.length, 0);
-                  return (
-                    <div key={custGroup.customerId} className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden">
-                      {/* Customer Header */}
-                      {!selectedCustomerId && (
-                        <div
-                          onClick={() => toggleCustomer(custGroup.customerId)}
-                          className="flex items-center justify-between p-4 bg-gradient-to-r from-purple-50 to-indigo-50 cursor-pointer hover:from-purple-100 hover:to-indigo-100 transition-all duration-150"
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="p-2 bg-gradient-to-r from-purple-500 to-indigo-600 rounded-lg shadow">
-                              <Building2 className="h-5 w-5 text-white" />
-                            </div>
-                            <div>
-                              <h2 className="text-base font-bold text-gray-900">{custGroup.customerName}</h2>
-                              <p className="text-xs text-gray-500">
-                                {Object.keys(custGroup.calendars).length} {Object.keys(custGroup.calendars).length === 1 ? 'Calendar' : 'Calendars'} &middot; {totalItems} {totalItems === 1 ? 'Item' : 'Items'}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="p-2 text-gray-400">
-                            {isCustExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                          </div>
+        {/* Assignments List - Customer > Calendar > Items */}
+        <div className="space-y-4">
+          {sortedCustomers.length > 0 ? (
+            sortedCustomers.map((custGroup) => {
+              const isCustExpanded = expandedCustomers[custGroup.customerId] === true;
+              const totalItems = Object.values(custGroup.calendars).reduce((sum, cal) => sum + cal.assignments.length, 0);
+              return (
+                <div key={custGroup.customerId} className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden">
+                  {/* Customer Header */}
+                  {!selectedCustomerId && (
+                    <div
+                      onClick={() => toggleCustomer(custGroup.customerId)}
+                      className="flex items-center justify-between p-4 bg-gradient-to-r from-purple-50 to-indigo-50 cursor-pointer hover:from-purple-100 hover:to-indigo-100 transition-all duration-150"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-gradient-to-r from-purple-500 to-indigo-600 rounded-lg shadow">
+                          <Building2 className="h-5 w-5 text-white" />
                         </div>
-                      )}
+                        <div>
+                          <h2 className="text-base font-bold text-gray-900">{custGroup.customerName}</h2>
+                          <p className="text-xs text-gray-500">
+                            {Object.keys(custGroup.calendars).length} {Object.keys(custGroup.calendars).length === 1 ? 'Calendar' : 'Calendars'} &middot; {totalItems} {totalItems === 1 ? 'Item' : 'Items'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="p-2 text-gray-400">
+                        {isCustExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                      </div>
+                    </div>
+                  )}
 
-                      {/* Calendars under this customer */}
-                      {(isCustExpanded || selectedCustomerId) && (
-                        <div className="p-4 space-y-4">
-                          {Object.values(custGroup.calendars).sort((a, b) => b.maxDate - a.maxDate).map((calGroup) => {
-                            const isCalExpanded = expandedCalendars[calGroup.calendarId] === true;
-                            return (
-                              <div key={calGroup.calendarId} className="border border-gray-200 rounded-xl overflow-hidden">
-                                {/* Calendar sub-header */}
-                                <div
-                                  onClick={() => toggleCalendar(calGroup.calendarId)}
-                                  className="flex items-center justify-between px-4 py-2.5 bg-indigo-50/60 cursor-pointer hover:bg-indigo-100/60 transition-colors"
-                                >
-                                  <div className="flex items-center gap-2">
-                                    <div className="p-1 bg-indigo-100 rounded">
-                                      <Calendar className="h-3.5 w-3.5 text-indigo-600" />
-                                    </div>
-                                    <span className="font-semibold text-gray-800 text-sm">{calGroup.calendarName}</span>
-                                    <span className="text-xs text-gray-400">{calGroup.assignments.length} {calGroup.assignments.length === 1 ? 'item' : 'items'}</span>
-                                  </div>
-                                  <div className="p-1 text-gray-400">
-                                    {isCalExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                                  </div>
+                  {/* Calendars under this customer */}
+                  {(isCustExpanded || selectedCustomerId) && (
+                    <div className="p-4 space-y-4">
+                      {Object.values(custGroup.calendars).sort((a, b) => b.maxDate - a.maxDate).map((calGroup) => {
+                        const isCalExpanded = expandedCalendars[calGroup.calendarId] === true;
+                        return (
+                          <div key={calGroup.calendarId} className="border border-gray-200 rounded-xl overflow-hidden">
+                            {/* Calendar sub-header */}
+                            <div
+                              onClick={() => toggleCalendar(calGroup.calendarId)}
+                              className="flex items-center justify-between px-4 py-2.5 bg-indigo-50/60 cursor-pointer hover:bg-indigo-100/60 transition-colors"
+                            >
+                              <div className="flex items-center gap-2">
+                                <div className="p-1 bg-indigo-100 rounded">
+                                  <Calendar className="h-3.5 w-3.5 text-indigo-600" />
                                 </div>
+                                <span className="font-semibold text-gray-800 text-sm">{calGroup.calendarName}</span>
+                                <span className="text-xs text-gray-400">{calGroup.assignments.length} {calGroup.assignments.length === 1 ? 'item' : 'items'}</span>
+                              </div>
+                              <div className="p-1 text-gray-400">
+                                {isCalExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                              </div>
+                            </div>
 
-                                {/* Assignment rows under this calendar */}
-                                {isCalExpanded && (
-                                  <div className="divide-y-2 divide-gray-200">
-                                    {calGroup.assignments.map((assignment, idx) => (
-                                      <div
-                                        key={assignment.id || assignment._id || idx}
-                                        onClick={() => handleAssignmentClick(assignment)}
-                                        className="px-4 py-5 hover:bg-purple-50/50 cursor-pointer transition-colors"
-                                      >
-                                        <div className="flex gap-3 items-start">
-                                        {/* Submission thumbnail */}
-                                        {(() => {
-                                          const thumb = getSubmissionThumbnail(assignment);
-                                          const isVid = isVideoUrl(thumb);
-                                          return (
-                                            <div className="flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden border border-gray-200 bg-gray-100 relative">
-                                              {thumb ? (
-                                                isVid ? (
-                                                  <div className="w-full h-full bg-black relative">
-                                                    <video
-                                                      src={thumb}
-                                                      muted
-                                                      playsInline
-                                                      preload="metadata"
-                                                      className="w-full h-full object-cover"
-                                                    />
-                                                    <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                                                      <Play className="h-4 w-4 text-white" />
-                                                    </div>
+                            {/* Assignment rows under this calendar */}
+                            {isCalExpanded && (
+                              <div className="divide-y-2 divide-gray-200">
+                                {calGroup.assignments.map((assignment, idx) => (
+                                  <div
+                                    key={assignment.id || assignment._id || idx}
+                                    onClick={() => handleAssignmentClick(assignment)}
+                                    className="px-4 py-5 hover:bg-purple-50/50 cursor-pointer transition-colors"
+                                  >
+                                    <div className="flex gap-3 items-start">
+                                      {/* Submission thumbnail */}
+                                      {(() => {
+                                        const thumb = getSubmissionThumbnail(assignment);
+                                        const isVid = isVideoUrl(thumb);
+                                        return (
+                                          <div className="flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden border border-gray-200 bg-gray-100 relative">
+                                            {thumb ? (
+                                              isVid ? (
+                                                <div className="w-full h-full bg-black relative">
+                                                  <video
+                                                    src={thumb}
+                                                    muted
+                                                    playsInline
+                                                    preload="metadata"
+                                                    className="w-full h-full object-cover"
+                                                  />
+                                                  <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                                                    <Play className="h-4 w-4 text-white" />
                                                   </div>
-                                                ) : (
-                                                  <img src={thumb} alt="" className="w-full h-full object-cover" />
-                                                )
-                                              ) : (
-                                                <div className="w-full h-full flex items-center justify-center">
-                                                  <Image className="h-5 w-5 text-gray-300" />
                                                 </div>
-                                              )}
-                                            </div>
-                                          );
-                                        })()}
-                                        {/* Assignment details */}
-                                        <div className="flex-1 min-w-0">
+                                              ) : (
+                                                <img src={thumb} alt="" className="w-full h-full object-cover" />
+                                              )
+                                            ) : (
+                                              <div className="w-full h-full flex items-center justify-center">
+                                                <Image className="h-5 w-5 text-gray-300" />
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })()}
+                                      {/* Assignment details */}
+                                      <div className="flex-1 min-w-0">
                                         {/* Line 1: Item label + title */}
                                         <div className="flex items-center justify-between gap-2 mb-1.5">
                                           <div className="flex items-center gap-1.5 min-w-0">
@@ -813,38 +784,36 @@ function Assignments() {
                                             </div>
                                           );
                                         })()}
-                                        </div>{/* end assignment details */}
-                                        </div>{/* end flex gap-3 */}
-                                      </div>
-                                    ))}
+                                      </div>{/* end assignment details */}
+                                    </div>{/* end flex gap-3 */}
                                   </div>
-                                )}
+                                ))}
                               </div>
-                            );
-                          })}
-                        </div>
-                      )}
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
-                  );
-                })
-              ) : (
-                <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-gray-200/50">
-                  <div className="text-center py-12">
-                    <div className="bg-gray-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-                      <AlertCircle className="h-8 w-8 text-gray-400" />
-                    </div>
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">No assignments found</h3>
-                    <p className="text-gray-500">No assignments match your current search criteria.</p>
-                  </div>
+                  )}
                 </div>
-              )}
+              );
+            })
+          ) : (
+            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-gray-200/50">
+              <div className="text-center py-12">
+                <div className="bg-gray-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
+                  <AlertCircle className="h-8 w-8 text-gray-400" />
+                </div>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No assignments found</h3>
+                <p className="text-gray-500">No assignments match your current search criteria.</p>
+              </div>
             </div>
-          </div>
-        </div>
+          )}
         </div>
       </div>
-      <Footer />
-    </div>
+
+
+    </ContentCreatorLayout>
   );
 }
 

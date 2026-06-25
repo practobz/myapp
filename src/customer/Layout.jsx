@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Logo from '../admin/components/layout/Logo';
 import Footer from '../admin/components/layout/Footer';
@@ -14,7 +14,20 @@ function getDisplayName(user) {
 
 function Layout({ children }) {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const userMenuRef = useRef(null);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
+        setIsUserMenuOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
   const location = useLocation();
   const { logout, currentUser } = useAuth();
 
@@ -78,7 +91,7 @@ function Layout({ children }) {
               </div>
             </div>
             {/* User Dropdown */}
-            <div className="relative z-50 mt-2 sm:mt-0 flex-shrink-0">
+            <div className="relative z-50 mt-2 sm:mt-0 flex-shrink-0" ref={userMenuRef}>
               <button
                 onClick={handleUserMenuToggle}
                 className="flex items-center space-x-3 p-2 rounded-lg hover:bg-[#bae6fd] transition-all duration-200"

@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import Footer from '../admin/components/layout/Footer';
 import Logo from '../admin/components/layout/Logo';
+import ContentCreatorLayout from './Layout';
 
 function getCreatorEmail() {
   try {
@@ -186,33 +187,12 @@ function CustomerFeedback() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex flex-col">
-      {/* Header */}
-      <header className="bg-white/80 backdrop-blur-sm shadow-sm border-b border-gray-200/50 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center">
-              <button
-                onClick={() => navigate('/content-creator')}
-                className="mr-4 p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all duration-200"
-              >
-                <ArrowLeft className="h-5 w-5" />
-              </button>
-              <div className="flex items-center">
-                <div className="p-2 bg-gradient-to-r from-violet-500 to-purple-600 rounded-xl shadow-lg">
-                  <MessageSquare className="h-6 w-6 text-white" />
-                </div>
-                <div className="ml-3">
-                  <span className="text-xl font-bold bg-gradient-to-r from-violet-600 to-purple-600 bg-clip-text text-transparent">
-                    Customer Feedback
-                  </span>
-                  <p className="text-sm text-gray-500">Comments from customers on your content</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </header>
+    <ContentCreatorLayout
+      title="Customer Feedback"
+      subtitle="Comments from customers on your content"
+      icon={<MessageSquare className="h-6 w-6 text-white" />}
+      onBack={() => navigate('/content-creator')}
+    >
 
       <div className="flex-1 flex min-h-0">
         {/* Calendar Sidebar */}
@@ -449,8 +429,7 @@ function CustomerFeedback() {
         </div>
       </div>
 
-      <Footer />
-    </div>
+    </ContentCreatorLayout>
   );
 }
 

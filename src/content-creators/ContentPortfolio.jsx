@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Upload, Eye, MessageSquare, Calendar, User, Palette, Clock, CheckCircle, AlertCircle, ChevronLeft, ChevronRight, Image, FileText, Play, Video, Users } from 'lucide-react';
+import ContentCreatorLayout from './Layout';
 
 // Helper to get creator email from localStorage
 function getCreatorEmail() {
@@ -484,71 +485,54 @@ function ContentPortfolio() {
     );
   }
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center">
-              <button
-                onClick={() => {
-                  if (selectedContent) {
-                    setSelectedContent(null);
-                  } else if (selectedCustomer) {
-                    setSelectedCustomer(null);
-                  } else {
-                    navigate('/content-creator');
-                  }
-                }}
-                className="mr-4 p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-all duration-200"
-              >
-                <ArrowLeft className="h-5 w-5" />
-              </button>
-              <div className="flex items-center">
-                <div className="p-2.5 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl shadow-md">
-                  <Palette className="h-5 w-5 text-white" />
-                </div>
-                <div className="ml-3">
-                  <h1 className="text-lg font-bold text-gray-900">Content Creator Portal</h1>
-                  <p className="text-xs text-gray-500">
-                    {selectedContent ? 'Content Details' : selectedCustomer ? selectedCustomer.customerName : 'My Portfolio'}
-                  </p>
-                </div>
-              </div>
-            </div>
-            
-            {/* Stats Summary in Header */}
-            {!selectedContent && !selectedCustomer && portfolioItems.length > 0 && (
-              <div className="hidden md:flex items-center gap-6">
-                <div className="text-center">
-                  <p className="text-2xl font-bold text-purple-600">{groupedByCustomer.length}</p>
-                  <p className="text-xs text-gray-500">Customers</p>
-                </div>
-                <div className="h-8 w-px bg-gray-200"></div>
-                <div className="text-center">
-                  <p className="text-2xl font-bold text-emerald-600">{portfolioItems.length}</p>
-                  <p className="text-xs text-gray-500">Total Projects</p>
-                </div>
-                <div className="h-8 w-px bg-gray-200"></div>
-                <div className="text-center">
-                  <p className="text-2xl font-bold text-amber-600">
-                    {portfolioItems.filter(i => {
-                      const actualStatus = getActualStatus(i.id, i.status);
-                      return actualStatus === 'under_review' || actualStatus === 'submitted';
-                    }).length}
-                  </p>
-                  <p className="text-xs text-gray-500">In Review</p>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </header>
+  const handleBackAction = () => {
+    if (selectedContent) {
+      setSelectedContent(null);
+    } else if (selectedCustomer) {
+      setSelectedCustomer(null);
+    } else {
+      navigate('/content-creator');
+    }
+  };
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {!selectedContent && !selectedCustomer ? (
+  const dynamicSubtitle = selectedContent
+    ? 'Content Details'
+    : selectedCustomer
+      ? selectedCustomer.customerName
+      : 'My Portfolio';
+
+  const statsActions = !selectedContent && !selectedCustomer && portfolioItems.length > 0 && (
+    <div className="hidden md:flex items-center gap-6">
+      <div className="text-center">
+        <p className="text-2xl font-bold text-purple-600">{groupedByCustomer.length}</p>
+        <p className="text-xs text-gray-500 font-medium">Customers</p>
+      </div>
+      <div className="h-8 w-px bg-gray-200"></div>
+      <div className="text-center">
+        <p className="text-2xl font-bold text-emerald-600">{portfolioItems.length}</p>
+        <p className="text-xs text-gray-500 font-medium">Projects</p>
+      </div>
+      <div className="h-8 w-px bg-gray-200"></div>
+      <div className="text-center">
+        <p className="text-2xl font-bold text-amber-600">
+          {portfolioItems.filter(i => {
+            const actualStatus = getActualStatus(i.id, i.status);
+            return actualStatus === 'under_review' || actualStatus === 'submitted';
+          }).length}
+        </p>
+        <p className="text-xs text-gray-500 font-medium">In Review</p>
+      </div>
+    </div>
+  );
+
+  return (
+    <ContentCreatorLayout
+      title="Content Creator Portal"
+      subtitle={dynamicSubtitle}
+      onBack={handleBackAction}
+      headerActions={statsActions}
+    >
+      {!selectedContent && !selectedCustomer ? (
           // Customer Cards View (Level 1)
           <div className="space-y-6">
             {/* Page Title */}
@@ -1307,8 +1291,7 @@ function ContentPortfolio() {
             </div>
           </div>
         )}
-      </div>
-    </div>
+    </ContentCreatorLayout>
   );
 }
 

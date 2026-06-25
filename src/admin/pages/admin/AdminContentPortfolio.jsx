@@ -150,7 +150,9 @@ const PortfolioCard = memo(({ item, onView, onSchedule, onDelete, formatDate, ge
 
       {/* Content */}
       <div className="p-3 flex-1 flex flex-col">
-        {item.title && <h3 className="font-medium text-sm text-gray-900 truncate mb-1">{item.title}</h3>}
+        <h3 className="font-medium text-sm text-gray-900 truncate mb-1">
+          {item.title || <span className="text-gray-400 italic font-normal">No caption</span>}
+        </h3>
         {item.calendarName && <p className="text-[10px] text-gray-500 truncate">📅 {item.calendarName}</p>}
         {item.itemName && <p className="text-[10px] text-gray-500 truncate mb-2">📝 {item.itemName}</p>}
         

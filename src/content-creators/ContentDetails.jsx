@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { Facebook, Instagram, Linkedin, Youtube, Twitter } from 'lucide-react';
 import Footer from '../admin/components/layout/Footer';
+import ContentCreatorLayout from './Layout';
 
 // Helper to get creator email from localStorage
 function getCreatorEmail() {
@@ -635,891 +636,868 @@ function ContentDetails() {
     : (assignment.status || 'assigned');
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex flex-col">
+    <ContentCreatorLayout
+      title="Content Creator Portal"
+      subtitle="Content Details"
+      icon={<Palette className="h-6 w-6 text-white" />}
+      onBack={() => navigate('/content-creator/assignments')}
+    >
 
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <header className="bg-white/80 backdrop-blur-sm shadow-sm border-b border-gray-200/50 sticky top-0 z-10">
-        <div className="w-full px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center h-16">
-            <button
-              onClick={() => navigate('/content-creator/assignments')}
-              className="mr-4 p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all duration-200"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </button>
-            <div className="flex items-center">
-              <div className="p-2 bg-gradient-to-r from-purple-500 to-indigo-600 rounded-xl shadow-lg">
-                <Palette className="h-6 w-6 text-white" />
-              </div>
-              <div className="ml-3">
-                <span className="text-xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">
-                  Content Creator Portal
-                </span>
-                <p className="text-sm text-gray-500">Content Details</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* ── Page Body ──────────────────────────────────────────────────────── */}
-      <div className="flex-1 w-full px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-
-        {/* ── Top Info Card ─────────────────────────────────────────────── */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-            <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-2xl font-bold text-gray-900">{assignment.title}</h1>
-              <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border uppercase tracking-wide ${getAssignmentStatusColor(displayStatus)}`}>
-                <Clock className="h-3 w-3" />
-                {displayStatus.replace(/_/g, ' ')}
-              </span>
-            </div>
-
+      {/* ── Top Info Card ─────────────────────────────────────────────── */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-bold text-gray-900">{assignment.title}</h1>
+            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border uppercase tracking-wide ${getAssignmentStatusColor(displayStatus)}`}>
+              <Clock className="h-3 w-3" />
+              {displayStatus.replace(/_/g, ' ')}
+            </span>
           </div>
 
-          {/* Meta row */}
-          <div className="mt-5 flex flex-wrap gap-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-50 rounded-lg">
-                <User className="h-5 w-5 text-blue-500" />
-              </div>
-              <div>
-                <p className="text-xs text-gray-500 font-medium">Customer</p>
-                <p className="text-sm font-semibold text-gray-900">{assignment.customerName || '—'}</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-50 rounded-lg">
-                <Calendar className="h-5 w-5 text-green-500" />
-              </div>
-              <div>
-                <p className="text-xs text-gray-500 font-medium">Platform</p>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  {assignment.platform
-                    ? (() => {
-                      const platforms = Array.isArray(assignment.platform)
-                        ? assignment.platform
-                        : String(assignment.platform).split(/[,\s]+/).map(p => p.trim()).filter(Boolean);
-                      return platforms.map((p, i) => {
-                        const key = p.toLowerCase();
-                        if (key === 'facebook') return <Facebook key={i} className="h-5 w-5 text-blue-600" />;
-                        if (key === 'instagram') return <Instagram key={i} className="h-5 w-5 text-pink-600" />;
-                        if (key === 'linkedin') return <Linkedin key={i} className="h-5 w-5 text-blue-700" />;
-                        if (key === 'youtube') return <Youtube key={i} className="h-5 w-5 text-red-600" />;
-                        if (key === 'twitter' || key === 'x') return <Twitter key={i} className="h-5 w-5 text-sky-500" />;
-                        return <span key={i} className="text-sm font-semibold text-gray-900">{p}</span>;
-                      });
-                    })()
-                    : <span className="text-sm font-semibold text-gray-900">—</span>}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-purple-50 rounded-lg">
-                <Image className="h-5 w-5 text-purple-500" />
-              </div>
-              <div>
-                <p className="text-xs text-gray-500 font-medium">Versions</p>
-                <p className="text-sm font-semibold text-gray-900">{versions.length}</p>
-              </div>
-            </div>
-          </div>
         </div>
 
-        <div className="flex flex-col-reverse gap-6">
-          {/* ── Accordion 1 : Submit Work ─────────────────────────────────── */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-            {/* Accordion trigger */}
-            <button
-              onClick={() => setSubmitWorkOpen(!submitWorkOpen)}
-              className="w-full flex items-center justify-between p-6 text-left hover:bg-gray-50 transition-colors duration-200"
-            >
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-purple-100 rounded-lg">
-                  <Play className="h-5 w-5 text-purple-600" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-bold text-gray-900">Submit Work</h2>
-                  <p className="text-sm text-gray-500">Upload media, add caption &amp; hashtags, then submit for review</p>
-                </div>
-              </div>
-              {submitWorkOpen
-                ? <ChevronUp className="h-5 w-5 text-gray-400 flex-shrink-0" />
-                : <ChevronDown className="h-5 w-5 text-gray-400 flex-shrink-0" />}
-            </button>
-
-            {/* Accordion body */}
-            {submitWorkOpen && (
-              <div className="border-t border-gray-100 p-6">
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-                  {/* Left: Upload + preview */}
-                  <div className="lg:col-span-2 space-y-6">
-
-                    {/* Drop zone */}
-                    <div>
-                      <h3 className="text-base font-semibold mb-3 flex items-center gap-2 text-gray-800">
-                        <Upload className="h-5 w-5 text-purple-600" />
-                        Upload Media
-                      </h3>
-                      <div
-                        className={`border-2 border-dashed rounded-xl p-8 text-center transition-all duration-200 ${dragActive
-                            ? 'border-purple-400 bg-purple-50 scale-[1.02]'
-                            : 'border-gray-300 hover:border-purple-400 hover:bg-purple-50/50'
-                          }`}
-                        onDragEnter={handleDrag}
-                        onDragLeave={handleDrag}
-                        onDragOver={handleDrag}
-                        onDrop={handleDrop}
-                      >
-                        <input
-                          ref={fileInputRef}
-                          type="file"
-                          multiple
-                          accept="image/*,video/*"
-                          onChange={handleChange}
-                          className="hidden"
-                        />
-                        <div className="flex justify-center gap-3 mb-3">
-                          <Upload className="h-8 w-8 text-gray-400" />
-                          <Video className="h-8 w-8 text-gray-400" />
-                        </div>
-                        <p className="text-base font-medium text-gray-900">
-                          Drag and drop your images and videos here
-                        </p>
-                        <p className="text-sm text-gray-500 my-1">or</p>
-                        <button
-                          onClick={() => fileInputRef.current?.click()}
-                          className="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm"
-                        >
-                          <Image className="h-4 w-4 mr-2" />
-                          Browse Files
-                        </button>
-                        <p className="text-xs text-gray-400 mt-3">
-                          Supports: JPG, PNG, GIF, MP4, MOV, AVI (Max 100 MB per file)
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Media preview grid */}
-                    {uploadedFiles.length > 0 && (
-                      <div>
-                        <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                          <Image className="h-5 w-5 text-purple-600" />
-                          Media Files ({uploadedFiles.length})
-                        </h3>
-                        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-                          {uploadedFiles.map(file => (
-                            <div key={file.id} className="relative group">
-                              <div
-                                className="aspect-square rounded-lg overflow-hidden bg-gray-100 ring-2 ring-transparent group-hover:ring-purple-200 transition-all relative cursor-pointer"
-                                onClick={() => setSelectedMedia(file)}
-                              >
-                                {file.type === 'image' ? (
-                                  <img src={file.preview} alt={file.name} className="w-full h-full object-cover" />
-                                ) : (
-                                  <div className="relative w-full h-full">
-                                    <video src={file.preview} className="w-full h-full object-cover" muted />
-                                    <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                                      <Play className="h-8 w-8 text-white" />
-                                    </div>
-                                    <div className="absolute top-2 left-2 bg-black/50 text-white text-[10px] px-1.5 py-0.5 rounded">
-                                      VIDEO
-                                    </div>
-                                  </div>
-                                )}
-
-                                {file.uploading && (
-                                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                                    <div className="text-white text-center">
-                                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mx-auto mb-1"></div>
-                                      <p className="text-xs">Uploading…</p>
-                                    </div>
-                                  </div>
-                                )}
-
-                                {file.uploaded && (
-                                  <div className="absolute top-2 right-2 bg-green-500 text-white rounded-full p-1">
-                                    <Check className="h-3 w-3" />
-                                  </div>
-                                )}
-
-                                {file.error && (
-                                  <div className="absolute inset-0 bg-red-500/50 flex items-center justify-center">
-                                    <div className="text-white text-center p-2">
-                                      <X className="h-4 w-4 mx-auto mb-1" />
-                                      <p className="text-xs">Failed</p>
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-
-                              <button
-                                onClick={() => removeFile(file.id)}
-                                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
-                              >
-                                <X className="h-3 w-3" />
-                              </button>
-
-                              <div className="mt-2">
-                                <p className="text-xs font-medium text-gray-900 truncate">{file.name}</p>
-                                <p className="text-xs text-gray-500">{formatFileSize(file.size)}</p>
-                                {file.error && (
-                                  <p className="text-xs text-red-500 mt-0.5 truncate">{file.error}</p>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Right: Assignment Info + Content Form + Submit */}
-                  <div className="space-y-4">
-
-                    {/* Assignment details */}
-                    <div className="bg-gray-50 rounded-xl p-4">
-                      <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2 text-sm">
-                        <FileText className="h-4 w-4 text-purple-600" />
-                        Assignment Details
-                      </h3>
-                      <div className="space-y-2">
-                        <p className="text-sm font-medium text-gray-900">{assignment.title}</p>
-                        {assignment.description && (
-                          <p className="text-sm text-gray-600">{assignment.description}</p>
-                        )}
-                        <div className="flex items-center text-xs text-gray-500">
-                          <MapPin className="h-3 w-3 mr-1 flex-shrink-0" />
-                          {assignment.customerName}
-                        </div>
-                        <div className="flex items-center text-xs text-gray-500">
-                          <Calendar className="h-3 w-3 mr-1 flex-shrink-0" />
-                          Due: {assignment.dueDate ? new Date(assignment.dueDate).toLocaleDateString() : 'N/A'}
-                        </div>
-                        {assignment.requirements?.length > 0 && (
-                          <div className="mt-2">
-                            <p className="text-xs font-medium text-gray-700 mb-1">Requirements:</p>
-                            <ul className="space-y-1">
-                              {assignment.requirements.map((req, i) => (
-                                <li key={i} className="flex items-start text-xs text-gray-600">
-                                  <Check className="h-3 w-3 mr-1.5 mt-0.5 text-green-500 flex-shrink-0" />
-                                  {req}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Caption / Hashtags / Notes */}
-                    <div className="space-y-3">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          <span className="flex items-center gap-1">
-                            <MessageSquare className="h-3.5 w-3.5 text-purple-500" />
-                            Caption
-                          </span>
-                        </label>
-                        <textarea
-                          value={caption}
-                          onChange={e => setCaption(e.target.value)}
-                          rows={3}
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
-                          placeholder="Write an engaging caption…"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          <span className="flex items-center gap-1">
-                            <Tag className="h-3.5 w-3.5 text-purple-500" />
-                            Hashtags
-                          </span>
-                        </label>
-                        <input
-                          type="text"
-                          value={hashtags}
-                          onChange={e => setHashtags(e.target.value)}
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                          placeholder="#fashion #summer #style"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Notes for Client
-                        </label>
-                        <textarea
-                          value={notes}
-                          onChange={e => setNotes(e.target.value)}
-                          rows={2}
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
-                          placeholder="Additional notes…"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Submit button */}
-                    <div className="bg-purple-50 rounded-xl p-4 text-center">
-                      <p className="text-sm text-gray-600 mb-3">
-                        Content will be sent to <strong>{assignment.customerName}</strong> for review
-                      </p>
-                      <button
-                        onClick={handleSubmit}
-                        disabled={submitting || uploadedFiles.length === 0 || uploadedFiles.some(f => f.uploading)}
-                        className="w-full inline-flex items-center justify-center px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl hover:from-purple-700 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-semibold shadow-md"
-                      >
-                        {submitting ? (
-                          <>
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
-                            Submitting…
-                          </>
-                        ) : (
-                          <>
-                            <Send className="h-4 w-4 mr-2" />
-                            Submit Content
-                          </>
-                        )}
-                      </button>
-                      {uploadedFiles.some(f => f.uploading) && (
-                        <p className="text-xs text-gray-500 mt-2">Please wait for all uploads to complete</p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+        {/* Meta row */}
+        <div className="mt-5 flex flex-wrap gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-blue-50 rounded-lg">
+              <User className="h-5 w-5 text-blue-500" />
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 font-medium">Customer</p>
+              <p className="text-sm font-semibold text-gray-900">{assignment.customerName || '—'}</p>
+            </div>
           </div>
 
-          {/* ── Accordion 2 : Version History ─────────────────────────────── */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-            {/* Accordion trigger */}
-            <button
-              onClick={() => setVersionHistoryOpen(!versionHistoryOpen)}
-              className="w-full flex items-center justify-between p-6 text-left hover:bg-gray-50 transition-colors duration-200"
-            >
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-green-100 rounded-lg">
-                  <History className="h-5 w-5 text-green-600" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-bold text-gray-900">Version History</h2>
-                  <p className="text-sm text-gray-500">
-                    {versions.length} {versions.length === 1 ? 'version' : 'versions'} submitted
-                  </p>
-                </div>
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-green-50 rounded-lg">
+              <Calendar className="h-5 w-5 text-green-500" />
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 font-medium">Platform</p>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                {assignment.platform
+                  ? (() => {
+                    const platforms = Array.isArray(assignment.platform)
+                      ? assignment.platform
+                      : String(assignment.platform).split(/[,\s]+/).map(p => p.trim()).filter(Boolean);
+                    return platforms.map((p, i) => {
+                      const key = p.toLowerCase();
+                      if (key === 'facebook') return <Facebook key={i} className="h-5 w-5 text-blue-600" />;
+                      if (key === 'instagram') return <Instagram key={i} className="h-5 w-5 text-pink-600" />;
+                      if (key === 'linkedin') return <Linkedin key={i} className="h-5 w-5 text-blue-700" />;
+                      if (key === 'youtube') return <Youtube key={i} className="h-5 w-5 text-red-600" />;
+                      if (key === 'twitter' || key === 'x') return <Twitter key={i} className="h-5 w-5 text-sky-500" />;
+                      return <span key={i} className="text-sm font-semibold text-gray-900">{p}</span>;
+                    });
+                  })()
+                  : <span className="text-sm font-semibold text-gray-900">—</span>}
               </div>
-              {versionHistoryOpen
-                ? <ChevronUp className="h-5 w-5 text-gray-400 flex-shrink-0" />
-                : <ChevronDown className="h-5 w-5 text-gray-400 flex-shrink-0" />}
-            </button>
+            </div>
+          </div>
 
-            {/* Accordion body */}
-            {versionHistoryOpen && (
-              <div className="border-t border-gray-100 p-6">
-                {versionsLoading ? (
-                  <div className="flex items-center justify-center py-10">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600" />
-                  </div>
-                ) : versions.length === 0 ? (
-                  <div className="text-center py-12">
-                    <div className="bg-gray-100 rounded-full w-14 h-14 flex items-center justify-center mx-auto mb-3">
-                      <History className="h-7 w-7 text-gray-400" />
-                    </div>
-                    <p className="text-gray-600 font-medium">No versions submitted yet</p>
-                    <p className="text-sm text-gray-400 mt-1">
-                      Upload your first version using the Submit Work section above
-                    </p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-                    {/* ── Left 2/3: Version display ─── */}
-                    <div className="xl:col-span-2">
-                      <div className="bg-gray-50 rounded-2xl border border-gray-200 overflow-hidden">
-                        {/* Version display header */}
-                        <div className="px-5 py-4 border-b border-gray-100 bg-white">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <div className="p-2 bg-purple-100 rounded-lg">
-                                <Image className="h-4 w-4 text-purple-600" />
-                              </div>
-                              <div>
-                                <h3 className="text-base font-semibold text-gray-900">
-                                  Version {versions[selectedVersionIndex]?.versionNumber}
-                                </h3>
-                                <p className="text-xs text-gray-500">of {versions.length} total versions</p>
-                              </div>
-                            </div>
-                            <div className="flex flex-wrap gap-1.5 max-w-xs justify-end">
-                              {versions.map((v, i) => (
-                                <button
-                                  key={v.id}
-                                  onClick={() => handleVersionSelect(i)}
-                                  className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all ${selectedVersionIndex === i
-                                      ? 'bg-purple-600 text-white shadow-sm'
-                                      : 'bg-gray-100 text-gray-600 hover:bg-purple-100 hover:text-purple-700'
-                                    }`}
-                                >
-                                  V{v.versionNumber}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="p-5">
-                          {versions[selectedVersionIndex] && (
-                            <div className="space-y-5">
-                              {/* Media */}
-                              <div>
-                                {versions[selectedVersionIndex].media?.length > 0 ? (
-                                  <div>
-                                    {versions[selectedVersionIndex].media.length > 1 && (
-                                      <div className="flex items-center justify-between mb-3 px-1">
-                                        <span className="text-sm font-medium text-gray-600">
-                                          Media {selectedMediaIndex + 1} of {versions[selectedVersionIndex].media.length}
-                                        </span>
-                                        <div className="flex gap-2">
-                                          <button
-                                            onClick={() => handleMediaChange('prev')}
-                                            disabled={selectedMediaIndex === 0}
-                                            className="p-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                                          >
-                                            <ChevronLeft className="h-4 w-4 text-gray-600" />
-                                          </button>
-                                          <button
-                                            onClick={() => handleMediaChange('next')}
-                                            disabled={selectedMediaIndex === versions[selectedVersionIndex].media.length - 1}
-                                            className="p-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                                          >
-                                            <ChevronRight className="h-4 w-4 text-gray-600" />
-                                          </button>
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {/* Current media with comment markers */}
-                                    <div className="flex justify-center">
-                                      <div className="relative inline-block">
-                                        {versions[selectedVersionIndex].media[selectedMediaIndex]?.url &&
-                                          typeof versions[selectedVersionIndex].media[selectedMediaIndex].url === 'string' ? (
-                                          versions[selectedVersionIndex].media[selectedMediaIndex].type === 'image' ? (
-                                            <img
-                                              ref={mediaImgRef}
-                                              src={versions[selectedVersionIndex].media[selectedMediaIndex].url}
-                                              alt={`Version ${versions[selectedVersionIndex].versionNumber} - Media ${selectedMediaIndex + 1}`}
-                                              className="max-w-full h-auto max-h-96 rounded-xl shadow-lg border border-gray-200"
-                                              onLoad={handleImgLoad}
-                                              onError={(e) => { e.target.style.display = 'none'; }}
-                                            />
-                                          ) : (
-                                            <video
-                                              src={versions[selectedVersionIndex].media[selectedMediaIndex].url}
-                                              controls
-                                              className="max-w-full h-auto max-h-96 rounded-xl shadow-lg border border-gray-200"
-                                            />
-                                          )
-                                        ) : (
-                                          <div className="w-80 h-64 bg-gray-200 rounded-xl flex items-center justify-center">
-                                            <div className="text-center">
-                                              <Image className="h-12 w-12 text-gray-400 mx-auto mb-2" />
-                                              <p className="text-gray-500">Media unavailable</p>
-                                            </div>
-                                          </div>
-                                        )}
-
-                                        {/* Comment markers */}
-                                        {commentsForCurrentMedia.map((comment, index) => {
-                                          const commentX = comment.x || comment.position?.x || 0;
-                                          const commentY = comment.y || comment.position?.y || 0;
-                                          const { x: scaledX, y: scaledY } = getScaledMarkerPos(commentX, commentY);
-                                          let boxLeft = 40;
-                                          let boxRight = 'auto';
-                                          if (imgDimensions?.rw ? scaledX > imgDimensions.rw / 2 : commentX > 150) { boxLeft = 'auto'; boxRight = 40; }
-                                          return (
-                                            <div
-                                              key={comment.id}
-                                              style={{
-                                                position: 'absolute',
-                                                top: scaledY - 12, left: scaledX - 12,
-                                                width: 24, height: 24,
-                                                background: comment.done ? '#10b981' : '#ef4444',
-                                                color: '#fff', borderRadius: '50%',
-                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                fontWeight: 'bold', fontSize: '11px',
-                                                boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
-                                                cursor: 'pointer', zIndex: 10, border: '2px solid #fff',
-                                              }}
-                                              onMouseEnter={() => setHoveredComment(comment.id)}
-                                              onMouseLeave={() => setHoveredComment(null)}
-                                              onClick={(e) => { e.stopPropagation(); handleCommentListClick(comment.id); }}
-                                            >
-                                              {index + 1}
-                                              {(activeComment === comment.id || hoveredComment === comment.id) && (
-                                                <div
-                                                  style={{
-                                                    position: 'absolute',
-                                                    left: boxLeft, right: boxRight,
-                                                    top: '50%', transform: 'translateY(-50%)',
-                                                    background: '#fff', border: '1px solid #3b82f6',
-                                                    borderRadius: '8px', padding: '12px',
-                                                    minWidth: '200px', maxWidth: '280px',
-                                                    zIndex: 20, boxShadow: '0 4px 20px rgba(59,130,246,0.15)',
-                                                  }}
-                                                  onClick={(e) => e.stopPropagation()}
-                                                >
-                                                  <div className="mb-2">
-                                                    <p className="font-medium text-gray-900 text-sm leading-relaxed break-words">
-                                                      {comment.message || comment.comment}
-                                                      {comment.done && <span className="text-green-600 ml-2 text-xs">✓ Done</span>}
-                                                    </p>
-                                                    <p className="text-xs text-gray-500 mt-1">
-                                                      {comment.timestamp ? new Date(comment.timestamp).toLocaleString() : ''}
-                                                    </p>
-                                                  </div>
-                                                  {comment.reply && (
-                                                    <div className="mt-2 p-2 bg-indigo-50 border border-indigo-200 rounded-lg">
-                                                      <p className="text-[10px] font-bold text-indigo-700 mb-0.5">
-                                                        Reply by {comment.reply.creatorName || 'Creator'}
-                                                      </p>
-                                                      <p className="text-xs text-gray-800 break-words">{comment.reply.text}</p>
-                                                    </div>
-                                                  )}
-                                                  <button
-                                                    onClick={() => handleToggleDone(comment.id)}
-                                                    className={`w-full px-3 py-1.5 text-xs rounded-lg font-medium transition-all flex items-center justify-center ${comment.done
-                                                        ? 'bg-gray-200 hover:bg-gray-300 text-gray-700'
-                                                        : 'bg-green-600 hover:bg-green-700 text-white'
-                                                      }`}
-                                                  >
-                                                    <CheckCircle className="h-3 w-3 mr-1" />
-                                                    {comment.done ? 'Undo Done' : 'Mark as Done'}
-                                                  </button>
-                                                </div>
-                                              )}
-                                            </div>
-                                          );
-                                        })}
-                                      </div>
-                                    </div>
-
-                                    {/* Media thumbnails */}
-                                    {versions[selectedVersionIndex].media.length > 1 && (
-                                      <div className="flex justify-center gap-2 mt-4">
-                                        {versions[selectedVersionIndex].media.map((media, index) => (
-                                          <button
-                                            key={index}
-                                            onClick={() => setSelectedMediaIndex(index)}
-                                            className={`w-16 h-16 rounded-lg overflow-hidden border-2 transition-all ${selectedMediaIndex === index
-                                                ? 'border-purple-500 ring-2 ring-purple-200'
-                                                : 'border-gray-200 hover:border-gray-300'
-                                              }`}
-                                          >
-                                            {media.type === 'image' && media.url ? (
-                                              <img src={media.url} alt={`Thumbnail ${index + 1}`} className="w-full h-full object-cover" />
-                                            ) : (
-                                              <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-                                                <Video className="h-6 w-6 text-gray-400" />
-                                              </div>
-                                            )}
-                                          </button>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
-                                ) : (
-                                  <div className="h-64 bg-gray-200 rounded-xl flex items-center justify-center">
-                                    <div className="text-center">
-                                      <Image className="h-12 w-12 text-gray-400 mx-auto mb-2" />
-                                      <p className="text-gray-500">No media available</p>
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* Caption / Hashtags / Notes */}
-                              <div className="space-y-4">
-                                <div>
-                                  <label className="block text-sm font-medium text-gray-700 mb-2">Caption</label>
-                                  <div className="bg-white rounded-lg p-4 border border-gray-200">
-                                    <p className="text-gray-900">{versions[selectedVersionIndex].caption || 'No caption'}</p>
-                                  </div>
-                                </div>
-                                <div>
-                                  <label className="block text-sm font-medium text-gray-700 mb-2">Hashtags</label>
-                                  <div className="bg-white rounded-lg p-4 border border-gray-200">
-                                    <p className="text-blue-600 font-medium">{versions[selectedVersionIndex].hashtags || 'No hashtags'}</p>
-                                  </div>
-                                </div>
-                                <div>
-                                  <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
-                                  <div className="bg-white rounded-lg p-4 border border-gray-200">
-                                    <p className="text-gray-900">{versions[selectedVersionIndex].notes || 'No notes'}</p>
-                                  </div>
-                                </div>
-                                <div className="flex items-center justify-between text-sm text-gray-500">
-                                  <span>Created: {formatDate(versions[selectedVersionIndex].createdAt)}</span>
-                                  <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getVersionStatusColor(versions[selectedVersionIndex].status)}`}>
-                                    {(versions[selectedVersionIndex].status || '').replace(/_/g, ' ').toUpperCase()}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* ── Right 1/3: Version History + Comments ─── */}
-                    <div className="space-y-5">
-                      {/* Version History panel */}
-                      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-                        <div className="px-5 py-4 border-b border-gray-100 bg-gray-50">
-                          <div className="flex items-center gap-3">
-                            <div className="p-2 bg-emerald-100 rounded-lg">
-                              <FileText className="h-4 w-4 text-emerald-600" />
-                            </div>
-                            <h3 className="text-base font-semibold text-gray-900">Version History</h3>
-                          </div>
-                        </div>
-                        <div className="max-h-80 overflow-y-auto">
-                          <div className="divide-y divide-gray-100">
-                            {(() => {
-                              const internalVersions = versions
-                                .map((v, i) => ({ ...v, idx: i }))
-                                .filter(v => v.submissionStage !== 'customer');
-                              const customerVersions = versions
-                                .map((v, i) => ({ ...v, idx: i }))
-                                .filter(v => v.submissionStage === 'customer');
-                              const renderSection = (sectionVersions, label, accentClass, activeBg, activeBorder) =>
-                                sectionVersions.length > 0 && (
-                                  <div key={label}>
-                                    <div className={`px-5 pt-3 pb-2 text-xs font-bold uppercase tracking-wider ${accentClass}`}>
-                                      {label}
-                                    </div>
-                                    {sectionVersions.map((version, ci) => {
-                                      const { date, time } = formatVersionDate(version.createdAt);
-                                      return (
-                                        <button
-                                          key={version.id || version.idx}
-                                          onClick={() => handleVersionSelect(version.idx)}
-                                          className={`w-full text-left px-5 py-3 flex flex-col border-l-4 transition-all duration-200 hover:bg-gray-50 ${selectedVersionIndex === version.idx
-                                              ? `${activeBg} ${activeBorder}`
-                                              : 'bg-white border-l-transparent'
-                                            }`}
-                                        >
-                                          <div className="flex items-center justify-between">
-                                            <span className="font-medium text-gray-900 text-sm">{date}, {time}</span>
-                                          </div>
-                                          <div className="flex items-center mt-1.5 text-xs text-gray-500 gap-3">
-                                            <span className="flex items-center">
-                                              <span className={`h-1.5 w-1.5 rounded-full mr-1.5 ${selectedVersionIndex === version.idx
-                                                  ? (label === 'Internal Review' ? 'bg-purple-500' : 'bg-amber-500')
-                                                  : 'bg-gray-300'
-                                                }`} />
-                                              V{ci + 1}
-                                            </span>
-                                            {version.media?.length > 0 && (
-                                              <span className="flex items-center">
-                                                <Image className="h-3 w-3 mr-1" />
-                                                {version.media.length}
-                                              </span>
-                                            )}
-                                          </div>
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                );
-                              return (
-                                <>
-                                  {renderSection(internalVersions, 'Internal Review', 'text-purple-500 bg-purple-50/60', 'bg-purple-50', 'border-l-purple-500')}
-                                  {renderSection(customerVersions, 'Customer Review', 'text-amber-600 bg-amber-50/60', 'bg-amber-50', 'border-l-amber-500')}
-                                </>
-                              );
-                            })()}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Comments panel */}
-                      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-                        <div className="px-5 py-4 border-b border-gray-100 bg-gray-50">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <div className="p-2 bg-purple-100 rounded-lg">
-                                <MessageSquare className="h-4 w-4 text-purple-600" />
-                              </div>
-                              <div>
-                                <h3 className="text-base font-semibold text-gray-900">Comments</h3>
-                                <p className="text-xs text-gray-500">
-                                  Version {versions[selectedVersionIndex]?.versionNumber} • Media {selectedMediaIndex + 1}
-                                </p>
-                              </div>
-                            </div>
-                            <span className="text-sm font-semibold text-purple-600 bg-purple-100 px-2.5 py-1 rounded-full">
-                              {commentsForCurrentMedia.length}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="max-h-96 overflow-y-auto p-4">
-                          {commentsForCurrentMedia.length === 0 ? (
-                            <div className="text-center py-10">
-                              <div className="bg-gray-100 rounded-full w-14 h-14 flex items-center justify-center mx-auto mb-3">
-                                <MessageSquare className="h-6 w-6 text-gray-400" />
-                              </div>
-                              <p className="text-gray-500 text-sm font-medium">No comments yet</p>
-                              <p className="text-gray-400 text-xs mt-1">Comments will appear here when added</p>
-                            </div>
-                          ) : (
-                            <div className="space-y-2.5">
-                              {commentsForCurrentMedia.map((comment, idx) => (
-                                <div
-                                  key={comment.id || idx}
-                                  className={`rounded-xl border transition-all duration-200 overflow-hidden ${activeComment === comment.id
-                                      ? 'bg-purple-50 border-purple-200 shadow-sm'
-                                      : 'bg-gray-50 border-gray-100 hover:border-gray-200'
-                                    }`}
-                                >
-                                  <div
-                                    className="p-3 cursor-pointer"
-                                    onClick={() => handleCommentListClick(comment.id)}
-                                  >
-                                    <div className="flex items-start gap-3">
-                                      <span className="font-bold text-white bg-purple-500 rounded-full w-6 h-6 flex items-center justify-center text-xs flex-shrink-0">
-                                        {idx + 1}
-                                      </span>
-                                      <div className="flex-1 min-w-0">
-                                        <p className="text-sm text-gray-800 break-words leading-relaxed">
-                                          {comment.message || comment.comment}
-                                        </p>
-                                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full inline-block mt-1 mb-1 ${(comment.reviewType === 'internal' || comment.authorRole === 'admin' || comment.author === 'Admin')
-                                            ? 'bg-purple-100 text-purple-700'
-                                            : 'bg-blue-100 text-blue-700'
-                                          }`}>
-                                          {(comment.reviewType === 'internal' || comment.authorRole === 'admin' || comment.author === 'Admin') ? 'Internal Review' : 'External Review'}
-                                        </span>
-                                        <div className="flex items-center gap-3 mt-2 flex-wrap">
-                                          <p className="text-xs text-gray-400">
-                                            {comment.timestamp ? new Date(comment.timestamp).toLocaleString() : ''}
-                                          </p>
-                                          {comment.done ? (
-                                            <button
-                                              onClick={(e) => { e.stopPropagation(); handleToggleDone(comment.id); }}
-                                              className="flex items-center gap-1 text-xs bg-emerald-50 hover:bg-gray-100 px-1.5 py-0.5 rounded transition-colors"
-                                            >
-                                              <CheckCircle className="h-3 w-3 text-emerald-600" />
-                                              <span className="text-emerald-600 font-semibold">Done</span>
-                                              <span className="text-gray-400">· Undo</span>
-                                            </button>
-                                          ) : (
-                                            <button
-                                              onClick={(e) => { e.stopPropagation(); handleToggleDone(comment.id); }}
-                                              className="flex items-center gap-1 text-xs text-gray-400 hover:text-green-600 bg-gray-50 hover:bg-green-50 px-1.5 py-0.5 rounded transition-colors"
-                                            >
-                                              <CheckCircle className="h-3 w-3" />
-                                              Mark Done
-                                            </button>
-                                          )}
-                                          {/* Reply button */}
-                                          <button
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              if (replyingToComment === comment.id) {
-                                                setReplyingToComment(null);
-                                                setReplyText('');
-                                              } else {
-                                                setReplyingToComment(comment.id);
-                                                setReplyText('');
-                                              }
-                                            }}
-                                            className="flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-1.5 py-0.5 rounded transition-colors"
-                                          >
-                                            <MessageSquare className="h-3 w-3" />
-                                            {comment.reply ? 'Edit Reply' : 'Reply'}
-                                          </button>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                  {/* Existing reply display */}
-                                  {comment.reply && replyingToComment !== comment.id && (
-                                    <div className="mx-3 mb-3 p-2.5 bg-indigo-50 border border-indigo-200 rounded-lg">
-                                      <div className="flex items-center gap-1.5 mb-1">
-                                        <span className="text-[10px] font-bold text-indigo-700 uppercase tracking-wide">
-                                          Reply
-                                        </span>
-                                        <span className="text-[10px] font-semibold text-indigo-600 bg-indigo-100 px-1.5 py-0.5 rounded-full">
-                                          {comment.reply.creatorName || 'Creator'}
-                                        </span>
-                                        <span className="text-[10px] text-gray-400 ml-auto">
-                                          {comment.reply.timestamp ? new Date(comment.reply.timestamp).toLocaleString() : ''}
-                                        </span>
-                                      </div>
-                                      <p className="text-xs text-gray-800 break-words leading-relaxed">
-                                        {comment.reply.text}
-                                      </p>
-                                    </div>
-                                  )}
-
-                                  {/* Reply input box */}
-                                  {replyingToComment === comment.id && (
-                                    <div className="mx-3 mb-3 p-2.5 bg-indigo-50 border border-indigo-200 rounded-lg"
-                                      onClick={(e) => e.stopPropagation()}
-                                    >
-                                      {comment.reply && (
-                                        <p className="text-[10px] text-indigo-500 mb-1.5 font-medium">Editing your existing reply…</p>
-                                      )}
-                                      <textarea
-                                        value={replyText}
-                                        onChange={(e) => setReplyText(e.target.value)}
-                                        placeholder="Write your reply…"
-                                        rows={2}
-                                        autoFocus
-                                        className="w-full border border-indigo-300 rounded-lg px-2.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none bg-white"
-                                      />
-                                      <div className="flex gap-2 mt-2">
-                                        <button
-                                          onClick={() => handleReplySubmit(comment.id)}
-                                          disabled={replySubmitting || !replyText.trim()}
-                                          className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white text-xs font-medium rounded-lg transition-colors"
-                                        >
-                                          {replySubmitting ? (
-                                            <div className="animate-spin rounded-full h-3 w-3 border-b border-white" />
-                                          ) : (
-                                            <Send className="h-3 w-3" />
-                                          )}
-                                          Send
-                                        </button>
-                                        <button
-                                          onClick={() => { setReplyingToComment(null); setReplyText(''); }}
-                                          className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 text-xs font-medium rounded-lg transition-colors"
-                                        >
-                                          Cancel
-                                        </button>
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-purple-50 rounded-lg">
+              <Image className="h-5 w-5 text-purple-500" />
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 font-medium">Versions</p>
+              <p className="text-sm font-semibold text-gray-900">{versions.length}</p>
+            </div>
           </div>
         </div>
       </div>
+
+      <div className="flex flex-col-reverse gap-6">
+        {/* ── Accordion 1 : Submit Work ─────────────────────────────────── */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+          {/* Accordion trigger */}
+          <button
+            onClick={() => setSubmitWorkOpen(!submitWorkOpen)}
+            className="w-full flex items-center justify-between p-6 text-left hover:bg-gray-50 transition-colors duration-200"
+          >
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-purple-100 rounded-lg">
+                <Play className="h-5 w-5 text-purple-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Submit Work</h2>
+                <p className="text-sm text-gray-500">Upload media, add caption &amp; hashtags, then submit for review</p>
+              </div>
+            </div>
+            {submitWorkOpen
+              ? <ChevronUp className="h-5 w-5 text-gray-400 flex-shrink-0" />
+              : <ChevronDown className="h-5 w-5 text-gray-400 flex-shrink-0" />}
+          </button>
+
+          {/* Accordion body */}
+          {submitWorkOpen && (
+            <div className="border-t border-gray-100 p-6">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+                {/* Left: Upload + preview */}
+                <div className="lg:col-span-2 space-y-6">
+
+                  {/* Drop zone */}
+                  <div>
+                    <h3 className="text-base font-semibold mb-3 flex items-center gap-2 text-gray-800">
+                      <Upload className="h-5 w-5 text-purple-600" />
+                      Upload Media
+                    </h3>
+                    <div
+                      className={`border-2 border-dashed rounded-xl p-8 text-center transition-all duration-200 ${dragActive
+                          ? 'border-purple-400 bg-purple-50 scale-[1.02]'
+                          : 'border-gray-300 hover:border-purple-400 hover:bg-purple-50/50'
+                        }`}
+                      onDragEnter={handleDrag}
+                      onDragLeave={handleDrag}
+                      onDragOver={handleDrag}
+                      onDrop={handleDrop}
+                    >
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        multiple
+                        accept="image/*,video/*"
+                        onChange={handleChange}
+                        className="hidden"
+                      />
+                      <div className="flex justify-center gap-3 mb-3">
+                        <Upload className="h-8 w-8 text-gray-400" />
+                        <Video className="h-8 w-8 text-gray-400" />
+                      </div>
+                      <p className="text-base font-medium text-gray-900">
+                        Drag and drop your images and videos here
+                      </p>
+                      <p className="text-sm text-gray-500 my-1">or</p>
+                      <button
+                        onClick={() => fileInputRef.current?.click()}
+                        className="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm"
+                      >
+                        <Image className="h-4 w-4 mr-2" />
+                        Browse Files
+                      </button>
+                      <p className="text-xs text-gray-400 mt-3">
+                        Supports: JPG, PNG, GIF, MP4, MOV, AVI (Max 100 MB per file)
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Media preview grid */}
+                  {uploadedFiles.length > 0 && (
+                    <div>
+                      <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                        <Image className="h-5 w-5 text-purple-600" />
+                        Media Files ({uploadedFiles.length})
+                      </h3>
+                      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+                        {uploadedFiles.map(file => (
+                          <div key={file.id} className="relative group">
+                            <div
+                              className="aspect-square rounded-lg overflow-hidden bg-gray-100 ring-2 ring-transparent group-hover:ring-purple-200 transition-all relative cursor-pointer"
+                              onClick={() => setSelectedMedia(file)}
+                            >
+                              {file.type === 'image' ? (
+                                <img src={file.preview} alt={file.name} className="w-full h-full object-cover" />
+                              ) : (
+                                <div className="relative w-full h-full">
+                                  <video src={file.preview} className="w-full h-full object-cover" muted />
+                                  <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                                    <Play className="h-8 w-8 text-white" />
+                                  </div>
+                                  <div className="absolute top-2 left-2 bg-black/50 text-white text-[10px] px-1.5 py-0.5 rounded">
+                                    VIDEO
+                                  </div>
+                                </div>
+                              )}
+
+                              {file.uploading && (
+                                <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                                  <div className="text-white text-center">
+                                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mx-auto mb-1"></div>
+                                    <p className="text-xs">Uploading…</p>
+                                  </div>
+                                </div>
+                              )}
+
+                              {file.uploaded && (
+                                <div className="absolute top-2 right-2 bg-green-500 text-white rounded-full p-1">
+                                  <Check className="h-3 w-3" />
+                                </div>
+                              )}
+
+                              {file.error && (
+                                <div className="absolute inset-0 bg-red-500/50 flex items-center justify-center">
+                                  <div className="text-white text-center p-2">
+                                    <X className="h-4 w-4 mx-auto mb-1" />
+                                    <p className="text-xs">Failed</p>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+
+                            <button
+                              onClick={() => removeFile(file.id)}
+                              className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+
+                            <div className="mt-2">
+                              <p className="text-xs font-medium text-gray-900 truncate">{file.name}</p>
+                              <p className="text-xs text-gray-500">{formatFileSize(file.size)}</p>
+                              {file.error && (
+                                <p className="text-xs text-red-500 mt-0.5 truncate">{file.error}</p>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Right: Assignment Info + Content Form + Submit */}
+                <div className="space-y-4">
+
+                  {/* Assignment details */}
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2 text-sm">
+                      <FileText className="h-4 w-4 text-purple-600" />
+                      Assignment Details
+                    </h3>
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-gray-900">{assignment.title}</p>
+                      {assignment.description && (
+                        <p className="text-sm text-gray-600">{assignment.description}</p>
+                      )}
+                      <div className="flex items-center text-xs text-gray-500">
+                        <MapPin className="h-3 w-3 mr-1 flex-shrink-0" />
+                        {assignment.customerName}
+                      </div>
+                      <div className="flex items-center text-xs text-gray-500">
+                        <Calendar className="h-3 w-3 mr-1 flex-shrink-0" />
+                        Due: {assignment.dueDate ? new Date(assignment.dueDate).toLocaleDateString() : 'N/A'}
+                      </div>
+                      {assignment.requirements?.length > 0 && (
+                        <div className="mt-2">
+                          <p className="text-xs font-medium text-gray-700 mb-1">Requirements:</p>
+                          <ul className="space-y-1">
+                            {assignment.requirements.map((req, i) => (
+                              <li key={i} className="flex items-start text-xs text-gray-600">
+                                <Check className="h-3 w-3 mr-1.5 mt-0.5 text-green-500 flex-shrink-0" />
+                                {req}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Caption / Hashtags / Notes */}
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <span className="flex items-center gap-1">
+                          <MessageSquare className="h-3.5 w-3.5 text-purple-500" />
+                          Caption
+                        </span>
+                      </label>
+                      <textarea
+                        value={caption}
+                        onChange={e => setCaption(e.target.value)}
+                        rows={3}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
+                        placeholder="Write an engaging caption…"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <span className="flex items-center gap-1">
+                          <Tag className="h-3.5 w-3.5 text-purple-500" />
+                          Hashtags
+                        </span>
+                      </label>
+                      <input
+                        type="text"
+                        value={hashtags}
+                        onChange={e => setHashtags(e.target.value)}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        placeholder="#fashion #summer #style"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Notes for Client
+                      </label>
+                      <textarea
+                        value={notes}
+                        onChange={e => setNotes(e.target.value)}
+                        rows={2}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
+                        placeholder="Additional notes…"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Submit button */}
+                  <div className="bg-purple-50 rounded-xl p-4 text-center">
+                    <p className="text-sm text-gray-600 mb-3">
+                      Content will be sent to <strong>{assignment.customerName}</strong> for review
+                    </p>
+                    <button
+                      onClick={handleSubmit}
+                      disabled={submitting || uploadedFiles.length === 0 || uploadedFiles.some(f => f.uploading)}
+                      className="w-full inline-flex items-center justify-center px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl hover:from-purple-700 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-semibold shadow-md"
+                    >
+                      {submitting ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                          Submitting…
+                        </>
+                      ) : (
+                        <>
+                          <Send className="h-4 w-4 mr-2" />
+                          Submit Content
+                        </>
+                      )}
+                    </button>
+                    {uploadedFiles.some(f => f.uploading) && (
+                      <p className="text-xs text-gray-500 mt-2">Please wait for all uploads to complete</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── Accordion 2 : Version History ─────────────────────────────── */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+          {/* Accordion trigger */}
+          <button
+            onClick={() => setVersionHistoryOpen(!versionHistoryOpen)}
+            className="w-full flex items-center justify-between p-6 text-left hover:bg-gray-50 transition-colors duration-200"
+          >
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-green-100 rounded-lg">
+                <History className="h-5 w-5 text-green-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Version History</h2>
+                <p className="text-sm text-gray-500">
+                  {versions.length} {versions.length === 1 ? 'version' : 'versions'} submitted
+                </p>
+              </div>
+            </div>
+            {versionHistoryOpen
+              ? <ChevronUp className="h-5 w-5 text-gray-400 flex-shrink-0" />
+              : <ChevronDown className="h-5 w-5 text-gray-400 flex-shrink-0" />}
+          </button>
+
+          {/* Accordion body */}
+          {versionHistoryOpen && (
+            <div className="border-t border-gray-100 p-6">
+              {versionsLoading ? (
+                <div className="flex items-center justify-center py-10">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600" />
+                </div>
+              ) : versions.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="bg-gray-100 rounded-full w-14 h-14 flex items-center justify-center mx-auto mb-3">
+                    <History className="h-7 w-7 text-gray-400" />
+                  </div>
+                  <p className="text-gray-600 font-medium">No versions submitted yet</p>
+                  <p className="text-sm text-gray-400 mt-1">
+                    Upload your first version using the Submit Work section above
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                  {/* ── Left 2/3: Version display ─── */}
+                  <div className="xl:col-span-2">
+                    <div className="bg-gray-50 rounded-2xl border border-gray-200 overflow-hidden">
+                      {/* Version display header */}
+                      <div className="px-5 py-4 border-b border-gray-100 bg-white">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 bg-purple-100 rounded-lg">
+                              <Image className="h-4 w-4 text-purple-600" />
+                            </div>
+                            <div>
+                              <h3 className="text-base font-semibold text-gray-900">
+                                Version {versions[selectedVersionIndex]?.versionNumber}
+                              </h3>
+                              <p className="text-xs text-gray-500">of {versions.length} total versions</p>
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5 max-w-xs justify-end">
+                            {versions.map((v, i) => (
+                              <button
+                                key={v.id}
+                                onClick={() => handleVersionSelect(i)}
+                                className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all ${selectedVersionIndex === i
+                                    ? 'bg-purple-600 text-white shadow-sm'
+                                    : 'bg-gray-100 text-gray-600 hover:bg-purple-100 hover:text-purple-700'
+                                  }`}
+                              >
+                                V{v.versionNumber}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="p-5">
+                        {versions[selectedVersionIndex] && (
+                          <div className="space-y-5">
+                            {/* Media */}
+                            <div>
+                              {versions[selectedVersionIndex].media?.length > 0 ? (
+                                <div>
+                                  {versions[selectedVersionIndex].media.length > 1 && (
+                                    <div className="flex items-center justify-between mb-3 px-1">
+                                      <span className="text-sm font-medium text-gray-600">
+                                        Media {selectedMediaIndex + 1} of {versions[selectedVersionIndex].media.length}
+                                      </span>
+                                      <div className="flex gap-2">
+                                        <button
+                                          onClick={() => handleMediaChange('prev')}
+                                          disabled={selectedMediaIndex === 0}
+                                          className="p-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                                        >
+                                          <ChevronLeft className="h-4 w-4 text-gray-600" />
+                                        </button>
+                                        <button
+                                          onClick={() => handleMediaChange('next')}
+                                          disabled={selectedMediaIndex === versions[selectedVersionIndex].media.length - 1}
+                                          className="p-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                                        >
+                                          <ChevronRight className="h-4 w-4 text-gray-600" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Current media with comment markers */}
+                                  <div className="flex justify-center">
+                                    <div className="relative inline-block">
+                                      {versions[selectedVersionIndex].media[selectedMediaIndex]?.url &&
+                                        typeof versions[selectedVersionIndex].media[selectedMediaIndex].url === 'string' ? (
+                                        versions[selectedVersionIndex].media[selectedMediaIndex].type === 'image' ? (
+                                          <img
+                                            ref={mediaImgRef}
+                                            src={versions[selectedVersionIndex].media[selectedMediaIndex].url}
+                                            alt={`Version ${versions[selectedVersionIndex].versionNumber} - Media ${selectedMediaIndex + 1}`}
+                                            className="max-w-full h-auto max-h-96 rounded-xl shadow-lg border border-gray-200"
+                                            onLoad={handleImgLoad}
+                                            onError={(e) => { e.target.style.display = 'none'; }}
+                                          />
+                                        ) : (
+                                          <video
+                                            src={versions[selectedVersionIndex].media[selectedMediaIndex].url}
+                                            controls
+                                            className="max-w-full h-auto max-h-96 rounded-xl shadow-lg border border-gray-200"
+                                          />
+                                        )
+                                      ) : (
+                                        <div className="w-80 h-64 bg-gray-200 rounded-xl flex items-center justify-center">
+                                          <div className="text-center">
+                                            <Image className="h-12 w-12 text-gray-400 mx-auto mb-2" />
+                                            <p className="text-gray-500">Media unavailable</p>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Comment markers */}
+                                      {commentsForCurrentMedia.map((comment, index) => {
+                                        const commentX = comment.x || comment.position?.x || 0;
+                                        const commentY = comment.y || comment.position?.y || 0;
+                                        const { x: scaledX, y: scaledY } = getScaledMarkerPos(commentX, commentY);
+                                        let boxLeft = 40;
+                                        let boxRight = 'auto';
+                                        if (imgDimensions?.rw ? scaledX > imgDimensions.rw / 2 : commentX > 150) { boxLeft = 'auto'; boxRight = 40; }
+                                        return (
+                                          <div
+                                            key={comment.id}
+                                            style={{
+                                              position: 'absolute',
+                                              top: scaledY - 12, left: scaledX - 12,
+                                              width: 24, height: 24,
+                                              background: comment.done ? '#10b981' : '#ef4444',
+                                              color: '#fff', borderRadius: '50%',
+                                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                              fontWeight: 'bold', fontSize: '11px',
+                                              boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                                              cursor: 'pointer', zIndex: 10, border: '2px solid #fff',
+                                            }}
+                                            onMouseEnter={() => setHoveredComment(comment.id)}
+                                            onMouseLeave={() => setHoveredComment(null)}
+                                            onClick={(e) => { e.stopPropagation(); handleCommentListClick(comment.id); }}
+                                          >
+                                            {index + 1}
+                                            {(activeComment === comment.id || hoveredComment === comment.id) && (
+                                              <div
+                                                style={{
+                                                  position: 'absolute',
+                                                  left: boxLeft, right: boxRight,
+                                                  top: '50%', transform: 'translateY(-50%)',
+                                                  background: '#fff', border: '1px solid #3b82f6',
+                                                  borderRadius: '8px', padding: '12px',
+                                                  minWidth: '200px', maxWidth: '280px',
+                                                  zIndex: 20, boxShadow: '0 4px 20px rgba(59,130,246,0.15)',
+                                                }}
+                                                onClick={(e) => e.stopPropagation()}
+                                              >
+                                                <div className="mb-2">
+                                                  <p className="font-medium text-gray-900 text-sm leading-relaxed break-words">
+                                                    {comment.message || comment.comment}
+                                                    {comment.done && <span className="text-green-600 ml-2 text-xs">✓ Done</span>}
+                                                  </p>
+                                                  <p className="text-xs text-gray-500 mt-1">
+                                                    {comment.timestamp ? new Date(comment.timestamp).toLocaleString() : ''}
+                                                  </p>
+                                                </div>
+                                                {comment.reply && (
+                                                  <div className="mt-2 p-2 bg-indigo-50 border border-indigo-200 rounded-lg">
+                                                    <p className="text-[10px] font-bold text-indigo-700 mb-0.5">
+                                                      Reply by {comment.reply.creatorName || 'Creator'}
+                                                    </p>
+                                                    <p className="text-xs text-gray-800 break-words">{comment.reply.text}</p>
+                                                  </div>
+                                                )}
+                                                <button
+                                                  onClick={() => handleToggleDone(comment.id)}
+                                                  className={`w-full px-3 py-1.5 text-xs rounded-lg font-medium transition-all flex items-center justify-center ${comment.done
+                                                      ? 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+                                                      : 'bg-green-600 hover:bg-green-700 text-white'
+                                                    }`}
+                                                >
+                                                  <CheckCircle className="h-3 w-3 mr-1" />
+                                                  {comment.done ? 'Undo Done' : 'Mark as Done'}
+                                                </button>
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+
+                                  {/* Media thumbnails */}
+                                  {versions[selectedVersionIndex].media.length > 1 && (
+                                    <div className="flex justify-center gap-2 mt-4">
+                                      {versions[selectedVersionIndex].media.map((media, index) => (
+                                        <button
+                                          key={index}
+                                          onClick={() => setSelectedMediaIndex(index)}
+                                          className={`w-16 h-16 rounded-lg overflow-hidden border-2 transition-all ${selectedMediaIndex === index
+                                              ? 'border-purple-500 ring-2 ring-purple-200'
+                                              : 'border-gray-200 hover:border-gray-300'
+                                            }`}
+                                        >
+                                          {media.type === 'image' && media.url ? (
+                                            <img src={media.url} alt={`Thumbnail ${index + 1}`} className="w-full h-full object-cover" />
+                                          ) : (
+                                            <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                                              <Video className="h-6 w-6 text-gray-400" />
+                                            </div>
+                                          )}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="h-64 bg-gray-200 rounded-xl flex items-center justify-center">
+                                  <div className="text-center">
+                                    <Image className="h-12 w-12 text-gray-400 mx-auto mb-2" />
+                                    <p className="text-gray-500">No media available</p>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Caption / Hashtags / Notes */}
+                            <div className="space-y-4">
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Caption</label>
+                                <div className="bg-white rounded-lg p-4 border border-gray-200">
+                                  <p className="text-gray-900">{versions[selectedVersionIndex].caption || 'No caption'}</p>
+                                </div>
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Hashtags</label>
+                                <div className="bg-white rounded-lg p-4 border border-gray-200">
+                                  <p className="text-blue-600 font-medium">{versions[selectedVersionIndex].hashtags || 'No hashtags'}</p>
+                                </div>
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
+                                <div className="bg-white rounded-lg p-4 border border-gray-200">
+                                  <p className="text-gray-900">{versions[selectedVersionIndex].notes || 'No notes'}</p>
+                                </div>
+                              </div>
+                              <div className="flex items-center justify-between text-sm text-gray-500">
+                                <span>Created: {formatDate(versions[selectedVersionIndex].createdAt)}</span>
+                                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getVersionStatusColor(versions[selectedVersionIndex].status)}`}>
+                                  {(versions[selectedVersionIndex].status || '').replace(/_/g, ' ').toUpperCase()}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ── Right 1/3: Version History + Comments ─── */}
+                  <div className="space-y-5">
+                    {/* Version History panel */}
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                      <div className="px-5 py-4 border-b border-gray-100 bg-gray-50">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-emerald-100 rounded-lg">
+                            <FileText className="h-4 w-4 text-emerald-600" />
+                          </div>
+                          <h3 className="text-base font-semibold text-gray-900">Version History</h3>
+                        </div>
+                      </div>
+                      <div className="max-h-80 overflow-y-auto">
+                        <div className="divide-y divide-gray-100">
+                          {(() => {
+                            const internalVersions = versions
+                              .map((v, i) => ({ ...v, idx: i }))
+                              .filter(v => v.submissionStage !== 'customer');
+                            const customerVersions = versions
+                              .map((v, i) => ({ ...v, idx: i }))
+                              .filter(v => v.submissionStage === 'customer');
+                            const renderSection = (sectionVersions, label, accentClass, activeBg, activeBorder) =>
+                              sectionVersions.length > 0 && (
+                                <div key={label}>
+                                  <div className={`px-5 pt-3 pb-2 text-xs font-bold uppercase tracking-wider ${accentClass}`}>
+                                    {label}
+                                  </div>
+                                  {sectionVersions.map((version, ci) => {
+                                    const { date, time } = formatVersionDate(version.createdAt);
+                                    return (
+                                      <button
+                                        key={version.id || version.idx}
+                                        onClick={() => handleVersionSelect(version.idx)}
+                                        className={`w-full text-left px-5 py-3 flex flex-col border-l-4 transition-all duration-200 hover:bg-gray-50 ${selectedVersionIndex === version.idx
+                                            ? `${activeBg} ${activeBorder}`
+                                            : 'bg-white border-l-transparent'
+                                          }`}
+                                      >
+                                        <div className="flex items-center justify-between">
+                                          <span className="font-medium text-gray-900 text-sm">{date}, {time}</span>
+                                        </div>
+                                        <div className="flex items-center mt-1.5 text-xs text-gray-500 gap-3">
+                                          <span className="flex items-center">
+                                            <span className={`h-1.5 w-1.5 rounded-full mr-1.5 ${selectedVersionIndex === version.idx
+                                                ? (label === 'Internal Review' ? 'bg-purple-500' : 'bg-amber-500')
+                                                : 'bg-gray-300'
+                                              }`} />
+                                            V{ci + 1}
+                                          </span>
+                                          {version.media?.length > 0 && (
+                                            <span className="flex items-center">
+                                              <Image className="h-3 w-3 mr-1" />
+                                              {version.media.length}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              );
+                            return (
+                              <>
+                                {renderSection(internalVersions, 'Internal Review', 'text-purple-500 bg-purple-50/60', 'bg-purple-50', 'border-l-purple-500')}
+                                {renderSection(customerVersions, 'Customer Review', 'text-amber-600 bg-amber-50/60', 'bg-amber-50', 'border-l-amber-500')}
+                              </>
+                            );
+                          })()}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Comments panel */}
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                      <div className="px-5 py-4 border-b border-gray-100 bg-gray-50">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 bg-purple-100 rounded-lg">
+                              <MessageSquare className="h-4 w-4 text-purple-600" />
+                            </div>
+                            <div>
+                              <h3 className="text-base font-semibold text-gray-900">Comments</h3>
+                              <p className="text-xs text-gray-500">
+                                Version {versions[selectedVersionIndex]?.versionNumber} • Media {selectedMediaIndex + 1}
+                              </p>
+                            </div>
+                          </div>
+                          <span className="text-sm font-semibold text-purple-600 bg-purple-100 px-2.5 py-1 rounded-full">
+                            {commentsForCurrentMedia.length}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="max-h-96 overflow-y-auto p-4">
+                        {commentsForCurrentMedia.length === 0 ? (
+                          <div className="text-center py-10">
+                            <div className="bg-gray-100 rounded-full w-14 h-14 flex items-center justify-center mx-auto mb-3">
+                              <MessageSquare className="h-6 w-6 text-gray-400" />
+                            </div>
+                            <p className="text-gray-500 text-sm font-medium">No comments yet</p>
+                            <p className="text-gray-400 text-xs mt-1">Comments will appear here when added</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-2.5">
+                            {commentsForCurrentMedia.map((comment, idx) => (
+                              <div
+                                key={comment.id || idx}
+                                className={`rounded-xl border transition-all duration-200 overflow-hidden ${activeComment === comment.id
+                                    ? 'bg-purple-50 border-purple-200 shadow-sm'
+                                    : 'bg-gray-50 border-gray-100 hover:border-gray-200'
+                                  }`}
+                              >
+                                <div
+                                  className="p-3 cursor-pointer"
+                                  onClick={() => handleCommentListClick(comment.id)}
+                                >
+                                  <div className="flex items-start gap-3">
+                                    <span className="font-bold text-white bg-purple-500 rounded-full w-6 h-6 flex items-center justify-center text-xs flex-shrink-0">
+                                      {idx + 1}
+                                    </span>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm text-gray-800 break-words leading-relaxed">
+                                        {comment.message || comment.comment}
+                                      </p>
+                                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full inline-block mt-1 mb-1 ${(comment.reviewType === 'internal' || comment.authorRole === 'admin' || comment.author === 'Admin')
+                                          ? 'bg-purple-100 text-purple-700'
+                                          : 'bg-blue-100 text-blue-700'
+                                        }`}>
+                                        {(comment.reviewType === 'internal' || comment.authorRole === 'admin' || comment.author === 'Admin') ? 'Internal Review' : 'External Review'}
+                                      </span>
+                                      <div className="flex items-center gap-3 mt-2 flex-wrap">
+                                        <p className="text-xs text-gray-400">
+                                          {comment.timestamp ? new Date(comment.timestamp).toLocaleString() : ''}
+                                        </p>
+                                        {comment.done ? (
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); handleToggleDone(comment.id); }}
+                                            className="flex items-center gap-1 text-xs bg-emerald-50 hover:bg-gray-100 px-1.5 py-0.5 rounded transition-colors"
+                                          >
+                                            <CheckCircle className="h-3 w-3 text-emerald-600" />
+                                            <span className="text-emerald-600 font-semibold">Done</span>
+                                            <span className="text-gray-400">· Undo</span>
+                                          </button>
+                                        ) : (
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); handleToggleDone(comment.id); }}
+                                            className="flex items-center gap-1 text-xs text-gray-400 hover:text-green-600 bg-gray-50 hover:bg-green-50 px-1.5 py-0.5 rounded transition-colors"
+                                          >
+                                            <CheckCircle className="h-3 w-3" />
+                                            Mark Done
+                                          </button>
+                                        )}
+                                        {/* Reply button */}
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (replyingToComment === comment.id) {
+                                              setReplyingToComment(null);
+                                              setReplyText('');
+                                            } else {
+                                              setReplyingToComment(comment.id);
+                                              setReplyText('');
+                                            }
+                                          }}
+                                          className="flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-1.5 py-0.5 rounded transition-colors"
+                                        >
+                                          <MessageSquare className="h-3 w-3" />
+                                          {comment.reply ? 'Edit Reply' : 'Reply'}
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Existing reply display */}
+                                {comment.reply && replyingToComment !== comment.id && (
+                                  <div className="mx-3 mb-3 p-2.5 bg-indigo-50 border border-indigo-200 rounded-lg">
+                                    <div className="flex items-center gap-1.5 mb-1">
+                                      <span className="text-[10px] font-bold text-indigo-700 uppercase tracking-wide">
+                                        Reply
+                                      </span>
+                                      <span className="text-[10px] font-semibold text-indigo-600 bg-indigo-100 px-1.5 py-0.5 rounded-full">
+                                        {comment.reply.creatorName || 'Creator'}
+                                      </span>
+                                      <span className="text-[10px] text-gray-400 ml-auto">
+                                        {comment.reply.timestamp ? new Date(comment.reply.timestamp).toLocaleString() : ''}
+                                      </span>
+                                    </div>
+                                    <p className="text-xs text-gray-800 break-words leading-relaxed">
+                                      {comment.reply.text}
+                                    </p>
+                                  </div>
+                                )}
+
+                                {/* Reply input box */}
+                                {replyingToComment === comment.id && (
+                                  <div className="mx-3 mb-3 p-2.5 bg-indigo-50 border border-indigo-200 rounded-lg"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    {comment.reply && (
+                                      <p className="text-[10px] text-indigo-500 mb-1.5 font-medium">Editing your existing reply…</p>
+                                    )}
+                                    <textarea
+                                      value={replyText}
+                                      onChange={(e) => setReplyText(e.target.value)}
+                                      placeholder="Write your reply…"
+                                      rows={2}
+                                      autoFocus
+                                      className="w-full border border-indigo-300 rounded-lg px-2.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none bg-white"
+                                    />
+                                    <div className="flex gap-2 mt-2">
+                                      <button
+                                        onClick={() => handleReplySubmit(comment.id)}
+                                        disabled={replySubmitting || !replyText.trim()}
+                                        className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white text-xs font-medium rounded-lg transition-colors"
+                                      >
+                                        {replySubmitting ? (
+                                          <div className="animate-spin rounded-full h-3 w-3 border-b border-white" />
+                                        ) : (
+                                          <Send className="h-3 w-3" />
+                                        )}
+                                        Send
+                                      </button>
+                                      <button
+                                        onClick={() => { setReplyingToComment(null); setReplyText(''); }}
+                                        className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 text-xs font-medium rounded-lg transition-colors"
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
 
       {/* ── Media preview modal ─────────────────────────────────────────── */}
       {selectedMedia && (
@@ -1558,8 +1536,7 @@ function ContentDetails() {
         </div>
       )}
 
-      <Footer />
-    </div>
+    </ContentCreatorLayout>
   );
 }
 

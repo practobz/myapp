@@ -78,6 +78,7 @@ import Settings from './content-creators/Settings';
 import ContentCreatorMediaLibrary from './content-creators/MediaLibrary';
 import ContentDetails from './content-creators/ContentDetails';
 import CustomerFeedback from './content-creators/CustomerFeedback';
+import ContentCreatorLayout from './content-creators/Layout';
 
 
 import { useAuth } from './admin/contexts/AuthContext';

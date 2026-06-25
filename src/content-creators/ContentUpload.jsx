@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Upload, Image, X, Check, CheckCircle, FileText, Calendar, Clock, Palette, Send, MapPin, Tag, MessageSquare, Play, Video, Bell, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, User, ShieldCheck, AlertCircle, History, Search, Globe } from 'lucide-react';
 import { Facebook, Instagram, Linkedin, Youtube, Twitter } from 'lucide-react';
+import ContentCreatorLayout from './Layout';
 
 // Helper to get creator email from localStorage
 function getCreatorEmail() {
@@ -1167,7 +1168,11 @@ function ContentUpload() {
       } else {
         alert('Content submitted directly for customer review!\n\nThe customer will review your submission.');
       }
-      navigate('/content-creator/assignments');
+      if (finalCustomerId) {
+        navigate(`/content-creator/assignments?expand=${finalCustomerId}`);
+      } else {
+        navigate('/content-creator/assignments');
+      }
     } catch (err) {
       console.error('❌ Upload error:', err);
       alert(`Upload failed: ${err.message}. Please try again.`);
@@ -1304,30 +1309,19 @@ function ContentUpload() {
 
     const statusLabel = (s) => (s || 'pending').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
+    const pickerHeaderActions = (
+      <span className="text-xs font-semibold text-purple-700 bg-purple-100 px-3 py-1.5 rounded-full">
+        {pickerAssignments.length} assignments
+      </span>
+    );
+
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-indigo-100 flex flex-col">
-        {/* Header */}
-        <header className="bg-white shadow-sm border-b sticky top-0 z-10">
-          <div className="px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center h-16 gap-4">
-              <button onClick={() => navigate('/content-creator')} className="text-gray-600 hover:text-gray-900 transition-colors flex-shrink-0">
-                <ArrowLeft className="h-5 w-5" />
-              </button>
-              <div className="flex items-center gap-3 flex-1 min-w-0">
-                <div className="p-2 bg-purple-100 rounded-lg flex-shrink-0">
-                  <Palette className="h-5 w-5 text-purple-600" />
-                </div>
-                <div className="min-w-0">
-                  <span className="text-xl font-bold text-gray-900">Upload Content</span>
-                  <p className="text-xs text-gray-400 mt-0.5 hidden sm:block">Select an assignment to upload media for</p>
-                </div>
-              </div>
-              <span className="text-xs font-semibold text-purple-700 bg-purple-100 px-3 py-1.5 rounded-full flex-shrink-0">
-                {pickerAssignments.length} assignments
-              </span>
-            </div>
-          </div>
-        </header>
+      <ContentCreatorLayout
+        title="Upload Content"
+        subtitle="Select an assignment to upload media for"
+        icon={<Palette className="h-5 w-5 text-white" />}
+        headerActions={pickerHeaderActions}
+      >
 
         {pickerLoading ? (
           <div className="flex-1 flex items-center justify-center py-20">
@@ -1547,7 +1541,7 @@ function ContentUpload() {
             </main>
           </div>
         )}
-      </div>
+      </ContentCreatorLayout>
     );
   }
 
@@ -1578,77 +1572,56 @@ function ContentUpload() {
     );
   }
 
+  const handleBackAction = () => {
+    if (assignment && assignment.customerId) {
+      navigate(`/content-creator/assignments?expand=${assignment.customerId}`);
+    } else {
+      navigate('/content-creator/assignments');
+    }
+  };
+
+  const detailHeaderActions = (
+    <div className="hidden md:flex items-center space-x-4">
+      <div className="text-right">
+        <p className="text-sm font-semibold text-gray-950">{assignment.title}</p>
+        <p className="text-xs text-gray-500">for {assignment.customerName}</p>
+      </div>
+      <div className="flex items-center text-xs text-gray-500 bg-white/60 px-2 py-1 rounded-lg border border-gray-200">
+        <Calendar className="h-3 w-3 mr-1 text-purple-600" />
+        {assignment.dueDate ? new Date(assignment.dueDate).toLocaleDateString() : 'N/A'}
+      </div>
+      <div className="flex items-center gap-1 flex-wrap">
+        {(Array.isArray(assignment.platform) ? assignment.platform : [assignment.platform]).filter(Boolean).map((p, pi) => (
+          <span key={pi} className={`inline-flex items-center gap-1 px-1.5 py-1 rounded border text-xs font-semibold uppercase ${
+            p.toLowerCase() === 'facebook'  ? 'bg-blue-100 text-blue-700 border-blue-200' :
+            p.toLowerCase() === 'instagram' ? 'bg-pink-100 text-pink-700 border-pink-200' :
+            p.toLowerCase() === 'youtube'   ? 'bg-red-100 text-red-700 border-red-200' :
+            p.toLowerCase() === 'linkedin'  ? 'bg-blue-50 text-blue-700 border-blue-200' :
+            p.toLowerCase() === 'twitter'   ? 'bg-sky-100 text-sky-700 border-sky-200' :
+            'bg-gray-100 text-gray-700 border-gray-200'
+          }`}>
+            {p.toLowerCase() === 'facebook'  ? <Facebook  className="h-3 w-3" /> :
+             p.toLowerCase() === 'instagram' ? <Instagram className="h-3 w-3" /> :
+             p.toLowerCase() === 'linkedin'  ? <Linkedin  className="h-3 w-3" /> :
+             p.toLowerCase() === 'youtube'   ? <Youtube   className="h-3 w-3" /> :
+             p.toLowerCase() === 'twitter'   ? <Twitter   className="h-3 w-3" /> :
+             <Globe className="h-3 w-3" />}
+            {p.charAt(0).toUpperCase() + p.slice(1)}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-indigo-100">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center">
-              <button
-                onClick={() => {
-                  if (assignment && assignment.customerId) {
-                    navigate(`/content-creator/assignments?expand=${assignment.customerId}`);
-                  } else {
-                    navigate('/content-creator/assignments');
-                  }
-                }}
-                className="mr-4 text-gray-600 hover:text-gray-900 transition-colors"
-              >
-                <ArrowLeft className="h-5 w-5" />
-              </button>
-              <div className="flex items-center">
-                <div className="p-2 bg-purple-100 rounded-lg">
-                  <Palette className="h-5 w-5 text-purple-600" />
-                </div>
-                <div className="ml-3">
-                  <span className="text-xl font-bold text-gray-900">
-                    {activeTab === 'admin' ? 'Submit for Admin Review' : 'Content Details'}
-                  </span>
-                  <p className="text-xs text-gray-400 leading-none mt-0.5">
-                    {activeTab === 'admin' ? 'Admin must approve before content goes to customer' : 'Review and manage customer-facing content submissions'}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Assignment Info in Header */}
-            <div className="hidden md:flex items-center space-x-4">
-              <div className="text-right">
-                <p className="text-sm font-medium text-gray-900">{assignment.title}</p>
-                <p className="text-xs text-gray-500">for {assignment.customerName}</p>
-              </div>
-              <div className="flex items-center text-xs text-gray-500">
-                <Calendar className="h-3 w-3 mr-1" />
-                {assignment.dueDate ? new Date(assignment.dueDate).toLocaleDateString() : 'N/A'}
-              </div>
-              <div className="flex items-center gap-1 flex-wrap">
-                {(Array.isArray(assignment.platform) ? assignment.platform : [assignment.platform]).filter(Boolean).map((p, pi) => (
-                  <span key={pi} className={`inline-flex items-center gap-1 px-1.5 py-1 rounded border text-xs font-medium ${
-                    p.toLowerCase() === 'facebook'  ? 'bg-blue-100 text-blue-700 border-blue-200' :
-                    p.toLowerCase() === 'instagram' ? 'bg-pink-100 text-pink-700 border-pink-200' :
-                    p.toLowerCase() === 'youtube'   ? 'bg-red-100 text-red-700 border-red-200' :
-                    p.toLowerCase() === 'linkedin'  ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                    p.toLowerCase() === 'twitter'   ? 'bg-sky-100 text-sky-700 border-sky-200' :
-                    'bg-gray-100 text-gray-700 border-gray-200'
-                  }`}>
-                    {p.toLowerCase() === 'facebook'  ? <Facebook  className="h-3 w-3" /> :
-                     p.toLowerCase() === 'instagram' ? <Instagram className="h-3 w-3" /> :
-                     p.toLowerCase() === 'linkedin'  ? <Linkedin  className="h-3 w-3" /> :
-                     p.toLowerCase() === 'youtube'   ? <Youtube   className="h-3 w-3" /> :
-                     p.toLowerCase() === 'twitter'   ? <Twitter   className="h-3 w-3" /> :
-                     <Globe className="h-3 w-3" />}
-                    {p.charAt(0).toUpperCase() + p.slice(1)}
-                  </span>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <ContentCreatorLayout
+      title={activeTab === 'admin' ? 'Submit for Admin Review' : 'Content Details'}
+      subtitle={activeTab === 'admin' ? 'Admin must approve before content goes to customer' : 'Review and manage customer-facing content submissions'}
+      icon={<Palette className="h-5 w-5 text-white" />}
+      onBack={handleBackAction}
+      headerActions={detailHeaderActions}
+    >
+      <div>
         {/* ── Tabs Selector ────────────────────────────────────────────────── */}
         <div className="flex border-b border-gray-200 bg-white rounded-2xl p-1.5 shadow-sm border border-gray-200/50 mb-6">
           <button
@@ -2793,7 +2766,7 @@ function ContentUpload() {
           </div>
         </div>
       )}
-    </div>
+    </ContentCreatorLayout>
   );
 }
 

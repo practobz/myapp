@@ -32,7 +32,7 @@ function getCreatorName() {
       const userObj = JSON.parse(userStr);
       return userObj.name || userObj.fullName || `${userObj.firstName || ''} ${userObj.lastName || ''}`.trim() || 'Content Creator';
     }
-  } catch (e) {}
+  } catch (e) { }
   return 'Content Creator';
 }
 
@@ -73,8 +73,8 @@ function ContentCreatorLayout({ children, title, subtitle, icon, headerActions, 
   };
 
   // Only show back arrow on sub-pages unless overridden
-  const showBackArrow = showBackArrowOverride !== undefined 
-    ? showBackArrowOverride 
+  const showBackArrow = showBackArrowOverride !== undefined
+    ? showBackArrowOverride
     : (location.pathname !== '/content-creator' && location.pathname !== '/content-creator/');
 
   const handleBack = () => {
@@ -93,7 +93,7 @@ function ContentCreatorLayout({ children, title, subtitle, icon, headerActions, 
       <header className="bg-white/80 backdrop-blur-md shadow-sm border-b border-gray-200/50 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            
+
             {/* Logo and Titles */}
             <div className="flex items-center min-w-0 flex-1 gap-2">
               {showBackArrow && (
@@ -105,7 +105,7 @@ function ContentCreatorLayout({ children, title, subtitle, icon, headerActions, 
                   <ArrowLeft className="h-5 w-5" />
                 </button>
               )}
-              
+
               <button
                 onClick={() => navigate('/content-creator')}
                 className="focus:outline-none flex-shrink-0 mr-3"
@@ -170,7 +170,7 @@ function ContentCreatorLayout({ children, title, subtitle, icon, headerActions, 
                         {creatorEmail}
                       </p>
                     </div>
-                    
+
                     <button
                       onClick={() => handleNavigation('/content-creator/profile')}
                       className="flex items-center w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-purple-50 hover:text-purple-700 transition-colors duration-150"
@@ -179,13 +179,7 @@ function ContentCreatorLayout({ children, title, subtitle, icon, headerActions, 
                       My Profile
                     </button>
 
-                    <button
-                      onClick={() => handleNavigation('/content-creator/settings')}
-                      className="flex items-center w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-purple-50 hover:text-purple-700 transition-colors duration-150"
-                    >
-                      <Settings className="h-4 w-4 mr-3 text-gray-400" />
-                      Settings
-                    </button>
+
 
                     <div className="border-t border-gray-100 my-1" />
 

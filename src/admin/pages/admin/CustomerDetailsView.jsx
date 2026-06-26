@@ -247,8 +247,8 @@ const TrendChart = memo(({ calendars, onClose }) => {
               key={opt.label}
               onClick={() => setRange(opt.months)}
               className={`px-2.5 py-0.5 rounded-md text-xs font-medium transition-colors ${range === opt.months
-                  ? 'bg-emerald-600 text-white'
-                  : 'text-gray-500 hover:bg-gray-100'
+                ? 'bg-emerald-600 text-white'
+                : 'text-gray-500 hover:bg-gray-100'
                 }`}
             >
               {opt.label}
@@ -507,22 +507,28 @@ const ItemTimeline = ({ item, itemStatus, scheduledPosts = [], submissions = [] 
   });
 
   // Derive customer approval from submission or item status
-  const customerApprovedSub = submissions.find(s => 
-    s.approved_by_customer === true || 
-    s.status === 'approved_customer' || 
-    s.status === 'approved_both'
-  );
-  
-  const isCustomerApproved = !!customerApprovedSub || 
-                             itemStatus === 'published' || 
-                             item.status === 'published' || 
-                             item.published === true ||
-                             (item.reviewedAt && submissions.length === 0);
-                             
-  const customerApprovedAt = customerApprovedSub?.approvedAt || 
-                             customerApprovedSub?.updatedAt || 
-                             (isCustomerApproved ? (item.reviewedAt || item.publishedAt) : null);
-                             
+  const customerApprovedSub = submissions.length > 0 && (() => {
+    const latest = submissions[submissions.length - 1];
+    const isApproved = latest.approved_by_customer === true ||
+      latest.status === 'approved_customer' ||
+      latest.status === 'approved_both';
+    const isReverted = latest.status === 'under_review' ||
+      latest.status === 'sent_to_creator' ||
+      latest.status === 'revision_requested' ||
+      latest.status === 'rejected';
+    return isApproved && !isReverted ? latest : null;
+  })();
+
+  const isCustomerApproved = !!customerApprovedSub ||
+    itemStatus === 'published' ||
+    item.status === 'published' ||
+    item.published === true ||
+    (item.reviewedAt && submissions.length === 0);
+
+  const customerApprovedAt = customerApprovedSub?.approvedAt ||
+    customerApprovedSub?.updatedAt ||
+    (isCustomerApproved ? (item.reviewedAt || item.publishedAt) : null);
+
   const customerApprovedDate = fmtDate(customerApprovedAt);
   const publishedAt = matchedPost?.publishedAt || item.publishedAt;
 
@@ -608,8 +614,8 @@ const ItemTimeline = ({ item, itemStatus, scheduledPosts = [], submissions = [] 
 const PostTrendButton = memo(({ isLoading, isActive, onClick }) => (
   <button
     className={`flex items-center gap-1 px-1.5 py-0.5 rounded border transition-colors flex-shrink-0 ${isActive
-        ? 'bg-blue-100 border-blue-300 text-blue-700'
-        : 'bg-blue-50 hover:bg-blue-100 border-blue-100 text-blue-600'
+      ? 'bg-blue-100 border-blue-300 text-blue-700'
+      : 'bg-blue-50 hover:bg-blue-100 border-blue-100 text-blue-600'
       }`}
     onClick={onClick}
     title="View post engagement trend"
@@ -715,8 +721,8 @@ const ExpandedTrendChart = memo(({ platformData, dateRange, onDateRangeChange, o
                 key={r.value}
                 onClick={() => onDateRangeChange(r.value)}
                 className={`px-2 py-0.5 text-[10px] rounded-full font-medium transition-colors ${dateRange === r.value
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-white text-gray-500 hover:bg-gray-100 border border-gray-200'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white text-gray-500 hover:bg-gray-100 border border-gray-200'
                   }`}
               >
                 {r.label}
@@ -1390,7 +1396,11 @@ function CustomerDetailsView() {
         platform: base.platform || '',
         status: latest.status || 'submitted',
         approved_by_admin: latest.approved_by_admin,
-        approved_by_customer: latest.approved_by_customer,
+        approved_by_customer: latest.approved_by_customer === true &&
+          latest.status !== 'under_review' &&
+          latest.status !== 'sent_to_creator' &&
+          latest.status !== 'revision_requested' &&
+          latest.status !== 'rejected',
         submission_stage: latest.submission_stage || latest.submissionStage || 'internal',
         createdDate: base.created_at,
         lastUpdated: latest.created_at,
@@ -1405,7 +1415,11 @@ function CustomerDetailsView() {
           createdAt: v.created_at,
           status: v.status || 'submitted',
           approved_by_admin: v.approved_by_admin,
-          approved_by_customer: v.approved_by_customer,
+          approved_by_customer: v.approved_by_customer === true &&
+            v.status !== 'under_review' &&
+            v.status !== 'sent_to_creator' &&
+            v.status !== 'revision_requested' &&
+            v.status !== 'rejected',
           submission_stage: v.submission_stage || v.submissionStage || 'internal',
           comments: v.comments || [],
         })),
@@ -1446,7 +1460,7 @@ function CustomerDetailsView() {
     let adminReviewCount = 0, customerReviewCount = 0;
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    
+
     const twoDaysFromNow = new Date(today);
     twoDaysFromNow.setDate(today.getDate() + 2);
     twoDaysFromNow.setHours(23, 59, 59, 999);
@@ -1487,27 +1501,31 @@ function CustomerDetailsView() {
           const latest = sorted[sorted.length - 1];
           const status = latest.status || 'submitted';
           const stage = latest.submission_stage || latest.submissionStage || 'internal';
-          
+
           const approvedByAdmin = latest.approved_by_admin === true || status === 'approved_admin' || status === 'approved_both';
-          const approvedByCustomer = latest.approved_by_customer === true || status === 'approved_customer' || status === 'approved_both';
-          
-          const isAdminRev = (stage !== 'customer') && 
-                             !approvedByAdmin && 
-                             status !== 'approved' &&
-                             status !== 'rejected' && 
-                             status !== 'revision_requested' && 
-                             status !== 'sent_to_creator' &&
-                             status !== 'published';
-                             
-          const isCustomerRev = (stage === 'customer') && 
-                                !approvedByCustomer && 
-                                status !== 'approved_customer' &&
-                                status !== 'approved_both' &&
-                                status !== 'rejected' && 
-                                status !== 'revision_requested' && 
-                                status !== 'sent_to_creator' &&
-                                status !== 'published';
-                                
+          const approvedByCustomer = (latest.approved_by_customer === true || status === 'approved_customer' || status === 'approved_both') &&
+            status !== 'under_review' &&
+            status !== 'sent_to_creator' &&
+            status !== 'revision_requested' &&
+            status !== 'rejected';
+
+          const isAdminRev = (stage !== 'customer') &&
+            !approvedByAdmin &&
+            status !== 'approved' &&
+            status !== 'rejected' &&
+            status !== 'revision_requested' &&
+            status !== 'sent_to_creator' &&
+            status !== 'published';
+
+          const isCustomerRev = (stage === 'customer') &&
+            !approvedByCustomer &&
+            status !== 'approved_customer' &&
+            status !== 'approved_both' &&
+            status !== 'rejected' &&
+            status !== 'revision_requested' &&
+            status !== 'sent_to_creator' &&
+            status !== 'published';
+
           if (isAdminRev) adminReviewCount++;
           if (isCustomerRev) customerReviewCount++;
         }
@@ -1565,27 +1583,31 @@ function CustomerDetailsView() {
           const latest = sorted[sorted.length - 1];
           const status = latest.status || 'submitted';
           const stage = latest.submission_stage || latest.submissionStage || 'internal';
-          
+
           const approvedByAdmin = latest.approved_by_admin === true || status === 'approved_admin' || status === 'approved_both';
-          const approvedByCustomer = latest.approved_by_customer === true || status === 'approved_customer' || status === 'approved_both';
-          
-          const isAdminRev = (stage !== 'customer') && 
-                             !approvedByAdmin && 
-                             status !== 'approved' &&
-                             status !== 'rejected' && 
-                             status !== 'revision_requested' && 
-                             status !== 'sent_to_creator' &&
-                             status !== 'published';
-                             
-          const isCustomerRev = (stage === 'customer') && 
-                                !approvedByCustomer && 
-                                status !== 'approved_customer' &&
-                                status !== 'approved_both' &&
-                                status !== 'rejected' && 
-                                status !== 'revision_requested' && 
-                                status !== 'sent_to_creator' &&
-                                status !== 'published';
-                                
+          const approvedByCustomer = (latest.approved_by_customer === true || status === 'approved_customer' || status === 'approved_both') &&
+            status !== 'under_review' &&
+            status !== 'sent_to_creator' &&
+            status !== 'revision_requested' &&
+            status !== 'rejected';
+
+          const isAdminRev = (stage !== 'customer') &&
+            !approvedByAdmin &&
+            status !== 'approved' &&
+            status !== 'rejected' &&
+            status !== 'revision_requested' &&
+            status !== 'sent_to_creator' &&
+            status !== 'published';
+
+          const isCustomerRev = (stage === 'customer') &&
+            !approvedByCustomer &&
+            status !== 'approved_customer' &&
+            status !== 'approved_both' &&
+            status !== 'rejected' &&
+            status !== 'revision_requested' &&
+            status !== 'sent_to_creator' &&
+            status !== 'published';
+
           if (isAdminRev) adminReviewCount++;
           if (isCustomerRev) customerReviewCount++;
         }
@@ -2262,8 +2284,8 @@ function CustomerDetailsView() {
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all flex-shrink-0 ${isActive
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                     }`}
                 >
                   <Icon className="h-3.5 w-3.5" />
@@ -2336,8 +2358,8 @@ function CustomerDetailsView() {
                       <button
                         onClick={() => setShowTrend(v => !v)}
                         className={`inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${showTrend
-                            ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                            : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                          ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                          : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
                           }`}
                       >
                         <TrendingUp className="h-4 w-4 mr-1.5" />
@@ -2533,10 +2555,10 @@ function CustomerDetailsView() {
                                         const sCustId = s.customer_id || s.customerId;
                                         if (sCustId && sCustId !== (calendar.customerId || id)) return false;
                                         const subId = s.assignment_id || s.item_id;
-                                         if (subId) {
-                                           return subId === item.id;
-                                         }
-                                         return (s.item_name && s.item_name === itemTitle);
+                                        if (subId) {
+                                          return subId === item.id;
+                                        }
+                                        return (s.item_name && s.item_name === itemTitle);
                                       })
                                       .sort((a, b) => new Date(a.created_at || a.createdAt) - new Date(b.created_at || b.createdAt));
                                     return (
@@ -2619,8 +2641,8 @@ function CustomerDetailsView() {
                                             </span>
                                             <button
                                               className={`p-1.5 rounded transition-colors touch-manipulation ${itemStatus === 'published'
-                                                  ? 'text-emerald-650 hover:bg-emerald-50'
-                                                  : 'text-gray-400 hover:text-emerald-650 hover:bg-emerald-50'
+                                                ? 'text-emerald-650 hover:bg-emerald-50'
+                                                : 'text-gray-400 hover:text-emerald-650 hover:bg-emerald-50'
                                                 }`}
                                               onClick={(e) => { e.stopPropagation(); openManualPublishModal(item, calendar._id); }}
                                               onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); openManualPublishModal(item, calendar._id); }}

@@ -192,11 +192,21 @@ const ItemTimeline = ({ item, itemStatus, scheduledPosts = [], submissions = [] 
     };
   });
 
-  const customerApprovedSub = submissions.find(s =>
-    s.approved_by_customer === true ||
-    s.status === 'approved_customer' ||
-    s.status === 'approved_both'
+  const sortedSubmissions = [...submissions].sort(
+    (a, b) => new Date(a.created_at || a.createdAt || 0) - new Date(b.created_at || b.createdAt || 0)
   );
+
+  const customerApprovedSub = sortedSubmissions.length > 0 && (() => {
+    const latest = sortedSubmissions[sortedSubmissions.length - 1];
+    const isApproved = latest.approved_by_customer === true ||
+      latest.status === 'approved_customer' ||
+      latest.status === 'approved_both';
+    const isReverted = latest.status === 'under_review' ||
+      latest.status === 'sent_to_creator' ||
+      latest.status === 'revision_requested' ||
+      latest.status === 'rejected';
+    return isApproved && !isReverted ? latest : null;
+  })();
 
   // Only mark as approved when there is an actual customer approval record.
   // Being published alone does NOT count as customer approval.

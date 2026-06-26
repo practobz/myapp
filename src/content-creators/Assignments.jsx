@@ -233,7 +233,8 @@ function Assignments() {
       // Track every assignment that has any submission
       keys.forEach(k => anySubmissionKeys.add(k));
 
-      const isCustomerApproved = s.approved_by_customer === true || s.status === 'approved_customer' || s.status === 'approved_both';
+      const isCustomerApproved = (s.approved_by_customer === true || s.status === 'approved_customer' || s.status === 'approved_both') &&
+        s.status !== 'under_review' && s.status !== 'sent_to_creator' && s.status !== 'revision_requested' && s.status !== 'rejected';
       const isAdminApproved = s.approved_by_admin === true || s.status === 'approved_admin' || s.status === 'approved_both' || (s.status === 'approved' && !s.approved_by_customer) || stage === 'customer';
 
       if (isAdminApproved) {
@@ -261,7 +262,8 @@ function Assignments() {
   const getSubmissionStatusInfo = (assignmentId) => {
     const sub = getLatestSubmission(assignmentId);
     if (!sub) return null;
-    const isCustApproved = sub.approved_by_customer === true || sub.status === 'approved_customer' || sub.status === 'approved_both';
+    const isCustApproved = (sub.approved_by_customer === true || sub.status === 'approved_customer' || sub.status === 'approved_both') &&
+      sub.status !== 'under_review' && sub.status !== 'sent_to_creator' && sub.status !== 'revision_requested' && sub.status !== 'rejected';
     if (isCustApproved) {
       return { label: 'Customer Approved', color: 'bg-emerald-100 text-emerald-700 border-emerald-200', icon: <CheckCircle className="h-3 w-3" />, canReupload: false, revisionNotes: '' };
     }

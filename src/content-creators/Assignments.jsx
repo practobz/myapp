@@ -204,19 +204,30 @@ function Assignments() {
   };
 
   // Precomputed Sets for reliable submission-based filtering.
-  // Built from submissions (which have the definitive data), avoiding fragile per-assignment ID lookups.
+  // Built from the latest submissions, avoiding fragile per-assignment ID lookups.
   const submissionFilterSets = useMemo(() => {
     const adminApprovedKeys = new Set();
     const customerApprovedKeys = new Set();
     const anySubmissionKeys = new Set();
-    submissions.forEach(s => {
+
+    assignments.forEach(assignment => {
+      const s = getLatestSubmission(assignment);
+      if (!s) return;
+
       const keys = [];
       if (s.assignment_id) keys.push(String(s.assignment_id));
       if (s.item_id && String(s.item_id) !== String(s.assignment_id)) keys.push(String(s.item_id));
-      // composite key: calendarId::itemIndex
       if (s.calendar_id && s.item_index !== undefined && s.item_index !== null) {
         keys.push(`${s.calendar_id}::${Number(s.item_index)}`);
       }
+
+      // Ensure the assignment's own IDs are added to keys
+      const assId = String(assignment.id || assignment._id || '');
+      if (assId) keys.push(assId);
+      if (assignment.calendarId && assignment.itemIndex !== undefined) {
+        keys.push(`${assignment.calendarId}::${Number(assignment.itemIndex)}`);
+      }
+
       const stage = s.submission_stage || s.submissionStage || '';
 
       // Track every assignment that has any submission
@@ -233,7 +244,7 @@ function Assignments() {
       }
     });
     return { adminApprovedKeys, customerApprovedKeys, anySubmissionKeys };
-  }, [submissions]);
+  }, [assignments, submissions]);
 
   // Check if an assignment matches any key in a submission filter set
   const assignmentMatchesSet = (assignment, set) => {

@@ -6,6 +6,7 @@ import { Facebook, Instagram, Linkedin, Youtube, Twitter } from 'lucide-react';
 import Footer from '../admin/components/layout/Footer';
 import Logo from '../admin/components/layout/Logo';
 import ContentCreatorLayout from './Layout';
+import CustomerFeedback from './CustomerFeedback';
 
 // Helper to get creator email from localStorage
 function getCreatorEmail() {
@@ -433,9 +434,7 @@ function Assignments() {
       adminApproved: listToCount.filter(a => getFilterStatus(a) === 'admin_approved').length,
       reviewUpdates: listToCount.filter(a => {
         const sub = getLatestSubmission(a);
-        return sub &&
-          (sub.submission_stage || sub.submissionStage || '') === 'customer' &&
-          Array.isArray(sub.comments) && sub.comments.length > 0;
+        return sub && Array.isArray(sub.comments) && sub.comments.length > 0;
       }).length,
     };
   }, [assignments, selectedCustomerId, scheduledPosts, submissions, submissionFilterSets]);
@@ -579,13 +578,16 @@ function Assignments() {
                 { key: 'approved', label: 'Customer Approved', count: stats.approved },
                 { key: 'published', label: 'Published', count: stats.published },
                 { key: 'admin_approved', label: 'Approved by Admin', count: stats.adminApproved },
+                { key: 'review_updates', label: 'Review Updates', count: stats.reviewUpdates },
               ].map(opt => (
                 <button
                   key={opt.key}
                   onClick={() => setSelectedFilter(opt.key)}
                   className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${selectedFilter === opt.key
                     ? 'bg-purple-600 text-white shadow-sm'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    : opt.key === 'review_updates'
+                      ? 'bg-gray-100 text-gray-600 hover:bg-rose-100 hover:text-rose-700'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                     }`}
                 >
                   {opt.label}
@@ -593,14 +595,6 @@ function Assignments() {
                     }`}>{opt.count}</span>
                 </button>
               ))}
-              {/* Review Updates tab — navigates to CustomerFeedback */}
-              <button
-                onClick={() => navigate('/content-creator/customer-feedback')}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all bg-gray-100 text-gray-600 hover:bg-rose-100 hover:text-rose-700"
-              >
-                Review Updates
-                <span className="text-xs px-1.5 py-0.5 rounded-full font-semibold bg-white text-gray-600">{stats.reviewUpdates}</span>
-              </button>
             </div>
             <div className="relative flex-shrink-0">
               <Search className="h-4 w-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -617,7 +611,9 @@ function Assignments() {
 
         {/* Assignments List - Customer > Calendar > Items */}
         <div className="space-y-4">
-          {sortedCustomers.length > 0 ? (
+          {selectedFilter === 'review_updates' ? (
+            <CustomerFeedback isTab={true} />
+          ) : sortedCustomers.length > 0 ? (
             sortedCustomers.map((custGroup) => {
               const isCustExpanded = expandedCustomers[custGroup.customerId] === true;
               const totalItems = Object.values(custGroup.calendars).reduce((sum, cal) => sum + cal.assignments.length, 0);

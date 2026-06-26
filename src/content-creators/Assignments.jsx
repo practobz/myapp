@@ -281,9 +281,14 @@ function Assignments() {
   const getFilterStatus = (assignment) => {
     const actual = getActualStatus(assignment);
     if (actual === 'published') return 'published';
-    if (assignmentMatchesSet(assignment, submissionFilterSets.customerApprovedKeys)) return 'approved';
+
     const hasSubmission = assignmentMatchesSet(assignment, submissionFilterSets.anySubmissionKeys);
-    if (!hasSubmission && actual === 'approved') return 'approved';
+    const isCustomerApproved = assignmentMatchesSet(assignment, submissionFilterSets.customerApprovedKeys) || (!hasSubmission && actual === 'approved');
+    if (isCustomerApproved) return 'approved';
+
+    const isAdminApproved = assignmentMatchesSet(assignment, submissionFilterSets.adminApprovedKeys);
+    if (isAdminApproved) return 'admin_approved';
+
     return 'pending';
   };
 
@@ -412,7 +417,7 @@ function Assignments() {
       pending: listToCount.filter(a => getFilterStatus(a) === 'pending').length,
       approved: listToCount.filter(a => getFilterStatus(a) === 'approved').length,
       published: listToCount.filter(a => getFilterStatus(a) === 'published').length,
-      adminApproved: listToCount.filter(a => assignmentMatchesSet(a, submissionFilterSets.adminApprovedKeys)).length,
+      adminApproved: listToCount.filter(a => getFilterStatus(a) === 'admin_approved').length,
       reviewUpdates: listToCount.filter(a => {
         const sub = getLatestSubmission(a);
         return sub &&
@@ -423,12 +428,7 @@ function Assignments() {
   }, [assignments, selectedCustomerId, scheduledPosts, submissions, submissionFilterSets]);
 
   const filteredAssignments = assignments.filter(assignment => {
-    let matchesFilter = true;
-    if (selectedFilter === 'admin_approved') {
-      matchesFilter = assignmentMatchesSet(assignment, submissionFilterSets.adminApprovedKeys);
-    } else {
-      matchesFilter = selectedFilter === 'all' || getFilterStatus(assignment) === selectedFilter;
-    }
+    const matchesFilter = selectedFilter === 'all' || getFilterStatus(assignment) === selectedFilter;
     const customerStr = typeof assignment.customer === 'string'
       ? assignment.customer
       : String(assignment.customerName || '');

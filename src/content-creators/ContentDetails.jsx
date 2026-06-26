@@ -745,8 +745,8 @@ function ContentDetails() {
                     </h3>
                     <div
                       className={`border-2 border-dashed rounded-xl p-8 text-center transition-all duration-200 ${dragActive
-                          ? 'border-purple-400 bg-purple-50 scale-[1.02]'
-                          : 'border-gray-300 hover:border-purple-400 hover:bg-purple-50/50'
+                        ? 'border-purple-400 bg-purple-50 scale-[1.02]'
+                        : 'border-gray-300 hover:border-purple-400 hover:bg-purple-50/50'
                         }`}
                       onDragEnter={handleDrag}
                       onDragLeave={handleDrag}
@@ -1039,8 +1039,8 @@ function ContentDetails() {
                                 key={v.id}
                                 onClick={() => handleVersionSelect(i)}
                                 className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all ${selectedVersionIndex === i
-                                    ? 'bg-purple-600 text-white shadow-sm'
-                                    : 'bg-gray-100 text-gray-600 hover:bg-purple-100 hover:text-purple-700'
+                                  ? 'bg-purple-600 text-white shadow-sm'
+                                  : 'bg-gray-100 text-gray-600 hover:bg-purple-100 hover:text-purple-700'
                                   }`}
                               >
                                 V{v.versionNumber}
@@ -1115,16 +1115,18 @@ function ContentDetails() {
                                       {commentsForCurrentMedia.map((comment, index) => {
                                         const commentX = comment.x || comment.position?.x || 0;
                                         const commentY = comment.y || comment.position?.y || 0;
-                                        const { x: scaledX, y: scaledY } = getScaledMarkerPos(commentX, commentY);
+                                        const pctX = commentX <= 1 ? commentX * 100 : commentX;
+                                        const pctY = commentY <= 1 ? commentY * 100 : commentY;
                                         let boxLeft = 40;
                                         let boxRight = 'auto';
-                                        if (imgDimensions?.rw ? scaledX > imgDimensions.rw / 2 : commentX > 150) { boxLeft = 'auto'; boxRight = 40; }
+                                        if (pctX > 50) { boxLeft = 'auto'; boxRight = 40; }
                                         return (
                                           <div
                                             key={comment.id}
                                             style={{
                                               position: 'absolute',
-                                              top: scaledY - 12, left: scaledX - 12,
+                                              top: `${pctY}%`, left: `${pctX}%`,
+                                              transform: 'translate(-50%, -50%)',
                                               width: 24, height: 24,
                                               background: comment.done ? '#10b981' : '#ef4444',
                                               color: '#fff', borderRadius: '50%',
@@ -1171,8 +1173,8 @@ function ContentDetails() {
                                                 <button
                                                   onClick={() => handleToggleDone(comment.id)}
                                                   className={`w-full px-3 py-1.5 text-xs rounded-lg font-medium transition-all flex items-center justify-center ${comment.done
-                                                      ? 'bg-gray-200 hover:bg-gray-300 text-gray-700'
-                                                      : 'bg-green-600 hover:bg-green-700 text-white'
+                                                    ? 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+                                                    : 'bg-green-600 hover:bg-green-700 text-white'
                                                     }`}
                                                 >
                                                   <CheckCircle className="h-3 w-3 mr-1" />
@@ -1194,8 +1196,8 @@ function ContentDetails() {
                                           key={index}
                                           onClick={() => setSelectedMediaIndex(index)}
                                           className={`w-16 h-16 rounded-lg overflow-hidden border-2 transition-all ${selectedMediaIndex === index
-                                              ? 'border-purple-500 ring-2 ring-purple-200'
-                                              : 'border-gray-200 hover:border-gray-300'
+                                            ? 'border-purple-500 ring-2 ring-purple-200'
+                                            : 'border-gray-200 hover:border-gray-300'
                                             }`}
                                         >
                                           {media.type === 'image' && media.url ? (
@@ -1287,8 +1289,8 @@ function ContentDetails() {
                                         key={version.id || version.idx}
                                         onClick={() => handleVersionSelect(version.idx)}
                                         className={`w-full text-left px-5 py-3 flex flex-col border-l-4 transition-all duration-200 hover:bg-gray-50 ${selectedVersionIndex === version.idx
-                                            ? `${activeBg} ${activeBorder}`
-                                            : 'bg-white border-l-transparent'
+                                          ? `${activeBg} ${activeBorder}`
+                                          : 'bg-white border-l-transparent'
                                           }`}
                                       >
                                         <div className="flex items-center justify-between">
@@ -1297,8 +1299,8 @@ function ContentDetails() {
                                         <div className="flex items-center mt-1.5 text-xs text-gray-500 gap-3">
                                           <span className="flex items-center">
                                             <span className={`h-1.5 w-1.5 rounded-full mr-1.5 ${selectedVersionIndex === version.idx
-                                                ? (label === 'Internal Review' ? 'bg-purple-500' : 'bg-amber-500')
-                                                : 'bg-gray-300'
+                                              ? (label === 'Internal Review' ? 'bg-purple-500' : 'bg-amber-500')
+                                              : 'bg-gray-300'
                                               }`} />
                                             V{ci + 1}
                                           </span>
@@ -1360,8 +1362,8 @@ function ContentDetails() {
                               <div
                                 key={comment.id || idx}
                                 className={`rounded-xl border transition-all duration-200 overflow-hidden ${activeComment === comment.id
-                                    ? 'bg-purple-50 border-purple-200 shadow-sm'
-                                    : 'bg-gray-50 border-gray-100 hover:border-gray-200'
+                                  ? 'bg-purple-50 border-purple-200 shadow-sm'
+                                  : 'bg-gray-50 border-gray-100 hover:border-gray-200'
                                   }`}
                               >
                                 <div
@@ -1377,8 +1379,8 @@ function ContentDetails() {
                                         {comment.message || comment.comment}
                                       </p>
                                       <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full inline-block mt-1 mb-1 ${(comment.reviewType === 'internal' || comment.authorRole === 'admin' || comment.author === 'Admin')
-                                          ? 'bg-purple-100 text-purple-700'
-                                          : 'bg-blue-100 text-blue-700'
+                                        ? 'bg-purple-100 text-purple-700'
+                                        : 'bg-blue-100 text-blue-700'
                                         }`}>
                                         {(comment.reviewType === 'internal' || comment.authorRole === 'admin' || comment.author === 'Admin') ? 'Internal Review' : 'External Review'}
                                       </span>

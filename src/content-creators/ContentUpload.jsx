@@ -32,7 +32,7 @@ function getUserRole() {
       const userObj = JSON.parse(userStr);
       return (userObj.role || '').toLowerCase();
     }
-  } catch (e) {}
+  } catch (e) { }
   return '';
 }
 
@@ -295,10 +295,10 @@ function ContentUpload() {
     }).length;
 
     return {
-      total:         customerAssignments.length,
-      pending:       customerAssignments.filter(a => getPickerFilterStatus(a) === 'pending').length,
-      approved:      customerAssignments.filter(a => getPickerFilterStatus(a) === 'approved').length,
-      published:     customerAssignments.filter(a => getPickerFilterStatus(a) === 'published').length,
+      total: customerAssignments.length,
+      pending: customerAssignments.filter(a => getPickerFilterStatus(a) === 'pending').length,
+      approved: customerAssignments.filter(a => getPickerFilterStatus(a) === 'approved').length,
+      published: customerAssignments.filter(a => getPickerFilterStatus(a) === 'published').length,
       adminApproved: adminApprovedCount
     };
   }, [pickerAssignments, pickerSubmissions, pickerScheduledPosts, pickerCustomer]);
@@ -391,16 +391,16 @@ function ContentUpload() {
             };
           });
         }
-        
+
         // Then fetch the specific calendar
         const res = await fetch(`${process.env.REACT_APP_API_URL}/calendars`);
         const calendars = await res.json();
-        
+
         let found = null;
         calendars.forEach((calendar) => {
           const customerId = calendar.customerId || calendar.customer_id || calendar.customer?._id || '';
           const customerInfo = customerMap[customerId] || {};
-          
+
           if (Array.isArray(calendar.contentItems)) {
             // Use itemIndex to get the correct item
             const idx = parseInt(itemIndex, 10);
@@ -421,7 +421,7 @@ function ContentUpload() {
                 platform: item.platform || item.type || 'Instagram',
                 requirements: item.requirements || [],
               };
-              
+
               // Only log if customer data is missing
               if (!found.customerId) {
                 console.error('❌ Customer ID is missing for calendarId:', calendarId, 'itemIndex:', itemIndex);
@@ -432,11 +432,11 @@ function ContentUpload() {
             }
           }
         });
-        
+
         if (!found) {
           console.error('❌ Assignment not found for calendarId:', calendarId, 'itemIndex:', itemIndex);
         }
-        
+
         setAssignment(found);
       } catch (err) {
         console.error('❌ Error fetching assignment:', err);
@@ -460,9 +460,9 @@ function ContentUpload() {
 
       try {
         console.log('🔍 Fetching previous submissions for assignment:', assignment.id, 'by creator:', creatorEmail);
-        
+
         const response = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions`);
-        
+
         if (!response.ok) {
           console.error('❌ Failed to fetch previous submissions:', response.status);
           setPreviousSubmissionLoaded(true);
@@ -471,11 +471,11 @@ function ContentUpload() {
 
         const data = await response.json();
         console.log('📦 Received submissions data:', data);
-        
+
         // Handle both array response and object with submissions property
         const submissions = Array.isArray(data) ? data : (data.submissions || []);
         console.log('📋 Total submissions count:', submissions.length);
-        
+
         if (submissions.length > 0) {
           console.log('🔍 Sample submission structure:', {
             assignment_id: submissions[0].assignment_id,
@@ -484,13 +484,13 @@ function ContentUpload() {
             hashtags: submissions[0].hashtags?.substring(0, 50)
           });
         }
-        
+
         // Filter submissions for this specific assignment
         // Primary: match by calendar_id + item_index (unambiguous)
         // Fallback: match by assignment_id title (for older submissions)
         const previousSubmissions = submissions.filter(sub => {
           const subCalendarId = sub.calendar_id || sub.calendarId;
-          const subItemIndex  = (sub.item_index !== undefined && sub.item_index !== null)
+          const subItemIndex = (sub.item_index !== undefined && sub.item_index !== null)
             ? String(sub.item_index)
             : undefined;
           const subAssignmentId = sub.assignment_id || sub.assignmentId || sub.assignmentID;
@@ -533,7 +533,7 @@ function ContentUpload() {
         // Detect if admin (not this creator) already uploaded and sent to customer
         const adminUploaded = allVersionsSorted.some(
           sub => (sub.submission_stage || sub.submissionStage || '') === 'customer' &&
-                 (sub.created_by || '') !== creatorEmail
+            (sub.created_by || '') !== creatorEmail
         );
         setAdminUploadedForThis(adminUploaded);
 
@@ -545,7 +545,7 @@ function ContentUpload() {
             const getType = (url) => {
               if (!url || typeof url !== 'string') return 'image';
               const ext = url.toLowerCase().split('.').pop();
-              return ['mp4','webm','ogg','mov','avi'].includes(ext) ? 'video' : 'image';
+              return ['mp4', 'webm', 'ogg', 'mov', 'avi'].includes(ext) ? 'video' : 'image';
             };
             return media.map(item => {
               if (typeof item === 'string') return { url: item, type: getType(item) };
@@ -728,7 +728,7 @@ function ContentUpload() {
           `${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(assignment.id)}/comments/${comment.id}`,
           { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ done: newDone, status: newDone ? 'completed' : 'pending' }) }
         );
-      } catch (err) {}
+      } catch (err) { }
       setCommentsForVersion(commentsForVersion.map(c => c.id === id ? { ...c, done: newDone } : c));
       setCommentsForCurrentMedia(commentsForCurrentMedia.map(c => c.id === id ? { ...c, done: newDone } : c));
       if (newDone) setActiveVersionComment(null);
@@ -865,14 +865,14 @@ function ContentUpload() {
   const uploadFileToGCS = async (fileObj) => {
     try {
       const fileSizeMB = fileObj.file.size / (1024 * 1024);
-      console.log(`📤 Starting upload for ${fileObj.name} (${formatFileSize(fileObj.size)})`);      
+      console.log(`📤 Starting upload for ${fileObj.name} (${formatFileSize(fileObj.size)})`);
       // Validate file object
       if (!fileObj.file || !fileObj.file.size || fileObj.file.size === 0) {
         throw new Error(`Invalid file: ${fileObj.name} has no content or is corrupted`);
       }
-      
+
       // Update file status to uploading
-      setUploadedFiles(prev => 
+      setUploadedFiles(prev =>
         prev.map(f => f.id === fileObj.id ? { ...f, uploading: true, error: null } : f)
       );
 
@@ -969,13 +969,13 @@ function ContentUpload() {
       }
 
       // Update file status to uploaded
-      setUploadedFiles(prev => 
-        prev.map(f => f.id === fileObj.id ? { 
-          ...f, 
-          uploading: false, 
-          uploaded: true, 
+      setUploadedFiles(prev =>
+        prev.map(f => f.id === fileObj.id ? {
+          ...f,
+          uploading: false,
+          uploaded: true,
           publicUrl: publicUrl,
-          error: null 
+          error: null
         } : f)
       );
 
@@ -989,14 +989,14 @@ function ContentUpload() {
 
     } catch (error) {
       console.error(`❌ Upload failed for ${fileObj.name}:`, error);
-      
+
       // Update file status to error
-      setUploadedFiles(prev => 
-        prev.map(f => f.id === fileObj.id ? { 
-          ...f, 
-          uploading: false, 
-          uploaded: false, 
-          error: error.message 
+      setUploadedFiles(prev =>
+        prev.map(f => f.id === fileObj.id ? {
+          ...f,
+          uploading: false,
+          uploaded: false,
+          error: error.message
         } : f)
       );
 
@@ -1022,7 +1022,7 @@ function ContentUpload() {
 
     if (!finalCustomerId || !finalCustomerName) {
       console.error('❌ Missing customer information in assignment');
-      
+
       // Use calendar data as fallback
       finalCustomerId = finalCustomerId || assignment.calendarId || '';
       finalCustomerName = finalCustomerName || assignment.calendarName || 'Unknown Customer';
@@ -1030,11 +1030,11 @@ function ContentUpload() {
 
     // Additional validation to ensure we have proper customer name
     if (!finalCustomerName || finalCustomerName === 'Unknown Customer') {
-      finalCustomerName = finalCustomerName || 
-                         assignment.customer || 
-                         assignment.client || 
-                         assignment.calendarName || 
-                         'Unknown Customer';
+      finalCustomerName = finalCustomerName ||
+        assignment.customer ||
+        assignment.client ||
+        assignment.calendarName ||
+        'Unknown Customer';
     }
 
     // CRITICAL: Ensure we have valid customer information before proceeding
@@ -1131,10 +1131,10 @@ function ContentUpload() {
       }
 
       // Additional validation for customer info quality
-      if (submissionData.customer_name === 'Unknown Customer' || 
-          submissionData.customer_name.length < 2 ||
-          !submissionData.customer_id ||
-          submissionData.customer_id.length < 5) {
+      if (submissionData.customer_name === 'Unknown Customer' ||
+        submissionData.customer_name.length < 2 ||
+        !submissionData.customer_id ||
+        submissionData.customer_id.length < 5) {
         console.error('❌ QUALITY CHECK FAILED: Invalid customer information quality');
         alert('Invalid customer information detected. Please refresh the page and try again.');
         setSubmitting(false);
@@ -1217,7 +1217,7 @@ function ContentUpload() {
   if (!calendarId || itemIndex === undefined) {
     // Derived filter options
     const allPlatforms = [...new Set(pickerAssignments.flatMap(a => flatPlatforms(a.platform).map(p => p.charAt(0).toUpperCase() + p.slice(1))))].sort();
-    const allStatuses  = [...new Set(pickerAssignments.map(a => getPickerFilterStatus(a)))].sort();
+    const allStatuses = [...new Set(pickerAssignments.map(a => getPickerFilterStatus(a)))].sort();
     const allCustomers = [...new Set(pickerAssignments.map(a => a.customerName || a.calendarName || 'Unknown'))].sort();
 
     const filtered = pickerAssignments
@@ -1230,7 +1230,7 @@ function ContentUpload() {
           platforms.some(p => p.includes(q)) ||
           (a.description || '').toLowerCase().includes(q);
         const matchPlatform = pickerPlatform === 'all' || platforms.some(p => p === pickerPlatform.toLowerCase());
-        
+
         let matchStatus = false;
         if (pickerStatus === 'all') {
           matchStatus = true;
@@ -1265,24 +1265,24 @@ function ContentUpload() {
 
     const platformColor = (p) => {
       switch ((p || '').toLowerCase()) {
-        case 'facebook':  return 'bg-blue-100 text-blue-700 border-blue-200';
+        case 'facebook': return 'bg-blue-100 text-blue-700 border-blue-200';
         case 'instagram': return 'bg-pink-100 text-pink-700 border-pink-200';
-        case 'youtube':   return 'bg-red-100 text-red-700 border-red-200';
-        case 'linkedin':  return 'bg-blue-50 text-blue-700 border-blue-200';
-        case 'twitter':   return 'bg-sky-100 text-sky-700 border-sky-200';
-        case 'tiktok':    return 'bg-gray-900 text-white border-gray-700';
-        default:          return 'bg-gray-100 text-gray-700 border-gray-200';
+        case 'youtube': return 'bg-red-100 text-red-700 border-red-200';
+        case 'linkedin': return 'bg-blue-50 text-blue-700 border-blue-200';
+        case 'twitter': return 'bg-sky-100 text-sky-700 border-sky-200';
+        case 'tiktok': return 'bg-gray-900 text-white border-gray-700';
+        default: return 'bg-gray-100 text-gray-700 border-gray-200';
       }
     };
 
     const PlatformIcon = ({ platform, className = 'h-3 w-3' }) => {
       switch ((platform || '').toLowerCase()) {
-        case 'facebook':  return <Facebook  className={className} />;
+        case 'facebook': return <Facebook className={className} />;
         case 'instagram': return <Instagram className={className} />;
-        case 'linkedin':  return <Linkedin  className={className} />;
-        case 'youtube':   return <Youtube   className={className} />;
-        case 'twitter':   return <Twitter   className={className} />;
-        default:          return <Globe     className={className} />;
+        case 'linkedin': return <Linkedin className={className} />;
+        case 'youtube': return <Youtube className={className} />;
+        case 'twitter': return <Twitter className={className} />;
+        default: return <Globe className={className} />;
       }
     };
 
@@ -1299,11 +1299,11 @@ function ContentUpload() {
 
     const statusColor = (s) => {
       switch (s) {
-        case 'approved':    return 'bg-green-100 text-green-800';
-        case 'published':   return 'bg-purple-100 text-purple-800';
+        case 'approved': return 'bg-green-100 text-green-800';
+        case 'published': return 'bg-purple-100 text-purple-800';
         case 'in_progress': return 'bg-amber-100 text-amber-800';
-        case 'pending':     return 'bg-orange-100 text-orange-800';
-        default:            return 'bg-gray-100 text-gray-700';
+        case 'pending': return 'bg-orange-100 text-orange-800';
+        default: return 'bg-gray-100 text-gray-700';
       }
     };
 
@@ -1374,25 +1374,23 @@ function ContentUpload() {
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <div className="flex flex-wrap gap-2">
                     {[
-                      { key: 'all',           label: 'All',               count: pickerStats.total         },
-                      { key: 'pending',       label: 'Pending',           count: pickerStats.pending       },
-                      { key: 'approved',      label: 'Customer Approved', count: pickerStats.approved      },
-                      { key: 'published',     label: 'Published',         count: pickerStats.published     },
-                      { key: 'admin_approved',label: 'Admin Approved',    count: pickerStats.adminApproved },
+                      { key: 'all', label: 'All', count: pickerStats.total },
+                      { key: 'pending', label: 'Pending', count: pickerStats.pending },
+                      { key: 'approved', label: 'Customer Approved', count: pickerStats.approved },
+                      { key: 'published', label: 'Published', count: pickerStats.published },
+                      { key: 'admin_approved', label: 'Admin Approved', count: pickerStats.adminApproved },
                     ].map(opt => (
                       <button
                         key={opt.key}
                         onClick={() => setPickerStatus(opt.key)}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                          pickerStatus === opt.key
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${pickerStatus === opt.key
                             ? 'bg-purple-600 text-white shadow-sm'
                             : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                        }`}
+                          }`}
                       >
                         {opt.label}
-                        <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${
-                          pickerStatus === opt.key ? 'bg-white/20 text-white' : 'bg-white text-gray-600'
-                        }`}>{opt.count}</span>
+                        <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${pickerStatus === opt.key ? 'bg-white/20 text-white' : 'bg-white text-gray-600'
+                          }`}>{opt.count}</span>
                       </button>
                     ))}
                   </div>
@@ -1449,10 +1447,10 @@ function ContentUpload() {
                         <div className={`h-1 w-full ${(() => {
                           const fps = flatPlatforms(a.platform);
                           if (fps.includes('instagram')) return 'bg-gradient-to-r from-pink-400 to-purple-500';
-                          if (fps.includes('facebook'))  return 'bg-blue-500';
-                          if (fps.includes('youtube'))   return 'bg-red-500';
-                          if (fps.includes('linkedin'))  return 'bg-blue-700';
-                          if (fps.includes('twitter'))   return 'bg-sky-400';
+                          if (fps.includes('facebook')) return 'bg-blue-500';
+                          if (fps.includes('youtube')) return 'bg-red-500';
+                          if (fps.includes('linkedin')) return 'bg-blue-700';
+                          if (fps.includes('twitter')) return 'bg-sky-400';
                           return 'bg-purple-400';
                         })()}`} />
                         <div className="p-4 flex items-start gap-4">
@@ -1592,20 +1590,19 @@ function ContentUpload() {
       </div>
       <div className="flex items-center gap-1 flex-wrap">
         {(Array.isArray(assignment.platform) ? assignment.platform : [assignment.platform]).filter(Boolean).map((p, pi) => (
-          <span key={pi} className={`inline-flex items-center gap-1 px-1.5 py-1 rounded border text-xs font-semibold uppercase ${
-            p.toLowerCase() === 'facebook'  ? 'bg-blue-100 text-blue-700 border-blue-200' :
-            p.toLowerCase() === 'instagram' ? 'bg-pink-100 text-pink-700 border-pink-200' :
-            p.toLowerCase() === 'youtube'   ? 'bg-red-100 text-red-700 border-red-200' :
-            p.toLowerCase() === 'linkedin'  ? 'bg-blue-50 text-blue-700 border-blue-200' :
-            p.toLowerCase() === 'twitter'   ? 'bg-sky-100 text-sky-700 border-sky-200' :
-            'bg-gray-100 text-gray-700 border-gray-200'
-          }`}>
-            {p.toLowerCase() === 'facebook'  ? <Facebook  className="h-3 w-3" /> :
-             p.toLowerCase() === 'instagram' ? <Instagram className="h-3 w-3" /> :
-             p.toLowerCase() === 'linkedin'  ? <Linkedin  className="h-3 w-3" /> :
-             p.toLowerCase() === 'youtube'   ? <Youtube   className="h-3 w-3" /> :
-             p.toLowerCase() === 'twitter'   ? <Twitter   className="h-3 w-3" /> :
-             <Globe className="h-3 w-3" />}
+          <span key={pi} className={`inline-flex items-center gap-1 px-1.5 py-1 rounded border text-xs font-semibold uppercase ${p.toLowerCase() === 'facebook' ? 'bg-blue-100 text-blue-700 border-blue-200' :
+              p.toLowerCase() === 'instagram' ? 'bg-pink-100 text-pink-700 border-pink-200' :
+                p.toLowerCase() === 'youtube' ? 'bg-red-100 text-red-700 border-red-200' :
+                  p.toLowerCase() === 'linkedin' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                    p.toLowerCase() === 'twitter' ? 'bg-sky-100 text-sky-700 border-sky-200' :
+                      'bg-gray-100 text-gray-700 border-gray-200'
+            }`}>
+            {p.toLowerCase() === 'facebook' ? <Facebook className="h-3 w-3" /> :
+              p.toLowerCase() === 'instagram' ? <Instagram className="h-3 w-3" /> :
+                p.toLowerCase() === 'linkedin' ? <Linkedin className="h-3 w-3" /> :
+                  p.toLowerCase() === 'youtube' ? <Youtube className="h-3 w-3" /> :
+                    p.toLowerCase() === 'twitter' ? <Twitter className="h-3 w-3" /> :
+                      <Globe className="h-3 w-3" />}
             {p.charAt(0).toUpperCase() + p.slice(1)}
           </span>
         ))}
@@ -1626,22 +1623,20 @@ function ContentUpload() {
         <div className="flex border-b border-gray-200 bg-white rounded-2xl p-1.5 shadow-sm border border-gray-200/50 mb-6">
           <button
             onClick={() => setActiveTab('admin')}
-            className={`flex-1 py-3 text-sm font-semibold rounded-xl transition-all duration-300 flex items-center justify-center gap-2 ${
-              activeTab === 'admin'
+            className={`flex-1 py-3 text-sm font-semibold rounded-xl transition-all duration-300 flex items-center justify-center gap-2 ${activeTab === 'admin'
                 ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
                 : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-            }`}
+              }`}
           >
             <Palette className="h-4 w-4" />
             Admin Review
           </button>
           <button
             onClick={() => setActiveTab('customer')}
-            className={`flex-1 py-3 text-sm font-semibold rounded-xl transition-all duration-300 flex items-center justify-center gap-2 ${
-              activeTab === 'customer'
+            className={`flex-1 py-3 text-sm font-semibold rounded-xl transition-all duration-300 flex items-center justify-center gap-2 ${activeTab === 'customer'
                 ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
                 : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-            }`}
+              }`}
           >
             <User className="h-4 w-4" />
             Customer Review
@@ -1661,20 +1656,19 @@ function ContentUpload() {
               </div>
               <div className="flex items-center gap-1 flex-wrap justify-end">
                 {(Array.isArray(assignment.platform) ? assignment.platform : [assignment.platform]).filter(Boolean).map((p, pi) => (
-                  <span key={pi} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-xs font-medium ${
-                    p.toLowerCase() === 'facebook'  ? 'bg-blue-100 text-blue-700 border-blue-200' :
-                    p.toLowerCase() === 'instagram' ? 'bg-pink-100 text-pink-700 border-pink-200' :
-                    p.toLowerCase() === 'youtube'   ? 'bg-red-100 text-red-700 border-red-200' :
-                    p.toLowerCase() === 'linkedin'  ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                    p.toLowerCase() === 'twitter'   ? 'bg-sky-100 text-sky-700 border-sky-200' :
-                    'bg-gray-100 text-gray-700 border-gray-200'
-                  }`}>
-                    {p.toLowerCase() === 'facebook'  ? <Facebook  className="h-3 w-3" /> :
-                     p.toLowerCase() === 'instagram' ? <Instagram className="h-3 w-3" /> :
-                     p.toLowerCase() === 'linkedin'  ? <Linkedin  className="h-3 w-3" /> :
-                     p.toLowerCase() === 'youtube'   ? <Youtube   className="h-3 w-3" /> :
-                     p.toLowerCase() === 'twitter'   ? <Twitter   className="h-3 w-3" /> :
-                     <Globe className="h-3 w-3" />}
+                  <span key={pi} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-xs font-medium ${p.toLowerCase() === 'facebook' ? 'bg-blue-100 text-blue-700 border-blue-200' :
+                      p.toLowerCase() === 'instagram' ? 'bg-pink-100 text-pink-700 border-pink-200' :
+                        p.toLowerCase() === 'youtube' ? 'bg-red-100 text-red-700 border-red-200' :
+                          p.toLowerCase() === 'linkedin' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                            p.toLowerCase() === 'twitter' ? 'bg-sky-100 text-sky-700 border-sky-200' :
+                              'bg-gray-100 text-gray-700 border-gray-200'
+                    }`}>
+                    {p.toLowerCase() === 'facebook' ? <Facebook className="h-3 w-3" /> :
+                      p.toLowerCase() === 'instagram' ? <Instagram className="h-3 w-3" /> :
+                        p.toLowerCase() === 'linkedin' ? <Linkedin className="h-3 w-3" /> :
+                          p.toLowerCase() === 'youtube' ? <Youtube className="h-3 w-3" /> :
+                            p.toLowerCase() === 'twitter' ? <Twitter className="h-3 w-3" /> :
+                              <Globe className="h-3 w-3" />}
                     {p.charAt(0).toUpperCase() + p.slice(1)}
                   </span>
                 ))}
@@ -1760,13 +1754,12 @@ function ContentUpload() {
                 <Upload className="h-5 w-5 mr-2 text-purple-600" />
                 Upload Media
               </h2>
-              
+
               <div
-                className={`relative border-2 border-dashed rounded-lg p-6 text-center transition-all duration-200 ${
-                  dragActive 
-                    ? 'border-purple-400 bg-purple-50 scale-105' 
+                className={`relative border-2 border-dashed rounded-lg p-6 text-center transition-all duration-200 ${dragActive
+                    ? 'border-purple-400 bg-purple-50 scale-105'
                     : 'border-gray-300 hover:border-purple-400 hover:bg-purple-50/50'
-                }`}
+                  }`}
                 onDragEnter={handleDrag}
                 onDragLeave={handleDrag}
                 onDragOver={handleDrag}
@@ -1780,7 +1773,7 @@ function ContentUpload() {
                   onChange={handleChange}
                   className="hidden"
                 />
-                
+
                 <div className="space-y-3">
                   <div className="flex justify-center space-x-2">
                     <Upload className="h-8 w-8 text-gray-400" />
@@ -1816,7 +1809,7 @@ function ContentUpload() {
                 <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
                   {uploadedFiles.map((file) => (
                     <div key={file.id} className="relative group">
-                      <div 
+                      <div
                         className="aspect-square rounded-lg overflow-hidden bg-gray-100 ring-2 ring-transparent group-hover:ring-purple-200 transition-all relative cursor-pointer"
                         onClick={() => setSelectedMedia(file)}
                       >
@@ -1841,7 +1834,7 @@ function ContentUpload() {
                             </div>
                           </div>
                         )}
-                        
+
                         {/* Upload Status Overlay */}
                         {file.uploading && (
                           <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
@@ -1851,13 +1844,13 @@ function ContentUpload() {
                             </div>
                           </div>
                         )}
-                        
+
                         {file.uploaded && (
                           <div className="absolute top-2 right-2 bg-green-500 text-white rounded-full p-1">
                             <Check className="h-3 w-3" />
                           </div>
                         )}
-                        
+
                         {file.error && (
                           <div className="absolute inset-0 bg-red-500 bg-opacity-50 flex items-center justify-center">
                             <div className="text-white text-center p-2">
@@ -1873,23 +1866,22 @@ function ContentUpload() {
                           </div>
                         )}
                       </div>
-                      
+
                       <button
                         onClick={() => removeFile(file.id)}
                         className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
                       >
                         <X className="h-3 w-3" />
                       </button>
-                      
+
                       <div className="mt-2">
                         <p className="text-xs font-medium text-gray-900 truncate">{file.name}</p>
                         <div className="flex items-center justify-between">
                           <p className="text-xs text-gray-500">{formatFileSize(file.size)}</p>
-                          <span className={`text-xs px-2 py-1 rounded-full ${
-                            file.type === 'image' 
-                              ? 'bg-green-100 text-green-800' 
+                          <span className={`text-xs px-2 py-1 rounded-full ${file.type === 'image'
+                              ? 'bg-green-100 text-green-800'
                               : 'bg-blue-100 text-blue-800'
-                          }`}>
+                            }`}>
                             {file.type.toUpperCase()}
                           </span>
                         </div>
@@ -1968,11 +1960,10 @@ function ContentUpload() {
                                     <button
                                       key={v.id || i}
                                       onClick={() => handleVersionSelect(i)}
-                                      className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all ${
-                                        selectedVersionIndex === i
+                                      className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all ${selectedVersionIndex === i
                                           ? activeTab === 'admin' ? 'bg-purple-600 text-white shadow-sm' : 'bg-amber-500 text-white shadow-sm'
                                           : 'bg-gray-100 text-gray-600 hover:bg-purple-100 hover:text-purple-700'
-                                      }`}
+                                        }`}
                                     >
                                       V{v.flowVersionNumber || v.versionNumber}
                                     </button>
@@ -2017,7 +2008,7 @@ function ContentUpload() {
                                       <div className="flex justify-center">
                                         <div className="relative inline-block">
                                           {previousVersions[selectedVersionIndex].media[selectedMediaIndex]?.url &&
-                                           typeof previousVersions[selectedVersionIndex].media[selectedMediaIndex].url === 'string' ? (
+                                            typeof previousVersions[selectedVersionIndex].media[selectedMediaIndex].url === 'string' ? (
                                             previousVersions[selectedVersionIndex].media[selectedMediaIndex].type === 'image' ? (
                                               <img
                                                 ref={versionImgRef}
@@ -2047,16 +2038,18 @@ function ContentUpload() {
                                           {commentsForCurrentMedia.map((comment, index) => {
                                             const commentX = comment.x || comment.position?.x || 0;
                                             const commentY = comment.y || comment.position?.y || 0;
-                                            const { x: scaledX, y: scaledY } = getVersionScaledMarkerPos(commentX, commentY);
+                                            const pctX = commentX <= 1 ? commentX * 100 : commentX;
+                                            const pctY = commentY <= 1 ? commentY * 100 : commentY;
                                             let boxLeft = 40;
                                             let boxRight = 'auto';
-                                            if (versionImgDimensions?.contentW ? scaledX > versionImgDimensions.contentW / 2 : commentX > 150) { boxLeft = 'auto'; boxRight = 40; }
+                                            if (pctX > 50) { boxLeft = 'auto'; boxRight = 40; }
                                             return (
                                               <div
                                                 key={comment.id}
                                                 style={{
                                                   position: 'absolute',
-                                                  top: scaledY - 12, left: scaledX - 12,
+                                                  top: `${pctY}%`, left: `${pctX}%`,
+                                                  transform: 'translate(-50%, -50%)',
                                                   width: 24, height: 24,
                                                   background: comment.done ? '#10b981' : '#ef4444',
                                                   color: '#fff', borderRadius: '50%',
@@ -2102,11 +2095,10 @@ function ContentUpload() {
                                                     )}
                                                     <button
                                                       onClick={() => handleVersionToggleDone(comment.id)}
-                                                      className={`w-full px-3 py-1.5 text-xs rounded-lg font-medium transition-all flex items-center justify-center mt-2 ${
-                                                        comment.done
+                                                      className={`w-full px-3 py-1.5 text-xs rounded-lg font-medium transition-all flex items-center justify-center mt-2 ${comment.done
                                                           ? 'bg-gray-200 hover:bg-gray-300 text-gray-700'
                                                           : 'bg-green-600 hover:bg-green-700 text-white'
-                                                      }`}
+                                                        }`}
                                                     >
                                                       <CheckCircle className="h-3 w-3 mr-1" />
                                                       {comment.done ? 'Undo Done' : 'Mark as Done'}
@@ -2126,11 +2118,10 @@ function ContentUpload() {
                                             <button
                                               key={index}
                                               onClick={() => setSelectedMediaIndex(index)}
-                                              className={`w-16 h-16 rounded-lg overflow-hidden border-2 transition-all ${
-                                                selectedMediaIndex === index
+                                              className={`w-16 h-16 rounded-lg overflow-hidden border-2 transition-all ${selectedMediaIndex === index
                                                   ? 'border-purple-500 ring-2 ring-purple-200'
                                                   : 'border-gray-200 hover:border-gray-300'
-                                              }`}
+                                                }`}
                                             >
                                               {media.type === 'image' && media.url ? (
                                                 <img src={media.url} alt={`Thumbnail ${index + 1}`} className="w-full h-full object-cover" />
@@ -2179,11 +2170,11 @@ function ContentUpload() {
                                     <div className="flex items-center gap-2 flex-wrap justify-end">
                                       {(previousVersions[selectedVersionIndex].status === 'approved' ||
                                         previousVersions[selectedVersionIndex].status === 'approved_by_admin') && (
-                                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-200">
-                                          <ShieldCheck className="h-3 w-3" />
-                                          Approved by Admin
-                                        </span>
-                                      )}
+                                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-200">
+                                            <ShieldCheck className="h-3 w-3" />
+                                            Approved by Admin
+                                          </span>
+                                        )}
                                       <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${getVersionStatusColor(previousVersions[selectedVersionIndex].status)}`}>
                                         {(previousVersions[selectedVersionIndex].status || '').replace(/_/g, ' ').toUpperCase()}
                                       </span>
@@ -2192,14 +2183,14 @@ function ContentUpload() {
                                   {(previousVersions[selectedVersionIndex].status === 'approved' ||
                                     previousVersions[selectedVersionIndex].status === 'approved_by_admin') &&
                                     previousVersions[selectedVersionIndex].approvalNotes && (
-                                    <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg flex items-start gap-2">
-                                      <ShieldCheck className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" />
-                                      <div>
-                                        <p className="text-xs font-semibold text-green-700 mb-0.5">Admin Approval Note</p>
-                                        <p className="text-xs text-green-800">{previousVersions[selectedVersionIndex].approvalNotes}</p>
+                                      <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg flex items-start gap-2">
+                                        <ShieldCheck className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" />
+                                        <div>
+                                          <p className="text-xs font-semibold text-green-700 mb-0.5">Admin Approval Note</p>
+                                          <p className="text-xs text-green-800">{previousVersions[selectedVersionIndex].approvalNotes}</p>
+                                        </div>
                                       </div>
-                                    </div>
-                                  )}
+                                    )}
                                 </div>
                               </div>
                             )}
@@ -2240,20 +2231,18 @@ function ContentUpload() {
                                           setSelectedVersionIndex(idx);
                                           setSelectedMediaIndex(0);
                                         }}
-                                        className={`w-full text-left px-5 py-3 flex flex-col border-l-4 transition-all duration-200 hover:bg-gray-50 ${
-                                          isSelected
+                                        className={`w-full text-left px-5 py-3 flex flex-col border-l-4 transition-all duration-200 hover:bg-gray-50 ${isSelected
                                             ? 'bg-purple-50 border-l-purple-500'
                                             : 'bg-white border-l-transparent'
-                                        }`}
+                                          }`}
                                       >
                                         <div className="flex items-center justify-between">
                                           <span className="font-medium text-gray-900 text-sm">{date}, {time}</span>
                                         </div>
                                         <div className="flex items-center mt-1.5 text-xs text-gray-500 gap-3">
                                           <span className="flex items-center">
-                                            <span className={`h-1.5 w-1.5 rounded-full mr-1.5 ${
-                                              isSelected ? 'bg-purple-500' : 'bg-gray-300'
-                                            }`} />
+                                            <span className={`h-1.5 w-1.5 rounded-full mr-1.5 ${isSelected ? 'bg-purple-500' : 'bg-gray-300'
+                                              }`} />
                                             V{version.flowVersionNumber}
                                           </span>
                                           {version.media?.length > 0 && (
@@ -2288,20 +2277,18 @@ function ContentUpload() {
                                           setSelectedVersionIndex(idx);
                                           setSelectedMediaIndex(0);
                                         }}
-                                        className={`w-full text-left px-5 py-3 flex flex-col border-l-4 transition-all duration-200 hover:bg-gray-50 ${
-                                          isSelected
+                                        className={`w-full text-left px-5 py-3 flex flex-col border-l-4 transition-all duration-200 hover:bg-gray-50 ${isSelected
                                             ? 'bg-amber-50 border-l-amber-500'
                                             : 'bg-white border-l-transparent'
-                                        }`}
+                                          }`}
                                       >
                                         <div className="flex items-center justify-between">
                                           <span className="font-medium text-gray-900 text-sm">{date}, {time}</span>
                                         </div>
                                         <div className="flex items-center mt-1.5 text-xs text-gray-500 gap-3">
                                           <span className="flex items-center">
-                                            <span className={`h-1.5 w-1.5 rounded-full mr-1.5 ${
-                                              isSelected ? 'bg-amber-500' : 'bg-gray-300'
-                                            }`} />
+                                            <span className={`h-1.5 w-1.5 rounded-full mr-1.5 ${isSelected ? 'bg-amber-500' : 'bg-gray-300'
+                                              }`} />
                                             V{version.flowVersionNumber}
                                           </span>
                                           {version.media?.length > 0 && (
@@ -2354,11 +2341,10 @@ function ContentUpload() {
                                 {commentsForCurrentMedia.map((comment, idx) => (
                                   <div
                                     key={comment.id || idx}
-                                    className={`rounded-xl border transition-all duration-200 overflow-hidden ${
-                                      activeVersionComment === comment.id
+                                    className={`rounded-xl border transition-all duration-200 overflow-hidden ${activeVersionComment === comment.id
                                         ? 'bg-purple-50 border-purple-200 shadow-sm'
                                         : 'bg-gray-50 border-gray-100 hover:border-gray-200'
-                                    }`}
+                                      }`}
                                   >
                                     <div
                                       className="p-3 cursor-pointer"
@@ -2532,18 +2518,18 @@ function ContentUpload() {
                 <FileText className="h-5 w-5 mr-2 text-purple-600" />
                 Assignment Details
               </h2>
-              
+
               <div className="space-y-3">
                 <div>
                   <h3 className="font-medium text-gray-900">{assignment.title}</h3>
                   <p className="text-sm text-gray-600 mt-1">{assignment.description}</p>
                 </div>
-                
+
                 <div className="flex items-center text-sm text-gray-500">
                   <MapPin className="h-4 w-4 mr-1" />
                   {assignment.customerName}
                 </div>
-                
+
                 <div className="flex items-center text-sm text-gray-500">
                   <Calendar className="h-4 w-4 mr-1" />
                   Due: {assignment.dueDate ? new Date(assignment.dueDate).toLocaleDateString() : 'N/A'}
@@ -2571,7 +2557,7 @@ function ContentUpload() {
                 <MessageSquare className="h-5 w-5 mr-2 text-purple-600" />
                 Content Details
               </h2>
-              
+
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -2622,9 +2608,8 @@ function ContentUpload() {
               const latestApproved = [...previousVersions].reverse().find(v => v.status === 'approved');
               if (!latestApproved) return null;
               return (
-                <div className={`rounded-lg shadow-sm p-5 border-2 ${
-                  sentToCustomer ? 'bg-green-50 border-green-200' : 'bg-orange-50 border-orange-200'
-                }`}>
+                <div className={`rounded-lg shadow-sm p-5 border-2 ${sentToCustomer ? 'bg-green-50 border-green-200' : 'bg-orange-50 border-orange-200'
+                  }`}>
                   <div className="flex items-center gap-2 mb-2">
                     <ShieldCheck className={`h-5 w-5 ${sentToCustomer ? 'text-green-600' : 'text-orange-600'}`} />
                     <h3 className={`font-semibold text-sm ${sentToCustomer ? 'text-green-800' : 'text-orange-800'}`}>
@@ -2716,7 +2701,7 @@ function ContentUpload() {
 
       {/* Media Preview Modal */}
       {selectedMedia && (
-        <div 
+        <div
           className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4"
           onClick={() => setSelectedMedia(null)}
         >
@@ -2728,7 +2713,7 @@ function ContentUpload() {
             >
               <X className="h-8 w-8" />
             </button>
-            
+
             {/* Media Content */}
             <div className="bg-white rounded-lg overflow-hidden shadow-2xl">
               {selectedMedia.type === 'image' ? (
@@ -2745,7 +2730,7 @@ function ContentUpload() {
                   className="max-w-full max-h-[85vh] w-auto h-auto"
                 />
               )}
-              
+
               {/* Media Info */}
               <div className="p-4 bg-gray-50 border-t">
                 <div className="flex items-center justify-between">
@@ -2753,11 +2738,10 @@ function ContentUpload() {
                     <p className="font-medium text-gray-900">{selectedMedia.name}</p>
                     <p className="text-sm text-gray-500">{formatFileSize(selectedMedia.size)}</p>
                   </div>
-                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                    selectedMedia.type === 'image' 
-                      ? 'bg-green-100 text-green-800' 
+                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${selectedMedia.type === 'image'
+                      ? 'bg-green-100 text-green-800'
                       : 'bg-blue-100 text-blue-800'
-                  }`}>
+                    }`}>
                     {selectedMedia.type.toUpperCase()}
                   </span>
                 </div>

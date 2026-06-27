@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef, memo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
 import {
   Send, Image, FileText, MessageSquare, Calendar, ChevronLeft, ChevronRight,
   Trash2, Check, X, CornerDownRight, UserCog, User, MessageCircle,
-  Clock, CheckCircle, XCircle, Loader2, Facebook, Instagram, Video
+  Clock, CheckCircle, XCircle, Loader2, Facebook, Instagram, Video, RotateCcw,
+  Edit3, Move, AlertCircle, Upload
 } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_API_URL;
@@ -47,6 +49,14 @@ const AuthorBadge = ({ comment }) => {
   );
 };
 
+
+const formatVideoTime = (seconds) => {
+  if (seconds == null || isNaN(seconds)) return '0:00';
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+};
+
 // ── Comment Marker (pin on media) ─────────────────────────────────────────────
 const CommentMarker = memo(({
   comment, index, active, hovered,
@@ -61,11 +71,17 @@ const CommentMarker = memo(({
   const dotBorder = isAdmin ? '#a78bfa' : '#fff';
   const isReplying = replyingTo === comment.id;
 
+  const x = comment.x ?? comment.position?.x ?? 0;
+  const y = comment.y ?? comment.position?.y ?? 0;
+  const isNormalized = (x >= 0 && x <= 1 && y >= 0 && y <= 1) || comment.reviewType === 'external';
+
+  const pinTop = isNormalized ? `calc(${y * 100}% - 12px)` : `${y - 12}px`;
+  const pinLeft = isNormalized ? `calc(${x * 100}% - 12px)` : `${x - 12}px`;
+
   // Popup left/right: flip when pin is in right half of image
-  const imgEl = document.querySelector('img[data-cdv-media]') || document.querySelector('video[data-cdv-media]');
-  const cx = comment.x || comment.position?.x || 0;
-  const popupLeft = cx > (imgEl?.offsetWidth || 500) / 2 ? 'auto' : 40;
-  const popupRight = cx > (imgEl?.offsetWidth || 500) / 2 ? 40 : 'auto';
+  const isRightHalf = isNormalized ? x > 0.5 : x > 200;
+  const popupLeft = isRightHalf ? 'auto' : 40;
+  const popupRight = isRightHalf ? 40 : 'auto';
 
   const popupStyle = {
     position: 'absolute', left: popupLeft, right: popupRight,
@@ -78,8 +94,8 @@ const CommentMarker = memo(({
     <div
       style={{
         position: 'absolute',
-        top: (comment.y || comment.position?.y || 0) - 12,
-        left: (comment.x || comment.position?.x || 0) - 12,
+        top: pinTop,
+        left: pinLeft,
         width: 24, height: 24,
         background: dotBg, color: '#fff',
         borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -142,6 +158,13 @@ const CommentMarker = memo(({
           <p className="text-[9px] text-gray-400 mt-0.5">
             {comment.timestamp ? new Date(comment.timestamp).toLocaleString() : ''}
           </p>
+          {comment.videoTimestamp != null && (
+            <div className="mt-1.5">
+              <span className="inline-flex items-center gap-1 bg-orange-500 text-white px-2 py-0.5 rounded-full text-[9px] font-bold shadow-sm">
+                ⏱ {formatVideoTime(comment.videoTimestamp)}
+              </span>
+            </div>
+          )}
 
           {/* Existing admin reply */}
           {comment.adminReply && (
@@ -219,6 +242,7 @@ function ContentDetailView({
   scheduledPosts,
   onDeleteScheduledPost,
 }) {
+  const navigate = useNavigate();
   // ── Admin user from localStorage ─────────────────────────────────────────
   const adminUser = useMemo(() => {
     try {
@@ -330,11 +354,173 @@ function ContentDetailView({
   const [activeComment, setActiveComment] = useState(null);
   const [hoveredComment, setHoveredComment] = useState(null);
   const [addingComment, setAddingComment] = useState(false);
+  const videoRef = useRef(null);
+  const videoPausedAtRef = useRef(null);
 
   // ── Reply state ──────────────────────────────────────────────────────────
   const [replyingTo, setReplyingTo] = useState(null);
   const [replyText, setReplyText] = useState('');
   const [savingReply, setSavingReply] = useState(false);
+
+  // ── Internal Review state & actions ──────────────────────────────────────
+  const [, setTick] = useState(0);
+  const [approvingAdmin, setApprovingAdmin] = useState(false);
+  const [sendingCustomer, setSendingCustomer] = useState(false);
+  const [undoingAdmin, setUndoingAdmin] = useState(false);
+
+  const handleApproveAdmin = useCallback(async () => {
+    const vId = selectedContent?.versions?.[selectedVersionIndex]?.id;
+    if (!vId) return;
+    setApprovingAdmin(true);
+    try {
+      const res = await fetch(`${API_URL}/api/content-submissions/${encodeURIComponent(vId)}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          versionId: vId,
+          status: 'approved',
+          approvalNotes: 'Approved by admin',
+          approved_by_admin: true,
+          approved_by_admin_name: adminUser?.name || 'Admin',
+          approved_by_admin_email: adminUser?.email || '',
+        }),
+      });
+      if (res.ok) {
+        if (selectedContent?.versions?.[selectedVersionIndex]) {
+          selectedContent.versions[selectedVersionIndex].approved_by_admin = true;
+          selectedContent.versions[selectedVersionIndex].status = 'approved';
+        }
+        setTick(t => t + 1);
+        onRefresh?.();
+      }
+    } catch (err) {
+      console.error('Failed to approve admin', err);
+    } finally {
+      setApprovingAdmin(false);
+    }
+  }, [selectedContent, selectedVersionIndex, adminUser, onRefresh]);
+
+  const handleSendToCustomerStage = useCallback(async () => {
+    const vId = selectedContent?.versions?.[selectedVersionIndex]?.id;
+    if (!vId) return;
+    setSendingCustomer(true);
+    try {
+      const res = await fetch(`${API_URL}/api/content-submissions/${encodeURIComponent(vId)}/send-to-customer`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (res.ok) {
+        if (selectedContent?.versions?.[selectedVersionIndex]) {
+          selectedContent.versions[selectedVersionIndex].submission_stage = 'customer';
+        }
+        setTick(t => t + 1);
+        onRefresh?.();
+      }
+    } catch (err) {
+      console.error('Failed to send to customer', err);
+    } finally {
+      setSendingCustomer(false);
+    }
+  }, [selectedContent, selectedVersionIndex, onRefresh]);
+
+  const handleUndoAdminApproval = useCallback(async () => {
+    const vId = selectedContent?.versions?.[selectedVersionIndex]?.id;
+    if (!vId) return;
+    setUndoingAdmin(true);
+    try {
+      const res = await fetch(`${API_URL}/api/content-submissions/${encodeURIComponent(vId)}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          versionId: vId,
+          status: 'submitted',
+          approvalNotes: '',
+          undo_admin_approval: true,
+        }),
+      });
+      if (res.ok) {
+        if (selectedContent?.versions?.[selectedVersionIndex]) {
+          selectedContent.versions[selectedVersionIndex].approved_by_admin = false;
+          selectedContent.versions[selectedVersionIndex].status = 'submitted';
+        }
+        setTick(t => t + 1);
+        onRefresh?.();
+      }
+    } catch (err) {
+      console.error('Failed to undo approval', err);
+    } finally {
+      setUndoingAdmin(false);
+    }
+  }, [selectedContent, selectedVersionIndex, onRefresh]);
+
+  // ── Caption / Hashtags draft state ───────────────────────────────────────
+  const [captionDraft, setCaptionDraft] = useState('');
+  const [hashtagsDraft, setHashtagsDraft] = useState('');
+  const [savingCaption, setSavingCaption] = useState(false);
+
+  useEffect(() => {
+    const v = selectedContent?.versions?.[selectedVersionIndex];
+    if (v) {
+      setCaptionDraft(v.caption || '');
+      setHashtagsDraft(v.hashtags || '');
+    }
+  }, [selectedContent, selectedVersionIndex]);
+
+  const handleSaveCaptionHashtags = useCallback(async () => {
+    const vId = selectedContent?.versions?.[selectedVersionIndex]?.id;
+    if (!vId) return;
+    setSavingCaption(true);
+    try {
+      const res = await fetch(`${API_URL}/api/content-submissions/${encodeURIComponent(vId)}/caption-hashtags`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ caption: captionDraft.trim(), hashtags: hashtagsDraft.trim() }),
+      });
+      if (res.ok) {
+        onRefresh?.();
+      }
+    } catch (err) {
+      console.error('Failed to save caption/hashtags', err);
+    } finally {
+      setSavingCaption(false);
+    }
+  }, [selectedContent, selectedVersionIndex, captionDraft, hashtagsDraft, onRefresh]);
+
+  // ── Delete states & actions ──────────────────────────────────────────────
+  const [deleteConfirm, setDeleteConfirm] = useState(null); // null | 'version' | 'all'
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDeleteVersionConfirm = useCallback(async () => {
+    const vId = selectedContent?.versions?.[selectedVersionIndex]?.id;
+    if (!vId) return;
+    setDeleting(true);
+    try {
+      await onDeleteVersion(vId, selectedContent.id, selectedContent.customerId);
+      setDeleteConfirm(null);
+    } catch (err) {
+      console.error('Failed to delete version', err);
+    } finally {
+      setDeleting(false);
+    }
+  }, [selectedContent, selectedVersionIndex, onDeleteVersion]);
+
+  const handleDeleteEntireSubmission = useCallback(async () => {
+    if (!selectedContent?.id) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`${API_URL}/api/content-submissions/assignment/${encodeURIComponent(selectedContent.id)}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        onRefresh?.();
+      }
+      setDeleteConfirm(null);
+    } catch (err) {
+      console.error('Failed to delete submission', err);
+    } finally {
+      setDeleting(false);
+    }
+  }, [selectedContent, onRefresh]);
 
   // ── Platform helpers ─────────────────────────────────────────────────────
   const parsePlatforms = useCallback((val) => {
@@ -395,6 +581,11 @@ function ContentDetailView({
     [selectedContent, selectedVersionIndex]
   );
 
+  const hasInternalReviewHistory = useMemo(() => {
+    const versions = selectedContent?.versions || [];
+    return versions.some(version => (version.submission_stage || version.submissionStage || 'internal') !== 'customer');
+  }, [selectedContent]);
+
   const currentMedia = useMemo(() =>
     currentVersion?.media?.[selectedMediaIndex],
     [currentVersion, selectedMediaIndex]
@@ -432,15 +623,40 @@ function ContentDetailView({
     return comment;
   }, [imgDisplaySize]);
 
-  // ── Image click → place new marker ──────────────────────────────────────
-  const handleImageClick = useCallback((e) => {
+  // ── Image click → place new marker or reposition ───────────────────────
+  const handleImageClick = useCallback(async (e) => {
+    const repositioning = commentsForCurrentMedia.find(c => c.repositioning);
+    if (repositioning) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const x = rect.width > 0 ? (e.clientX - rect.left) / rect.width : 0;
+      const y = rect.height > 0 ? (e.clientY - rect.top) / rect.height : 0;
+      patchCommentLocally(repositioning.id, { x, y, repositioning: false });
+      try {
+        await fetch(`${API_URL}/api/content-submissions/${encodeURIComponent(selectedContent.id)}/comments/${repositioning.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ x, y, position: { x, y } })
+        });
+      } catch { }
+      return;
+    }
     if (!addingComment) return;
     if (commentsForCurrentMedia.some(c => c.editing)) return;
+    const isVideo = currentMedia && isVideoUrl(currentMedia.url);
+    const videoTimestamp = (isVideo && videoRef.current && !isNaN(videoRef.current.currentTime))
+      ? videoRef.current.currentTime
+      : null;
+    if (isVideo && videoRef.current) {
+      videoPausedAtRef.current = videoRef.current.currentTime;
+      videoRef.current.pause();
+    }
     const rect = e.currentTarget.getBoundingClientRect();
+    const x = rect.width > 0 ? (e.clientX - rect.left) / rect.width : 0;
+    const y = rect.height > 0 ? (e.clientY - rect.top) / rect.height : 0;
     const newComment = {
       id: uuidv4(),
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
+      x,
+      y,
       comment: '',
       editing: true,
       done: false,
@@ -452,11 +668,12 @@ function ContentDetailView({
       versionNumber: currentVersion?.versionNumber || 1,
       mediaIndex: selectedMediaIndex,
       timestamp: new Date().toISOString(),
+      ...(videoTimestamp != null && { videoTimestamp }),
     };
     setCommentsForVersion(prev => [...prev, newComment]);
     setActiveComment(newComment.id);
     setAddingComment(false);
-  }, [addingComment, commentsForCurrentMedia, adminUser, currentVersion, selectedMediaIndex]);
+  }, [addingComment, commentsForCurrentMedia, adminUser, currentVersion, selectedMediaIndex, currentMedia, isVideoUrl]);
 
   const handleCommentChange = useCallback((id, text) => {
     patchCommentLocally(id, { comment: text });
@@ -638,7 +855,21 @@ function ContentDetailView({
 
               {/* Status + Action */}
               <div className="flex flex-wrap items-center gap-2">
-
+                <button
+                  onClick={() => {
+                    const calId = selectedContent?.calendarId || selectedContent?._calendarId;
+                    const idx = selectedContent?.itemIndex !== undefined ? selectedContent.itemIndex : 0;
+                    if (calId) {
+                      navigate(`/content-creator/content-upload/${calId}/${idx}`);
+                    } else {
+                      navigate(`/content-creator/upload`);
+                    }
+                  }}
+                  className="inline-flex items-center justify-center px-3 py-1.5 bg-purple-600 text-white text-xs font-medium rounded-lg hover:bg-purple-700 transition-colors"
+                >
+                  <Upload className="h-3 w-3 mr-1" />
+                  Upload Content
+                </button>
                 <button
                   onClick={() => handleScheduleContent(selectedContent)}
                   className="inline-flex items-center justify-center px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors"
@@ -813,11 +1044,14 @@ function ContentDetailView({
                           {currentMedia?.url && typeof currentMedia.url === 'string' ? (
                             isVideoUrl(currentMedia.url) ? (
                               <video
+                                ref={videoRef}
                                 data-cdv-media
                                 src={currentMedia.url}
                                 controls
-                                className="max-w-full h-auto max-h-[50vh] sm:max-h-[60vh] lg:max-h-[70vh] rounded-lg shadow border border-gray-200 object-contain"
+                                className={`max-w-full h-auto max-h-[50vh] sm:max-h-[60vh] lg:max-h-[70vh] rounded-lg shadow border border-gray-200 object-contain transition-all ${addingComment ? 'cursor-crosshair ring-2 ring-purple-400 ring-offset-1' : ''
+                                  }`}
                                 loading="lazy"
+                                onClick={handleImageClick}
                               />
                             ) : (
                               <img
@@ -842,30 +1076,36 @@ function ContentDetailView({
                           )}
 
                           {/* Comment Markers */}
-                          {commentsForCurrentMedia.map((comment, index) => (
-                            <CommentMarker
-                              key={comment.id || index}
-                              comment={resolveCoords(comment)}
-                              index={index}
-                              active={activeComment === comment.id}
-                              hovered={hoveredComment === comment.id}
-                              onToggle={() => setActiveComment(activeComment === comment.id ? null : comment.id)}
-                              onHover={() => setHoveredComment(comment.id)}
-                              onLeave={() => setHoveredComment(null)}
-                              onChange={handleCommentChange}
-                              onSubmit={handleCommentSubmit}
-                              onCancel={handleCommentCancel}
-                              onDelete={handleDeleteComment}
-                              onMarkDone={handleMarkDone}
-                              replyingTo={replyingTo}
-                              replyText={replyText}
-                              onStartReply={handleStartReply}
-                              onReplyTextChange={setReplyText}
-                              onReplySubmit={handleReplySubmit}
-                              onCancelReply={handleCancelReply}
-                              adminUser={adminUser}
-                            />
-                          ))}
+                          {commentsForCurrentMedia.map((comment, index) => {
+                            if (activeComment && comment.id !== activeComment && !comment.editing) {
+                              return null;
+                            }
+                            return (
+                              <CommentMarker
+                                key={comment.id || index}
+                                comment={comment}
+                                index={index}
+                                active={activeComment === comment.id}
+                                hovered={hoveredComment === comment.id}
+                                onToggle={() => setActiveComment(activeComment === comment.id ? null : comment.id)}
+                                onHover={() => setHoveredComment(comment.id)}
+                                onLeave={() => setHoveredComment(null)}
+                                onChange={handleCommentChange}
+                                onSubmit={handleCommentSubmit}
+                                onCancel={handleCommentCancel}
+                                onDelete={handleDeleteComment}
+                                onMarkDone={handleMarkDone}
+                                onReposition={(id) => patchCommentLocally(id, { repositioning: true })}
+                                replyingTo={replyingTo}
+                                replyText={replyText}
+                                onStartReply={handleStartReply}
+                                onReplyTextChange={setReplyText}
+                                onReplySubmit={handleReplySubmit}
+                                onCancelReply={handleCancelReply}
+                                adminUser={adminUser}
+                              />
+                            );
+                          })}
                         </div>
                       </div>
                     </>
@@ -879,35 +1119,52 @@ function ContentDetailView({
                   )}
 
                   {/* Caption / Hashtags / Notes */}
-                  <div className="space-y-2">
+                  <div className="space-y-3 pt-1">
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Caption</label>
-                      <div className="bg-gray-50 rounded-lg p-2 border border-gray-200">
-                        <p className="text-xs text-gray-900">{currentVersion.caption || 'No caption'}</p>
-                      </div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1 flex items-center gap-1">
+                        <Edit3 className="h-3.5 w-3.5 text-blue-600" /> Caption
+                      </label>
+                      <textarea
+                        className="w-full border border-gray-200 rounded-lg p-2 text-xs text-gray-900 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none resize-none"
+                        rows={3}
+                        placeholder="Enter caption for this post..."
+                        value={captionDraft}
+                        onChange={(e) => setCaptionDraft(e.target.value)}
+                      />
                     </div>
-                    {currentVersion.hashtags && (
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">Hashtags</label>
-                        <div className="bg-gray-50 rounded-lg p-2 border border-gray-200">
-                          <p className="text-xs text-gray-900">{currentVersion.hashtags}</p>
-                        </div>
-                      </div>
-                    )}
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Notes</label>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1">Hashtags</label>
+                      <input
+                        type="text"
+                        className="w-full border border-gray-200 rounded-lg p-2 text-xs text-gray-900 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                        placeholder="#hashtag1 #hashtag2"
+                        value={hashtagsDraft}
+                        onChange={(e) => setHashtagsDraft(e.target.value)}
+                      />
+                    </div>
+                    <button
+                      onClick={handleSaveCaptionHashtags}
+                      disabled={savingCaption}
+                      className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-1"
+                    >
+                      {savingCaption ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                      Save Caption & Hashtags
+                    </button>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Notes from Creator</label>
                       <div className="bg-gray-50 rounded-lg p-2 border border-gray-200">
                         <p className="text-xs text-gray-900">{currentVersion.notes || 'No notes'}</p>
                       </div>
                     </div>
-                    <div className="flex items-center justify-between text-[10px] text-gray-500">
-                      <span>Created: {formatDate(currentVersion.createdAt)}</span>
-                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getStatusColor(currentVersion.status)}`}>
-                        {getStatusLabel(currentVersion.status)}
-                      </span>
-                    </div>
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] text-gray-500">
+                    <span>Created: {formatDate(currentVersion.createdAt)}</span>
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getStatusColor(currentVersion.status)}`}>
+                      {getStatusLabel(currentVersion.status)}
+                    </span>
                   </div>
                 </div>
+
               )}
             </div>
           </div>
@@ -915,6 +1172,145 @@ function ContentDetailView({
 
         {/* ── RIGHT: Version History + Comments ── */}
         <div className="space-y-3">
+
+          {/* Internal Review Card */}
+          {hasInternalReviewHistory && (
+            <div className="bg-white rounded-xl shadow-sm border border-purple-200 overflow-hidden">
+              <div className="px-3 py-2 border-b border-purple-100 bg-purple-50 flex items-center justify-between">
+                <h3 className="text-sm font-bold text-purple-900 flex items-center gap-1.5">
+                  <UserCog className="h-4 w-4 text-purple-600" />
+                  Internal Review
+                </h3>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-200 text-purple-800 uppercase tracking-wider">
+                  Admin Review
+                </span>
+              </div>
+              <div className="p-3 space-y-2.5">
+                {/* Current Version Stage badges */}
+                <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                  <div className={`px-2 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 border ${currentVersion?.approved_by_admin || currentVersion?.status === 'approved' || currentVersion?.status === 'approved_both'
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      : 'bg-amber-50 text-amber-700 border-amber-200'
+                    }`}>
+                    {currentVersion?.approved_by_admin || currentVersion?.status === 'approved' || currentVersion?.status === 'approved_both' ? (
+                      <><CheckCircle className="h-3.5 w-3.5 text-emerald-600" /> Admin Approved</>
+                    ) : (
+                      <><Clock className="h-3.5 w-3.5 text-amber-600" /> Pending Admin Review</>
+                    )}
+                  </div>
+
+                  {currentVersion?.submission_stage === 'customer' && (
+                    <div className="px-2 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200">
+                      <Send className="h-3.5 w-3.5 text-blue-600" /> Sent to Customer
+                    </div>
+                  )}
+                </div>
+
+                {/* Internal Review Actions */}
+                <div className="space-y-1.5 pt-1">
+                  {!(currentVersion?.approved_by_admin || currentVersion?.status === 'approved' || currentVersion?.status === 'approved_both') ? (
+                    <button
+                      onClick={handleApproveAdmin}
+                      disabled={approvingAdmin}
+                      className="w-full py-2 bg-gradient-to-r from-emerald-600 to-green-600 text-white rounded-lg text-xs font-semibold hover:from-emerald-700 hover:to-green-700 shadow-sm transition-all disabled:opacity-50 flex items-center justify-center gap-1.5"
+                    >
+                      {approvingAdmin ? (
+                        <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Approving...</>
+                      ) : (
+                        <><CheckCircle className="h-3.5 w-3.5" /> Approve (Internal Review)</>
+                      )}
+                    </button>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {currentVersion?.submission_stage !== 'customer' ? (
+                        <button
+                          onClick={handleSendToCustomerStage}
+                          disabled={sendingCustomer}
+                          className="w-full py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg text-xs font-semibold hover:from-blue-700 hover:to-indigo-700 shadow-sm transition-all disabled:opacity-50 flex items-center justify-center gap-1.5"
+                        >
+                          {sendingCustomer ? (
+                            <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Sending...</>
+                          ) : (
+                            <><Send className="h-3.5 w-3.5" /> Send to Customer for Review</>
+                          )}
+                        </button>
+                      ) : (
+                        <div className="text-[11px] text-blue-700 bg-blue-50 p-2 rounded-lg border border-blue-150 font-medium flex items-center gap-1.5">
+                          <CheckCircle className="h-3.5 w-3.5 text-blue-600 flex-shrink-0" />
+                          This version is currently sent to customer for external review.
+                        </div>
+                      )}
+
+                      {currentVersion?.submission_stage !== 'customer' && (
+                        <button
+                          onClick={handleUndoAdminApproval}
+                          disabled={undoingAdmin}
+                          className="w-full py-1.5 text-amber-700 border border-amber-200 bg-amber-50 rounded-lg text-[11px] font-semibold hover:bg-amber-100 transition-all disabled:opacity-50 flex items-center justify-center gap-1"
+                        >
+                          {undoingAdmin ? (
+                            <><Loader2 className="h-3 w-3 animate-spin" /> Undoing...</>
+                          ) : (
+                            <><RotateCcw className="h-3 w-3" /> Undo Admin Approval</>
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Delete section */}
+                <div className="border-t border-purple-100 pt-2 space-y-1.5">
+                  {selectedContent?.versions?.length > 1 && (
+                    <button
+                      onClick={() => setDeleteConfirm('version')}
+                      className="w-full py-1.5 text-rose-600 border border-rose-200 rounded-lg text-[11px] font-semibold hover:bg-rose-50 transition-all flex items-center justify-center gap-1"
+                    >
+                      <Trash2 className="h-3 w-3" /> Delete Version v{selectedVersionIndex + 1}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setDeleteConfirm('all')}
+                    className="w-full py-1.5 text-rose-700 border border-rose-200 bg-rose-50/50 rounded-lg text-[11px] font-semibold hover:bg-rose-100 transition-all flex items-center justify-center gap-1"
+                  >
+                    <Trash2 className="h-3 w-3" /> Delete Entire Submission
+                  </button>
+                </div>
+
+                {/* Delete confirmation box */}
+                {deleteConfirm && (
+                  <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg space-y-2 mt-2">
+                    <div className="flex items-start gap-1.5">
+                      <AlertCircle className="h-4 w-4 text-rose-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-xs font-bold text-rose-900">
+                          {deleteConfirm === 'version' ? `Delete version v${selectedVersionIndex + 1}?` : `Delete entire submission?`}
+                        </p>
+                        <p className="text-[10px] text-rose-700 mt-0.5">
+                          {deleteConfirm === 'version' ? 'This version will be permanently removed.' : 'All versions will be permanently removed.'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={deleteConfirm === 'version' ? handleDeleteVersionConfirm : handleDeleteEntireSubmission}
+                        disabled={deleting}
+                        className="flex-1 py-1 bg-rose-600 text-white rounded-md text-xs font-semibold hover:bg-rose-700 disabled:opacity-50 flex items-center justify-center gap-1"
+                      >
+                        {deleting ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Yes, Delete'}
+                      </button>
+                      <button
+                        onClick={() => setDeleteConfirm(null)}
+                        disabled={deleting}
+                        className="flex-1 py-1 border border-gray-300 bg-white rounded-md text-xs text-gray-700 font-semibold hover:bg-gray-50"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Version History */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200/50 overflow-hidden">
@@ -1009,7 +1405,19 @@ function ContentDetailView({
                             ? isAdminComment ? 'bg-purple-50 border-purple-200' : 'bg-blue-50 border-blue-200'
                             : isAdminComment ? 'bg-white border-purple-100 hover:bg-purple-50/40' : 'bg-gray-50 border-gray-200 hover:bg-blue-50/40'
                           }`}
-                        onClick={() => setActiveComment(isActive ? null : comment.id)}
+                        onClick={() => {
+                          const next = isActive ? null : comment.id;
+                          setActiveComment(next);
+                          if (next) {
+                            const c = commentsForCurrentMedia.find(x => x.id === next);
+                            if (c && c.videoTimestamp != null && videoRef.current) {
+                              videoRef.current.currentTime = c.videoTimestamp;
+                              videoRef.current.pause();
+                              videoPausedAtRef.current = c.videoTimestamp;
+                              videoRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                            }
+                          }
+                        }}
                       >
                         <div className="p-2 flex items-start gap-2">
                           {/* Index badge */}
@@ -1035,9 +1443,33 @@ function ContentDetailView({
                               {comment.message || comment.comment}
                               {comment.done && <span className="ml-1.5 text-green-600 text-[10px]">✓</span>}
                             </p>
-                            <p className="text-[9px] text-gray-400 mt-0.5">
-                              {comment.timestamp ? new Date(comment.timestamp).toLocaleString() : ''}
-                            </p>
+                            <div className="flex items-center justify-between gap-2 mt-0.5 flex-wrap">
+                              <p className="text-[9px] text-gray-400">
+                                {comment.timestamp ? new Date(comment.timestamp).toLocaleString() : ''}
+                              </p>
+                              {comment.videoTimestamp != null && (
+                                <button
+                                  title="Jump to this moment in the video"
+                                  className="inline-flex items-center gap-1 bg-orange-500 text-white px-2 py-0.5 rounded-full text-[9px] font-bold hover:bg-orange-600 active:scale-95 transition-all shadow-sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (videoRef.current) {
+                                      videoRef.current.currentTime = comment.videoTimestamp;
+                                      videoRef.current.pause();
+                                      videoPausedAtRef.current = comment.videoTimestamp;
+                                      videoRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                                    }
+                                    setActiveComment(comment.id);
+                                  }}
+                                >
+                                  <span className="relative flex h-1.5 w-1.5">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
+                                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-white" />
+                                  </span>
+                                  ⏱ {formatVideoTime(comment.videoTimestamp)}
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </div>
 

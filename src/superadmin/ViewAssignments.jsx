@@ -305,6 +305,10 @@ const STYLES = `
 const initials = (name, email) => (name || email || '?').slice(0, 2).toUpperCase();
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+const normalizeReviewTabMode = (value) => {
+  if (value === 'admin' || value === 'customer' || value === 'both') return value;
+  return 'both';
+};
 
 /* ─────────────────────────────────────────────
    Component
@@ -319,6 +323,7 @@ const ViewAssignments = () => {
   const [removeConfirm, setRemoveConfirm] = useState(null);
   const [notification, setNotification] = useState(null);
   const [viewMode, setViewMode]         = useState('admin');
+  const [updatingReviewMode, setUpdatingReviewMode] = useState({});
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -396,6 +401,37 @@ const ViewAssignments = () => {
       adminName:    admin?.name    || admin?.email?.split('@')[0] || 'Unknown Admin',
       customerName: customer?.name || 'Unknown Customer'
     });
+  };
+
+  const handleReviewTabModeChange = async (customerId, reviewTabMode) => {
+    const customer = customers.find(c => c._id === customerId);
+    if (!customer) return;
+
+    const normalized = normalizeReviewTabMode(reviewTabMode);
+    setUpdatingReviewMode(prev => ({ ...prev, [customerId]: true }));
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/customer/${customerId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reviewTabMode: normalized })
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        showNotification(err.error || 'Failed to update review tab mode', 'error');
+        return;
+      }
+
+      setCustomers(prev => prev.map(c =>
+        c._id === customerId ? { ...c, reviewTabMode: normalized } : c
+      ));
+      showNotification('Review tab mode updated', 'success');
+    } catch (error) {
+      showNotification('Network error: ' + error.message, 'error');
+    } finally {
+      setUpdatingReviewMode(prev => ({ ...prev, [customerId]: false }));
+    }
   };
 
   const confirmRemove = async () => {
@@ -614,6 +650,9 @@ const ViewAssignments = () => {
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div className="customer-name">{getCustomerName(cid)}</div>
                             <div className="customer-email"><Mail size={10} />{getCustomerEmail(cid)}</div>
+                            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+                              Tabs: {normalizeReviewTabMode(getCustomer(cid)?.reviewTabMode)}
+                            </div>
                           </div>
                           <button
                             className="rm-btn"
@@ -659,10 +698,30 @@ const ViewAssignments = () => {
                           <div className="avatar-email"><Mail size={11} />{customer.email}</div>
                         </div>
                       </div>
-                      <span className="badge badge-slate">
-                        <Shield size={11} />
-                        {custAdmins.length} admin{custAdmins.length !== 1 ? 's' : ''}
-                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>Review Tabs</label>
+                        <select
+                          value={normalizeReviewTabMode(customer.reviewTabMode)}
+                          onChange={(e) => handleReviewTabModeChange(customer._id, e.target.value)}
+                          disabled={!!updatingReviewMode[customer._id]}
+                          style={{
+                            fontSize: 12,
+                            padding: '6px 8px',
+                            borderRadius: 8,
+                            border: '1px solid var(--border)',
+                            background: '#fff',
+                            color: 'var(--text)'
+                          }}
+                        >
+                          <option value="admin">Admin Review</option>
+                          <option value="customer">Customer Review</option>
+                          <option value="both">Both</option>
+                        </select>
+                        <span className="badge badge-slate">
+                          <Shield size={11} />
+                          {custAdmins.length} admin{custAdmins.length !== 1 ? 's' : ''}
+                        </span>
+                      </div>
                     </div>
 
                     <div className="customer-grid">

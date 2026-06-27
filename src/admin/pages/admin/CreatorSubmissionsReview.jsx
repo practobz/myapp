@@ -10,10 +10,10 @@ import {
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 const STATUS_CONFIG = {
-  submitted: { label: 'Pending Review', color: 'bg-amber-50  text-amber-700  border-amber-200 shadow-sm shadow-amber-500/5' },
-  approved: { label: 'Approved', color: 'bg-emerald-50  text-emerald-700  border-emerald-250 shadow-sm shadow-emerald-500/5' },
+  submitted:          { label: 'Pending Review',     color: 'bg-amber-50  text-amber-700  border-amber-200 shadow-sm shadow-amber-500/5'  },
+  approved:           { label: 'Approved',           color: 'bg-emerald-50  text-emerald-700  border-emerald-250 shadow-sm shadow-emerald-500/5'  },
   revision_requested: { label: 'Revision Requested', color: 'bg-amber-50 text-amber-700 border-amber-200 shadow-sm shadow-amber-500/5' },
-  rejected: { label: 'Rejected', color: 'bg-rose-50    text-rose-700    border-rose-200 shadow-sm shadow-rose-500/5' },
+  rejected:           { label: 'Rejected',           color: 'bg-rose-50    text-rose-700    border-rose-200 shadow-sm shadow-rose-500/5'    },
 };
 
 const getStatusConfig = (status) =>
@@ -94,9 +94,9 @@ const Btn = ({ onClick, variant = 'primary', size = 'sm', children, disabled }) 
     primary: 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm shadow-blue-500/10',
     success: 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-500/10',
     warning: 'bg-amber-500 hover:bg-amber-600 text-white shadow-sm shadow-amber-500/10',
-    danger: 'bg-rose-500   hover:bg-rose-650   text-white shadow-sm shadow-rose-500/10',
-    info: 'bg-violet-600  hover:bg-violet-750  text-white shadow-sm shadow-violet-500/10',
-    ghost: 'bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-800 hover:border-slate-300',
+    danger:  'bg-rose-500   hover:bg-rose-650   text-white shadow-sm shadow-rose-500/10',
+    info:    'bg-violet-600  hover:bg-violet-750  text-white shadow-sm shadow-violet-500/10',
+    ghost:   'bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-800 hover:border-slate-300',
   };
   const s = { sm: 'px-2 py-1 text-[10px]', md: 'px-2.5 py-1.5 text-xs', lg: 'px-4 py-2 text-sm' };
   return (
@@ -119,12 +119,12 @@ function CommentPin({ comment, index, onActivate, activeId, hoveredId, setHovere
   const y = comment.y ?? 0;
   const isNormalized = x > 0 && x <= 1 && y > 0 && y <= 1;
 
-  const pinColor = comment.done ? '#10b981'
-    : comment.repositioning ? '#8b5cf6'
-      : comment.editing ? '#3b82f6'
-        : '#ef4444';
+  const pinColor = comment.done        ? '#10b981'
+    : comment.repositioning            ? '#8b5cf6'
+    : comment.editing                  ? '#3b82f6'
+    :                                    '#ef4444';
 
-  const popupLeft = (isNormalized ? x > 0.5 : x > 150) ? 'auto' : 32;
+  const popupLeft  = (isNormalized ? x > 0.5 : x > 150) ? 'auto' : 32;
   const popupRight = (isNormalized ? x > 0.5 : x > 150) ? 32 : 'auto';
 
   return (
@@ -195,7 +195,14 @@ function CommentPin({ comment, index, onActivate, activeId, hoveredId, setHovere
                 {comment.comment}
                 {comment.done && <span className="text-emerald-600 ml-1 font-bold">✓</span>}
               </p>
-              {comment.author && <p className="text-[9px] font-bold text-slate-400 mb-2 uppercase tracking-wider">— {comment.author}</p>}
+              {comment.author && <p className="text-[9px] font-bold text-slate-400 mb-1 uppercase tracking-wider">— {comment.author}</p>}
+              {comment.videoTimestamp != null && (
+                <div className="mb-2">
+                  <span className="inline-flex items-center gap-1 bg-orange-500 text-white px-2 py-0.5 rounded-full text-[9px] font-bold shadow-sm">
+                    ⏱ {formatVideoTime(comment.videoTimestamp)}
+                  </span>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-1.5 pt-2 border-t border-slate-100">
                 {!comment.done ? (
                   <Btn onClick={(e) => { e.stopPropagation(); onMarkDone(comment.id); }} variant="success" size="sm">
@@ -236,6 +243,14 @@ function CommentPin({ comment, index, onActivate, activeId, hoveredId, setHovere
 }
 
 // ─── Full-screen Review Panel ──────────────────────────────────────────────────
+
+const formatVideoTime = (seconds) => {
+  if (seconds == null || isNaN(seconds)) return '0:00';
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+};
+
 function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
   const [localVersions, setLocalVersions] = useState(submission.allVersions || [submission]);
   const [activeVersionIdx, setActiveVersionIdx] = useState((submission.allVersions || [submission]).length - 1);
@@ -243,27 +258,30 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
 
   const mediaItems = normalizeMedia(activeVersion.images);
   const [activeMediaIdx, setActiveMediaIdx] = useState(0);
+  const videoRef = useRef(null);
+  const videoPausedAtRef = useRef(null);
 
   const [comments, setComments] = useState(() => normalizeComments(activeVersion.comments));
   const [commentsForMedia, setCommentsForMedia] = useState([]);
   const [activeComment, setActiveComment] = useState(null);
   const [hoveredComment, setHoveredComment] = useState(null);
 
-  const [approving, setApproving] = useState(false);
+  const [approving, setApproving]          = useState(false);
+  const [undoingApproval, setUndoingApproval] = useState(false);
 
   const [localStatus, setLocalStatus] = useState(activeVersion.status);
-  const [toast, setToast] = useState(null);
-  const [sidebarTab, setSidebarTab] = useState('comments');
-  const [sentToCustomer, setSentToCustomer] = useState(activeVersion.submission_stage === 'customer');
+  const [toast, setToast]             = useState(null);
+  const [sidebarTab, setSidebarTab]   = useState('comments');
+  const [sentToCustomer, setSentToCustomer]       = useState(activeVersion.submission_stage === 'customer');
   const [sendingToCustomer, setSendingToCustomer] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState(null); // null | 'version' | 'all'
-  const [deleting, setDeleting] = useState(false);
-  const [mobilePanelTab, setMobilePanelTab] = useState('actions'); // 'media' | 'actions'
+  const [deleteConfirm, setDeleteConfirm]         = useState(null); // null | 'version' | 'all'
+  const [deleting, setDeleting]                   = useState(false);
+  const [mobilePanelTab, setMobilePanelTab]       = useState('actions'); // 'media' | 'actions'
 
   // Caption / hashtag editing
-  const [captionDraft, setCaptionDraft] = useState(activeVersion.caption || '');
-  const [hashtagsDraft, setHashtagsDraft] = useState(activeVersion.hashtags || '');
-  const [savingCaption, setSavingCaption] = useState(false);
+  const [captionDraft, setCaptionDraft]           = useState(activeVersion.caption || '');
+  const [hashtagsDraft, setHashtagsDraft]         = useState(activeVersion.hashtags || '');
+  const [savingCaption, setSavingCaption]         = useState(false);
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -291,6 +309,15 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
   // ── Click handlers ──
   const handleImageClick = (e) => {
     if (commentsForMedia.some(c => c.editing)) return;
+    const currentMedia = mediaItems[activeMediaIdx];
+    const isVideo = currentMedia && isVideoUrl(currentMedia.url);
+    const videoTimestamp = (isVideo && videoRef.current && !isNaN(videoRef.current.currentTime))
+      ? videoRef.current.currentTime
+      : null;
+    if (isVideo && videoRef.current) {
+      videoPausedAtRef.current = videoRef.current.currentTime;
+      videoRef.current.pause();
+    }
     const rect = e.target.getBoundingClientRect();
     const newComment = {
       id: uuidv4(),
@@ -305,6 +332,7 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
       mediaIndex: activeMediaIdx,
       author: 'Admin',
       timestamp: new Date().toISOString(),
+      ...(videoTimestamp != null && { videoTimestamp }),
     };
     setComments(prev => [...prev, newComment]);
     setActiveComment(newComment.id);
@@ -322,7 +350,7 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
           `${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(submission.assignment_id)}/comments/${repositioning.id}`,
           { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ x, y, position: { x, y } }) }
         );
-      } catch { }
+      } catch {}
       return;
     }
     handleImageClick(e);
@@ -391,7 +419,7 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
         `${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(submission.assignment_id)}/comments/${id}`,
         { method: 'DELETE' }
       );
-    } catch { }
+    } catch {}
   };
 
   const handleMarkDone = async (id) => {
@@ -407,7 +435,7 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
           body: JSON.stringify({ done: newDone, status: newDone ? 'completed' : 'active' }),
         }
       );
-    } catch { }
+    } catch {}
   };
 
   const handleEditComment = (id) => {
@@ -420,7 +448,21 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
     setActiveComment(null);
   };
 
-  const handleActivate = (id) => setActiveComment(prev => prev === id ? null : id);
+  const handleActivate = (id) => {
+    setActiveComment(prev => {
+      const next = prev === id ? null : id;
+      if (next) {
+        const comment = comments.find(c => c.id === next);
+        if (comment && comment.videoTimestamp != null && videoRef.current) {
+          videoRef.current.currentTime = comment.videoTimestamp;
+          videoRef.current.pause();
+          videoPausedAtRef.current = comment.videoTimestamp;
+          videoRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+      }
+      return next;
+    });
+  };
 
   // ── Caption / hashtag save ──
   const handleSaveCaptionHashtags = async () => {
@@ -515,12 +557,25 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
   const handleApprove = async () => {
     setApproving(true);
     try {
+      // Get the currently logged-in admin's info so it can be stored as the approver
+      let adminUser = null;
+      try { adminUser = JSON.parse(localStorage.getItem('user')); } catch { adminUser = null; }
+      const adminName = adminUser?.name || adminUser?.email || null;
+      const adminEmail = adminUser?.email || null;
+
       const res = await fetch(
         `${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(activeVersion._id)}/status`,
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ versionId: activeVersion._id, status: 'approved', approvalNotes: 'Approved by admin', approved_by_admin: true }),
+          body: JSON.stringify({
+            versionId: activeVersion._id,
+            status: 'approved',
+            approvalNotes: 'Approved by admin',
+            approved_by_admin: true,
+            approved_by_admin_name: adminName,
+            approved_by_admin_email: adminEmail,
+          }),
         }
       );
       if (!res.ok) throw new Error();
@@ -532,11 +587,37 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
     } finally { setApproving(false); }
   };
 
-  // Derived
-  const statusCfg = getStatusConfig(localStatus);
+  // ── Undo Approval ──
+  const handleUndoApproval = async () => {
+    setUndoingApproval(true);
+    try {
+      const res = await fetch(
+        `${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(activeVersion._id)}/status`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            versionId: activeVersion._id,
+            status: 'submitted',
+            approvalNotes: '',
+            undo_admin_approval: true,
+          }),
+        }
+      );
+      if (!res.ok) throw new Error();
+      setLocalStatus('submitted');
+      setSentToCustomer(false);
+      showToast('Approval undone. Submission is back under review.');
+      onStatusUpdated(activeVersion._id, 'submitted');
+    } catch {
+      showToast('Failed to undo approval. Please try again.', 'error');
+    } finally { setUndoingApproval(false); }
+  };
+
+  const statusCfg   = getStatusConfig(localStatus);
   const currentMedia = mediaItems[activeMediaIdx];
   const totalComments = comments.length;
-  const openComments = comments.filter(c => !c.done).length;
+  const openComments  = comments.filter(c => !c.done).length;
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-0 sm:p-4 md:p-6 overflow-hidden animate-fade-in">
@@ -652,16 +733,18 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
                   <div key={v._id || i} className="flex items-center relative group">
                     <button
                       onClick={() => setActiveVersionIdx(i)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 ${isActive
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 ${
+                        isActive
                           ? 'bg-blue-600 text-white shadow-md'
                           : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
-                        }`}
+                      }`}
                     >
                       <span>v{i + 1}</span>
-                      <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${isActive
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${
+                        isActive
                           ? 'bg-white/20 text-white'
                           : 'bg-slate-850 text-slate-450 group-hover:bg-slate-800 group-hover:text-slate-350'
-                        }`}>
+                      }`}>
                         {vCfg.label.replace(' Review', '')}
                       </span>
                     </button>
@@ -669,10 +752,11 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
                       <button
                         onClick={() => { setActiveVersionIdx(i); setDeleteConfirm('version'); }}
                         title={`Delete version v${i + 1}`}
-                        className={`p-1 rounded-md ml-0.5 transition-all duration-150 ${isActive
+                        className={`p-1 rounded-md ml-0.5 transition-all duration-150 ${
+                          isActive
                             ? 'text-white/60 hover:text-white hover:bg-blue-700'
                             : 'text-slate-600 hover:text-rose-450 hover:bg-rose-500/10'
-                          }`}
+                        }`}
                       >
                         <Trash2 className="h-3 w-3" />
                       </button>
@@ -710,6 +794,7 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
               <div className="relative inline-block w-full flex justify-center group/canvas">
                 {isVideoUrl(currentMedia.url) ? (
                   <video
+                    ref={videoRef}
                     src={currentMedia.url}
                     controls
                     className="w-full max-w-full h-auto max-h-[40vh] sm:max-h-[48vh] rounded-xl shadow-2xl border border-slate-800 object-contain cursor-crosshair transition-all"
@@ -725,24 +810,29 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
                 )}
 
                 {/* Comment pins */}
-                {commentsForMedia.map((comment, idx) => (
-                  <CommentPin
-                    key={comment.id}
-                    comment={comment}
-                    index={idx}
-                    activeId={activeComment}
-                    hoveredId={hoveredComment}
-                    setHoveredId={setHoveredComment}
-                    onActivate={handleActivate}
-                    onCommentChange={handleCommentChange}
-                    onSubmit={handleCommentSubmit}
-                    onCancel={handleCommentCancel}
-                    onMarkDone={handleMarkDone}
-                    onEdit={handleEditComment}
-                    onDelete={handleDeleteComment}
-                    onReposition={handleRepositionStart}
-                  />
-                ))}
+                {commentsForMedia.map((comment, idx) => {
+                  if (activeComment && comment.id !== activeComment && !comment.repositioning && !comment.editing) {
+                    return null;
+                  }
+                  return (
+                    <CommentPin
+                      key={comment.id}
+                      comment={comment}
+                      index={idx}
+                      activeId={activeComment}
+                      hoveredId={hoveredComment}
+                      setHoveredId={setHoveredComment}
+                      onActivate={handleActivate}
+                      onCommentChange={handleCommentChange}
+                      onSubmit={handleCommentSubmit}
+                      onCancel={handleCommentCancel}
+                      onMarkDone={handleMarkDone}
+                      onEdit={handleEditComment}
+                      onDelete={handleDeleteComment}
+                      onReposition={handleRepositionStart}
+                    />
+                  );
+                })}
               </div>
             ) : (
               <div className="w-80 h-60 bg-slate-900 rounded-xl flex items-center justify-center border border-slate-800">
@@ -754,11 +844,13 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
             )}
 
             {/* Hint */}
-            {currentMedia && !isVideoUrl(currentMedia.url) && (
+            {currentMedia && (
               <div className="px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg shadow-sm">
                 <p className="text-[11px] font-medium text-slate-400 flex items-center gap-1.5">
                   <MessageSquare className="h-3.5 w-3.5 text-blue-500 animate-pulse" />
-                  Click anywhere on the image to pin a comment
+                  {isVideoUrl(currentMedia.url)
+                    ? "Click on the video to add a comment at the current timestamp"
+                    : "Click anywhere on the image to pin a comment"}
                 </p>
               </div>
             )}
@@ -772,10 +864,11 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
                     <button
                       key={i}
                       onClick={() => setActiveMediaIdx(i)}
-                      className={`w-12 h-12 rounded-lg overflow-hidden border-2 transition-all duration-150 flex-shrink-0 ${isActive
+                      className={`w-12 h-12 rounded-lg overflow-hidden border-2 transition-all duration-150 flex-shrink-0 ${
+                        isActive
                           ? 'border-blue-500 ring-2 ring-blue-500/20 scale-105'
                           : 'border-slate-800 opacity-60 hover:opacity-100 hover:border-slate-700'
-                        }`}
+                      }`}
                     >
                       {isVideoUrl(m.url) ? (
                         <div className="w-full h-full bg-slate-800 flex items-center justify-center">
@@ -861,6 +954,20 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
                         <><Loader2 className="h-3.5 w-3.5 animate-spin" />Sending...</>
                       ) : (
                         <><Send className="h-3.5 w-3.5" />Send to Customer</>
+                      )}
+                    </button>
+                  )}
+                  {/* Undo Approval */}
+                  {!sentToCustomer && (
+                    <button
+                      onClick={handleUndoApproval}
+                      disabled={undoingApproval}
+                      className="w-full py-2 text-amber-700 border border-amber-200 bg-amber-50/30 rounded-xl text-[11px] font-semibold hover:bg-amber-50/80 hover:border-amber-300 transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-1.5"
+                    >
+                      {undoingApproval ? (
+                        <><Loader2 className="h-3 w-3 animate-spin" />Undoing...</>
+                      ) : (
+                        <><RotateCcw className="h-3.5 w-3.5" />Undo Approval</>
                       )}
                     </button>
                   )}
@@ -954,22 +1061,24 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
             <div className="flex border-b border-slate-100 bg-slate-50/40 flex-shrink-0">
               {[
                 { key: 'comments', label: 'Comments', count: totalComments },
-                { key: 'details', label: 'Details', count: null },
+                { key: 'details',  label: 'Details',  count: null },
               ].map(tab => {
                 const isActive = sidebarTab === tab.key;
                 return (
                   <button
                     key={tab.key}
                     onClick={() => setSidebarTab(tab.key)}
-                    className={`flex-1 py-3 text-xs font-bold transition-all relative ${isActive
+                    className={`flex-1 py-3 text-xs font-bold transition-all relative ${
+                      isActive
                         ? 'text-blue-600'
                         : 'text-slate-500 hover:text-slate-800'
-                      }`}
+                    }`}
                   >
                     {tab.label}
                     {tab.count !== null && tab.count > 0 && (
-                      <span className={`ml-1.5 text-[9px] px-1.5 py-0.5 rounded-full font-bold transition-all ${isActive ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-655'
-                        }`}>
+                      <span className={`ml-1.5 text-[9px] px-1.5 py-0.5 rounded-full font-bold transition-all ${
+                        isActive ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-655'
+                      }`}>
                         {tab.count}
                       </span>
                     )}
@@ -1005,10 +1114,11 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
                               <button
                                 key={i}
                                 onClick={() => setActiveMediaIdx(i)}
-                                className={`text-[10px] px-2.5 py-1 rounded-lg font-semibold transition-all ${isCurrent
+                                className={`text-[10px] px-2.5 py-1 rounded-lg font-semibold transition-all ${
+                                  isCurrent
                                     ? 'bg-blue-50 text-blue-650 border border-blue-200 shadow-sm'
                                     : 'bg-slate-50 text-slate-500 hover:bg-slate-100 border border-slate-150'
-                                  }`}
+                                }`}
                               >
                                 Media {i + 1} {cnt > 0 && `(${cnt})`}
                               </button>
@@ -1028,14 +1138,16 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
                               <div
                                 key={comment.id}
                                 onClick={() => handleActivate(comment.id)}
-                                className={`rounded-xl cursor-pointer transition-all border overflow-hidden ${isActive
+                                className={`rounded-xl cursor-pointer transition-all border overflow-hidden ${
+                                  isActive
                                     ? 'bg-blue-50/50 border-blue-200 shadow-sm ring-1 ring-blue-200/50'
                                     : 'bg-white border-slate-100 hover:border-slate-200 hover:bg-slate-50/40'
-                                  }`}
+                                }`}
                               >
                                 <div className="p-3 flex items-start gap-2.5">
-                                  <span className={`w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center flex-shrink-0 shadow-sm ${comment.done ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-blue-50 text-blue-700 border border-blue-100'
-                                    }`}>
+                                  <span className={`w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center flex-shrink-0 shadow-sm ${
+                                    comment.done ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-blue-50 text-blue-700 border border-blue-100'
+                                  }`}>
                                     {idx + 1}
                                   </span>
                                   <div className="flex-1 min-w-0">
@@ -1060,10 +1172,11 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
                                     <button
                                       onClick={() => handleMarkDone(comment.id)}
                                       title={comment.done ? 'Undo / Reopen' : 'Mark as resolved'}
-                                      className={`p-1 rounded-md transition-colors ${comment.done
+                                      className={`p-1 rounded-md transition-colors ${
+                                        comment.done
                                           ? 'text-emerald-600 hover:bg-emerald-50'
                                           : 'text-slate-350 hover:text-emerald-600 hover:bg-emerald-50/50'
-                                        }`}
+                                      }`}
                                     >
                                       <CheckCircle className="h-4 w-4" />
                                     </button>
@@ -1110,12 +1223,12 @@ function ReviewPanel({ submission, onClose, onStatusUpdated, onDeleted }) {
               {sidebarTab === 'details' && (
                 <div className="p-4 space-y-4">
                   <div className="space-y-2">
-                    <SidebarRow icon={User} label="Creator" value={submission.created_by} />
-                    <SidebarRow icon={User} label="Customer" value={submission.customer_name} color="text-blue-650" />
-                    <SidebarRow icon={Calendar} label="Calendar" value={submission.calendar_name} />
-                    <SidebarRow icon={FileText} label="Item" value={submission.item_name} />
-                    <SidebarRow icon={Clock} label="Submitted" value={fmtDate(submission.sent_to_admin_at || submission.created_at)} />
-                    <SidebarRow icon={FileText} label="Platform" value={submission.platform} />
+                    <SidebarRow icon={User}     label="Creator"   value={submission.created_by} />
+                    <SidebarRow icon={User}     label="Customer"  value={submission.customer_name} color="text-blue-650" />
+                    <SidebarRow icon={Calendar} label="Calendar"  value={submission.calendar_name} />
+                    <SidebarRow icon={FileText} label="Item"      value={submission.item_name} />
+                    <SidebarRow icon={Clock}    label="Submitted" value={fmtDate(submission.sent_to_admin_at || submission.created_at)} />
+                    <SidebarRow icon={FileText} label="Platform"  value={submission.platform} />
                     {Array.isArray(submission.notify_admins) && submission.notify_admins.length > 0 && (
                       <SidebarRow icon={User} label="Notified Admins"
                         value={submission.notify_admins.map(a => a.name || a.email).join(', ')} />
@@ -1239,7 +1352,7 @@ function MediaPreview({ images }) {
 
 // ─── Submission Card ───────────────────────────────────────────────────────────
 function SubmissionCard({ submission, onView, onDelete }) {
-  const statusCfg = getStatusConfig(submission.status);
+  const statusCfg    = getStatusConfig(submission.status);
   const commentCount = Array.isArray(submission.comments) ? submission.comments.length : 0;
   const versionCount = submission.allVersions?.length || 1;
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -1337,16 +1450,16 @@ function SubmissionCard({ submission, onView, onDelete }) {
 
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 export default function CreatorSubmissionsReview({ embedded = false, customerId = null }) {
-  const [submissions, setSubmissions] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [filterStatus, setFilterStatus] = useState('all');
+  const [submissions,      setSubmissions]      = useState([]);
+  const [loading,          setLoading]          = useState(true);
+  const [refreshing,       setRefreshing]       = useState(false);
+  const [filterStatus,     setFilterStatus]     = useState('all');
   const [reviewSubmission, setReviewSubmission] = useState(null);
 
   const fetchSubmissions = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
-      const res = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions`);
+      const res  = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions`);
       const data = await res.json();
       const adminReview = Array.isArray(data)
         ? data.filter(s => Array.isArray(s.notify_admins) && s.notify_admins.length > 0)
@@ -1354,10 +1467,10 @@ export default function CreatorSubmissionsReview({ embedded = false, customerId 
 
       const reviewItems = customerId
         ? adminReview.filter(s =>
-          s.customer_id === customerId ||
-          s.customerId === customerId ||
-          s.customer?._id === customerId
-        )
+            s.customer_id === customerId ||
+            s.customerId === customerId ||
+            s.customer?._id === customerId
+          )
         : adminReview;
 
       // Group by assignment_id so multiple versions appear as one card
@@ -1399,7 +1512,7 @@ export default function CreatorSubmissionsReview({ embedded = false, customerId 
         `${process.env.REACT_APP_API_URL}/api/content-submissions/assignment/${encodeURIComponent(assignmentId)}`,
         { method: 'DELETE' }
       );
-    } catch { }
+    } catch {}
   }, []);
 
   const handleStatusUpdated = (submissionId, newStatus) => {
@@ -1428,9 +1541,9 @@ export default function CreatorSubmissionsReview({ embedded = false, customerId 
     : submissions.filter(s => s.status === filterStatus);
 
   const counts = {
-    all: submissions.length,
-    submitted: submissions.filter(s => s.status === 'submitted').length,
-    approved: submissions.filter(s => s.status === 'approved').length,
+    all:                submissions.length,
+    submitted:          submissions.filter(s => s.status === 'submitted').length,
+    approved:           submissions.filter(s => s.status === 'approved').length,
     revision_requested: submissions.filter(s => s.status === 'revision_requested').length,
   };
 
@@ -1463,74 +1576,74 @@ export default function CreatorSubmissionsReview({ embedded = false, customerId 
 
   const content = (
     <div className="space-y-5">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">Creator Submissions</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            Content submitted by creators for your review. Click any card to review, pin comments, approve or request revisions.
-          </p>
-        </div>
-        <button
-          onClick={() => fetchSubmissions(true)}
-          disabled={refreshing}
-          className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors shadow-sm disabled:opacity-50"
-        >
-          <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-          Refresh
-        </button>
-      </div>
-
-      {/* Filter tabs */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1">
-        {[
-          { key: 'all', label: 'All' },
-          { key: 'submitted', label: 'Pending Review' },
-          { key: 'approved', label: 'Approved' },
-          { key: 'revision_requested', label: 'Revision Requested' },
-        ].map(tab => (
-          <button
-            key={tab.key}
-            onClick={() => setFilterStatus(tab.key)}
-            className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors
-                ${filterStatus === tab.key
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
-          >
-            {tab.label}
-            <span className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-full
-                ${filterStatus === tab.key ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'}`}>
-              {counts[tab.key]}
-            </span>
-          </button>
-        ))}
-      </div>
-
-      {/* Grid */}
-      {filtered.length === 0 ? (
-        <div className="text-center py-20">
-          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Image className="h-8 w-8 text-gray-300" />
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
+          <div>
+            <h1 className="text-xl font-bold text-gray-900">Creator Submissions</h1>
+            <p className="text-sm text-gray-500 mt-0.5">
+              Content submitted by creators for your review. Click any card to review, pin comments, approve or request revisions.
+            </p>
           </div>
-          <h3 className="text-lg font-semibold text-gray-700 mb-1">No submissions found</h3>
-          <p className="text-sm text-gray-400">
-            {filterStatus === 'all'
-              ? 'No content creators have submitted content for admin review yet.'
-              : `No submissions with status "${getStatusConfig(filterStatus).label}".`}
-          </p>
+          <button
+            onClick={() => fetchSubmissions(true)}
+            disabled={refreshing}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors shadow-sm disabled:opacity-50"
+          >
+            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
         </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-          {filtered.map(submission => (
-            <SubmissionCard
-              key={submission._id}
-              submission={submission}
-              onView={() => setReviewSubmission(submission)}
-              onDelete={handleDeleteSubmission}
-            />
+
+        {/* Filter tabs */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+          {[
+            { key: 'all',                label: 'All' },
+            { key: 'submitted',          label: 'Pending Review' },
+            { key: 'approved',           label: 'Approved' },
+            { key: 'revision_requested', label: 'Revision Requested' },
+          ].map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setFilterStatus(tab.key)}
+              className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors
+                ${filterStatus === tab.key
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
+            >
+              {tab.label}
+              <span className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-full
+                ${filterStatus === tab.key ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'}`}>
+                {counts[tab.key]}
+              </span>
+            </button>
           ))}
         </div>
-      )}
+
+        {/* Grid */}
+        {filtered.length === 0 ? (
+          <div className="text-center py-20">
+            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Image className="h-8 w-8 text-gray-300" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-700 mb-1">No submissions found</h3>
+            <p className="text-sm text-gray-400">
+              {filterStatus === 'all'
+                ? 'No content creators have submitted content for admin review yet.'
+                : `No submissions with status "${getStatusConfig(filterStatus).label}".`}
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+            {filtered.map(submission => (
+              <SubmissionCard
+                key={submission._id}
+                submission={submission}
+                onView={() => setReviewSubmission(submission)}
+                onDelete={handleDeleteSubmission}
+              />
+            ))}
+          </div>
+        )}
 
       {/* Full-screen review panel */}
       {reviewSubmission && (
@@ -1545,7 +1658,7 @@ export default function CreatorSubmissionsReview({ embedded = false, customerId 
         />
       )}
     </div>
-  );
+);
 
   if (embedded) {
     return content;

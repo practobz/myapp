@@ -377,7 +377,7 @@ function Dashboard() {
   };
 
   return (
-    <ContentCreatorLayout title="Content Creator Portal" subtitle="Manage assignments & progress">
+    <ContentCreatorLayout title="Content Creator Portal" subtitle="Manage assignments & progress" fullWidthContent={true}>
       <style>{CSS}</style>
       <div className="space-y-6">
         {/* Welcome Banner */}

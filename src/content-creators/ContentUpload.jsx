@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Upload, Image, X, Check, CheckCircle, FileText, Calendar, Clock, Palette, Send, MapPin, Tag, MessageSquare, Play, Video, Bell, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, User, ShieldCheck, AlertCircle, History, Search, Globe } from 'lucide-react';
+import { ArrowLeft, Upload, Image, X, Check, CheckCircle, FileText, Calendar, Clock, Palette, Send, MapPin, Tag, MessageSquare, Play, Video, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, User, ShieldCheck, AlertCircle, History, Search, Globe } from 'lucide-react';
 import { Facebook, Instagram, Linkedin, Youtube, Twitter } from 'lucide-react';
 import ContentCreatorLayout from './Layout';
 
@@ -32,8 +32,13 @@ function getUserRole() {
       const userObj = JSON.parse(userStr);
       return (userObj.role || '').toLowerCase();
     }
-  } catch (e) { }
+  } catch (e) {}
   return '';
+}
+
+function normalizeReviewTabMode(value) {
+  if (value === 'admin' || value === 'customer' || value === 'both') return value;
+  return 'both';
 }
 
 function ContentUpload() {
@@ -41,7 +46,9 @@ function ContentUpload() {
   const { calendarId, itemIndex } = useParams();
   const [searchParams] = useSearchParams();
   const fileInputRef = useRef(null);
-  const [activeTab, setActiveTab] = useState('admin');
+  const isAdmin = useMemo(() => getUserRole() === 'admin' || window.location.hash.includes('admin'), []);
+  const [activeTab, setActiveTab] = useState(() => (getUserRole() === 'admin' || window.location.hash.includes('admin')) ? 'customer' : 'admin');
+  const [reviewTabMode, setReviewTabMode] = useState('both');
 
   // State for assignment details
   const [assignment, setAssignment] = useState(null);
@@ -103,10 +110,15 @@ function ContentUpload() {
   const [sendingToCustomer, setSendingToCustomer] = useState(false);
   const [sentToCustomer, setSentToCustomer] = useState(false);
   const [adminUploadedForThis, setAdminUploadedForThis] = useState(false);
+  const [submitSuccessModal, setSubmitSuccessModal] = useState({
+    open: false,
+    title: '',
+    message: ''
+  });
 
   // Admin notification state
   const [adminsList, setAdminsList] = useState([]);
-  const [adminsLoading, setAdminsLoading] = useState(false);
+  const [, setAdminsLoading] = useState(false);
 
   const displayAdminsList = useMemo(() => {
     if (!assignment || !assignment.customerId) return [];
@@ -295,10 +307,10 @@ function ContentUpload() {
     }).length;
 
     return {
-      total: customerAssignments.length,
-      pending: customerAssignments.filter(a => getPickerFilterStatus(a) === 'pending').length,
-      approved: customerAssignments.filter(a => getPickerFilterStatus(a) === 'approved').length,
-      published: customerAssignments.filter(a => getPickerFilterStatus(a) === 'published').length,
+      total:         customerAssignments.length,
+      pending:       customerAssignments.filter(a => getPickerFilterStatus(a) === 'pending').length,
+      approved:      customerAssignments.filter(a => getPickerFilterStatus(a) === 'approved').length,
+      published:     customerAssignments.filter(a => getPickerFilterStatus(a) === 'published').length,
       adminApproved: adminApprovedCount
     };
   }, [pickerAssignments, pickerSubmissions, pickerScheduledPosts, pickerCustomer]);
@@ -370,6 +382,7 @@ function ContentUpload() {
     setCommentsForCurrentMedia([]);
     setSentToCustomer(false);
     setAdminUploadedForThis(false);
+    setReviewTabMode('both');
   }, [calendarId, itemIndex]);
 
   // Fetch real assignment data based on calendarId and itemIndex
@@ -387,20 +400,21 @@ function ContentUpload() {
             customerMap[c._id || c.id] = {
               name: c.name || c.customerName || c.email || '',
               email: c.email || '',
-              id: c._id || c.id
+              id: c._id || c.id,
+              reviewTabMode: normalizeReviewTabMode(c.reviewTabMode)
             };
           });
         }
-
+        
         // Then fetch the specific calendar
         const res = await fetch(`${process.env.REACT_APP_API_URL}/calendars`);
         const calendars = await res.json();
-
+        
         let found = null;
         calendars.forEach((calendar) => {
           const customerId = calendar.customerId || calendar.customer_id || calendar.customer?._id || '';
           const customerInfo = customerMap[customerId] || {};
-
+          
           if (Array.isArray(calendar.contentItems)) {
             // Use itemIndex to get the correct item
             const idx = parseInt(itemIndex, 10);
@@ -420,8 +434,9 @@ function ContentUpload() {
                 dueDate: item.dueDate || item.due_date || item.date,
                 platform: item.platform || item.type || 'Instagram',
                 requirements: item.requirements || [],
+                reviewTabMode: normalizeReviewTabMode(customerInfo.reviewTabMode),
               };
-
+              
               // Only log if customer data is missing
               if (!found.customerId) {
                 console.error('❌ Customer ID is missing for calendarId:', calendarId, 'itemIndex:', itemIndex);
@@ -432,12 +447,13 @@ function ContentUpload() {
             }
           }
         });
-
+        
         if (!found) {
           console.error('❌ Assignment not found for calendarId:', calendarId, 'itemIndex:', itemIndex);
         }
-
+        
         setAssignment(found);
+        setReviewTabMode(normalizeReviewTabMode(found?.reviewTabMode));
       } catch (err) {
         console.error('❌ Error fetching assignment:', err);
         setAssignment(null);
@@ -460,9 +476,9 @@ function ContentUpload() {
 
       try {
         console.log('🔍 Fetching previous submissions for assignment:', assignment.id, 'by creator:', creatorEmail);
-
+        
         const response = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions`);
-
+        
         if (!response.ok) {
           console.error('❌ Failed to fetch previous submissions:', response.status);
           setPreviousSubmissionLoaded(true);
@@ -471,11 +487,11 @@ function ContentUpload() {
 
         const data = await response.json();
         console.log('📦 Received submissions data:', data);
-
+        
         // Handle both array response and object with submissions property
         const submissions = Array.isArray(data) ? data : (data.submissions || []);
         console.log('📋 Total submissions count:', submissions.length);
-
+        
         if (submissions.length > 0) {
           console.log('🔍 Sample submission structure:', {
             assignment_id: submissions[0].assignment_id,
@@ -484,13 +500,13 @@ function ContentUpload() {
             hashtags: submissions[0].hashtags?.substring(0, 50)
           });
         }
-
+        
         // Filter submissions for this specific assignment
         // Primary: match by calendar_id + item_index (unambiguous)
         // Fallback: match by assignment_id title (for older submissions)
         const previousSubmissions = submissions.filter(sub => {
           const subCalendarId = sub.calendar_id || sub.calendarId;
-          const subItemIndex = (sub.item_index !== undefined && sub.item_index !== null)
+          const subItemIndex  = (sub.item_index !== undefined && sub.item_index !== null)
             ? String(sub.item_index)
             : undefined;
           const subAssignmentId = sub.assignment_id || sub.assignmentId || sub.assignmentID;
@@ -533,7 +549,7 @@ function ContentUpload() {
         // Detect if admin (not this creator) already uploaded and sent to customer
         const adminUploaded = allVersionsSorted.some(
           sub => (sub.submission_stage || sub.submissionStage || '') === 'customer' &&
-            (sub.created_by || '') !== creatorEmail
+                 (sub.created_by || '') !== creatorEmail
         );
         setAdminUploadedForThis(adminUploaded);
 
@@ -545,7 +561,7 @@ function ContentUpload() {
             const getType = (url) => {
               if (!url || typeof url !== 'string') return 'image';
               const ext = url.toLowerCase().split('.').pop();
-              return ['mp4', 'webm', 'ogg', 'mov', 'avi'].includes(ext) ? 'video' : 'image';
+              return ['mp4','webm','ogg','mov','avi'].includes(ext) ? 'video' : 'image';
             };
             return media.map(item => {
               if (typeof item === 'string') return { url: item, type: getType(item) };
@@ -607,6 +623,18 @@ function ContentUpload() {
       fetchPreviousSubmission();
     }
   }, [assignment, creatorEmail, previousSubmissionLoaded]);
+
+  useEffect(() => {
+    if (isAdmin) return;
+    const mode = normalizeReviewTabMode(reviewTabMode);
+    if (mode === 'admin' && activeTab !== 'admin') {
+      setActiveTab('admin');
+      return;
+    }
+    if (mode === 'customer' && activeTab !== 'customer') {
+      setActiveTab('customer');
+    }
+  }, [reviewTabMode, activeTab, isAdmin]);
 
   // Reset selected version when activeTab changes
   useEffect(() => {
@@ -728,7 +756,7 @@ function ContentUpload() {
           `${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(assignment.id)}/comments/${comment.id}`,
           { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ done: newDone, status: newDone ? 'completed' : 'pending' }) }
         );
-      } catch (err) { }
+      } catch (err) {}
       setCommentsForVersion(commentsForVersion.map(c => c.id === id ? { ...c, done: newDone } : c));
       setCommentsForCurrentMedia(commentsForCurrentMedia.map(c => c.id === id ? { ...c, done: newDone } : c));
       if (newDone) setActiveVersionComment(null);
@@ -865,14 +893,14 @@ function ContentUpload() {
   const uploadFileToGCS = async (fileObj) => {
     try {
       const fileSizeMB = fileObj.file.size / (1024 * 1024);
-      console.log(`📤 Starting upload for ${fileObj.name} (${formatFileSize(fileObj.size)})`);
+      console.log(`📤 Starting upload for ${fileObj.name} (${formatFileSize(fileObj.size)})`);      
       // Validate file object
       if (!fileObj.file || !fileObj.file.size || fileObj.file.size === 0) {
         throw new Error(`Invalid file: ${fileObj.name} has no content or is corrupted`);
       }
-
+      
       // Update file status to uploading
-      setUploadedFiles(prev =>
+      setUploadedFiles(prev => 
         prev.map(f => f.id === fileObj.id ? { ...f, uploading: true, error: null } : f)
       );
 
@@ -969,13 +997,13 @@ function ContentUpload() {
       }
 
       // Update file status to uploaded
-      setUploadedFiles(prev =>
-        prev.map(f => f.id === fileObj.id ? {
-          ...f,
-          uploading: false,
-          uploaded: true,
+      setUploadedFiles(prev => 
+        prev.map(f => f.id === fileObj.id ? { 
+          ...f, 
+          uploading: false, 
+          uploaded: true, 
           publicUrl: publicUrl,
-          error: null
+          error: null 
         } : f)
       );
 
@@ -989,14 +1017,14 @@ function ContentUpload() {
 
     } catch (error) {
       console.error(`❌ Upload failed for ${fileObj.name}:`, error);
-
+      
       // Update file status to error
-      setUploadedFiles(prev =>
-        prev.map(f => f.id === fileObj.id ? {
-          ...f,
-          uploading: false,
-          uploaded: false,
-          error: error.message
+      setUploadedFiles(prev => 
+        prev.map(f => f.id === fileObj.id ? { 
+          ...f, 
+          uploading: false, 
+          uploaded: false, 
+          error: error.message 
         } : f)
       );
 
@@ -1022,7 +1050,7 @@ function ContentUpload() {
 
     if (!finalCustomerId || !finalCustomerName) {
       console.error('❌ Missing customer information in assignment');
-
+      
       // Use calendar data as fallback
       finalCustomerId = finalCustomerId || assignment.calendarId || '';
       finalCustomerName = finalCustomerName || assignment.calendarName || 'Unknown Customer';
@@ -1030,11 +1058,11 @@ function ContentUpload() {
 
     // Additional validation to ensure we have proper customer name
     if (!finalCustomerName || finalCustomerName === 'Unknown Customer') {
-      finalCustomerName = finalCustomerName ||
-        assignment.customer ||
-        assignment.client ||
-        assignment.calendarName ||
-        'Unknown Customer';
+      finalCustomerName = finalCustomerName || 
+                         assignment.customer || 
+                         assignment.client || 
+                         assignment.calendarName || 
+                         'Unknown Customer';
     }
 
     // CRITICAL: Ensure we have valid customer information before proceeding
@@ -1131,10 +1159,10 @@ function ContentUpload() {
       }
 
       // Additional validation for customer info quality
-      if (submissionData.customer_name === 'Unknown Customer' ||
-        submissionData.customer_name.length < 2 ||
-        !submissionData.customer_id ||
-        submissionData.customer_id.length < 5) {
+      if (submissionData.customer_name === 'Unknown Customer' || 
+          submissionData.customer_name.length < 2 ||
+          !submissionData.customer_id ||
+          submissionData.customer_id.length < 5) {
         console.error('❌ QUALITY CHECK FAILED: Invalid customer information quality');
         alert('Invalid customer information detected. Please refresh the page and try again.');
         setSubmitting(false);
@@ -1162,16 +1190,19 @@ function ContentUpload() {
       if (activeTab === 'admin') {
         const adminNames = displayAdminsList.map(a => a.name).join(', ');
         const adminMsg = displayAdminsList.length > 0
-          ? `\n\nNotified admin(s): ${adminNames}`
-          : '';
-        alert(`Content submitted for admin review!${adminMsg}\n\nThe admin will review your submission and notify you with feedback or approval.`);
+          ? `Notified admin(s): ${adminNames}.`
+          : 'System admins will review this submission.';
+        setSubmitSuccessModal({
+          open: true,
+          title: 'Submitted for Admin Review',
+          message: `${adminMsg} Content will move to customer review after approval.`
+        });
       } else {
-        alert('Content submitted directly for customer review!\n\nThe customer will review your submission.');
-      }
-      if (finalCustomerId) {
-        navigate(`/content-creator/assignments?expand=${finalCustomerId}`);
-      } else {
-        navigate('/content-creator/assignments');
+        setSubmitSuccessModal({
+          open: true,
+          title: 'Submitted for Customer Review',
+          message: 'Your content has been sent directly to the customer for review.'
+        });
       }
     } catch (err) {
       console.error('❌ Upload error:', err);
@@ -1213,11 +1244,24 @@ function ContentUpload() {
     }
   };
 
+  const closeSubmitSuccessModal = () => {
+    setSubmitSuccessModal({ open: false, title: '', message: '' });
+    if (isAdmin) {
+      window.history.back();
+      return;
+    }
+    if (assignment && assignment.customerId) {
+      navigate(`/content-creator/assignments?expand=${assignment.customerId}`);
+      return;
+    }
+    navigate('/content-creator/assignments');
+  };
+
   // No params — show assignment picker
   if (!calendarId || itemIndex === undefined) {
     // Derived filter options
     const allPlatforms = [...new Set(pickerAssignments.flatMap(a => flatPlatforms(a.platform).map(p => p.charAt(0).toUpperCase() + p.slice(1))))].sort();
-    const allStatuses = [...new Set(pickerAssignments.map(a => getPickerFilterStatus(a)))].sort();
+    const allStatuses  = [...new Set(pickerAssignments.map(a => getPickerFilterStatus(a)))].sort();
     const allCustomers = [...new Set(pickerAssignments.map(a => a.customerName || a.calendarName || 'Unknown'))].sort();
 
     const filtered = pickerAssignments
@@ -1230,7 +1274,7 @@ function ContentUpload() {
           platforms.some(p => p.includes(q)) ||
           (a.description || '').toLowerCase().includes(q);
         const matchPlatform = pickerPlatform === 'all' || platforms.some(p => p === pickerPlatform.toLowerCase());
-
+        
         let matchStatus = false;
         if (pickerStatus === 'all') {
           matchStatus = true;
@@ -1265,24 +1309,24 @@ function ContentUpload() {
 
     const platformColor = (p) => {
       switch ((p || '').toLowerCase()) {
-        case 'facebook': return 'bg-blue-100 text-blue-700 border-blue-200';
+        case 'facebook':  return 'bg-blue-100 text-blue-700 border-blue-200';
         case 'instagram': return 'bg-pink-100 text-pink-700 border-pink-200';
-        case 'youtube': return 'bg-red-100 text-red-700 border-red-200';
-        case 'linkedin': return 'bg-blue-50 text-blue-700 border-blue-200';
-        case 'twitter': return 'bg-sky-100 text-sky-700 border-sky-200';
-        case 'tiktok': return 'bg-gray-900 text-white border-gray-700';
-        default: return 'bg-gray-100 text-gray-700 border-gray-200';
+        case 'youtube':   return 'bg-red-100 text-red-700 border-red-200';
+        case 'linkedin':  return 'bg-blue-50 text-blue-700 border-blue-200';
+        case 'twitter':   return 'bg-sky-100 text-sky-700 border-sky-200';
+        case 'tiktok':    return 'bg-gray-900 text-white border-gray-700';
+        default:          return 'bg-gray-100 text-gray-700 border-gray-200';
       }
     };
 
     const PlatformIcon = ({ platform, className = 'h-3 w-3' }) => {
       switch ((platform || '').toLowerCase()) {
-        case 'facebook': return <Facebook className={className} />;
+        case 'facebook':  return <Facebook  className={className} />;
         case 'instagram': return <Instagram className={className} />;
-        case 'linkedin': return <Linkedin className={className} />;
-        case 'youtube': return <Youtube className={className} />;
-        case 'twitter': return <Twitter className={className} />;
-        default: return <Globe className={className} />;
+        case 'linkedin':  return <Linkedin  className={className} />;
+        case 'youtube':   return <Youtube   className={className} />;
+        case 'twitter':   return <Twitter   className={className} />;
+        default:          return <Globe     className={className} />;
       }
     };
 
@@ -1299,11 +1343,11 @@ function ContentUpload() {
 
     const statusColor = (s) => {
       switch (s) {
-        case 'approved': return 'bg-green-100 text-green-800';
-        case 'published': return 'bg-purple-100 text-purple-800';
+        case 'approved':    return 'bg-green-100 text-green-800';
+        case 'published':   return 'bg-purple-100 text-purple-800';
         case 'in_progress': return 'bg-amber-100 text-amber-800';
-        case 'pending': return 'bg-orange-100 text-orange-800';
-        default: return 'bg-gray-100 text-gray-700';
+        case 'pending':     return 'bg-orange-100 text-orange-800';
+        default:            return 'bg-gray-100 text-gray-700';
       }
     };
 
@@ -1320,6 +1364,7 @@ function ContentUpload() {
         title="Upload Content"
         subtitle="Select an assignment to upload media for"
         icon={<Palette className="h-5 w-5 text-white" />}
+        fullWidthContent={true}
         headerActions={pickerHeaderActions}
       >
 
@@ -1374,23 +1419,25 @@ function ContentUpload() {
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <div className="flex flex-wrap gap-2">
                     {[
-                      { key: 'all', label: 'All', count: pickerStats.total },
-                      { key: 'pending', label: 'Pending', count: pickerStats.pending },
-                      { key: 'approved', label: 'Customer Approved', count: pickerStats.approved },
-                      { key: 'published', label: 'Published', count: pickerStats.published },
-                      { key: 'admin_approved', label: 'Admin Approved', count: pickerStats.adminApproved },
+                      { key: 'all',           label: 'All',               count: pickerStats.total         },
+                      { key: 'pending',       label: 'Pending',           count: pickerStats.pending       },
+                      { key: 'approved',      label: 'Customer Approved', count: pickerStats.approved      },
+                      { key: 'published',     label: 'Published',         count: pickerStats.published     },
+                      { key: 'admin_approved',label: 'Admin Approved',    count: pickerStats.adminApproved },
                     ].map(opt => (
                       <button
                         key={opt.key}
                         onClick={() => setPickerStatus(opt.key)}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${pickerStatus === opt.key
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                          pickerStatus === opt.key
                             ? 'bg-purple-600 text-white shadow-sm'
                             : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                          }`}
+                        }`}
                       >
                         {opt.label}
-                        <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${pickerStatus === opt.key ? 'bg-white/20 text-white' : 'bg-white text-gray-600'
-                          }`}>{opt.count}</span>
+                        <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${
+                          pickerStatus === opt.key ? 'bg-white/20 text-white' : 'bg-white text-gray-600'
+                        }`}>{opt.count}</span>
                       </button>
                     ))}
                   </div>
@@ -1447,10 +1494,10 @@ function ContentUpload() {
                         <div className={`h-1 w-full ${(() => {
                           const fps = flatPlatforms(a.platform);
                           if (fps.includes('instagram')) return 'bg-gradient-to-r from-pink-400 to-purple-500';
-                          if (fps.includes('facebook')) return 'bg-blue-500';
-                          if (fps.includes('youtube')) return 'bg-red-500';
-                          if (fps.includes('linkedin')) return 'bg-blue-700';
-                          if (fps.includes('twitter')) return 'bg-sky-400';
+                          if (fps.includes('facebook'))  return 'bg-blue-500';
+                          if (fps.includes('youtube'))   return 'bg-red-500';
+                          if (fps.includes('linkedin'))  return 'bg-blue-700';
+                          if (fps.includes('twitter'))   return 'bg-sky-400';
                           return 'bg-purple-400';
                         })()}`} />
                         <div className="p-4 flex items-start gap-4">
@@ -1571,6 +1618,10 @@ function ContentUpload() {
   }
 
   const handleBackAction = () => {
+    if (isAdmin) {
+      window.history.back();
+      return;
+    }
     if (assignment && assignment.customerId) {
       navigate(`/content-creator/assignments?expand=${assignment.customerId}`);
     } else {
@@ -1578,106 +1629,79 @@ function ContentUpload() {
     }
   };
 
-  const detailHeaderActions = (
-    <div className="hidden md:flex items-center space-x-4">
-      <div className="text-right">
-        <p className="text-sm font-semibold text-gray-950">{assignment.title}</p>
-        <p className="text-xs text-gray-500">for {assignment.customerName}</p>
-      </div>
-      <div className="flex items-center text-xs text-gray-500 bg-white/60 px-2 py-1 rounded-lg border border-gray-200">
-        <Calendar className="h-3 w-3 mr-1 text-purple-600" />
-        {assignment.dueDate ? new Date(assignment.dueDate).toLocaleDateString() : 'N/A'}
-      </div>
-      <div className="flex items-center gap-1 flex-wrap">
-        {(Array.isArray(assignment.platform) ? assignment.platform : [assignment.platform]).filter(Boolean).map((p, pi) => (
-          <span key={pi} className={`inline-flex items-center gap-1 px-1.5 py-1 rounded border text-xs font-semibold uppercase ${p.toLowerCase() === 'facebook' ? 'bg-blue-100 text-blue-700 border-blue-200' :
-              p.toLowerCase() === 'instagram' ? 'bg-pink-100 text-pink-700 border-pink-200' :
-                p.toLowerCase() === 'youtube' ? 'bg-red-100 text-red-700 border-red-200' :
-                  p.toLowerCase() === 'linkedin' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                    p.toLowerCase() === 'twitter' ? 'bg-sky-100 text-sky-700 border-sky-200' :
-                      'bg-gray-100 text-gray-700 border-gray-200'
-            }`}>
-            {p.toLowerCase() === 'facebook' ? <Facebook className="h-3 w-3" /> :
-              p.toLowerCase() === 'instagram' ? <Instagram className="h-3 w-3" /> :
-                p.toLowerCase() === 'linkedin' ? <Linkedin className="h-3 w-3" /> :
-                  p.toLowerCase() === 'youtube' ? <Youtube className="h-3 w-3" /> :
-                    p.toLowerCase() === 'twitter' ? <Twitter className="h-3 w-3" /> :
-                      <Globe className="h-3 w-3" />}
-            {p.charAt(0).toUpperCase() + p.slice(1)}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-
   return (
     <ContentCreatorLayout
-      title={activeTab === 'admin' ? 'Submit for Admin Review' : 'Content Details'}
-      subtitle={activeTab === 'admin' ? 'Admin must approve before content goes to customer' : 'Review and manage customer-facing content submissions'}
+      title={isAdmin ? 'Content Details (Customer Review)' : (activeTab === 'admin' ? 'Submit for Admin Review' : 'Content Details')}
+      subtitle={isAdmin ? 'Upload and manage customer-facing content' : (activeTab === 'admin' ? 'Admin must approve before content goes to customer' : 'Review and manage customer-facing content submissions')}
       icon={<Palette className="h-5 w-5 text-white" />}
+      fullWidthContent={true}
       onBack={handleBackAction}
-      headerActions={detailHeaderActions}
     >
       <div>
         {/* ── Tabs Selector ────────────────────────────────────────────────── */}
-        <div className="flex border-b border-gray-200 bg-white rounded-2xl p-1.5 shadow-sm border border-gray-200/50 mb-6">
-          <button
-            onClick={() => setActiveTab('admin')}
-            className={`flex-1 py-3 text-sm font-semibold rounded-xl transition-all duration-300 flex items-center justify-center gap-2 ${activeTab === 'admin'
-                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
-                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+        {!isAdmin && reviewTabMode === 'both' && (
+          <div className="flex border-b border-gray-200 bg-white rounded-2xl p-1.5 shadow-sm border border-gray-200/50 mb-6">
+            <button
+              onClick={() => setActiveTab('admin')}
+              className={`flex-1 py-3 text-sm font-semibold rounded-xl transition-all duration-300 flex items-center justify-center gap-2 ${
+                activeTab === 'admin'
+                  ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
               }`}
-          >
-            <Palette className="h-4 w-4" />
-            Admin Review
-          </button>
-          <button
-            onClick={() => setActiveTab('customer')}
-            className={`flex-1 py-3 text-sm font-semibold rounded-xl transition-all duration-300 flex items-center justify-center gap-2 ${activeTab === 'customer'
-                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
-                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+            >
+              <Palette className="h-4 w-4" />
+              Admin Review
+            </button>
+            <button
+              onClick={() => setActiveTab('customer')}
+              className={`flex-1 py-3 text-sm font-semibold rounded-xl transition-all duration-300 flex items-center justify-center gap-2 ${
+                activeTab === 'customer'
+                  ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
               }`}
-          >
-            <User className="h-4 w-4" />
-            Customer Review
-          </button>
-        </div>
-        {/* Assignment Details - Compact */}
-        <div className="bg-white rounded-lg shadow-sm p-4 mb-6 md:hidden">
-          <div className="flex items-center justify-between">
+            >
+              <User className="h-4 w-4" />
+              Customer Review
+            </button>
+          </div>
+        )}
+        {/* Assignment Details - Top */}
+        <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
             <div>
               <h1 className="text-lg font-bold text-gray-900">{assignment.title}</h1>
               <p className="text-sm text-gray-600">for {assignment.customerName}</p>
+              {assignment.description && (
+                <p className="text-sm text-gray-600 mt-2">{assignment.description}</p>
+              )}
             </div>
-            <div className="text-right">
-              <div className="flex items-center text-xs text-gray-500 mb-1">
+            <div className="text-left sm:text-right">
+              <div className="flex items-center text-xs text-gray-500 mb-2 sm:justify-end">
                 <Calendar className="h-3 w-3 mr-1" />
                 {assignment.dueDate ? new Date(assignment.dueDate).toLocaleDateString() : 'N/A'}
               </div>
-              <div className="flex items-center gap-1 flex-wrap justify-end">
+              <div className="flex items-center gap-1 flex-wrap sm:justify-end">
                 {(Array.isArray(assignment.platform) ? assignment.platform : [assignment.platform]).filter(Boolean).map((p, pi) => (
-                  <span key={pi} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-xs font-medium ${p.toLowerCase() === 'facebook' ? 'bg-blue-100 text-blue-700 border-blue-200' :
-                      p.toLowerCase() === 'instagram' ? 'bg-pink-100 text-pink-700 border-pink-200' :
-                        p.toLowerCase() === 'youtube' ? 'bg-red-100 text-red-700 border-red-200' :
-                          p.toLowerCase() === 'linkedin' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                            p.toLowerCase() === 'twitter' ? 'bg-sky-100 text-sky-700 border-sky-200' :
-                              'bg-gray-100 text-gray-700 border-gray-200'
-                    }`}>
-                    {p.toLowerCase() === 'facebook' ? <Facebook className="h-3 w-3" /> :
-                      p.toLowerCase() === 'instagram' ? <Instagram className="h-3 w-3" /> :
-                        p.toLowerCase() === 'linkedin' ? <Linkedin className="h-3 w-3" /> :
-                          p.toLowerCase() === 'youtube' ? <Youtube className="h-3 w-3" /> :
-                            p.toLowerCase() === 'twitter' ? <Twitter className="h-3 w-3" /> :
-                              <Globe className="h-3 w-3" />}
+                  <span key={pi} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-xs font-medium ${
+                    p.toLowerCase() === 'facebook'  ? 'bg-blue-100 text-blue-700 border-blue-200' :
+                    p.toLowerCase() === 'instagram' ? 'bg-pink-100 text-pink-700 border-pink-200' :
+                    p.toLowerCase() === 'youtube'   ? 'bg-red-100 text-red-700 border-red-200' :
+                    p.toLowerCase() === 'linkedin'  ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                    p.toLowerCase() === 'twitter'   ? 'bg-sky-100 text-sky-700 border-sky-200' :
+                    'bg-gray-100 text-gray-700 border-gray-200'
+                  }`}>
+                    {p.toLowerCase() === 'facebook'  ? <Facebook  className="h-3 w-3" /> :
+                     p.toLowerCase() === 'instagram' ? <Instagram className="h-3 w-3" /> :
+                     p.toLowerCase() === 'linkedin'  ? <Linkedin  className="h-3 w-3" /> :
+                     p.toLowerCase() === 'youtube'   ? <Youtube   className="h-3 w-3" /> :
+                     p.toLowerCase() === 'twitter'   ? <Twitter   className="h-3 w-3" /> :
+                     <Globe className="h-3 w-3" />}
                     {p.charAt(0).toUpperCase() + p.slice(1)}
                   </span>
                 ))}
               </div>
             </div>
           </div>
-          {assignment.description && (
-            <p className="text-sm text-gray-600 mt-2">{assignment.description}</p>
-          )}
         </div>
 
         {/* Admin Uploaded Banner — shown when admin already sent content to customer */}
@@ -1726,79 +1750,10 @@ function ContentUpload() {
           );
         })()}
 
-        {/* Workflow Banner */}
-        {activeTab === 'admin' && (
-          <div className="bg-white border border-purple-100 rounded-xl shadow-sm px-5 py-4 mb-6 flex flex-col sm:flex-row sm:items-center gap-3">
-            <ShieldCheck className="h-6 w-6 text-purple-500 flex-shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-gray-800">Admin Review Required</p>
-              <p className="text-xs text-gray-500 mt-0.5">Your upload goes to the selected admin first. Once approved, the admin or you can submit the content to the customer's content calendar.</p>
-            </div>
-            <div className="hidden sm:flex items-center gap-1 text-xs text-gray-400 flex-shrink-0">
-              <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full font-medium">1 Upload</span>
-              <span>→</span>
-              <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded-full font-medium">2 Admin Review</span>
-              <span>→</span>
-              <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full font-medium">3 Customer</span>
-            </div>
-          </div>
-        )}
-
         {/* Main Grid Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column - Upload Section */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Upload Area */}
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <h2 className="text-lg font-semibold mb-4 flex items-center">
-                <Upload className="h-5 w-5 mr-2 text-purple-600" />
-                Upload Media
-              </h2>
-
-              <div
-                className={`relative border-2 border-dashed rounded-lg p-6 text-center transition-all duration-200 ${dragActive
-                    ? 'border-purple-400 bg-purple-50 scale-105'
-                    : 'border-gray-300 hover:border-purple-400 hover:bg-purple-50/50'
-                  }`}
-                onDragEnter={handleDrag}
-                onDragLeave={handleDrag}
-                onDragOver={handleDrag}
-                onDrop={handleDrop}
-              >
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  accept="image/*,video/*"
-                  onChange={handleChange}
-                  className="hidden"
-                />
-
-                <div className="space-y-3">
-                  <div className="flex justify-center space-x-2">
-                    <Upload className="h-8 w-8 text-gray-400" />
-                    <Video className="h-8 w-8 text-gray-400" />
-                  </div>
-                  <div>
-                    <p className="text-base font-medium text-gray-900">
-                      Drag and drop your images and videos here
-                    </p>
-                    <p className="text-sm text-gray-500">or</p>
-                    <button
-                      onClick={onButtonClick}
-                      className="mt-2 inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors"
-                    >
-                      <Image className="h-4 w-4 mr-2" />
-                      Browse Files
-                    </button>
-                  </div>
-                  <p className="text-xs text-gray-400">
-                    Supports: JPG, PNG, GIF, MP4, MOV, AVI (Max 100MB per file)
-                  </p>
-                </div>
-              </div>
-            </div>
-
             {/* Media Preview Grid */}
             {uploadedFiles.length > 0 && (
               <div className="bg-white rounded-lg shadow-sm p-6">
@@ -1809,7 +1764,7 @@ function ContentUpload() {
                 <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
                   {uploadedFiles.map((file) => (
                     <div key={file.id} className="relative group">
-                      <div
+                      <div 
                         className="aspect-square rounded-lg overflow-hidden bg-gray-100 ring-2 ring-transparent group-hover:ring-purple-200 transition-all relative cursor-pointer"
                         onClick={() => setSelectedMedia(file)}
                       >
@@ -1834,7 +1789,7 @@ function ContentUpload() {
                             </div>
                           </div>
                         )}
-
+                        
                         {/* Upload Status Overlay */}
                         {file.uploading && (
                           <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
@@ -1844,13 +1799,13 @@ function ContentUpload() {
                             </div>
                           </div>
                         )}
-
+                        
                         {file.uploaded && (
                           <div className="absolute top-2 right-2 bg-green-500 text-white rounded-full p-1">
                             <Check className="h-3 w-3" />
                           </div>
                         )}
-
+                        
                         {file.error && (
                           <div className="absolute inset-0 bg-red-500 bg-opacity-50 flex items-center justify-center">
                             <div className="text-white text-center p-2">
@@ -1866,22 +1821,23 @@ function ContentUpload() {
                           </div>
                         )}
                       </div>
-
+                      
                       <button
                         onClick={() => removeFile(file.id)}
                         className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
                       >
                         <X className="h-3 w-3" />
                       </button>
-
+                      
                       <div className="mt-2">
                         <p className="text-xs font-medium text-gray-900 truncate">{file.name}</p>
                         <div className="flex items-center justify-between">
                           <p className="text-xs text-gray-500">{formatFileSize(file.size)}</p>
-                          <span className={`text-xs px-2 py-1 rounded-full ${file.type === 'image'
-                              ? 'bg-green-100 text-green-800'
+                          <span className={`text-xs px-2 py-1 rounded-full ${
+                            file.type === 'image' 
+                              ? 'bg-green-100 text-green-800' 
                               : 'bg-blue-100 text-blue-800'
-                            }`}>
+                          }`}>
                             {file.type.toUpperCase()}
                           </span>
                         </div>
@@ -1900,25 +1856,73 @@ function ContentUpload() {
             {/* Version History Accordion — ContentDetails style */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
               {/* Accordion trigger */}
-              <button
-                onClick={() => setVersionsAccordionOpen(!versionsAccordionOpen)}
-                className="w-full flex items-center justify-between p-6 text-left hover:bg-gray-50 transition-colors duration-200"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-green-100 rounded-lg">
-                    <History className="h-5 w-5 text-green-600" />
-                  </div>
-                  <div>
-                    <h2 className="text-lg font-bold text-gray-900">Version History</h2>
-                    <p className="text-sm text-gray-500">
-                      {previousVersions.length} {previousVersions.length === 1 ? 'version' : 'versions'} submitted
-                    </p>
+              <div className="w-full p-5 hover:bg-gray-50 transition-colors duration-200">
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <button
+                    type="button"
+                    onClick={() => setVersionsAccordionOpen(!versionsAccordionOpen)}
+                    className="flex items-center gap-3 text-left"
+                  >
+                    <div className="p-2 bg-green-100 rounded-lg flex-shrink-0">
+                      <History className="h-5 w-5 text-green-600" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold text-gray-900">Version History</h2>
+                      <p className="text-sm text-gray-500">
+                        {previousVersions.length} {previousVersions.length === 1 ? 'version' : 'versions'} submitted
+                      </p>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setVersionsAccordionOpen(!versionsAccordionOpen)}
+                    className="p-1 rounded hover:bg-gray-100"
+                    aria-label="Toggle version history"
+                  >
+                    {versionsAccordionOpen
+                      ? <ChevronUp className="h-5 w-5 text-gray-400 flex-shrink-0" />
+                      : <ChevronDown className="h-5 w-5 text-gray-400 flex-shrink-0" />}
+                  </button>
+                </div>
+
+                <div
+                  className={`relative w-full border-2 border-dashed rounded-xl px-4 py-4 transition-all duration-200 ${
+                    dragActive
+                      ? 'border-purple-400 bg-purple-50'
+                      : 'border-gray-300 hover:border-purple-400 hover:bg-purple-50/50'
+                  }`}
+                  onDragEnter={handleDrag}
+                  onDragLeave={handleDrag}
+                  onDragOver={handleDrag}
+                  onDrop={handleDrop}
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    accept="image/*,video/*"
+                    onChange={handleChange}
+                    className="hidden"
+                  />
+
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                    <div className="flex items-center gap-1.5 text-gray-500">
+                      <Upload className="h-4 w-4" />
+                      <Video className="h-4 w-4" />
+                      <p className="text-sm whitespace-nowrap">Drop files here</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={onButtonClick}
+                      className="inline-flex items-center px-2 py-1 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors"
+                    >
+                      <Image className="h-3 w-3 mr-1" />
+                      Browse Files
+                    </button>
                   </div>
                 </div>
-                {versionsAccordionOpen
-                  ? <ChevronUp className="h-5 w-5 text-gray-400 flex-shrink-0" />
-                  : <ChevronDown className="h-5 w-5 text-gray-400 flex-shrink-0" />}
-              </button>
+              </div>
 
               {/* Accordion body */}
               {versionsAccordionOpen && (
@@ -1960,10 +1964,11 @@ function ContentUpload() {
                                     <button
                                       key={v.id || i}
                                       onClick={() => handleVersionSelect(i)}
-                                      className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all ${selectedVersionIndex === i
+                                      className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all ${
+                                        selectedVersionIndex === i
                                           ? activeTab === 'admin' ? 'bg-purple-600 text-white shadow-sm' : 'bg-amber-500 text-white shadow-sm'
                                           : 'bg-gray-100 text-gray-600 hover:bg-purple-100 hover:text-purple-700'
-                                        }`}
+                                      }`}
                                     >
                                       V{v.flowVersionNumber || v.versionNumber}
                                     </button>
@@ -2008,7 +2013,7 @@ function ContentUpload() {
                                       <div className="flex justify-center">
                                         <div className="relative inline-block">
                                           {previousVersions[selectedVersionIndex].media[selectedMediaIndex]?.url &&
-                                            typeof previousVersions[selectedVersionIndex].media[selectedMediaIndex].url === 'string' ? (
+                                           typeof previousVersions[selectedVersionIndex].media[selectedMediaIndex].url === 'string' ? (
                                             previousVersions[selectedVersionIndex].media[selectedMediaIndex].type === 'image' ? (
                                               <img
                                                 ref={versionImgRef}
@@ -2095,10 +2100,11 @@ function ContentUpload() {
                                                     )}
                                                     <button
                                                       onClick={() => handleVersionToggleDone(comment.id)}
-                                                      className={`w-full px-3 py-1.5 text-xs rounded-lg font-medium transition-all flex items-center justify-center mt-2 ${comment.done
+                                                      className={`w-full px-3 py-1.5 text-xs rounded-lg font-medium transition-all flex items-center justify-center mt-2 ${
+                                                        comment.done
                                                           ? 'bg-gray-200 hover:bg-gray-300 text-gray-700'
                                                           : 'bg-green-600 hover:bg-green-700 text-white'
-                                                        }`}
+                                                      }`}
                                                     >
                                                       <CheckCircle className="h-3 w-3 mr-1" />
                                                       {comment.done ? 'Undo Done' : 'Mark as Done'}
@@ -2118,10 +2124,11 @@ function ContentUpload() {
                                             <button
                                               key={index}
                                               onClick={() => setSelectedMediaIndex(index)}
-                                              className={`w-16 h-16 rounded-lg overflow-hidden border-2 transition-all ${selectedMediaIndex === index
+                                              className={`w-16 h-16 rounded-lg overflow-hidden border-2 transition-all ${
+                                                selectedMediaIndex === index
                                                   ? 'border-purple-500 ring-2 ring-purple-200'
                                                   : 'border-gray-200 hover:border-gray-300'
-                                                }`}
+                                              }`}
                                             >
                                               {media.type === 'image' && media.url ? (
                                                 <img src={media.url} alt={`Thumbnail ${index + 1}`} className="w-full h-full object-cover" />
@@ -2170,11 +2177,11 @@ function ContentUpload() {
                                     <div className="flex items-center gap-2 flex-wrap justify-end">
                                       {(previousVersions[selectedVersionIndex].status === 'approved' ||
                                         previousVersions[selectedVersionIndex].status === 'approved_by_admin') && (
-                                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-200">
-                                            <ShieldCheck className="h-3 w-3" />
-                                            Approved by Admin
-                                          </span>
-                                        )}
+                                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-200">
+                                          <ShieldCheck className="h-3 w-3" />
+                                          Approved by Admin
+                                        </span>
+                                      )}
                                       <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${getVersionStatusColor(previousVersions[selectedVersionIndex].status)}`}>
                                         {(previousVersions[selectedVersionIndex].status || '').replace(/_/g, ' ').toUpperCase()}
                                       </span>
@@ -2183,14 +2190,14 @@ function ContentUpload() {
                                   {(previousVersions[selectedVersionIndex].status === 'approved' ||
                                     previousVersions[selectedVersionIndex].status === 'approved_by_admin') &&
                                     previousVersions[selectedVersionIndex].approvalNotes && (
-                                      <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg flex items-start gap-2">
-                                        <ShieldCheck className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" />
-                                        <div>
-                                          <p className="text-xs font-semibold text-green-700 mb-0.5">Admin Approval Note</p>
-                                          <p className="text-xs text-green-800">{previousVersions[selectedVersionIndex].approvalNotes}</p>
-                                        </div>
+                                    <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg flex items-start gap-2">
+                                      <ShieldCheck className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" />
+                                      <div>
+                                        <p className="text-xs font-semibold text-green-700 mb-0.5">Admin Approval Note</p>
+                                        <p className="text-xs text-green-800">{previousVersions[selectedVersionIndex].approvalNotes}</p>
                                       </div>
-                                    )}
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             )}
@@ -2231,18 +2238,20 @@ function ContentUpload() {
                                           setSelectedVersionIndex(idx);
                                           setSelectedMediaIndex(0);
                                         }}
-                                        className={`w-full text-left px-5 py-3 flex flex-col border-l-4 transition-all duration-200 hover:bg-gray-50 ${isSelected
+                                        className={`w-full text-left px-5 py-3 flex flex-col border-l-4 transition-all duration-200 hover:bg-gray-50 ${
+                                          isSelected
                                             ? 'bg-purple-50 border-l-purple-500'
                                             : 'bg-white border-l-transparent'
-                                          }`}
+                                        }`}
                                       >
                                         <div className="flex items-center justify-between">
                                           <span className="font-medium text-gray-900 text-sm">{date}, {time}</span>
                                         </div>
                                         <div className="flex items-center mt-1.5 text-xs text-gray-500 gap-3">
                                           <span className="flex items-center">
-                                            <span className={`h-1.5 w-1.5 rounded-full mr-1.5 ${isSelected ? 'bg-purple-500' : 'bg-gray-300'
-                                              }`} />
+                                            <span className={`h-1.5 w-1.5 rounded-full mr-1.5 ${
+                                              isSelected ? 'bg-purple-500' : 'bg-gray-300'
+                                            }`} />
                                             V{version.flowVersionNumber}
                                           </span>
                                           {version.media?.length > 0 && (
@@ -2277,18 +2286,20 @@ function ContentUpload() {
                                           setSelectedVersionIndex(idx);
                                           setSelectedMediaIndex(0);
                                         }}
-                                        className={`w-full text-left px-5 py-3 flex flex-col border-l-4 transition-all duration-200 hover:bg-gray-50 ${isSelected
+                                        className={`w-full text-left px-5 py-3 flex flex-col border-l-4 transition-all duration-200 hover:bg-gray-50 ${
+                                          isSelected
                                             ? 'bg-amber-50 border-l-amber-500'
                                             : 'bg-white border-l-transparent'
-                                          }`}
+                                        }`}
                                       >
                                         <div className="flex items-center justify-between">
                                           <span className="font-medium text-gray-900 text-sm">{date}, {time}</span>
                                         </div>
                                         <div className="flex items-center mt-1.5 text-xs text-gray-500 gap-3">
                                           <span className="flex items-center">
-                                            <span className={`h-1.5 w-1.5 rounded-full mr-1.5 ${isSelected ? 'bg-amber-500' : 'bg-gray-300'
-                                              }`} />
+                                            <span className={`h-1.5 w-1.5 rounded-full mr-1.5 ${
+                                              isSelected ? 'bg-amber-500' : 'bg-gray-300'
+                                            }`} />
                                             V{version.flowVersionNumber}
                                           </span>
                                           {version.media?.length > 0 && (
@@ -2341,10 +2352,11 @@ function ContentUpload() {
                                 {commentsForCurrentMedia.map((comment, idx) => (
                                   <div
                                     key={comment.id || idx}
-                                    className={`rounded-xl border transition-all duration-200 overflow-hidden ${activeVersionComment === comment.id
+                                    className={`rounded-xl border transition-all duration-200 overflow-hidden ${
+                                      activeVersionComment === comment.id
                                         ? 'bg-purple-50 border-purple-200 shadow-sm'
                                         : 'bg-gray-50 border-gray-100 hover:border-gray-200'
-                                      }`}
+                                    }`}
                                   >
                                     <div
                                       className="p-3 cursor-pointer"
@@ -2470,94 +2482,13 @@ function ContentUpload() {
 
           {/* Right Column - Content Details & Assignment Info */}
           <div className="space-y-6">
-            {/* Notification Recipients Section */}
-            {activeTab === 'admin' && (
-              <div className="bg-white rounded-lg shadow-sm p-6 border border-purple-100/80 bg-gradient-to-br from-white to-purple-50/20">
-                <h2 className="text-lg font-semibold mb-1.5 flex items-center gap-2">
-                  <Bell className="h-5 w-5 text-purple-600" />
-                  Notification Recipients
-                </h2>
-                <p className="text-xs text-gray-500 mb-4">
-                  The following admins are assigned to this customer and will be notified of your submission:
-                </p>
-
-                {adminsLoading ? (
-                  <div className="flex items-center text-sm text-gray-500 py-2">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-500 mr-2"></div>
-                    Loading assigned admins…
-                  </div>
-                ) : displayAdminsList.length === 0 ? (
-                  <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-100 rounded-xl">
-                    <AlertCircle className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
-                    <p className="text-xs text-amber-700">No admins are currently assigned to this customer. System admins will handle the review.</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {displayAdminsList.map(admin => (
-                      <div
-                        key={admin.id}
-                        className="flex items-center gap-3 p-2.5 bg-white border border-gray-100 rounded-xl shadow-sm hover:border-purple-200 transition-all"
-                      >
-                        <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center text-purple-700 font-bold text-xs flex-shrink-0">
-                          {admin.name.charAt(0).toUpperCase()}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-gray-800 truncate">{admin.name}</p>
-                          <p className="text-xs text-gray-500 truncate">{admin.email}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Assignment Details - Desktop */}
-            <div className="bg-white rounded-lg shadow-sm p-6 hidden md:block">
-              <h2 className="text-lg font-semibold mb-4 flex items-center">
-                <FileText className="h-5 w-5 mr-2 text-purple-600" />
-                Assignment Details
-              </h2>
-
-              <div className="space-y-3">
-                <div>
-                  <h3 className="font-medium text-gray-900">{assignment.title}</h3>
-                  <p className="text-sm text-gray-600 mt-1">{assignment.description}</p>
-                </div>
-
-                <div className="flex items-center text-sm text-gray-500">
-                  <MapPin className="h-4 w-4 mr-1" />
-                  {assignment.customerName}
-                </div>
-
-                <div className="flex items-center text-sm text-gray-500">
-                  <Calendar className="h-4 w-4 mr-1" />
-                  Due: {assignment.dueDate ? new Date(assignment.dueDate).toLocaleDateString() : 'N/A'}
-                </div>
-
-                {assignment.requirements && assignment.requirements.length > 0 && (
-                  <div>
-                    <h4 className="font-medium text-gray-900 text-sm mb-2">Requirements:</h4>
-                    <ul className="text-sm text-gray-600 space-y-1">
-                      {assignment.requirements.map((req, index) => (
-                        <li key={index} className="flex items-start">
-                          <Check className="h-3 w-3 mr-2 mt-0.5 text-green-500 flex-shrink-0" />
-                          {req}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            </div>
-
             {/* Content Details Form */}
             <div className="bg-white rounded-lg shadow-sm p-6">
               <h2 className="text-lg font-semibold mb-4 flex items-center">
                 <MessageSquare className="h-5 w-5 mr-2 text-purple-600" />
                 Content Details
               </h2>
-
+              
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -2608,8 +2539,9 @@ function ContentUpload() {
               const latestApproved = [...previousVersions].reverse().find(v => v.status === 'approved');
               if (!latestApproved) return null;
               return (
-                <div className={`rounded-lg shadow-sm p-5 border-2 ${sentToCustomer ? 'bg-green-50 border-green-200' : 'bg-orange-50 border-orange-200'
-                  }`}>
+                <div className={`rounded-lg shadow-sm p-5 border-2 ${
+                  sentToCustomer ? 'bg-green-50 border-green-200' : 'bg-orange-50 border-orange-200'
+                }`}>
                   <div className="flex items-center gap-2 mb-2">
                     <ShieldCheck className={`h-5 w-5 ${sentToCustomer ? 'text-green-600' : 'text-orange-600'}`} />
                     <h3 className={`font-semibold text-sm ${sentToCustomer ? 'text-green-800' : 'text-orange-800'}`}>
@@ -2699,9 +2631,46 @@ function ContentUpload() {
         </div>
       </div>
 
+      {submitSuccessModal.open && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={closeSubmitSuccessModal}>
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-gradient-to-r from-emerald-500 to-green-600 px-6 py-5 text-white">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+                  <CheckCircle className="h-6 w-6" />
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wider font-semibold text-emerald-100">Submission Confirmed</p>
+                  <h3 className="text-lg font-bold leading-tight">{submitSuccessModal.title}</h3>
+                </div>
+              </div>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                <p className="text-sm font-semibold text-emerald-800">Assignment Details</p>
+                <p className="text-sm text-gray-900 mt-1 font-medium">{assignment?.title || 'Untitled Assignment'}</p>
+                <div className="mt-2 space-y-1 text-xs text-gray-700">
+                  <p><span className="font-semibold">Customer:</span> {assignment?.customerName || 'N/A'}</p>
+                  <p><span className="font-semibold">Due:</span> {assignment?.dueDate ? new Date(assignment.dueDate).toLocaleDateString() : 'N/A'}</p>
+                  <p><span className="font-semibold">Stage:</span> {activeTab === 'admin' ? 'Admin Review' : 'Customer Review'}</p>
+                </div>
+              </div>
+              <p className="text-sm text-gray-700 leading-relaxed">{submitSuccessModal.message}</p>
+              <button
+                onClick={closeSubmitSuccessModal}
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-lg transition-colors"
+              >
+                <Check className="h-4 w-4" />
+                Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Media Preview Modal */}
       {selectedMedia && (
-        <div
+        <div 
           className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4"
           onClick={() => setSelectedMedia(null)}
         >
@@ -2713,7 +2682,7 @@ function ContentUpload() {
             >
               <X className="h-8 w-8" />
             </button>
-
+            
             {/* Media Content */}
             <div className="bg-white rounded-lg overflow-hidden shadow-2xl">
               {selectedMedia.type === 'image' ? (
@@ -2730,7 +2699,7 @@ function ContentUpload() {
                   className="max-w-full max-h-[85vh] w-auto h-auto"
                 />
               )}
-
+              
               {/* Media Info */}
               <div className="p-4 bg-gray-50 border-t">
                 <div className="flex items-center justify-between">
@@ -2738,10 +2707,11 @@ function ContentUpload() {
                     <p className="font-medium text-gray-900">{selectedMedia.name}</p>
                     <p className="text-sm text-gray-500">{formatFileSize(selectedMedia.size)}</p>
                   </div>
-                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${selectedMedia.type === 'image'
-                      ? 'bg-green-100 text-green-800'
+                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                    selectedMedia.type === 'image' 
+                      ? 'bg-green-100 text-green-800' 
                       : 'bg-blue-100 text-blue-800'
-                    }`}>
+                  }`}>
                     {selectedMedia.type.toUpperCase()}
                   </span>
                 </div>

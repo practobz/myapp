@@ -295,14 +295,14 @@ function Assignments() {
   const getFilterStatus = (assignment) => {
     const actual = getActualStatus(assignment);
     if (actual === 'published') return 'published';
-
+    
     const hasSubmission = assignmentMatchesSet(assignment, submissionFilterSets.anySubmissionKeys);
     const isCustomerApproved = assignmentMatchesSet(assignment, submissionFilterSets.customerApprovedKeys) || (!hasSubmission && actual === 'approved');
     if (isCustomerApproved) return 'approved';
-
+    
     const isAdminApproved = assignmentMatchesSet(assignment, submissionFilterSets.adminApprovedKeys);
     if (isAdminApproved) return 'admin_approved';
-
+    
     return 'pending';
   };
 
@@ -543,23 +543,24 @@ function Assignments() {
       title="Content Creator Portal"
       subtitle="Assignment Dashboard"
       icon={<Palette className="h-6 w-6 text-white" />}
+      fullWidthContent={true}
     >
       <div className="space-y-5">
         {selectedCustomer && (
-          <div className="bg-gradient-to-r from-purple-600 via-purple-500 to-indigo-600 rounded-2xl shadow-lg p-6 text-white mb-5 flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center text-2xl font-bold overflow-hidden">
+          <div className="bg-gradient-to-r from-purple-600 via-purple-500 to-indigo-600 rounded-xl shadow p-2.5 text-white mb-3 flex items-center">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-9 h-9 rounded-full bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center text-sm font-bold overflow-hidden flex-shrink-0">
                 {selectedCustomer.profileImage ? (
                   <img src={selectedCustomer.profileImage} alt="" className="w-full h-full object-cover" />
                 ) : (
                   (selectedCustomer.name || 'C').charAt(0).toUpperCase()
                 )}
               </div>
-              <div>
-                <h1 className="text-xl sm:text-2xl font-bold">{selectedCustomer.name || 'Unnamed Customer'}</h1>
-                <p className="text-purple-100 text-sm">{selectedCustomer.email}</p>
+              <div className="min-w-0">
+                <h1 className="text-sm sm:text-base font-semibold truncate">{selectedCustomer.name || 'Unnamed Customer'}</h1>
+                <p className="text-purple-100 text-[11px] truncate">{selectedCustomer.email}</p>
                 {selectedCustomer.companyName && (
-                  <p className="text-purple-200 text-xs mt-1 bg-white/10 px-2 py-0.5 rounded-full inline-block">
+                  <p className="text-purple-200 text-[10px] mt-0.5 bg-white/10 px-1.5 py-0.5 rounded-full inline-block max-w-full truncate">
                     {selectedCustomer.companyName}
                   </p>
                 )}
@@ -584,10 +585,10 @@ function Assignments() {
                   key={opt.key}
                   onClick={() => setSelectedFilter(opt.key)}
                   className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${selectedFilter === opt.key
-                    ? 'bg-purple-600 text-white shadow-sm'
-                    : opt.key === 'review_updates'
-                      ? 'bg-gray-100 text-gray-600 hover:bg-rose-100 hover:text-rose-700'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      ? 'bg-purple-600 text-white shadow-sm'
+                      : opt.key === 'review_updates'
+                        ? 'bg-gray-100 text-gray-600 hover:bg-rose-100 hover:text-rose-700'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                     }`}
                 >
                   {opt.label}

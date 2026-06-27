@@ -6,6 +6,7 @@ import {
 } from 'recharts';
 import AdminLayout from '../../components/layout/AdminLayout';
 import ContentDetailView from '../../components/modals/ContentDetailView';
+import ContentCalendar from '../../../customer/ContentCalendar';
 import ContentItemModal from '../../components/modals/ContentItemModal';
 import ContentCalendarModal from '../../components/modals/ContentCalendarModal';
 import AssignCreatorModal from '../../components/modals/AssignCreatorModal';
@@ -14,7 +15,6 @@ import SchedulePostModal from '../../components/modals/SchedulePostModal';
 import ManualPublishModal from '../../components/modals/ManualPublishModal';
 import SummaryReport from './SummaryReport';
 import CustomerSocialAccounts from './CustomerSocialAccounts';
-import CreatorSubmissionsReview from './CreatorSubmissionsReview';
 import MultiCustomerAnalytics from './MultiCustomerAnalytics';
 import {
   ArrowLeft,
@@ -96,7 +96,6 @@ SocialBadge.displayName = 'SocialBadge';
 const TABS_CONFIG = [
   { id: 'overview', label: 'Overview', icon: LayoutGrid },
   { id: 'portfolio', label: 'Total Posts', icon: Briefcase },
-  { id: 'internal_review', label: 'Internal Review', icon: Layers },
   { id: 'qr', label: 'QR Codes', icon: QrCode },
   { id: 'social', label: 'Social', icon: BarChart3 },
   { id: 'report', label: 'Report', icon: FileText },
@@ -247,8 +246,8 @@ const TrendChart = memo(({ calendars, onClose }) => {
               key={opt.label}
               onClick={() => setRange(opt.months)}
               className={`px-2.5 py-0.5 rounded-md text-xs font-medium transition-colors ${range === opt.months
-                ? 'bg-emerald-600 text-white'
-                : 'text-gray-500 hover:bg-gray-100'
+                  ? 'bg-emerald-600 text-white'
+                  : 'text-gray-500 hover:bg-gray-100'
                 }`}
             >
               {opt.label}
@@ -482,9 +481,10 @@ const ItemTimeline = ({ item, itemStatus, scheduledPosts = [], submissions = [] 
     // Admin Approved Step
     const isAdminApproved = s.approved_by_admin === true || s.status === 'approved_admin' || s.status === 'approved_both' || (s.status === 'approved' && !s.approved_by_customer) || s.submission_stage === 'customer';
     if (isAdminApproved) {
-      const notifiedAdmins = Array.isArray(s.notify_admins) ? s.notify_admins : [];
-      const adminEmail = notifiedAdmins.length > 0 ? (notifiedAdmins[0].name || notifiedAdmins[0].email || 'Admin') : 'Admin';
-      const approvedLabel = `Admin Approved (${adminEmail})`;
+      // Use the actual approver's name/email (stored when admin clicks approve),
+      // NOT notify_admins which is just who was notified about the upload.
+      const approverName = s.approved_by_admin_name || s.approved_by_admin_email || null;
+      const approvedLabel = approverName ? `Admin Approved (${approverName})` : 'Admin Approved';
       versionSteps.push({
         key: `v${idx + 1}_admin_approved`,
         label: approvedLabel,
@@ -509,26 +509,26 @@ const ItemTimeline = ({ item, itemStatus, scheduledPosts = [], submissions = [] 
   // Derive customer approval from submission or item status
   const customerApprovedSub = submissions.length > 0 && (() => {
     const latest = submissions[submissions.length - 1];
-    const isApproved = latest.approved_by_customer === true ||
-      latest.status === 'approved_customer' ||
-      latest.status === 'approved_both';
-    const isReverted = latest.status === 'under_review' ||
-      latest.status === 'sent_to_creator' ||
-      latest.status === 'revision_requested' ||
-      latest.status === 'rejected';
+    const isApproved = latest.approved_by_customer === true || 
+                       latest.status === 'approved_customer' || 
+                       latest.status === 'approved_both';
+    const isReverted = latest.status === 'under_review' || 
+                       latest.status === 'sent_to_creator' || 
+                       latest.status === 'revision_requested' || 
+                       latest.status === 'rejected';
     return isApproved && !isReverted ? latest : null;
   })();
-
-  const isCustomerApproved = !!customerApprovedSub ||
-    itemStatus === 'published' ||
-    item.status === 'published' ||
-    item.published === true ||
-    (item.reviewedAt && submissions.length === 0);
-
-  const customerApprovedAt = customerApprovedSub?.approvedAt ||
-    customerApprovedSub?.updatedAt ||
-    (isCustomerApproved ? (item.reviewedAt || item.publishedAt) : null);
-
+  
+  const isCustomerApproved = !!customerApprovedSub || 
+                             itemStatus === 'published' || 
+                             item.status === 'published' || 
+                             item.published === true ||
+                             (item.reviewedAt && submissions.length === 0);
+                             
+  const customerApprovedAt = customerApprovedSub?.approvedAt || 
+                             customerApprovedSub?.updatedAt || 
+                             (isCustomerApproved ? (item.reviewedAt || item.publishedAt) : null);
+                             
   const customerApprovedDate = fmtDate(customerApprovedAt);
   const publishedAt = matchedPost?.publishedAt || item.publishedAt;
 
@@ -614,8 +614,8 @@ const ItemTimeline = ({ item, itemStatus, scheduledPosts = [], submissions = [] 
 const PostTrendButton = memo(({ isLoading, isActive, onClick }) => (
   <button
     className={`flex items-center gap-1 px-1.5 py-0.5 rounded border transition-colors flex-shrink-0 ${isActive
-      ? 'bg-blue-100 border-blue-300 text-blue-700'
-      : 'bg-blue-50 hover:bg-blue-100 border-blue-100 text-blue-600'
+        ? 'bg-blue-100 border-blue-300 text-blue-700'
+        : 'bg-blue-50 hover:bg-blue-100 border-blue-100 text-blue-600'
       }`}
     onClick={onClick}
     title="View post engagement trend"
@@ -721,8 +721,8 @@ const ExpandedTrendChart = memo(({ platformData, dateRange, onDateRangeChange, o
                 key={r.value}
                 onClick={() => onDateRangeChange(r.value)}
                 className={`px-2 py-0.5 text-[10px] rounded-full font-medium transition-colors ${dateRange === r.value
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-white text-gray-500 hover:bg-gray-100 border border-gray-200'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white text-gray-500 hover:bg-gray-100 border border-gray-200'
                   }`}
               >
                 {r.label}
@@ -1135,20 +1135,16 @@ function CustomerDetailsView() {
   // ── Publish Manager helpers ───────────────────────────────────────────────
   // Check if item is published (manual or via scheduled post)
   const isItemPublished = useCallback((item, calendarId = null) => {
-    // Check manual publish flag
     if (item.published === true) return true;
-    // Check scheduled posts
     return scheduledPosts.some(post => {
       if (calendarId) {
         const postCalId = post.calendarId || post.calendar_id;
         if (postCalId && postCalId !== calendarId) return false;
       }
       const postId = post.item_id || post.contentId;
-      if (postId) {
-        return postId === item.id && (post.status === 'published' || post.publishedAt);
-      }
-      return post.item_name && post.item_name === (item.title || item.description) &&
-        (post.status === 'published' || post.publishedAt);
+      const isIdMatch = postId && item.id && String(postId) === String(item.id);
+      const isNameMatch = post.item_name && (item.title || item.description) && post.item_name === (item.title || item.description);
+      return (isIdMatch || isNameMatch) && (post.status === 'published' || post.publishedAt);
     });
   }, [scheduledPosts]);
 
@@ -1397,10 +1393,10 @@ function CustomerDetailsView() {
         status: latest.status || 'submitted',
         approved_by_admin: latest.approved_by_admin,
         approved_by_customer: latest.approved_by_customer === true &&
-          latest.status !== 'under_review' &&
-          latest.status !== 'sent_to_creator' &&
-          latest.status !== 'revision_requested' &&
-          latest.status !== 'rejected',
+                              latest.status !== 'under_review' &&
+                              latest.status !== 'sent_to_creator' &&
+                              latest.status !== 'revision_requested' &&
+                              latest.status !== 'rejected',
         submission_stage: latest.submission_stage || latest.submissionStage || 'internal',
         createdDate: base.created_at,
         lastUpdated: latest.created_at,
@@ -1416,10 +1412,10 @@ function CustomerDetailsView() {
           status: v.status || 'submitted',
           approved_by_admin: v.approved_by_admin,
           approved_by_customer: v.approved_by_customer === true &&
-            v.status !== 'under_review' &&
-            v.status !== 'sent_to_creator' &&
-            v.status !== 'revision_requested' &&
-            v.status !== 'rejected',
+                                v.status !== 'under_review' &&
+                                v.status !== 'sent_to_creator' &&
+                                v.status !== 'revision_requested' &&
+                                v.status !== 'rejected',
           submission_stage: v.submission_stage || v.submissionStage || 'internal',
           comments: v.comments || [],
         })),
@@ -1460,7 +1456,7 @@ function CustomerDetailsView() {
     let adminReviewCount = 0, customerReviewCount = 0;
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
+    
     const twoDaysFromNow = new Date(today);
     twoDaysFromNow.setDate(today.getDate() + 2);
     twoDaysFromNow.setHours(23, 59, 59, 999);
@@ -1501,31 +1497,31 @@ function CustomerDetailsView() {
           const latest = sorted[sorted.length - 1];
           const status = latest.status || 'submitted';
           const stage = latest.submission_stage || latest.submissionStage || 'internal';
-
+          
           const approvedByAdmin = latest.approved_by_admin === true || status === 'approved_admin' || status === 'approved_both';
           const approvedByCustomer = (latest.approved_by_customer === true || status === 'approved_customer' || status === 'approved_both') &&
-            status !== 'under_review' &&
-            status !== 'sent_to_creator' &&
-            status !== 'revision_requested' &&
-            status !== 'rejected';
-
-          const isAdminRev = (stage !== 'customer') &&
-            !approvedByAdmin &&
-            status !== 'approved' &&
-            status !== 'rejected' &&
-            status !== 'revision_requested' &&
-            status !== 'sent_to_creator' &&
-            status !== 'published';
-
-          const isCustomerRev = (stage === 'customer') &&
-            !approvedByCustomer &&
-            status !== 'approved_customer' &&
-            status !== 'approved_both' &&
-            status !== 'rejected' &&
-            status !== 'revision_requested' &&
-            status !== 'sent_to_creator' &&
-            status !== 'published';
-
+                                     status !== 'under_review' &&
+                                     status !== 'sent_to_creator' &&
+                                     status !== 'revision_requested' &&
+                                     status !== 'rejected';
+          
+          const isAdminRev = (stage !== 'customer') && 
+                             !approvedByAdmin && 
+                             status !== 'approved' &&
+                             status !== 'rejected' && 
+                             status !== 'revision_requested' && 
+                             status !== 'sent_to_creator' &&
+                             status !== 'published';
+                             
+          const isCustomerRev = (stage === 'customer') && 
+                                !approvedByCustomer && 
+                                status !== 'approved_customer' &&
+                                status !== 'approved_both' &&
+                                status !== 'rejected' && 
+                                status !== 'revision_requested' && 
+                                status !== 'sent_to_creator' &&
+                                status !== 'published';
+                                
           if (isAdminRev) adminReviewCount++;
           if (isCustomerRev) customerReviewCount++;
         }
@@ -1583,31 +1579,31 @@ function CustomerDetailsView() {
           const latest = sorted[sorted.length - 1];
           const status = latest.status || 'submitted';
           const stage = latest.submission_stage || latest.submissionStage || 'internal';
-
+          
           const approvedByAdmin = latest.approved_by_admin === true || status === 'approved_admin' || status === 'approved_both';
           const approvedByCustomer = (latest.approved_by_customer === true || status === 'approved_customer' || status === 'approved_both') &&
-            status !== 'under_review' &&
-            status !== 'sent_to_creator' &&
-            status !== 'revision_requested' &&
-            status !== 'rejected';
-
-          const isAdminRev = (stage !== 'customer') &&
-            !approvedByAdmin &&
-            status !== 'approved' &&
-            status !== 'rejected' &&
-            status !== 'revision_requested' &&
-            status !== 'sent_to_creator' &&
-            status !== 'published';
-
-          const isCustomerRev = (stage === 'customer') &&
-            !approvedByCustomer &&
-            status !== 'approved_customer' &&
-            status !== 'approved_both' &&
-            status !== 'rejected' &&
-            status !== 'revision_requested' &&
-            status !== 'sent_to_creator' &&
-            status !== 'published';
-
+                                     status !== 'under_review' &&
+                                     status !== 'sent_to_creator' &&
+                                     status !== 'revision_requested' &&
+                                     status !== 'rejected';
+          
+          const isAdminRev = (stage !== 'customer') && 
+                             !approvedByAdmin && 
+                             status !== 'approved' &&
+                             status !== 'rejected' && 
+                             status !== 'revision_requested' && 
+                             status !== 'sent_to_creator' &&
+                             status !== 'published';
+                             
+          const isCustomerRev = (stage === 'customer') && 
+                                !approvedByCustomer && 
+                                status !== 'approved_customer' &&
+                                status !== 'approved_both' &&
+                                status !== 'rejected' && 
+                                status !== 'revision_requested' && 
+                                status !== 'sent_to_creator' &&
+                                status !== 'published';
+                                
           if (isAdminRev) adminReviewCount++;
           if (isCustomerRev) customerReviewCount++;
         }
@@ -2175,6 +2171,7 @@ function CustomerDetailsView() {
           publishedPlatforms: item.publishedPlatforms || [],
           totalVersions: matching.length,
           versions: matching.map((s, idx) => ({
+            ...s,
             id: s._id,
             assignment_id: s.assignment_id,
             versionNumber: idx + 1,
@@ -2184,6 +2181,8 @@ function CustomerDetailsView() {
             notes: s.notes || '',
             createdAt: s.created_at,
             status: s.status || 'submitted',
+            submission_stage: s.submission_stage || '',
+            approved_by_admin: s.approved_by_admin || false,
             comments: s.comments || [],
           })),
           calendarName: calendar.name || '',
@@ -2284,8 +2283,8 @@ function CustomerDetailsView() {
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all flex-shrink-0 ${isActive
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                     }`}
                 >
                   <Icon className="h-3.5 w-3.5" />
@@ -2303,468 +2302,126 @@ function CustomerDetailsView() {
 
         {/* ══════════ TAB: OVERVIEW ══════════ */}
         {activeTab === 'overview' && (
-          <>
-            {/* Content Calendars Section */}
-            <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-              {/* Header with Stats Inline */}
-              <div className="px-3 sm:px-4 py-3 border-b border-gray-100">
-                <div className="flex flex-col xl:flex-row xl:items-center gap-3">
-                  <div className="flex-shrink-0">
-                    <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Content Calendars</h2>
-                    <p className="text-base text-gray-500 mt-0.5">Manage content schedule and items</p>
-                  </div>
+          <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+            {/* Header with Stats */}
+            <div className="px-3 sm:px-4 py-3 border-b border-gray-100">
+              <div className="flex flex-col xl:flex-row xl:items-center gap-3">
+                <div className="flex-shrink-0">
+                  <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Content Calendars</h2>
+                  <p className="text-base text-gray-500 mt-0.5">Manage content schedule and items</p>
+                </div>
 
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 xl:ml-auto overflow-hidden">
-                    {/* Stats Inline */}
-                    {calendars.length > 0 && (
-                      <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0">
-                        <div className="flex items-center gap-1.5 px-2 py-1 bg-gray-50 rounded-md border border-gray-200 whitespace-nowrap">
-                          <span className="text-sm font-bold text-gray-700">{overallStats.totalCalendars}</span>
-                          <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">Calendars</span>
-                        </div>
-                        <div className="flex items-center gap-1.5 px-2 py-1 bg-blue-50 rounded-md border border-blue-200 whitespace-nowrap">
-                          <span className="text-sm font-bold text-blue-700">{overallStats.totalItems}</span>
-                          <span className="text-[10px] font-medium text-blue-600 uppercase tracking-wide">Items</span>
-                        </div>
-                        <div className="flex items-center gap-1.5 px-2 py-1 bg-emerald-50 rounded-md border border-emerald-200 whitespace-nowrap">
-                          <span className="text-sm font-bold text-emerald-700">{overallStats.publishedItems}</span>
-                          <span className="text-[10px] font-medium text-emerald-600 uppercase tracking-wide">Published</span>
-                        </div>
-                        <div className="flex items-center gap-1.5 px-2 py-1 bg-amber-50 rounded-md border border-amber-200 whitespace-nowrap">
-                          <span className="text-sm font-bold text-amber-700">{overallStats.pendingItems}</span>
-                          <span className="text-[10px] font-medium text-amber-600 uppercase tracking-wide">Pending</span>
-                        </div>
-                        <div className="flex items-center gap-1.5 px-2 py-1 bg-indigo-50 rounded-md border border-indigo-200 whitespace-nowrap">
-                          <span className="text-sm font-bold text-indigo-700">{overallStats.adminReviewCount}</span>
-                          <span className="text-[10px] font-medium text-indigo-600 uppercase tracking-wide">Admin Review</span>
-                        </div>
-                        <div className="flex items-center gap-1.5 px-2 py-1 bg-pink-50 rounded-md border border-pink-200 whitespace-nowrap">
-                          <span className="text-sm font-bold text-pink-700">{overallStats.customerReviewCount}</span>
-                          <span className="text-[10px] font-medium text-pink-600 uppercase tracking-wide">Customer Review</span>
-                        </div>
-                        <div className="flex items-center gap-1.5 px-2 py-1 bg-orange-50 rounded-md border border-orange-200 whitespace-nowrap">
-                          <span className="text-sm font-bold text-orange-700">{overallStats.upcomingDue}</span>
-                          <span className="text-[10px] font-medium text-orange-600 uppercase tracking-wide">Upcoming</span>
-                        </div>
-                        <div className="flex items-center gap-1.5 px-2 py-1 bg-red-50 rounded-md border border-red-200 whitespace-nowrap">
-                          <span className="text-sm font-bold text-red-700">{overallStats.overdue}</span>
-                          <span className="text-[10px] font-medium text-red-600 uppercase tracking-wide">Overdue</span>
-                        </div>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 xl:ml-auto overflow-hidden">
+                  {/* Stats Inline */}
+                  {calendars.length > 0 && (
+                    <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0">
+                      <div className="flex items-center gap-1.5 px-2 py-1 bg-gray-50 rounded-md border border-gray-200 whitespace-nowrap">
+                        <span className="text-sm font-bold text-gray-700">{overallStats.totalCalendars}</span>
+                        <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">Calendars</span>
                       </div>
-                    )}
+                      <div className="flex items-center gap-1.5 px-2 py-1 bg-blue-50 rounded-md border border-blue-200 whitespace-nowrap">
+                        <span className="text-sm font-bold text-blue-700">{overallStats.totalItems}</span>
+                        <span className="text-[10px] font-medium text-blue-600 uppercase tracking-wide">Items</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 px-2 py-1 bg-emerald-50 rounded-md border border-emerald-200 whitespace-nowrap">
+                        <span className="text-sm font-bold text-emerald-700">{overallStats.publishedItems}</span>
+                        <span className="text-[10px] font-medium text-emerald-600 uppercase tracking-wide">Published</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 px-2 py-1 bg-amber-50 rounded-md border border-amber-200 whitespace-nowrap">
+                        <span className="text-sm font-bold text-amber-700">{overallStats.pendingItems}</span>
+                        <span className="text-[10px] font-medium text-amber-600 uppercase tracking-wide">Pending</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 px-2 py-1 bg-indigo-50 rounded-md border border-indigo-200 whitespace-nowrap">
+                        <span className="text-sm font-bold text-indigo-700">{overallStats.adminReviewCount}</span>
+                        <span className="text-[10px] font-medium text-indigo-600 uppercase tracking-wide">Admin Review</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 px-2 py-1 bg-pink-50 rounded-md border border-pink-200 whitespace-nowrap">
+                        <span className="text-sm font-bold text-pink-700">{overallStats.customerReviewCount}</span>
+                        <span className="text-[10px] font-medium text-pink-600 uppercase tracking-wide">Customer Review</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 px-2 py-1 bg-orange-50 rounded-md border border-orange-200 whitespace-nowrap">
+                        <span className="text-sm font-bold text-orange-700">{overallStats.upcomingDue}</span>
+                        <span className="text-[10px] font-medium text-orange-600 uppercase tracking-wide">Upcoming</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 px-2 py-1 bg-red-50 rounded-md border border-red-200 whitespace-nowrap">
+                        <span className="text-sm font-bold text-red-700">{overallStats.overdue}</span>
+                        <span className="text-[10px] font-medium text-red-600 uppercase tracking-wide">Overdue</span>
+                      </div>
+                    </div>
+                  )}
 
-                    {/* Actions */}
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <button
-                        onClick={() => setShowTrend(v => !v)}
-                        className={`inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${showTrend
+                  {/* Actions */}
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <button
+                      onClick={() => setShowTrend(v => !v)}
+                      className={`inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${showTrend
                           ? 'bg-emerald-600 text-white hover:bg-emerald-700'
                           : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                          }`}
-                      >
-                        <TrendingUp className="h-4 w-4 mr-1.5" />
-                        Trend
-                      </button>
-                      <button
-                        onClick={() => setIsReportModalOpen(true)}
-                        className="inline-flex items-center px-3 py-1.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
-                      >
-                        <Download className="h-4 w-4 mr-1.5" />
-                        Report
-                      </button>
-                      <button
-                        onClick={() => setIsCalendarModalOpen(true)}
-                        className="inline-flex items-center px-3 py-1.5 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-colors"
-                      >
-                        <Plus className="h-4 w-4 mr-1.5" />
-                        Add Calendar
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Trend chart */}
-              {showTrend && calendars.length > 0 && (
-                <div className="px-4 sm:px-6 pb-4">
-                  <TrendChart calendars={calendars} onClose={() => setShowTrend(false)} />
-                </div>
-              )}
-
-              <div className="p-2 sm:p-3">
-                {calendarsLoading && calendars.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-12 gap-3">
-                    <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                    <p className="text-sm text-gray-500">Loading calendars...</p>
-                  </div>
-                ) : calendars.length > 0 ? (
-                  <div className="space-y-1">
-                    {[...calendars].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)).map((calendar) => {
-                      const calStats = getCalendarStats(calendar);
-                      return (
-                        <div key={calendar._id} className="bg-gray-50 rounded-xl border border-gray-100 overflow-hidden">
-                          {/* Calendar Header */}
-                          <div
-                            className="p-2 sm:p-3 cursor-pointer hover:bg-gray-100/50 transition-colors"
-                            onClick={() => toggleCalendarExpansion(calendar._id)}
-                          >
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-3 min-w-0 flex-1">
-                                <div className="h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                                  <Calendar className="h-5 w-5 text-blue-600" />
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <h4 className="text-sm font-semibold text-gray-900 truncate">{calendar.name}</h4>
-                                    {isCalendarPublished(calendar) && (
-                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 border border-emerald-200 flex-shrink-0">
-                                        <CheckCircle className="w-3 h-3 mr-1" />
-                                        Complete
-                                      </span>
-                                    )}
-                                    {calStats.total > 0 && (
-                                      <div className="flex items-center gap-1.5 ml-1">
-                                        <span className="text-[11px] font-medium text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">Published: {calStats.published}</span>
-                                        <span className="text-[11px] font-medium text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">Pending: {calStats.pending}</span>
-                                        <span className="text-[11px] font-medium text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">Admin Review: {calStats.adminReviewCount}</span>
-                                        <span className="text-[11px] font-medium text-pink-600 bg-pink-50 px-1.5 py-0.5 rounded">Customer Review: {calStats.customerReviewCount}</span>
-                                        <span className="text-[11px] font-medium text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded">Upcoming: {calStats.upcomingDue}</span>
-                                        <span className="text-[11px] font-medium text-red-600 bg-red-50 px-1.5 py-0.5 rounded">Overdue: {calStats.overdue}</span>
-                                      </div>
-                                    )}
-                                  </div>
-                                  <div className="flex items-center gap-3 mt-1 flex-wrap">
-                                    <span className="text-xs text-gray-500 font-medium">{calStats.total} items</span>
-                                    {calendar.assignedTo && (
-                                      <span className="text-[11px] text-gray-500 truncate border-l border-gray-200 pl-3">
-                                        Assigned: {calendar.assignedToName || calendar.assignedTo}
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-
-                              {/* Progress & Actions */}
-                              <div className="flex items-center gap-3 ml-3">
-                                {/* Progress Bar - Desktop */}
-                                <div className="hidden sm:flex items-center gap-2">
-                                  <span className="text-xs text-gray-600 tabular-nums min-w-[40px] text-right">
-                                    {calStats.published}/{calStats.total}
-                                  </span>
-                                  <div className="w-20 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                                    <div
-                                      className="h-full bg-emerald-500 rounded-full transition-all"
-                                      style={{ width: `${calStats.progressPercent}%` }}
-                                    />
-                                  </div>
-                                </div>
-
-                                {/* Desktop Actions */}
-                                <div className="hidden sm:flex items-center gap-1">
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); setSelectedCalendar(calendar); setIsContentModalOpen(true); }}
-                                    className="p-1.5 text-green-600 hover:bg-green-100 rounded-lg transition-colors"
-                                    title="Add Item"
-                                  >
-                                    <Plus className="h-4 w-4" />
-                                  </button>
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); handleEditCalendar(calendar); }}
-                                    className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors"
-                                    title="Edit"
-                                  >
-                                    <Edit className="h-4 w-4" />
-                                  </button>
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); handleDeleteCalendar(calendar._id); }}
-                                    className="p-1.5 text-red-600 hover:bg-red-100 rounded-lg transition-colors"
-                                    title="Delete"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </button>
-                                </div>
-
-                                {/* Mobile Menu Button */}
-                                <div className="sm:hidden">
-                                  <button
-                                    type="button"
-                                    onClick={e => { e.stopPropagation(); openMobileMenu(calendar); }}
-                                    className="p-1.5 text-gray-500 hover:bg-gray-200 rounded-lg transition-colors"
-                                  >
-                                    <MoreVertical className="h-4 w-4" />
-                                  </button>
-                                </div>
-
-                                {expandedCalendars.has(calendar._id) ? (
-                                  <ChevronDown className="h-4 w-4 text-gray-400" />
-                                ) : (
-                                  <ChevronRight className="h-4 w-4 text-gray-400" />
-                                )}
-                              </div>
-                            </div>
-
-                            {/* Progress Bar - Mobile */}
-                            <div className="sm:hidden mt-3 flex items-center gap-2">
-                              <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                                <div
-                                  className="h-full bg-emerald-500 rounded-full transition-all"
-                                  style={{ width: `${calStats.progressPercent}%` }}
-                                />
-                              </div>
-                              <span className="text-xs text-gray-500 tabular-nums">{calStats.progressPercent}%</span>
-                            </div>
-                          </div>
-
-                          {/* Expanded Content Items */}
-                          {expandedCalendars.has(calendar._id) && (
-                            <div className="border-t border-gray-200/50 p-2 space-y-1">
-                              {calendar.contentItems && calendar.contentItems.length > 0 ? (
-                                <>
-                                  <div className="flex items-center justify-end pb-1">
-                                    <button
-                                      onClick={e => { e.stopPropagation(); setItemSortOrder(o => o === 'desc' ? 'asc' : 'desc'); }}
-                                      className="flex items-center gap-1 px-2 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
-                                      title={itemSortOrder === 'desc' ? 'Newest first — click for oldest first' : 'Oldest first — click for newest first'}
-                                    >
-                                      <ArrowUpDown className="h-3 w-3" />
-                                      {itemSortOrder === 'desc' ? 'Newest first' : 'Oldest first'}
-                                    </button>
-                                  </div>
-                                  {[...calendar.contentItems].sort((a, b) => itemSortOrder === 'desc'
-                                    ? new Date(b.date) - new Date(a.date)
-                                    : new Date(a.date) - new Date(b.date)
-                                  ).map((item, index) => {
-                                    const originalIndex = calendar.contentItems.findIndex(
-                                      orig => orig.date === item.date && orig.description === item.description
-                                    );
-                                    const itemStatus = getItemStatus(item);
-                                    const statusConfig = getStatusConfig(itemStatus);
-                                    const itemKey = item.id || `${calendar._id}_${index}`;
-                                    const itemTrendData = postTrendCache[itemKey];
-                                    const isTrendLoading = itemTrendData === null;
-                                    const isExpanded = expandedTrendItem === itemKey;
-                                    const publishedLinks = itemStatus === 'published' ? getItemPublishedLinks(item) : [];
-                                    const creatorId = item.assignedTo || calendar.assignedTo;
-                                    const creatorName = item.assignedToName || calendar.assignedToName || (creators.find(c => c.email === creatorId)?.name) || creatorId || '';
-                                    // Filter submissions for this item (for version nodes in timeline)
-                                    const itemTitle = item.title || item.description;
-                                    const itemSubmissions = allSubmissions
-                                      .filter(s => {
-                                        const sCalId = s.calendar_id || s.calendarId;
-                                        if (sCalId && sCalId !== calendar._id) return false;
-                                        const sCustId = s.customer_id || s.customerId;
-                                        if (sCustId && sCustId !== (calendar.customerId || id)) return false;
-                                        const subId = s.assignment_id || s.item_id;
-                                        if (subId) {
-                                          return subId === item.id;
-                                        }
-                                        return (s.item_name && s.item_name === itemTitle);
-                                      })
-                                      .sort((a, b) => new Date(a.created_at || a.createdAt) - new Date(b.created_at || b.createdAt));
-                                    return (
-                                      <div key={itemKey} className="bg-white rounded-lg border border-gray-100 hover:border-gray-200 transition-colors overflow-hidden">
-                                        <div className="flex items-center justify-between p-2">
-                                          <div className="flex items-center gap-3 min-w-0 flex-1">
-                                            <div className="h-9 w-9 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                                              <FileText className="h-4 w-4 text-gray-400" />
-                                            </div>
-                                            <div className="min-w-0 flex-1">
-                                              <div className="flex items-center gap-1.5 flex-wrap">
-                                                {item.title && (
-                                                  <button
-                                                    className="text-sm font-medium text-blue-800 truncate hover:text-blue-600 hover:underline cursor-pointer text-left"
-                                                    onClick={(e) => { e.stopPropagation(); openContentDetail(item, calendar); }}
-                                                    title="View content details"
-                                                  >
-                                                    {item.title}
-                                                  </button>
-                                                )}
-                                                {publishedLinks.map((link, li) => (
-                                                  <a
-                                                    key={li}
-                                                    href={link.url}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="flex-shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-100 transition-colors"
-                                                    onClick={e => e.stopPropagation()}
-                                                    title={`Open on ${link.label}${link.isManual ? ' (Manual)' : ''}`}
-                                                  >
-                                                    <PlatformIcon platform={link.platform || link.label} />
-                                                    {link.isManual && <User className="h-3.5 w-3.5 text-emerald-600 bg-emerald-100/50 rounded ml-0.5 p-[2px]" title="Manually Published" />}
-                                                    <ExternalLink className="h-2.5 w-2.5 ml-0.5" />
-                                                  </a>
-                                                ))}
-                                              </div>
-                                              <p className="text-sm text-gray-900 truncate">{item.description || 'Untitled'}</p>
-                                              <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                                {item.type && (
-                                                  (Array.isArray(item.type) ? item.type :
-                                                    (typeof item.type === 'string' ? item.type.split(',').map(p => p.trim()) : [item.type])
-                                                  ).map((platform, idx) => (
-                                                    <span key={idx} title={platform} className="flex items-center justify-center">
-                                                      <PlatformIcon platform={platform} />
-                                                    </span>
-                                                  ))
-                                                )}
-                                                {creatorName && (
-                                                  <span className="text-[10px] text-gray-500 flex items-center gap-0.5">
-                                                    <User className="h-2.5 w-2.5" />
-                                                    {creatorName}
-                                                  </span>
-                                                )}
-                                              </div>
-                                              <ItemTimeline item={item} itemStatus={itemStatus} scheduledPosts={scheduledPosts} submissions={itemSubmissions} />
-                                              {itemStatus === 'published' && itemTrendData && typeof itemTrendData === 'object' && (
-                                                <MiniTrendCharts platformData={itemTrendData} />
-                                              )}
-                                            </div>
-                                          </div>
-                                          <div className="flex items-center gap-1.5 ml-2">
-                                            {itemStatus === 'published' && (
-                                              <div className="hidden sm:block" onClick={e => e.stopPropagation()}>
-                                                <PostTrendButton
-                                                  isLoading={isTrendLoading}
-                                                  isActive={isExpanded}
-                                                  onClick={() => {
-                                                    if (isExpanded) {
-                                                      setExpandedTrendItem(null);
-                                                    } else {
-                                                      fetchPostTrend(itemKey, item);
-                                                      setExpandedTrendItem(itemKey);
-                                                    }
-                                                  }}
-                                                />
-                                              </div>
-                                            )}
-                                            <span className={`px-2 py-1 rounded-md text-xs font-medium ${statusConfig.bg} ${statusConfig.text} border ${statusConfig.border} hidden sm:inline-flex`}>
-                                              {itemStatus.replace('_', ' ')}
-                                            </span>
-                                            <button
-                                              className={`p-1.5 rounded transition-colors touch-manipulation ${itemStatus === 'published'
-                                                ? 'text-emerald-650 hover:bg-emerald-50'
-                                                : 'text-gray-400 hover:text-emerald-650 hover:bg-emerald-50'
-                                                }`}
-                                              onClick={(e) => { e.stopPropagation(); openManualPublishModal(item, calendar._id); }}
-                                              onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); openManualPublishModal(item, calendar._id); }}
-                                              title="Publish Status"
-                                            >
-                                              <CheckCircle className="h-3.5 w-3.5" />
-                                            </button>
-                                            <button
-                                              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors touch-manipulation"
-                                              onClick={(e) => { e.stopPropagation(); handleEditItem(item, calendar._id); }}
-                                              onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleEditItem(item, calendar._id); }}
-                                              title="Edit"
-                                            >
-                                              <Edit className="h-3.5 w-3.5" />
-                                            </button>
-                                            <button
-                                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors touch-manipulation"
-                                              onClick={(e) => { e.stopPropagation(); handleDeleteItem(calendar._id, item); }}
-                                              onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteItem(calendar._id, item); }}
-                                              title="Delete"
-                                            >
-                                              <Trash2 className="h-3.5 w-3.5" />
-                                            </button>
-                                            <button
-                                              className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors touch-manipulation"
-                                              onClick={(e) => { e.stopPropagation(); navigate(`/admin/content-upload/${calendar._id}/${originalIndex}`); }}
-                                              onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); navigate(`/admin/content-upload/${calendar._id}/${originalIndex}`); }}
-                                              title="Upload"
-                                            >
-                                              <Upload className="h-3.5 w-3.5" />
-                                            </button>
-                                          </div>
-                                        </div>
-
-                                        {/* Mobile trend & post link row */}
-                                        <div className="sm:hidden px-3 pb-2 flex items-center gap-2 flex-wrap">
-                                          <span className={`px-2 py-0.5 rounded-md text-[10px] font-medium ${statusConfig.bg} ${statusConfig.text} border ${statusConfig.border}`}>
-                                            {itemStatus.replace('_', ' ')}
-                                          </span>
-                                          {publishedLinks.map((link, li) => (
-                                            <a
-                                              key={li}
-                                              href={link.url}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-600 border border-blue-100"
-                                              onClick={e => e.stopPropagation()}
-                                            >
-                                              <ExternalLink className="h-2.5 w-2.5" /> {link.label} {link.isManual ? '(m)' : ''}
-                                            </a>
-                                          ))}
-                                          {itemStatus === 'published' && (
-                                            <PostTrendButton
-                                              isLoading={isTrendLoading}
-                                              isActive={isExpanded}
-                                              onClick={() => {
-                                                if (isExpanded) {
-                                                  setExpandedTrendItem(null);
-                                                } else {
-                                                  fetchPostTrend(itemKey, item);
-                                                  setExpandedTrendItem(itemKey);
-                                                }
-                                              }}
-                                            />
-                                          )}
-                                        </div>
-
-                                        {/* Expanded Trend Chart */}
-                                        {isExpanded && (
-                                          <div className="px-3 pb-3">
-                                            {isTrendLoading ? (
-                                              <div className="mt-3 bg-blue-50/50 rounded-lg border border-blue-100 p-6 flex items-center justify-center gap-2">
-                                                <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                                                <span className="text-xs text-gray-500">Loading trend data…</span>
-                                              </div>
-                                            ) : (
-                                              <ExpandedTrendChart
-                                                platformData={itemTrendData || {}}
-                                                dateRange={trendDateRange}
-                                                onDateRangeChange={setTrendDateRange}
-                                                onClose={() => setExpandedTrendItem(null)}
-                                              />
-                                            )}
-                                          </div>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
-                                </>
-                              ) : (
-                                <div className="text-center py-6 text-sm text-gray-500">
-                                  No content items in this calendar
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="text-center py-12">
-                    <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
-                      <Calendar className="h-7 w-7 text-gray-400" />
-                    </div>
-                    <h3 className="text-lg font-medium text-gray-800 mb-1">No calendars yet</h3>
-                    <p className="text-gray-500 text-sm max-w-sm mx-auto mb-4">
-                      Create a content calendar to start managing this customer's content schedule.
-                    </p>
+                        }`}
+                    >
+                      <TrendingUp className="h-4 w-4 mr-1.5" />
+                      Trend
+                    </button>
+                    <button
+                      onClick={() => setIsReportModalOpen(true)}
+                      className="inline-flex items-center px-3 py-1.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+                    >
+                      <Download className="h-4 w-4 mr-1.5" />
+                      Report
+                    </button>
                     <button
                       onClick={() => setIsCalendarModalOpen(true)}
-                      className="inline-flex items-center px-5 py-2.5 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-colors"
+                      className="inline-flex items-center px-3 py-1.5 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-colors"
                     >
                       <Plus className="h-4 w-4 mr-1.5" />
-                      Create First Calendar
+                      Add Calendar
                     </button>
                   </div>
-                )}
+                </div>
               </div>
             </div>
 
-          </> /* end overview tab */
+            {/* Trend chart */}
+            {showTrend && calendars.length > 0 && (
+              <div className="px-4 py-3 border-b border-gray-100 bg-gray-50/30">
+                <TrendChart calendars={calendars} onClose={() => setShowTrend(false)} />
+              </div>
+            )}
+
+            <div className="p-3 sm:p-4">
+              <ContentCalendar
+                adminCustomerId={id}
+                isAdmin={true}
+                calendars={calendars}
+                scheduledPosts={scheduledPosts}
+                submissions={allSubmissions}
+                customer={customer}
+                loading={calendarsLoading || loading}
+                onAddItem={(calendar) => {
+                  setSelectedCalendar(calendar);
+                  setIsContentModalOpen(true);
+                }}
+                onEditCalendar={handleEditCalendar}
+                onDeleteCalendar={handleDeleteCalendar}
+                onAddCalendar={() => setIsCalendarModalOpen(true)}
+                onEditItem={(item, calendarId) => {
+                  handleEditItem(item, calendarId);
+                }}
+                onDeleteItem={(calendarId, item) => {
+                  handleDeleteItem(calendarId, item);
+                }}
+                onUploadItem={(calendarId, itemIndex) => {
+                  navigate(`/admin/content-upload/${calendarId}/${itemIndex}`);
+                }}
+                onManualPublish={(item, calendarId) => {
+                  openManualPublishModal(item, calendarId);
+                }}
+                openContentDetail={(item, calendar) => {
+                  openContentDetail(item, calendar);
+                }}
+              />
+            </div>
+          </div>
         )}
 
         {/* ══════════ TAB: PORTFOLIO ══════════ */}
@@ -2889,10 +2546,6 @@ function CustomerDetailsView() {
         )}
 
 
-        {/* ══════════ TAB: QR CODES ══════════ */}
-        {activeTab === 'internal_review' && (
-          <CreatorSubmissionsReview embedded={true} customerId={id} />
-        )}
 
         {/* ══════════ TAB: QR CODES ══════════ */}
         {activeTab === 'qr' && (
@@ -3252,6 +2905,7 @@ function CustomerDetailsView() {
               calendarName={selectedContentDetail.calendarName}
               itemName={selectedContentDetail.itemName}
               onDeleteVersion={handleDeleteVersion}
+              onRefresh={() => { fetchSubmissions(); fetchCalendars(); }}
               scheduledPosts={scheduledPosts}
               onDeleteScheduledPost={handleDeleteScheduledPost}
             />

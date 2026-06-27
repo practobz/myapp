@@ -28,6 +28,20 @@ const normalizeMedia = (media) => {
   }).filter(Boolean);
 };
 
+const isVisibleToCustomerSubmission = (submission) => {
+  if (!submission) return false;
+  const stage = submission.submission_stage || submission.submissionStage || '';
+  const status = submission.status || 'submitted';
+  const sentToCustomerAt = submission.sent_to_customer_at || submission.sentToCustomerAt;
+  const approvedByAdmin =
+    submission.approved_by_admin === true ||
+    status === 'approved_admin' ||
+    status === 'approved_both' ||
+    (status === 'approved' && !submission.approved_by_customer);
+  const isLegacyDirectCustomerSubmission = stage === 'customer' && !sentToCustomerAt && !approvedByAdmin;
+  return (stage === 'customer' && !!sentToCustomerAt) || isLegacyDirectCustomerSubmission || status === 'published';
+};
+
 const processSubmissionsData = (submissions, user, targetItemId, filterStatus) => {
   if (!Array.isArray(submissions)) return { displayData: [], grouped: {} };
 
@@ -40,7 +54,7 @@ const processSubmissionsData = (submissions, user, targetItemId, filterStatus) =
     } else if (user && user.email && sub.created_by && sub.created_by === user.email && !sub.customer_id && !sub.customer_email) {
       matches = true;
     }
-    return matches;
+    return matches && isVisibleToCustomerSubmission(sub);
   });
 
   if (filteredSubmissions.length === 0) {
@@ -711,7 +725,18 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
 
   const handleCommentListClick = (id) => {
     setActiveComment(activeComment === id ? null : id);
+
+    // If the clicked comment has a video timestamp, seek the video to that point
+    const comment = commentsForCurrentMedia.find(c => c.id === id);
+    if (comment && comment.videoTimestamp != null && videoRef.current) {
+      videoRef.current.currentTime = comment.videoTimestamp;
+      videoRef.current.pause();
+      videoPausedAtRef.current = comment.videoTimestamp;
+      // Scroll the video into view smoothly
+      videoRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
   };
+
 
   const handleContentSelect = (item, index) => {
     setSelectedContent(item);
@@ -1405,6 +1430,9 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
 
                             {/* Render Comment Markers */}
                             {currentMedia && currentMedia.url && commentsForCurrentMedia.map((comment, index) => {
+                              if (activeComment && comment.id !== activeComment && !comment.repositioning && !comment.editing) {
+                                return null;
+                              }
                               const commentX = comment.x ?? comment.position?.x ?? 0;
                               const commentY = comment.y ?? comment.position?.y ?? 0;
                               const isFrac = commentX <= 1 && commentY <= 1;
@@ -1414,6 +1442,14 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
                               return (
                                 <div
                                   key={`marker-${comment.id}`}
+                                  ref={(el) => {
+                                    if (el && activeComment === comment.id) {
+                                      const r = el.getBoundingClientRect();
+                                      if (!activeMarkerRect || activeMarkerRect.top !== r.top || activeMarkerRect.left !== r.left) {
+                                        setActiveMarkerRect({ top: r.top, left: r.left, right: r.right, bottom: r.bottom });
+                                      }
+                                    }
+                                  }}
                                   style={{
                                     position: "absolute",
                                     top: py - 12,
@@ -1669,16 +1705,23 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
                                 </span>
                                 {comment.videoTimestamp != null && (
                                   <button
-                                    className="inline-flex items-center gap-0.5 bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full text-[9px] font-bold hover:bg-orange-200 transition"
+                                    title="Jump to this moment in the video"
+                                    className="inline-flex items-center gap-1 bg-orange-500 text-white px-2 py-0.5 rounded-full text-[9px] font-bold hover:bg-orange-600 active:scale-95 transition-all shadow-sm"
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       if (videoRef.current) {
                                         videoRef.current.currentTime = comment.videoTimestamp;
                                         videoRef.current.pause();
+                                        videoPausedAtRef.current = comment.videoTimestamp;
+                                        videoRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                                       }
                                     }}
                                   >
-                                    ▶ {formatVideoTime(comment.videoTimestamp)}
+                                    <span className="relative flex h-1.5 w-1.5">
+                                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
+                                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-white" />
+                                    </span>
+                                    ⏱ {formatVideoTime(comment.videoTimestamp)}
                                   </button>
                                 )}
                               </div>

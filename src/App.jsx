@@ -18,6 +18,7 @@ import ContentCreators from './admin/pages/admin/ContentCreators';
 import ContentCreatorDetails from './admin/pages/admin/ContentCreatorDetails';
 import ScheduledPosts from './admin/ScheduledPosts';
 import AdminContentPortfolio from './admin/pages/admin/AdminContentPortfolio';
+import AdminContentUpload from './content-creators/ContentUpload';
 import AdminContentUpload from './admin/pages/admin/ContentUpload';
 import AdminQrGenerator from './admin/pages/admin/AdminQrGenerator';
 import PublishManager from './admin/pages/admin/PublishManager';

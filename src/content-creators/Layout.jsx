@@ -36,7 +36,7 @@ function getCreatorName() {
   return 'Content Creator';
 }
 
-function ContentCreatorLayout({ children, title, subtitle, icon, headerActions, onBack, showBackArrowOverride, fullWidthContent = false }) {
+function ContentCreatorLayout({ children, title, subtitle, icon, headerActions, onBack, showBackArrowOverride, fullWidthContent = false, homePath = '/content-creator' }) {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const userMenuRef = useRef(null);
   const navigate = useNavigate();
@@ -83,7 +83,7 @@ function ContentCreatorLayout({ children, title, subtitle, icon, headerActions, 
     } else if (window.history.length > 2) {
       navigate(-1);
     } else {
-      navigate('/content-creator');
+      navigate(homePath);
     }
   };
 
@@ -107,7 +107,7 @@ function ContentCreatorLayout({ children, title, subtitle, icon, headerActions, 
               )}
               
               <button
-                onClick={() => navigate('/content-creator')}
+                onClick={() => navigate(homePath)}
                 className="focus:outline-none flex-shrink-0 mr-3"
                 aria-label="Go to Dashboard"
                 style={{ background: 'none', border: 'none', padding: 0 }}

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams, useLocation } from 'react-router-dom';
 import { ArrowLeft, Upload, Image, X, Check, CheckCircle, FileText, Calendar, Clock, Palette, Send, MapPin, Tag, MessageSquare, Play, Video, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, User, ShieldCheck, AlertCircle, History, Search, Globe } from 'lucide-react';
 import { Facebook, Instagram, Linkedin, Youtube, Twitter } from 'lucide-react';
 import ContentCreatorLayout from './Layout';
@@ -43,11 +43,13 @@ function normalizeReviewTabMode(value) {
 
 function ContentUpload() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { calendarId, itemIndex } = useParams();
   const [searchParams] = useSearchParams();
   const fileInputRef = useRef(null);
-  const isAdmin = useMemo(() => getUserRole() === 'admin' || window.location.hash.includes('admin'), []);
-  const [activeTab, setActiveTab] = useState(() => (getUserRole() === 'admin' || window.location.hash.includes('admin')) ? 'customer' : 'admin');
+  const isAdminPortal = useMemo(() => location.pathname.startsWith('/admin'), [location.pathname]);
+  const isAdmin = useMemo(() => getUserRole() === 'admin' || window.location.hash.includes('admin') || isAdminPortal, [isAdminPortal]);
+  const [activeTab, setActiveTab] = useState(() => (getUserRole() === 'admin' || window.location.hash.includes('admin') || window.location.pathname.startsWith('/admin')) ? 'customer' : 'admin');
   const [reviewTabMode, setReviewTabMode] = useState('both');
 
   // State for assignment details
@@ -1619,7 +1621,7 @@ function ContentUpload() {
 
   const handleBackAction = () => {
     if (isAdmin) {
-      window.history.back();
+      navigate('/admin/dashboard');
       return;
     }
     if (assignment && assignment.customerId) {
@@ -1631,11 +1633,12 @@ function ContentUpload() {
 
   return (
     <ContentCreatorLayout
-      title={isAdmin ? 'Content Details (Customer Review)' : (activeTab === 'admin' ? 'Submit for Admin Review' : 'Content Details')}
-      subtitle={isAdmin ? 'Upload and manage customer-facing content' : (activeTab === 'admin' ? 'Admin must approve before content goes to customer' : 'Review and manage customer-facing content submissions')}
+      title={isAdmin ? 'Admin Content Upload' : (activeTab === 'admin' ? 'Submit for Admin Review' : 'Content Details')}
+      subtitle={isAdmin ? 'Upload and manage customer-facing content from the admin portal' : (activeTab === 'admin' ? 'Admin must approve before content goes to customer' : 'Review and manage customer-facing content submissions')}
       icon={<Palette className="h-5 w-5 text-white" />}
       fullWidthContent={true}
       onBack={handleBackAction}
+      homePath={isAdmin ? '/admin/dashboard' : '/content-creator'}
     >
       <div>
         {/* ── Tabs Selector ────────────────────────────────────────────────── */}

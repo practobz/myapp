@@ -1885,12 +1885,6 @@ function ContentCalendar({
                                 <PlatformNameBadges platforms={item.selectedPlatforms} />
                               </div>
                             )}
-                            {item.publishedPlatforms?.length > 0 && (
-                              <div className="mb-3">
-                                <p className="text-[11px] font-medium text-gray-500 mb-1">Published on</p>
-                                <PlatformNameBadges platforms={item.publishedPlatforms} tone="published" />
-                              </div>
-                            )}
                             {item.creator && (
                               <div className="flex items-center gap-2 text-xs text-gray-500 mb-3">
                                 <User className="h-3.5 w-3.5" /><span className="truncate">{item.creator}</span>
@@ -2002,12 +1996,6 @@ function ContentCalendar({
                             <div className="mb-3">
                               <p className="text-[11px] font-medium text-gray-500 mb-1">Selected for</p>
                               <PlatformNameBadges platforms={item.selectedPlatforms} />
-                            </div>
-                          )}
-                          {item.publishedPlatforms?.length > 0 && (
-                            <div className="mb-3">
-                              <p className="text-[11px] font-medium text-gray-500 mb-1">Published on</p>
-                              <PlatformNameBadges platforms={item.publishedPlatforms} tone="published" />
                             </div>
                           )}
                           {publishedLinks?.length > 0 && (
@@ -2169,7 +2157,6 @@ function ContentCalendar({
                                 )}
                                 {publishedLinks?.length > 0 && (
                                   <div className="flex items-center gap-2">
-                                    <span className="text-xs text-gray-500">Published on:</span>
                                     <div className="flex items-center gap-1.5">
                                       {publishedLinks.map((link, li) => (
                                         <a
@@ -2303,14 +2290,6 @@ function ContentCalendar({
                                     <span className="text-xs text-gray-500">Selected for:</span>
                                     <div className="mt-1.5">
                                       <PlatformNameBadges platforms={item.selectedPlatforms} />
-                                    </div>
-                                  </div>
-                                )}
-                                {item.publishedPlatforms?.length > 0 && (
-                                  <div>
-                                    <span className="text-xs text-gray-500">Published on:</span>
-                                    <div className="mt-1.5">
-                                      <PlatformNameBadges platforms={item.publishedPlatforms} tone="published" />
                                     </div>
                                   </div>
                                 )}

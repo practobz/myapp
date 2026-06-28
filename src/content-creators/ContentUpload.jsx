@@ -1754,105 +1754,6 @@ function ContentUpload() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column - Upload Section */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Media Preview Grid */}
-            {uploadedFiles.length > 0 && (
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <h3 className="font-semibold text-gray-900 mb-4 flex items-center">
-                  <Image className="h-5 w-5 mr-2 text-purple-600" />
-                  Media Files ({uploadedFiles.length})
-                </h3>
-                <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-                  {uploadedFiles.map((file) => (
-                    <div key={file.id} className="relative group">
-                      <div 
-                        className="aspect-square rounded-lg overflow-hidden bg-gray-100 ring-2 ring-transparent group-hover:ring-purple-200 transition-all relative cursor-pointer"
-                        onClick={() => setSelectedMedia(file)}
-                      >
-                        {file.type === 'image' ? (
-                          <img
-                            src={file.preview}
-                            alt={file.name}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="relative w-full h-full">
-                            <video
-                              src={file.preview}
-                              className="w-full h-full object-cover"
-                              muted
-                            />
-                            <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30">
-                              <Play className="h-8 w-8 text-white" />
-                            </div>
-                            <div className="absolute top-2 left-2 bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded">
-                              VIDEO
-                            </div>
-                          </div>
-                        )}
-                        
-                        {/* Upload Status Overlay */}
-                        {file.uploading && (
-                          <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-                            <div className="text-white text-center">
-                              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mx-auto mb-2"></div>
-                              <p className="text-xs">Uploading...</p>
-                            </div>
-                          </div>
-                        )}
-                        
-                        {file.uploaded && (
-                          <div className="absolute top-2 right-2 bg-green-500 text-white rounded-full p-1">
-                            <Check className="h-3 w-3" />
-                          </div>
-                        )}
-                        
-                        {file.error && (
-                          <div className="absolute inset-0 bg-red-500 bg-opacity-50 flex items-center justify-center">
-                            <div className="text-white text-center p-2">
-                              <X className="h-4 w-4 mx-auto mb-1" />
-                              <p className="text-xs">Failed</p>
-                              <button
-                                onClick={() => retryUpload(file)}
-                                className="text-xs underline mt-1"
-                              >
-                                Retry
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                      
-                      <button
-                        onClick={() => removeFile(file.id)}
-                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                      
-                      <div className="mt-2">
-                        <p className="text-xs font-medium text-gray-900 truncate">{file.name}</p>
-                        <div className="flex items-center justify-between">
-                          <p className="text-xs text-gray-500">{formatFileSize(file.size)}</p>
-                          <span className={`text-xs px-2 py-1 rounded-full ${
-                            file.type === 'image' 
-                              ? 'bg-green-100 text-green-800' 
-                              : 'bg-blue-100 text-blue-800'
-                          }`}>
-                            {file.type.toUpperCase()}
-                          </span>
-                        </div>
-                        {file.error && (
-                          <p className="text-xs text-red-500 mt-1 truncate" title={file.error}>
-                            {file.error}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
             {/* Version History Accordion — ContentDetails style */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
               {/* Accordion trigger */}
@@ -2478,6 +2379,105 @@ function ContentUpload() {
                 </div>
               )}
             </div>
+
+            {/* Media Preview Grid */}
+            {uploadedFiles.length > 0 && (
+              <div className="bg-white rounded-lg shadow-sm p-6">
+                <h3 className="font-semibold text-gray-900 mb-4 flex items-center">
+                  <Image className="h-5 w-5 mr-2 text-purple-600" />
+                  Media Files ({uploadedFiles.length})
+                </h3>
+                <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {uploadedFiles.map((file) => (
+                    <div key={file.id} className="relative group">
+                      <div 
+                        className="aspect-square rounded-lg overflow-hidden bg-gray-100 ring-2 ring-transparent group-hover:ring-purple-200 transition-all relative cursor-pointer"
+                        onClick={() => setSelectedMedia(file)}
+                      >
+                        {file.type === 'image' ? (
+                          <img
+                            src={file.preview}
+                            alt={file.name}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="relative w-full h-full">
+                            <video
+                              src={file.preview}
+                              className="w-full h-full object-cover"
+                              muted
+                            />
+                            <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30">
+                              <Play className="h-8 w-8 text-white" />
+                            </div>
+                            <div className="absolute top-2 left-2 bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded">
+                              VIDEO
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Upload Status Overlay */}
+                        {file.uploading && (
+                          <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+                            <div className="text-white text-center">
+                              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mx-auto mb-2"></div>
+                              <p className="text-xs">Uploading...</p>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {file.uploaded && (
+                          <div className="absolute top-2 right-2 bg-green-500 text-white rounded-full p-1">
+                            <Check className="h-3 w-3" />
+                          </div>
+                        )}
+                        
+                        {file.error && (
+                          <div className="absolute inset-0 bg-red-500 bg-opacity-50 flex items-center justify-center">
+                            <div className="text-white text-center p-2">
+                              <X className="h-4 w-4 mx-auto mb-1" />
+                              <p className="text-xs">Failed</p>
+                              <button
+                                onClick={() => retryUpload(file)}
+                                className="text-xs underline mt-1"
+                              >
+                                Retry
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      
+                      <button
+                        onClick={() => removeFile(file.id)}
+                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                      
+                      <div className="mt-2">
+                        <p className="text-xs font-medium text-gray-900 truncate">{file.name}</p>
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs text-gray-500">{formatFileSize(file.size)}</p>
+                          <span className={`text-xs px-2 py-1 rounded-full ${
+                            file.type === 'image' 
+                              ? 'bg-green-100 text-green-800' 
+                              : 'bg-blue-100 text-blue-800'
+                          }`}>
+                            {file.type.toUpperCase()}
+                          </span>
+                        </div>
+                        {file.error && (
+                          <p className="text-xs text-red-500 mt-1 truncate" title={file.error}>
+                            {file.error}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Right Column - Content Details & Assignment Info */}

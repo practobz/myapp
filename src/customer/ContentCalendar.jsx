@@ -143,11 +143,6 @@ const getStatusLabel = (status) => {
     case 'under_review': return 'Under Review';
     case 'scheduled': return 'Scheduled';
     case 'waiting_input': return 'Waiting Input';
-    case 'approved_admin': return 'Approved by Admin';
-    case 'approved_customer': return 'Customer Approved';
-    case 'approved_both': return 'Both Approved';
-    case 'approved': return 'Approved';
-    case 'rejected': return 'Rejected';
     default: return status.replace('_', ' ').charAt(0).toUpperCase() + status.slice(1);
   }
 };
@@ -184,10 +179,10 @@ const normalizePlatforms = (platformValue) => {
     ? platformValue.flatMap(value => normalizePlatforms(value))
     : typeof platformValue === 'string'
       ? (() => {
-          const matches = platformValue.match(/facebook|instagram|youtube|linkedin|twitter|x|tiktok/gi);
-          if (matches?.length) return matches;
-          return platformValue.split(',');
-        })()
+        const matches = platformValue.match(/facebook|instagram|youtube|linkedin|twitter|x|tiktok/gi);
+        if (matches?.length) return matches;
+        return platformValue.split(',');
+      })()
       : [platformValue];
 
   return [...new Set(rawValues
@@ -495,37 +490,37 @@ const ItemTimeline = ({ item, itemStatus, scheduledPosts = [], submissions = [],
     // Derive customer approval from submission or item status
     const customerApprovedSub = sortedSubmissions.length > 0 && (() => {
       const latest = sortedSubmissions[sortedSubmissions.length - 1];
-      const isApproved = latest.approved_by_customer === true || 
-                         latest.status === 'approved_customer' || 
-                         latest.status === 'approved_both';
-      const isReverted = latest.status === 'under_review' || 
-                         latest.status === 'sent_to_creator' || 
-                         latest.status === 'revision_requested' || 
-                         latest.status === 'rejected';
+      const isApproved = latest.approved_by_customer === true ||
+        latest.status === 'approved_customer' ||
+        latest.status === 'approved_both';
+      const isReverted = latest.status === 'under_review' ||
+        latest.status === 'sent_to_creator' ||
+        latest.status === 'revision_requested' ||
+        latest.status === 'rejected';
       return isApproved && !isReverted ? latest : null;
     })();
-    
-    const isCustomerApproved = !!customerApprovedSub || 
-                               itemStatus === 'published' || 
-                               item.status === 'published' || 
-                               item.published === true ||
-                               (item.reviewedAt && sortedSubmissions.length === 0);
-                               
-    const customerApprovedAt = customerApprovedSub?.approvedAt || 
-                               customerApprovedSub?.updatedAt || 
-                               (isCustomerApproved ? (item.reviewedAt || item.publishedAt) : null);
-                               
+
+    const isCustomerApproved = !!customerApprovedSub ||
+      itemStatus === 'published' ||
+      item.status === 'published' ||
+      item.published === true ||
+      (item.reviewedAt && sortedSubmissions.length === 0);
+
+    const customerApprovedAt = customerApprovedSub?.approvedAt ||
+      customerApprovedSub?.updatedAt ||
+      (isCustomerApproved ? (item.reviewedAt || item.publishedAt) : null);
+
     const customerApprovedDate = fmtDate(customerApprovedAt);
     const publishedAt = matchedPost?.publishedAt || item.publishedAt;
 
     // Order: Created → Assigned → Due → V1 → V2 → ... → Approved by Customer → Published
     steps = [
-      { key: 'created',   label: 'Created',   done: hasReachedDate(item.createdAt),   date: fmtDate(item.createdAt),   tone: 'blue' },
-      { key: 'assigned',  label: 'Assigned',  done: hasReachedDate(item.assignedAt),  date: fmtDate(item.assignedAt),  tone: 'blue' },
-      { key: 'due',       label: 'Due',       done: hasReachedDate(item.date),        date: fmtDate(item.date),        tone: 'orange' },
+      { key: 'created', label: 'Created', done: hasReachedDate(item.createdAt), date: fmtDate(item.createdAt), tone: 'blue' },
+      { key: 'assigned', label: 'Assigned', done: hasReachedDate(item.assignedAt), date: fmtDate(item.assignedAt), tone: 'blue' },
+      { key: 'due', label: 'Due', done: hasReachedDate(item.date), date: fmtDate(item.date), tone: 'orange' },
       ...versionSteps,
-      { key: 'reviewed',  label: 'Approved by Customer',  done: isCustomerApproved, date: customerApprovedDate, tone: 'blue' },
-      { key: 'published', label: 'Published', done: hasReachedDate(publishedAt),       date: fmtDate(publishedAt),      tone: 'green' },
+      { key: 'reviewed', label: 'Approved by Customer', done: isCustomerApproved, date: customerApprovedDate, tone: 'blue' },
+      { key: 'published', label: 'Published', done: hasReachedDate(publishedAt), date: fmtDate(publishedAt), tone: 'green' },
     ];
 
     toneClasses = {
@@ -594,8 +589,8 @@ const ItemTimeline = ({ item, itemStatus, scheduledPosts = [], submissions = [],
     const sortedSubmissions = submissions
       .filter(isVisibleToCustomerSubmission)
       .sort(
-      (a, b) => new Date(a.created_at || a.createdAt || 0) - new Date(b.created_at || b.createdAt || 0)
-    );
+        (a, b) => new Date(a.created_at || a.createdAt || 0) - new Date(b.created_at || b.createdAt || 0)
+      );
 
     const customerApprovedSub = sortedSubmissions.length > 0 && (() => {
       const latest = sortedSubmissions[sortedSubmissions.length - 1];
@@ -686,29 +681,29 @@ const ItemTimeline = ({ item, itemStatus, scheduledPosts = [], submissions = [],
     datePlaceholder: "—"
   };
 
-return (
-  <div className={layout.divClass}>
-    {steps.map((step, idx) => (
-      <React.Fragment key={step.key}>
-        <div className={`flex flex-col items-center flex-shrink-0 transition-opacity ${!step.done ? 'opacity-35' : ''}`}>
-          <div className={`w-2 h-2 rounded-full flex-shrink-0 ${step.done ? (toneClasses[step.tone || 'blue']?.dotDone || 'bg-blue-500') : (toneClasses[step.tone || 'blue']?.dotTodo || 'bg-blue-100')}`} />
-          <span className={`text-[9px] leading-none ${layout.labelMargin} whitespace-nowrap ${layout.labelClass(step)}`}>
-            {step.label}
-          </span>
-          <span className={`text-[8px] leading-none ${layout.dateMargin} whitespace-nowrap ${step.date ? (step.done ? (toneClasses[step.tone || 'blue']?.dateDone || 'text-blue-500') : (toneClasses[step.tone || 'blue']?.dateTodo || 'text-blue-200')) : 'text-transparent select-none'}`}>
-            {step.date || layout.datePlaceholder}
-          </span>
-        </div>
-        {idx < steps.length - 1 && (
-          <div
-            className={`flex-1 h-px mt-1 ${layout.lineMargin} ${step.done && steps[idx + 1].done ? (toneClasses[steps[idx + 1].tone || 'blue']?.lineDone || 'bg-blue-400') : (toneClasses[steps[idx + 1].tone || 'blue']?.lineTodo || 'bg-blue-100')}`}
-            style={{ minWidth: layout.minWidth }}
-          />
-        )}
-      </React.Fragment>
-    ))}
-  </div>
-);
+  return (
+    <div className={layout.divClass}>
+      {steps.map((step, idx) => (
+        <React.Fragment key={step.key}>
+          <div className={`flex flex-col items-center flex-shrink-0 transition-opacity ${!step.done ? 'opacity-35' : ''}`}>
+            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${step.done ? (toneClasses[step.tone || 'blue']?.dotDone || 'bg-blue-500') : (toneClasses[step.tone || 'blue']?.dotTodo || 'bg-blue-100')}`} />
+            <span className={`text-[9px] leading-none ${layout.labelMargin} whitespace-nowrap ${layout.labelClass(step)}`}>
+              {step.label}
+            </span>
+            <span className={`text-[8px] leading-none ${layout.dateMargin} whitespace-nowrap ${step.date ? (step.done ? (toneClasses[step.tone || 'blue']?.dateDone || 'text-blue-500') : (toneClasses[step.tone || 'blue']?.dateTodo || 'text-blue-200')) : 'text-transparent select-none'}`}>
+              {step.date || layout.datePlaceholder}
+            </span>
+          </div>
+          {idx < steps.length - 1 && (
+            <div
+              className={`flex-1 h-px mt-1 ${layout.lineMargin} ${step.done && steps[idx + 1].done ? (toneClasses[steps[idx + 1].tone || 'blue']?.lineDone || 'bg-blue-400') : (toneClasses[steps[idx + 1].tone || 'blue']?.lineTodo || 'bg-blue-100')}`}
+              style={{ minWidth: layout.minWidth }}
+            />
+          )}
+        </React.Fragment>
+      ))}
+    </div>
+  );
 };
 
 function ContentCalendar({
@@ -1035,116 +1030,80 @@ function ContentCalendar({
     if (customerId) fetchCustomerAndCalendars();
   }, [customerId]);
 
+  const isSubmissionForItem = (sub, item, calendarId = null) => {
+    if (!sub || !item) return false;
+    const targetCalId = calendarId || item.calendarId;
+    const subCalId = sub.calendar_id || sub.calendarId;
+    if (subCalId && targetCalId && String(subCalId) !== String(targetCalId)) return false;
+
+    const subId = sub.assignment_id || sub.item_id;
+    const itemId = item.id || item._id;
+    if (subId && itemId) {
+      return String(subId) === String(itemId);
+    }
+    if (subId || itemId) {
+      return false;
+    }
+
+    const subItemIndex = (sub.item_index !== undefined && sub.item_index !== null) ? Number(sub.item_index) : null;
+    const itemIndex = item.calendarItemIndex !== undefined ? Number(item.calendarItemIndex) : null;
+    if (subItemIndex !== null && itemIndex !== null && subCalId && targetCalId && String(subCalId) === String(targetCalId)) {
+      return subItemIndex === itemIndex;
+    }
+
+    const itemTitle = item.title || item.description;
+    return Boolean(sub.item_name && itemTitle && String(sub.item_name).trim() === String(itemTitle).trim());
+  };
+
+  const isScheduledPostForItem = (post, item, calendarId = null) => {
+    if (!post || !item) return false;
+    const targetCalId = calendarId || item.calendarId;
+    const postCalId = post.calendar_id || post.calendarId;
+    if (postCalId && targetCalId && String(postCalId) !== String(targetCalId)) return false;
+
+    const postId = post.item_id || post.contentId;
+    const itemId = item.id || item._id;
+    if (postId && itemId) {
+      return String(postId) === String(itemId);
+    }
+    if (postId || itemId) {
+      return false;
+    }
+
+    const itemTitle = item.title || item.description;
+    return Boolean(post.item_name && itemTitle && String(post.item_name).trim() === String(itemTitle).trim());
+  };
+
   const hasContentSubmitted = (item, calendarId) =>
-    submissions.some(sub => {
-      const subCalId = sub.calendar_id || sub.calendarId;
-      if (subCalId && subCalId !== calendarId) return false;
-      const subId = sub.item_id || sub.assignment_id;
-      if (subId) {
-        return subId === item.id;
-      }
-      return sub.item_name && sub.item_name === item.title;
-    });
+    submissions.some(sub => isSubmissionForItem(sub, item, calendarId));
 
   const isItemScheduled = (item, calendarId) =>
-    scheduledPosts.some(post => {
-      const postCalId = post.calendar_id || post.calendarId;
-      if (postCalId && calendarId && postCalId !== calendarId) return false;
-      const postId = post.item_id || post.contentId;
-      const isIdMatch = postId && item.id && String(postId) === String(item.id);
-      const isNameMatch = post.item_name && (item.title || item.description) && post.item_name === (item.title || item.description);
-      return (isIdMatch || isNameMatch) && (post.status === 'scheduled' || post.status === 'pending' || (post.scheduledDate && !post.publishedAt));
-    });
+    scheduledPosts.some(post =>
+      isScheduledPostForItem(post, item, calendarId) &&
+      (post.status === 'scheduled' || post.status === 'pending' || (post.scheduledDate && !post.publishedAt))
+    );
 
   const getPublishedPlatformsForItem = (item, calendarId) =>
     [...new Set(scheduledPosts
-      .filter(post => {
-        const postCalId = post.calendar_id || post.calendarId;
-        if (postCalId && calendarId && postCalId !== calendarId) return false;
-        const postId = post.item_id || post.contentId;
-        const isIdMatch = postId && item.id && String(postId) === String(item.id);
-        const isNameMatch = post.item_name && (item.title || item.description) && post.item_name === (item.title || item.description);
-        return (isIdMatch || isNameMatch) && (post.status === 'published' || post.publishedAt);
-      })
+      .filter(post =>
+        isScheduledPostForItem(post, item, calendarId) &&
+        (post.status === 'published' || post.publishedAt)
+      )
       .map(post => normalizePlatformKey(post.platform))
       .filter(Boolean))];
 
-  const getItemCreatedTime = (item) => {
-    const value = item?.createdAt || item?.created_at || item?.createdOn || null;
-    const time = value ? new Date(value).getTime() : 0;
-    return Number.isFinite(time) ? time : 0;
-  };
-
-  const getSubmissionCreatedTime = (submission) => {
-    const value = submission?.created_at || submission?.createdAt || null;
-    const time = value ? new Date(value).getTime() : 0;
-    return Number.isFinite(time) ? time : 0;
-  };
-
-  const isCurrentItemSubmission = (submission, item) => {
-    if (!submission || !item) return false;
-    const subCalId = submission.calendar_id || submission.calendarId;
-    if (subCalId && item.calendarId && String(subCalId) !== String(item.calendarId)) return false;
-
-    const submissionItemId = submission.item_id || submission.assignment_id;
-    if (submissionItemId && item.id && String(submissionItemId) === String(item.id)) return true;
-
-    const itemIndex = item.calendarItemIndex;
-    const submissionIndex = submission.item_index !== undefined && submission.item_index !== null
-      ? Number(submission.item_index)
-      : null;
-    if (submissionIndex !== null && itemIndex !== undefined && Number(itemIndex) === submissionIndex) {
-      const itemCreatedTime = getItemCreatedTime(item);
-      const submissionCreatedTime = getSubmissionCreatedTime(submission);
-      if (!itemCreatedTime || !submissionCreatedTime || submissionCreatedTime >= itemCreatedTime) {
-        return true;
-      }
-    }
-
-    const itemName = item.title || item.description || '';
-    const submissionName = submission.item_name || '';
-    if (submissionName && itemName && submissionName === itemName) {
-      const itemCreatedTime = getItemCreatedTime(item);
-      const submissionCreatedTime = getSubmissionCreatedTime(submission);
-      if (!itemCreatedTime || !submissionCreatedTime || submissionCreatedTime >= itemCreatedTime) {
-        return true;
-      }
-    }
-
-    return false;
-  };
-
-  const getCurrentItemSubmissions = (item) => submissions
-    .filter(submission => isCurrentItemSubmission(submission, item))
-    .sort((a, b) => getSubmissionCreatedTime(b) - getSubmissionCreatedTime(a));
-
   const isItemPublished = (item, calendarId) =>
-    scheduledPosts.some(post => {
-      const postCalId = post.calendar_id || post.calendarId;
-      if (postCalId && calendarId && postCalId !== calendarId) return false;
-      const postId = post.item_id || post.contentId;
-      const isIdMatch = postId && item.id && String(postId) === String(item.id);
-      const isNameMatch = post.item_name && (item.title || item.description) && post.item_name === (item.title || item.description);
-      return (isIdMatch || isNameMatch) && (post.status === 'published' || post.publishedAt);
-    });
+    scheduledPosts.some(post =>
+      isScheduledPostForItem(post, item, calendarId) &&
+      (post.status === 'published' || post.publishedAt)
+    );
 
   const getItemStatus = (item, calendarId) => {
     if (item.published === true) return 'published';
     if (isItemPublished(item, calendarId)) return 'published';
     if (isItemScheduled(item, calendarId)) return 'scheduled';
-    const latestSubmission = getLatestSubmission(item);
-    if (latestSubmission) {
-      const status = latestSubmission.status || 'submitted';
-      const approvedByAdmin = latestSubmission.approved_by_admin === true || status === 'approved_admin' || status === 'approved_both' || (status === 'approved' && !latestSubmission.approved_by_customer);
-      const approvedByCustomer = latestSubmission.approved_by_customer === true || status === 'approved_customer' || status === 'approved_both';
-
-      if (approvedByAdmin && approvedByCustomer) return 'approved_both';
-      if (approvedByAdmin) return 'approved_admin';
-      if (approvedByCustomer) return 'approved_customer';
-      if (status === 'rejected' || status === 'revision_requested' || status === 'sent_to_creator') return status;
-      return 'under_review';
-    }
-    return 'pending';
+    if (hasContentSubmitted(item, calendarId)) return 'under_review';
+    return item.status || 'pending';
   };
 
   // Convert email to display name: if it looks like an email, use the part before @
@@ -1154,10 +1113,10 @@ function ContentCalendar({
     return val;
   };
 
-  function getLatestSubmission(item) {
-    const itemSubs = getCurrentItemSubmissions(item);
+  function getLatestSubmission(item, calendarId = null) {
+    const itemSubs = submissions.filter(s => isSubmissionForItem(s, item, calendarId || item.calendarId));
     if (!itemSubs.length) return null;
-    return itemSubs[0];
+    return [...itemSubs].sort((a, b) => new Date(b.created_at || b.createdAt || 0) - new Date(a.created_at || a.createdAt || 0))[0];
   }
 
   let allItems = [];
@@ -1198,7 +1157,7 @@ function ContentCalendar({
 
     if (statusFilter === 'admin_review') {
       return allItems.filter(item => {
-        const latest = getLatestSubmission(item);
+        const latest = getLatestSubmission(item, item.calendarId);
         if (!latest) return false;
         const status = latest.status || 'submitted';
         const stage = latest.submission_stage || latest.submissionStage || 'internal';
@@ -1210,7 +1169,7 @@ function ContentCalendar({
 
     if (statusFilter === 'customer_review') {
       return allItems.filter(item => {
-        const latest = getLatestSubmission(item);
+        const latest = getLatestSubmission(item, item.calendarId);
         if (!latest) return false;
         const status = latest.status || 'submitted';
         const stage = latest.submission_stage || latest.submissionStage || 'internal';
@@ -1259,11 +1218,7 @@ function ContentCalendar({
 
     allItems.forEach(item => {
       // Admin / Customer review counts
-      const itemSubs = submissions.filter(s => {
-        const subId = s.assignment_id || s.item_id;
-        if (subId) return subId === item.id;
-        return s.item_name && s.item_name === (item.title || item.description);
-      });
+      const itemSubs = submissions.filter(s => isSubmissionForItem(s, item, item.calendarId));
       if (itemSubs.length) {
         const latest = [...itemSubs].sort((a, b) => new Date(b.created_at || b.createdAt || 0) - new Date(a.created_at || a.createdAt || 0))[0];
         const status = latest.status || 'submitted';
@@ -1619,25 +1574,21 @@ function ContentCalendar({
   }
 
   const getItemMedia = (item) => {
+    if (item.submissionMedia) return { imageUrl: item.submissionMedia, imageUrls: [item.submissionMedia] };
+    if (item.imageUrl) return { imageUrl: item.imageUrl, imageUrls: item.imageUrls || [item.imageUrl] };
+    if (item.thumbnail) return { imageUrl: item.thumbnail, imageUrls: [item.thumbnail] };
+    if (item.aiGeneratedImage) return { imageUrl: item.aiGeneratedImage, imageUrls: [item.aiGeneratedImage] };
+    if (item.media?.length > 0) {
+      const urls = item.media.map(m => typeof m === 'string' ? m : m?.url).filter(Boolean);
+      return { imageUrl: urls[0], imageUrls: urls };
+    }
+    if (item.images?.length > 0) {
+      const urls = item.images.map(m => typeof m === 'string' ? m : m?.url).filter(Boolean);
+      return { imageUrl: urls[0], imageUrls: urls };
+    }
+    if (item.imageUrls?.length > 0) return { imageUrl: item.imageUrls[0], imageUrls: item.imageUrls };
     const matchingSubs = submissions
-      .filter(sub => {
-        const subCalId = sub.calendar_id || sub.calendarId;
-        if (subCalId && item.calendarId && subCalId !== item.calendarId) return false;
-
-        const subItemIndex = sub.item_index !== undefined && sub.item_index !== null
-          ? Number(sub.item_index)
-          : null;
-        if (subItemIndex !== null && item.calendarItemIndex !== undefined) {
-          if (subItemIndex === Number(item.calendarItemIndex)) return true;
-        }
-
-        const subId = sub.assignment_id || sub.item_id;
-        if (subId && item.id) {
-          return String(subId) === String(item.id);
-        }
-
-        return sub.item_name && sub.item_name === item.title;
-      })
+      .filter(sub => isSubmissionForItem(sub, item, item.calendarId))
       .sort((a, b) => new Date(b.created_at || b.createdAt || 0) - new Date(a.created_at || a.createdAt || 0));
 
     const latestSubmission = matchingSubs[0];
@@ -1653,20 +1604,6 @@ function ContentCalendar({
         return { imageUrl: videoUrl, imageUrls: [videoUrl] };
       }
     }
-
-    if (item.submissionMedia) return { imageUrl: item.submissionMedia, imageUrls: [item.submissionMedia] };
-    if (item.imageUrl) return { imageUrl: item.imageUrl, imageUrls: item.imageUrls || [item.imageUrl] };
-    if (item.thumbnail) return { imageUrl: item.thumbnail, imageUrls: [item.thumbnail] };
-    if (item.aiGeneratedImage) return { imageUrl: item.aiGeneratedImage, imageUrls: [item.aiGeneratedImage] };
-    if (item.media?.length > 0) {
-      const urls = item.media.map(m => typeof m === 'string' ? m : m?.url).filter(Boolean);
-      return { imageUrl: urls[0], imageUrls: urls };
-    }
-    if (item.images?.length > 0) {
-      const urls = item.images.map(m => typeof m === 'string' ? m : m?.url).filter(Boolean);
-      return { imageUrl: urls[0], imageUrls: urls };
-    }
-    if (item.imageUrls?.length > 0) return { imageUrl: item.imageUrls[0], imageUrls: item.imageUrls };
     return { imageUrl: null, imageUrls: [] };
   };
 
@@ -1919,7 +1856,7 @@ function ContentCalendar({
                                   </div>
                                 </div>
                               ) : (
-                                <img src={previewMedia.imageUrl} alt="" className="w-full h-full object-cover" />
+                                <img src={itemMedia.imageUrl} alt="" className="w-full h-full object-cover" />
                               )
                             ) : (
                               <div className="w-full h-full flex items-center justify-center"><Image className="h-10 w-10 text-gray-300" /></div>
@@ -2094,7 +2031,7 @@ function ContentCalendar({
                           </button>
                         </div>
                       </div>
-                  )) : (
+                    )) : (
                     isAdmin ? (
                       <div
                         key={itemKey}
@@ -2249,7 +2186,9 @@ function ContentCalendar({
                                 scheduledPosts={scheduledPosts}
                                 submissions={submissions.filter(sub => {
                                   if (!isAdmin && sub.reviewType === 'internal') return false;
-                                    return isCurrentItemSubmission(sub, item);
+                                  const subId = sub.assignment_id || sub.item_id;
+                                  if (subId) return subId === item.id;
+                                  return sub.item_name && sub.item_name === item.title;
                                 })}
                                 isAdmin={isAdmin}
                               />
@@ -2320,17 +2259,17 @@ function ContentCalendar({
                                 </div>
                                 <div className="flex flex-col items-end gap-1">
                                   <div className="flex items-center gap-2">
-                                  {item.status === 'published' && (
-                                    <div className="flex items-center gap-1 text-xs text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg">
-                                      <ExternalLink className="h-3.5 w-3.5" /><span className="font-medium">View Details</span>
-                                    </div>
-                                  )}
-                                  <button
-                                    onClick={(e) => handleOpenReviewPanel(item, e)}
-                                    className="flex items-center gap-1 text-xs text-purple-650 bg-purple-50 hover:bg-purple-105 active:bg-purple-200 px-3 py-1.5 rounded-lg transition-colors font-medium"
-                                  >
-                                    <MessageSquare className="h-3.5 w-3.5" /><span>Content Review</span>
-                                  </button>
+                                    {item.status === 'published' && (
+                                      <div className="flex items-center gap-1 text-xs text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg">
+                                        <ExternalLink className="h-3.5 w-3.5" /><span className="font-medium">View Details</span>
+                                      </div>
+                                    )}
+                                    <button
+                                      onClick={(e) => handleOpenReviewPanel(item, e)}
+                                      className="flex items-center gap-1 text-xs text-purple-650 bg-purple-50 hover:bg-purple-105 active:bg-purple-200 px-3 py-1.5 rounded-lg transition-colors font-medium"
+                                    >
+                                      <MessageSquare className="h-3.5 w-3.5" /><span>Content Review</span>
+                                    </button>
                                   </div>
                                   {item.creator && (
                                     <div
@@ -2386,7 +2325,7 @@ function ContentCalendar({
                                 scheduledPosts={scheduledPosts}
                                 submissions={submissions.filter(sub => {
                                   if (!isAdmin && sub.reviewType === 'internal') return false;
-                                    return isCurrentItemSubmission(sub, item);
+                                  return isSubmissionForItem(sub, item, item.calendarId);
                                 })}
                                 isAdmin={isAdmin}
                               />

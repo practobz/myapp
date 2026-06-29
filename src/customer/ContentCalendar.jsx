@@ -1558,19 +1558,6 @@ function ContentCalendar({
   }
 
   const getItemMedia = (item) => {
-    if (item.submissionMedia) return { imageUrl: item.submissionMedia, imageUrls: [item.submissionMedia] };
-    if (item.imageUrl) return { imageUrl: item.imageUrl, imageUrls: item.imageUrls || [item.imageUrl] };
-    if (item.thumbnail) return { imageUrl: item.thumbnail, imageUrls: [item.thumbnail] };
-    if (item.aiGeneratedImage) return { imageUrl: item.aiGeneratedImage, imageUrls: [item.aiGeneratedImage] };
-    if (item.media?.length > 0) {
-      const urls = item.media.map(m => typeof m === 'string' ? m : m?.url).filter(Boolean);
-      return { imageUrl: urls[0], imageUrls: urls };
-    }
-    if (item.images?.length > 0) {
-      const urls = item.images.map(m => typeof m === 'string' ? m : m?.url).filter(Boolean);
-      return { imageUrl: urls[0], imageUrls: urls };
-    }
-    if (item.imageUrls?.length > 0) return { imageUrl: item.imageUrls[0], imageUrls: item.imageUrls };
     const matchingSubs = submissions
       .filter(sub => {
         const subCalId = sub.calendar_id || sub.calendarId;
@@ -1605,6 +1592,20 @@ function ContentCalendar({
         return { imageUrl: videoUrl, imageUrls: [videoUrl] };
       }
     }
+
+    if (item.submissionMedia) return { imageUrl: item.submissionMedia, imageUrls: [item.submissionMedia] };
+    if (item.imageUrl) return { imageUrl: item.imageUrl, imageUrls: item.imageUrls || [item.imageUrl] };
+    if (item.thumbnail) return { imageUrl: item.thumbnail, imageUrls: [item.thumbnail] };
+    if (item.aiGeneratedImage) return { imageUrl: item.aiGeneratedImage, imageUrls: [item.aiGeneratedImage] };
+    if (item.media?.length > 0) {
+      const urls = item.media.map(m => typeof m === 'string' ? m : m?.url).filter(Boolean);
+      return { imageUrl: urls[0], imageUrls: urls };
+    }
+    if (item.images?.length > 0) {
+      const urls = item.images.map(m => typeof m === 'string' ? m : m?.url).filter(Boolean);
+      return { imageUrl: urls[0], imageUrls: urls };
+    }
+    if (item.imageUrls?.length > 0) return { imageUrl: item.imageUrls[0], imageUrls: item.imageUrls };
     return { imageUrl: null, imageUrls: [] };
   };
 
@@ -1857,7 +1858,7 @@ function ContentCalendar({
                                   </div>
                                 </div>
                               ) : (
-                                <img src={itemMedia.imageUrl} alt="" className="w-full h-full object-cover" />
+                                <img src={previewMedia.imageUrl} alt="" className="w-full h-full object-cover" />
                               )
                             ) : (
                               <div className="w-full h-full flex items-center justify-center"><Image className="h-10 w-10 text-gray-300" /></div>

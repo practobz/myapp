@@ -22,15 +22,22 @@ const isIdValid = (id) => id && id !== 'null' && id !== 'undefined' && id !== 'n
 const isVisibleToCustomerSubmission = (submission) => {
   if (!submission) return false;
   const stage = submission.submission_stage || submission.submissionStage || '';
-  const status = submission.status || 'submitted';
+  const status = submission.status || '';
   const sentToCustomerAt = submission.sent_to_customer_at || submission.sentToCustomerAt;
   const approvedByAdmin =
     submission.approved_by_admin === true ||
     status === 'approved_admin' ||
     status === 'approved_both' ||
     (status === 'approved' && !submission.approved_by_customer);
-  const isLegacyDirectCustomerSubmission = stage === 'customer' && !sentToCustomerAt && !approvedByAdmin;
-  return (stage === 'customer' && !!sentToCustomerAt) || isLegacyDirectCustomerSubmission || status === 'published';
+  const approvedByCustomer =
+    submission.approved_by_customer === true ||
+    status === 'approved_customer' ||
+    status === 'approved_both';
+
+  if (status === 'published' || submission.published === true) return true;
+  if (approvedByCustomer) return true;
+
+  return (stage === 'customer' || stage === 'approved') && (!!sentToCustomerAt || approvedByAdmin);
 };
 
 // Convert Instagram Media ID to shortcode URL
@@ -1119,6 +1126,12 @@ function ContentCalendar({
     return [...itemSubs].sort((a, b) => new Date(b.created_at || b.createdAt || 0) - new Date(a.created_at || a.createdAt || 0))[0];
   }
 
+  function getLatestCustomerSubmission(item, calendarId = null) {
+    const itemSubs = submissions.filter(s => isSubmissionForItem(s, item, calendarId || item.calendarId) && isVisibleToCustomerSubmission(s));
+    if (!itemSubs.length) return null;
+    return [...itemSubs].sort((a, b) => new Date(b.created_at || b.createdAt || 0) - new Date(a.created_at || a.createdAt || 0))[0];
+  }
+
   let allItems = [];
   calendars.forEach(calendar => {
     if (Array.isArray(calendar.contentItems)) {
@@ -1573,7 +1586,40 @@ function ContentCalendar({
     );
   }
 
-  const getItemMedia = (item) => {
+  const getItemMedia = (item, forCustomer = !isAdmin) => {
+    const matchingSubs = submissions
+      .filter(sub => isSubmissionForItem(sub, item, item.calendarId))
+      .sort((a, b) => new Date(b.created_at || b.createdAt || 0) - new Date(a.created_at || a.createdAt || 0));
+
+    if (forCustomer) {
+      const latestCustomerSub = matchingSubs.find(sub => isVisibleToCustomerSubmission(sub));
+      if (latestCustomerSub) {
+        const subMedia = latestCustomerSub.media || latestCustomerSub.images || [];
+        if (subMedia.length > 0) {
+          const urls = subMedia.map(m => typeof m === 'string' ? m : m?.url).filter(Boolean);
+          if (urls.length > 0) return { imageUrl: urls[0], imageUrls: urls };
+        }
+        if (latestCustomerSub.videoUrl || latestCustomerSub.video_url) {
+          const videoUrl = latestCustomerSub.videoUrl || latestCustomerSub.video_url;
+          return { imageUrl: videoUrl, imageUrls: [videoUrl] };
+        }
+      }
+      if (item.published === true || item.status === 'published') {
+        if (item.submissionMedia) return { imageUrl: item.submissionMedia, imageUrls: [item.submissionMedia] };
+        if (item.imageUrl) return { imageUrl: item.imageUrl, imageUrls: item.imageUrls || [item.imageUrl] };
+        if (item.thumbnail) return { imageUrl: item.thumbnail, imageUrls: [item.thumbnail] };
+        if (item.media?.length > 0) {
+          const urls = item.media.map(m => typeof m === 'string' ? m : m?.url).filter(Boolean);
+          return { imageUrl: urls[0], imageUrls: urls };
+        }
+        if (item.images?.length > 0) {
+          const urls = item.images.map(m => typeof m === 'string' ? m : m?.url).filter(Boolean);
+          return { imageUrl: urls[0], imageUrls: urls };
+        }
+      }
+      return { imageUrl: null, imageUrls: [] };
+    }
+
     if (item.submissionMedia) return { imageUrl: item.submissionMedia, imageUrls: [item.submissionMedia] };
     if (item.imageUrl) return { imageUrl: item.imageUrl, imageUrls: item.imageUrls || [item.imageUrl] };
     if (item.thumbnail) return { imageUrl: item.thumbnail, imageUrls: [item.thumbnail] };
@@ -1587,20 +1633,17 @@ function ContentCalendar({
       return { imageUrl: urls[0], imageUrls: urls };
     }
     if (item.imageUrls?.length > 0) return { imageUrl: item.imageUrls[0], imageUrls: item.imageUrls };
-    const matchingSubs = submissions
-      .filter(sub => isSubmissionForItem(sub, item, item.calendarId))
-      .sort((a, b) => new Date(b.created_at || b.createdAt || 0) - new Date(a.created_at || a.createdAt || 0));
 
-    const latestSubmission = matchingSubs[0];
-    if (latestSubmission) {
-      const subMedia = latestSubmission.media || latestSubmission.images || [];
+    const targetSubmission = matchingSubs[0];
+    if (targetSubmission) {
+      const subMedia = targetSubmission.media || targetSubmission.images || [];
       if (subMedia.length > 0) {
         const urls = subMedia.map(m => typeof m === 'string' ? m : m?.url).filter(Boolean);
         if (urls.length > 0) return { imageUrl: urls[0], imageUrls: urls };
       }
 
-      if (latestSubmission.videoUrl || latestSubmission.video_url) {
-        const videoUrl = latestSubmission.videoUrl || latestSubmission.video_url;
+      if (targetSubmission.videoUrl || targetSubmission.video_url) {
+        const videoUrl = targetSubmission.videoUrl || targetSubmission.video_url;
         return { imageUrl: videoUrl, imageUrls: [videoUrl] };
       }
     }
@@ -1822,9 +1865,9 @@ function ContentCalendar({
             {displayedItems.length > 0 ? (
               <div className={viewMode === 'grid' ? 'grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4' : 'space-y-3'}>
                 {displayedItems.map((item, index) => {
-                  const itemMedia = getItemMedia(item);
-                  const latestSubmission = getLatestSubmission(item);
-                  const customerCanSeeThumbnail = isAdmin || item.published === true || item.status === 'published' || isVisibleToCustomerSubmission(latestSubmission);
+                  const itemMedia = getItemMedia(item, !isAdmin);
+                  const activeSubmission = isAdmin ? getLatestSubmission(item) : getLatestCustomerSubmission(item);
+                  const customerCanSeeThumbnail = isAdmin || item.published === true || item.status === 'published' || (activeSubmission && isVisibleToCustomerSubmission(activeSubmission));
                   const previewMedia = customerCanSeeThumbnail ? itemMedia : { imageUrl: null, imageUrls: [] };
                   const itemKey = item.id || `${item.calendarId}_${index}`;
                   const itemTrendData = postTrendCache[itemKey];
@@ -1856,7 +1899,7 @@ function ContentCalendar({
                                   </div>
                                 </div>
                               ) : (
-                                <img src={itemMedia.imageUrl} alt="" className="w-full h-full object-cover" />
+                                <img src={previewMedia.imageUrl} alt="" className="w-full h-full object-cover" />
                               )
                             ) : (
                               <div className="w-full h-full flex items-center justify-center"><Image className="h-10 w-10 text-gray-300" /></div>

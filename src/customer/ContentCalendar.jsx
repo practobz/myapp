@@ -143,6 +143,11 @@ const getStatusLabel = (status) => {
     case 'under_review': return 'Under Review';
     case 'scheduled': return 'Scheduled';
     case 'waiting_input': return 'Waiting Input';
+    case 'approved_admin': return 'Approved by Admin';
+    case 'approved_customer': return 'Customer Approved';
+    case 'approved_both': return 'Both Approved';
+    case 'approved': return 'Approved';
+    case 'rejected': return 'Rejected';
     default: return status.replace('_', ' ').charAt(0).toUpperCase() + status.slice(1);
   }
 };
@@ -1064,6 +1069,55 @@ function ContentCalendar({
       .map(post => normalizePlatformKey(post.platform))
       .filter(Boolean))];
 
+  const getItemCreatedTime = (item) => {
+    const value = item?.createdAt || item?.created_at || item?.createdOn || null;
+    const time = value ? new Date(value).getTime() : 0;
+    return Number.isFinite(time) ? time : 0;
+  };
+
+  const getSubmissionCreatedTime = (submission) => {
+    const value = submission?.created_at || submission?.createdAt || null;
+    const time = value ? new Date(value).getTime() : 0;
+    return Number.isFinite(time) ? time : 0;
+  };
+
+  const isCurrentItemSubmission = (submission, item) => {
+    if (!submission || !item) return false;
+    const subCalId = submission.calendar_id || submission.calendarId;
+    if (subCalId && item.calendarId && String(subCalId) !== String(item.calendarId)) return false;
+
+    const submissionItemId = submission.item_id || submission.assignment_id;
+    if (submissionItemId && item.id && String(submissionItemId) === String(item.id)) return true;
+
+    const itemIndex = item.calendarItemIndex;
+    const submissionIndex = submission.item_index !== undefined && submission.item_index !== null
+      ? Number(submission.item_index)
+      : null;
+    if (submissionIndex !== null && itemIndex !== undefined && Number(itemIndex) === submissionIndex) {
+      const itemCreatedTime = getItemCreatedTime(item);
+      const submissionCreatedTime = getSubmissionCreatedTime(submission);
+      if (!itemCreatedTime || !submissionCreatedTime || submissionCreatedTime >= itemCreatedTime) {
+        return true;
+      }
+    }
+
+    const itemName = item.title || item.description || '';
+    const submissionName = submission.item_name || '';
+    if (submissionName && itemName && submissionName === itemName) {
+      const itemCreatedTime = getItemCreatedTime(item);
+      const submissionCreatedTime = getSubmissionCreatedTime(submission);
+      if (!itemCreatedTime || !submissionCreatedTime || submissionCreatedTime >= itemCreatedTime) {
+        return true;
+      }
+    }
+
+    return false;
+  };
+
+  const getCurrentItemSubmissions = (item) => submissions
+    .filter(submission => isCurrentItemSubmission(submission, item))
+    .sort((a, b) => getSubmissionCreatedTime(b) - getSubmissionCreatedTime(a));
+
   const isItemPublished = (item, calendarId) =>
     scheduledPosts.some(post => {
       const postCalId = post.calendar_id || post.calendarId;
@@ -1078,8 +1132,19 @@ function ContentCalendar({
     if (item.published === true) return 'published';
     if (isItemPublished(item, calendarId)) return 'published';
     if (isItemScheduled(item, calendarId)) return 'scheduled';
-    if (hasContentSubmitted(item, calendarId)) return 'under_review';
-    return item.status || 'pending';
+    const latestSubmission = getLatestSubmission(item);
+    if (latestSubmission) {
+      const status = latestSubmission.status || 'submitted';
+      const approvedByAdmin = latestSubmission.approved_by_admin === true || status === 'approved_admin' || status === 'approved_both' || (status === 'approved' && !latestSubmission.approved_by_customer);
+      const approvedByCustomer = latestSubmission.approved_by_customer === true || status === 'approved_customer' || status === 'approved_both';
+
+      if (approvedByAdmin && approvedByCustomer) return 'approved_both';
+      if (approvedByAdmin) return 'approved_admin';
+      if (approvedByCustomer) return 'approved_customer';
+      if (status === 'rejected' || status === 'revision_requested' || status === 'sent_to_creator') return status;
+      return 'under_review';
+    }
+    return 'pending';
   };
 
   // Convert email to display name: if it looks like an email, use the part before @
@@ -1090,13 +1155,9 @@ function ContentCalendar({
   };
 
   function getLatestSubmission(item) {
-    const itemSubs = submissions.filter(s => {
-      const subId = s.assignment_id || s.item_id;
-      if (subId) return subId === item.id;
-      return s.item_name && s.item_name === (item.title || item.description);
-    });
+    const itemSubs = getCurrentItemSubmissions(item);
     if (!itemSubs.length) return null;
-    return [...itemSubs].sort((a, b) => new Date(b.created_at || b.createdAt || 0) - new Date(a.created_at || a.createdAt || 0))[0];
+    return itemSubs[0];
   }
 
   let allItems = [];
@@ -2188,9 +2249,7 @@ function ContentCalendar({
                                 scheduledPosts={scheduledPosts}
                                 submissions={submissions.filter(sub => {
                                   if (!isAdmin && sub.reviewType === 'internal') return false;
-                                  const subId = sub.assignment_id || sub.item_id;
-                                  if (subId) return subId === item.id;
-                                  return sub.item_name && sub.item_name === item.title;
+                                    return isCurrentItemSubmission(sub, item);
                                 })}
                                 isAdmin={isAdmin}
                               />
@@ -2327,9 +2386,7 @@ function ContentCalendar({
                                 scheduledPosts={scheduledPosts}
                                 submissions={submissions.filter(sub => {
                                   if (!isAdmin && sub.reviewType === 'internal') return false;
-                                  const subId = sub.assignment_id || sub.item_id;
-                                  if (subId) return subId === item.id;
-                                  return sub.item_name && sub.item_name === item.title;
+                                    return isCurrentItemSubmission(sub, item);
                                 })}
                                 isAdmin={isAdmin}
                               />

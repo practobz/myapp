@@ -3,6 +3,7 @@ import { useNavigate, useParams, useSearchParams, useLocation } from 'react-rout
 import { ArrowLeft, Upload, Image, X, Check, CheckCircle, FileText, Calendar, Clock, Palette, Send, MapPin, Tag, MessageSquare, Play, Video, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, User, ShieldCheck, AlertCircle, History, Search, Globe } from 'lucide-react';
 import { Facebook, Instagram, Linkedin, Youtube, Twitter } from 'lucide-react';
 import ContentCreatorLayout from './Layout';
+import { validateMediaForPlatforms } from './mediaValidation';
 
 // Helper to get creator email from localStorage
 function getCreatorEmail() {
@@ -98,6 +99,7 @@ function ContentUpload() {
   const [versionsAccordionOpen, setVersionsAccordionOpen] = useState(false);
   const [selectedVersionIndex, setSelectedVersionIndex] = useState(0);
   const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
+  const [validationNotice, setValidationNotice] = useState('');
   const [commentsForVersion, setCommentsForVersion] = useState([]);
   const [commentsForCurrentMedia, setCommentsForCurrentMedia] = useState([]);
   const [activeVersionComment, setActiveVersionComment] = useState(null);
@@ -182,6 +184,16 @@ function ContentUpload() {
     if (!val) return [];
     if (Array.isArray(val)) return val.map(v => String(v).trim().toLowerCase()).filter(Boolean);
     return [String(val).trim().toLowerCase()];
+  };
+
+  const getValidationPlatforms = (val) => {
+    if (!val) return [];
+    const asString = Array.isArray(val) ? val.join(',') : String(val);
+    const matches = asString.match(/facebook|instagram|youtube|linkedin|twitter|tiktok|pinterest/ig);
+    if (matches) {
+      return [...new Set(matches.map(match => match.toLowerCase()))];
+    }
+    return flatPlatforms(val);
   };
 
   // Helper: get normalized display status (mirrors Assignments.jsx getFilterStatus)
@@ -437,6 +449,7 @@ function ContentUpload() {
                 platform: item.platform || item.type || 'Instagram',
                 requirements: item.requirements || [],
                 reviewTabMode: normalizeReviewTabMode(customerInfo.reviewTabMode),
+                createdAt: item.createdAt || item.created_at || null,
               };
               
               // Only log if customer data is missing
@@ -506,12 +519,20 @@ function ContentUpload() {
         // Filter submissions for this specific assignment
         // Primary: match by calendar_id + item_index (unambiguous)
         // Fallback: match by assignment_id title (for older submissions)
+        const assignmentCreatedAt = assignment.createdAt ? new Date(assignment.createdAt).getTime() : 0;
         const previousSubmissions = submissions.filter(sub => {
           const subCalendarId = sub.calendar_id || sub.calendarId;
           const subItemIndex  = (sub.item_index !== undefined && sub.item_index !== null)
             ? String(sub.item_index)
             : undefined;
           const subAssignmentId = sub.assignment_id || sub.assignmentId || sub.assignmentID;
+          const subCreatedAtValue = sub.created_at || sub.createdAt;
+          const subCreatedAt = subCreatedAtValue ? new Date(subCreatedAtValue).getTime() : 0;
+          const isNewerThanAssignment = !assignmentCreatedAt || !subCreatedAt || subCreatedAt >= assignmentCreatedAt;
+
+          if (!isNewerThanAssignment) {
+            return false;
+          }
 
           // Primary — most reliable: calendar_id + item_index
           if (subCalendarId && subItemIndex !== undefined) {
@@ -844,39 +865,49 @@ function ContentUpload() {
   };
 
   const handleFiles = async (files) => {
-    Array.from(files).forEach(async file => {
-      if (file.type.startsWith('image/')) {
-        const preview = URL.createObjectURL(file);
-        const newFile = {
-          id: Date.now() + Math.random(),
-          file: file,
-          preview: preview,
-          name: file.name,
-          size: file.size,
-          type: 'image',
-          uploaded: false,
-          uploading: false,
-          publicUrl: null,
-          error: null
-        };
-        setUploadedFiles(prev => [...prev, newFile]);
-      } else if (file.type.startsWith('video/')) {
-        const preview = URL.createObjectURL(file);
-        const newFile = {
-          id: Date.now() + Math.random(),
-          file: file,
-          preview: preview,
-          name: file.name,
-          size: file.size,
-          type: 'video',
-          uploaded: false,
-          uploading: false,
-          publicUrl: null,
-          error: null
-        };
-        setUploadedFiles(prev => [...prev, newFile]);
+    const incomingFiles = Array.from(files || []);
+    const validationPlatforms = getValidationPlatforms(assignment?.platform);
+
+    for (const file of incomingFiles) {
+      if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
+        continue;
       }
-    });
+
+      const validationResult = await validateMediaForPlatforms(file, {
+        platforms: validationPlatforms,
+      });
+
+      const preview = URL.createObjectURL(file);
+      const validationIssues = validationResult.issues || [];
+      const errorIssue = validationIssues.find(issue => issue.level === 'error') || null;
+      const warningIssues = validationIssues.filter(issue => issue.level === 'warning');
+
+      const newFile = {
+        id: Date.now() + Math.random(),
+        file,
+        preview,
+        name: file.name,
+        size: file.size,
+        type: file.type.startsWith('image/') ? 'image' : 'video',
+        uploaded: false,
+        uploading: false,
+        publicUrl: null,
+        error: errorIssue ? errorIssue.message : null,
+        warnings: warningIssues.map(issue => issue.message),
+        validationIssues,
+      };
+
+      setUploadedFiles(prev => [...prev, newFile]);
+
+      if (validationIssues.length > 0) {
+        setValidationNotice(validationIssues.map(issue => issue.message).join(' '));
+        if (errorIssue) {
+          window.alert(errorIssue.message);
+        }
+      } else {
+        setValidationNotice('');
+      }
+    }
   };
 
   const removeFile = (fileId) => {
@@ -2390,6 +2421,11 @@ function ContentUpload() {
                   <Image className="h-5 w-5 mr-2 text-purple-600" />
                   Media Files ({uploadedFiles.length})
                 </h3>
+                {validationNotice && (
+                  <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    {validationNotice}
+                  </div>
+                )}
                 <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
                   {uploadedFiles.map((file) => (
                     <div key={file.id} className="relative group">
@@ -2474,6 +2510,15 @@ function ContentUpload() {
                           <p className="text-xs text-red-500 mt-1 truncate" title={file.error}>
                             {file.error}
                           </p>
+                        )}
+                        {file.warnings && file.warnings.length > 0 && (
+                          <div className="mt-1 space-y-1">
+                            {file.warnings.map((warning, index) => (
+                              <p key={`${file.id}-warning-${index}`} className="text-xs text-amber-700 truncate" title={warning}>
+                                {warning}
+                              </p>
+                            ))}
+                          </div>
                         )}
                       </div>
                     </div>

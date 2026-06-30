@@ -37,6 +37,10 @@ const isVisibleToCustomerSubmission = (submission) => {
   if (status === 'published' || submission.published === true) return true;
   if (approvedByCustomer) return true;
 
+  // Support legacy direct customer submissions as in ContentReview.jsx
+  const isLegacyDirectCustomerSubmission = stage === 'customer' && !sentToCustomerAt && !approvedByAdmin;
+  if (isLegacyDirectCustomerSubmission) return true;
+
   return (stage === 'customer' || stage === 'approved') && (!!sentToCustomerAt || approvedByAdmin);
 };
 
@@ -1043,8 +1047,13 @@ function ContentCalendar({
     const subCalId = sub.calendar_id || sub.calendarId;
     if (subCalId && targetCalId && String(subCalId) !== String(targetCalId)) return false;
 
-    const subId = sub.assignment_id || sub.item_id;
     const itemId = item.id || item._id;
+    if (itemId) {
+      if (sub.item_id && String(sub.item_id) === String(itemId)) return true;
+      if (sub.assignment_id && String(sub.assignment_id) === String(itemId)) return true;
+    }
+
+    const subId = sub.assignment_id || sub.item_id;
     if (subId && itemId) {
       return String(subId) === String(itemId);
     }

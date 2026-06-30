@@ -41,6 +41,9 @@ const isVisibleToCustomerSubmission = (submission) => {
   const isLegacyDirectCustomerSubmission = stage === 'customer' && !sentToCustomerAt && !approvedByAdmin;
   if (isLegacyDirectCustomerSubmission) return true;
 
+  // Support customer upload stage
+  if (stage === 'customer_upload') return true;
+
   return (stage === 'customer' || stage === 'approved') && (!!sentToCustomerAt || approvedByAdmin);
 };
 
@@ -967,16 +970,44 @@ function ContentCalendar({
   const refreshSubmissions = React.useCallback(async () => {
     if (!customerId) return;
     try {
+      const calendarIds = calendars.map(c => String(c._id || c.id || '').trim()).filter(Boolean);
+      const calendarItemIds = new Set();
+      const calendarItemTitles = new Set();
+      calendars.forEach(cal => {
+        if (Array.isArray(cal.contentItems)) {
+          cal.contentItems.forEach(item => {
+            if (item.id) calendarItemIds.add(String(item.id).trim());
+            if (item._id) calendarItemIds.add(String(item._id).trim());
+            if (item.title) calendarItemTitles.add(String(item.title).trim().toLowerCase());
+            if (item.description) calendarItemTitles.add(String(item.description).trim().toLowerCase());
+          });
+        }
+      });
+
       const submissionsRes = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions`);
       let submissionsData = await submissionsRes.json();
       if (!Array.isArray(submissionsData)) submissionsData = [];
-      setSubmissions(submissionsData.filter(s =>
-        s.customer_id === customerId ||
-        s.customer_email === user?.email ||
-        (s.created_by && user?.email && s.created_by === user.email && !s.customer_id && !s.customer_email)
-      ));
+      setSubmissions(submissionsData.filter(s => {
+        const subCalId = String(s.calendar_id || s.calendarId || '').trim();
+        const matchesCalendar = subCalId && calendarIds.includes(subCalId);
+
+        const subItemId = String(s.item_id || s.assignment_id || '').trim();
+        const matchesItemId = subItemId && calendarItemIds.has(subItemId);
+
+        const subItemName = String(s.item_name || '').trim().toLowerCase();
+        const matchesItemName = subItemName && calendarItemTitles.has(subItemName);
+
+        return (
+          s.customer_id === customerId ||
+          s.customer_email === user?.email ||
+          (s.created_by && user?.email && s.created_by === user.email && !s.customer_id && !s.customer_email) ||
+          matchesCalendar ||
+          matchesItemId ||
+          matchesItemName
+        );
+      }));
     } catch { /* silent — stale data is acceptable */ }
-  }, [customerId, user?.email]);
+  }, [customerId, user?.email, calendars]);
 
   useEffect(() => {
     const fetchCustomerAndCalendars = async () => {
@@ -1629,7 +1660,13 @@ function ContentCalendar({
       .sort((a, b) => new Date(b.created_at || b.createdAt || 0) - new Date(a.created_at || a.createdAt || 0));
 
     if (forCustomer) {
-      const latestCustomerSub = matchingSubs.find(sub => isVisibleToCustomerSubmission(sub));
+      let latestCustomerSub = matchingSubs.find(sub => isVisibleToCustomerSubmission(sub));
+
+      // Fallback for published items: if no customer-visible submission is found, use the latest overall matching submission
+      if (!latestCustomerSub && (item.published === true || item.status === 'published')) {
+        latestCustomerSub = matchingSubs[0];
+      }
+
       if (latestCustomerSub) {
         const subMedia = latestCustomerSub.media || latestCustomerSub.images || [];
         if (subMedia.length > 0) {

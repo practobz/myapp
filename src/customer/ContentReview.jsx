@@ -31,15 +31,29 @@ const normalizeMedia = (media) => {
 const isVisibleToCustomerSubmission = (submission) => {
   if (!submission) return false;
   const stage = submission.submission_stage || submission.submissionStage || '';
-  const status = submission.status || 'submitted';
+  const status = submission.status || '';
   const sentToCustomerAt = submission.sent_to_customer_at || submission.sentToCustomerAt;
   const approvedByAdmin =
     submission.approved_by_admin === true ||
     status === 'approved_admin' ||
     status === 'approved_both' ||
     (status === 'approved' && !submission.approved_by_customer);
+  const approvedByCustomer =
+    submission.approved_by_customer === true ||
+    status === 'approved_customer' ||
+    status === 'approved_both';
+
+  if (status === 'published' || submission.published === true) return true;
+  if (approvedByCustomer) return true;
+
+  // Support legacy direct customer submissions as in ContentReview.jsx
   const isLegacyDirectCustomerSubmission = stage === 'customer' && !sentToCustomerAt && !approvedByAdmin;
-  return (stage === 'customer' && !!sentToCustomerAt) || isLegacyDirectCustomerSubmission || status === 'published';
+  if (isLegacyDirectCustomerSubmission) return true;
+
+  // Support customer upload stage
+  if (stage === 'customer_upload') return true;
+
+  return (stage === 'customer' || stage === 'approved') && (!!sentToCustomerAt || approvedByAdmin);
 };
 
 const processSubmissionsData = (submissions, user, targetItemId, filterStatus) => {

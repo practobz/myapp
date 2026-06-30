@@ -1021,14 +1021,42 @@ function ContentCalendar({
             .catch(liveErr => console.warn('Live metrics fetch failed (non-critical):', liveErr));
         }
 
+        const calendarIds = customerCalendars.map(c => String(c._id || c.id || '').trim()).filter(Boolean);
+        const calendarItemIds = new Set();
+        const calendarItemTitles = new Set();
+        customerCalendars.forEach(cal => {
+          if (Array.isArray(cal.contentItems)) {
+            cal.contentItems.forEach(item => {
+              if (item.id) calendarItemIds.add(String(item.id).trim());
+              if (item._id) calendarItemIds.add(String(item._id).trim());
+              if (item.title) calendarItemTitles.add(String(item.title).trim().toLowerCase());
+              if (item.description) calendarItemTitles.add(String(item.description).trim().toLowerCase());
+            });
+          }
+        });
+
         const submissionsRes = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions`);
         let submissionsData = await submissionsRes.json();
         if (!Array.isArray(submissionsData)) submissionsData = [];
-        setSubmissions(submissionsData.filter(s =>
-          s.customer_id === customerId ||
-          s.customer_email === user?.email ||
-          (s.created_by && user?.email && s.created_by === user.email && !s.customer_id && !s.customer_email)
-        ));
+        setSubmissions(submissionsData.filter(s => {
+          const subCalId = String(s.calendar_id || s.calendarId || '').trim();
+          const matchesCalendar = subCalId && calendarIds.includes(subCalId);
+
+          const subItemId = String(s.item_id || s.assignment_id || '').trim();
+          const matchesItemId = subItemId && calendarItemIds.has(subItemId);
+
+          const subItemName = String(s.item_name || '').trim().toLowerCase();
+          const matchesItemName = subItemName && calendarItemTitles.has(subItemName);
+
+          return (
+            s.customer_id === customerId ||
+            s.customer_email === user?.email ||
+            (s.created_by && user?.email && s.created_by === user.email && !s.customer_id && !s.customer_email) ||
+            matchesCalendar ||
+            matchesItemId ||
+            matchesItemName
+          );
+        }));
       } catch {
         setCustomer(null);
         setCalendars([]);

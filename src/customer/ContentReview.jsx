@@ -54,6 +54,20 @@ const processSubmissionsData = (submissions, user, targetItemId, filterStatus) =
     } else if (user && user.email && sub.created_by && sub.created_by === user.email && !sub.customer_id && !sub.customer_email) {
       matches = true;
     }
+
+    // Also match if this submission is specifically for the target item that we are reviewing
+    if (targetItemId && (
+      (sub.item_id && String(sub.item_id) === String(targetItemId)) ||
+      (sub.assignment_id && String(sub.assignment_id) === String(targetItemId))
+    )) {
+      matches = true;
+    }
+
+    // Also match if the submission is published
+    if (sub.status === 'published' || sub.submission_stage === 'published' || sub.published === true) {
+      matches = true;
+    }
+
     return matches && isVisibleToCustomerSubmission(sub);
   });
 
@@ -78,7 +92,7 @@ const processSubmissionsData = (submissions, user, targetItemId, filterStatus) =
     const baseItem = versions[0];
     const latestVersion = versions[versions.length - 1];
     const currentStatus = latestVersion.status || baseItem.status || 'under_review';
-    
+
     contentData.push({
       id: assignmentId,
       title: baseItem.caption || 'Untitled Post',
@@ -115,13 +129,13 @@ const processSubmissionsData = (submissions, user, targetItemId, filterStatus) =
 
   const displayData = targetItemId
     ? contentData.filter(item =>
-        (item.item_id && item.item_id === targetItemId) ||
-        (item.id && item.id === targetItemId) ||
-        (item.assignment_id && item.assignment_id === targetItemId)
-      )
+      (item.item_id && item.item_id === targetItemId) ||
+      (item.id && item.id === targetItemId) ||
+      (item.assignment_id && item.assignment_id === targetItemId)
+    )
     : filterStatus
-    ? contentData.filter(item => item.status === filterStatus)
-    : contentData;
+      ? contentData.filter(item => item.status === filterStatus)
+      : contentData;
 
   const grouped = {};
   displayData.forEach(item => {
@@ -165,7 +179,7 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
   const [scheduledPostsError, setScheduledPostsError] = useState(null);
   // Calendars state for checking manual publish status
   const [calendars, setCalendars] = useState([]);
-  
+
   // Fetch scheduled posts and calendars on mount
   useEffect(() => {
     const fetchScheduledPosts = async () => {
@@ -183,7 +197,7 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
         setScheduledPostsLoading(false);
       }
     };
-    
+
     const fetchCalendars = async () => {
       try {
         const res = await fetch(`${process.env.REACT_APP_API_URL}/calendars`);
@@ -196,7 +210,7 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
         setCalendars([]);
       }
     };
-    
+
     fetchScheduledPosts();
     fetchCalendars();
   }, []);
@@ -234,7 +248,7 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
     return !(initialSubmissions && Array.isArray(initialSubmissions) && initialSubmissions.length > 0);
   });
   const [error, setError] = useState(null);
-  
+
   // Ref for image container to properly position comments
   const imageContainerRef = useRef(null);
   const videoRef = useRef(null);
@@ -266,12 +280,12 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
         isNew: false, // Mark as existing comment (already saved)
         done: comment.done || comment.status === 'completed' || false
       }));
-      
+
       // Remove duplicate comments by ID (in case backend has duplicates)
       const uniqueComments = normalizedComments.filter((comment, index, self) =>
         index === self.findIndex((c) => c.id === comment.id)
       );
-      
+
       setComments(uniqueComments);
     } else {
       setComments([]);
@@ -318,7 +332,7 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
 
       setContentItems(displayData);
       setGroupedContentItems(grouped);
-      
+
       if (displayData.length > 0 && targetItemId) {
         setSelectedContent(prev => {
           if (prev) {
@@ -402,9 +416,9 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
     const contentW = nw * scale, contentH = nh * scale;
     const ox = (rect.width - contentW) / 2, oy = (rect.height - contentH) / 2;
     const x = Math.max(0, Math.min(1, (e.clientX - rect.left - ox) / contentW));
-    const y = Math.max(0, Math.min(1, (e.clientY - rect.top  - oy) / contentH));
+    const y = Math.max(0, Math.min(1, (e.clientY - rect.top - oy) / contentH));
     if (commentsForCurrentMedia.some((c) => c.editing)) return;
-    
+
     const mediaType = selectedContent?.versions?.[selectedVersionIndex]?.media?.[selectedMediaIndex]?.type;
     const videoTimestamp = (mediaType === 'video' && videoRef.current && !isNaN(videoRef.current.currentTime))
       ? videoRef.current.currentTime
@@ -449,9 +463,9 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
         const versionId = selectedContent.versions[selectedVersionIndex]?.id;
 
         const isNewComment = comment.isNew === true;
-        
+
         let response;
-        
+
         if (!isNewComment) {
           response = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(assignmentId)}/comments/${comment.id}`, {
             method: 'PUT',
@@ -480,7 +494,7 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
             status: 'active',
             ...(comment.videoTimestamp != null && { videoTimestamp: comment.videoTimestamp })
           };
-          
+
           response = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(assignmentId)}/comment`, {
             method: 'PATCH',
             headers: {
@@ -499,19 +513,19 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
               videoRef.current.currentTime = videoPausedAtRef.current;
               videoPausedAtRef.current = null;
             }
-            videoRef.current.play().catch(() => {});
+            videoRef.current.play().catch(() => { });
           }
 
           setComments(comments.map((c) => (c.id === id ? { ...c, editing: false } : c)));
           setCommentsForCurrentMedia(commentsForCurrentMedia.map((c) => (c.id === id ? { ...c, editing: false } : c)));
           setActiveComment(null);
-          
+
           const currentAssignmentId = selectedContent.id;
           const currentVersionIndex = selectedVersionIndex;
           const currentMediaIndex = selectedMediaIndex;
-          
+
           await fetchContentSubmissions();
-          
+
           setContentItems(prevItems => {
             const itemIndex = prevItems.findIndex(item => item.id === currentAssignmentId);
             if (itemIndex !== -1) {
@@ -553,7 +567,7 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
         videoRef.current.currentTime = videoPausedAtRef.current;
         videoPausedAtRef.current = null;
       }
-      videoRef.current.play().catch(() => {});
+      videoRef.current.play().catch(() => { });
     }
   };
 
@@ -569,13 +583,13 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
         });
 
         if (response.ok) {
-          
+
           const currentAssignmentId = selectedContent.id;
           const currentVersionIndex = selectedVersionIndex;
           const currentMediaIndex = selectedMediaIndex;
-          
+
           await fetchContentSubmissions();
-          
+
           setContentItems(prevItems => {
             const itemIndex = prevItems.findIndex(item => item.id === currentAssignmentId);
             if (itemIndex !== -1) {
@@ -596,7 +610,7 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
         setComments(comments.filter((c) => c.id !== id));
         setCommentsForCurrentMedia(commentsForCurrentMedia.filter((c) => c.id !== id));
       }
-      
+
       setActiveComment(null);
     }
   };
@@ -667,8 +681,8 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
       const contentW = nw * scale, contentH = nh * scale;
       const ox = (rect.width - contentW) / 2, oy = (rect.height - contentH) / 2;
       const x = Math.max(0, Math.min(1, (e.clientX - rect.left - ox) / contentW));
-      const y = Math.max(0, Math.min(1, (e.clientY - rect.top  - oy) / contentH));
-      
+      const y = Math.max(0, Math.min(1, (e.clientY - rect.top - oy) / contentH));
+
       setComments(
         comments.map((c) =>
           c.id === repositioningComment.id ? { ...c, x, y, repositioning: false } : c
@@ -680,7 +694,7 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
         )
       );
       setActiveComment(null);
-      
+
       try {
         const response = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(selectedContent.id)}/comments/${repositioningComment.id}`, {
           method: 'PUT',
@@ -693,15 +707,15 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
             y
           })
         });
-        
+
         if (response.ok) {
-          
+
           const currentAssignmentId = selectedContent.id;
           const currentVersionIndex = selectedVersionIndex;
           const currentMediaIndex = selectedMediaIndex;
-          
+
           await fetchContentSubmissions();
-          
+
           setContentItems(prevItems => {
             const itemIndex = prevItems.findIndex(item => item.id === currentAssignmentId);
             if (itemIndex !== -1) {
@@ -753,11 +767,11 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
       isNew: false,
       done: comment.done || comment.status === 'completed' || false
     }));
-    
+
     const uniqueComments = normalizedComments.filter((comment, index, self) =>
       index === self.findIndex((c) => c.id === comment.id)
     );
-    
+
     setComments(uniqueComments);
     setActiveComment(null);
   };
@@ -781,11 +795,11 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
       isNew: false,
       done: comment.done || comment.status === 'completed' || false
     }));
-    
+
     const uniqueComments = normalizedComments.filter((comment, index, self) =>
       index === self.findIndex((c) => c.id === comment.id)
     );
-    
+
     setComments(uniqueComments);
     setActiveComment(null);
   };
@@ -814,7 +828,7 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
   const handleMediaChange = (direction) => {
     const currentVersion = selectedContent.versions[selectedVersionIndex];
     const mediaLength = currentVersion.media.length;
-    
+
     if (direction === 'prev' && selectedMediaIndex > 0) {
       setSelectedMediaIndex(selectedMediaIndex - 1);
     } else if (direction === 'next' && selectedMediaIndex < mediaLength - 1) {
@@ -923,7 +937,7 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
 
   const handleApproveContent = async () => {
     if (!selectedContent) return;
-    
+
     setApprovingContent(true);
     try {
       const response = await fetch(
@@ -944,13 +958,13 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
 
       if (response.ok) {
         alert('Content approved successfully!');
-        
+
         const currentAssignmentId = selectedContent.id;
         const currentVersionIndex = selectedVersionIndex;
         const currentMediaIndex = selectedMediaIndex;
-        
+
         await fetchContentSubmissions();
-        
+
         setContentItems(prevItems => {
           const itemIndex = prevItems.findIndex(item => item.id === currentAssignmentId);
           if (itemIndex !== -1) {
@@ -1003,8 +1017,8 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
     if (!dateString) return 'N/A';
     try {
       const date = new Date(dateString);
-      return date.toLocaleDateString('en-US', { 
-        month: 'short', 
+      return date.toLocaleDateString('en-US', {
+        month: 'short',
         day: 'numeric',
         hour: '2-digit',
         minute: '2-digit'
@@ -1017,26 +1031,26 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
   const isContentPublished = (contentOrId) => {
     const content = typeof contentOrId === 'object' ? contentOrId : selectedContent;
     if (!content) return false;
-    
+
     if (content.published === true) return true;
-    
+
     if (calendars && calendars.length > 0 && (content.calendar_id || content.item_id)) {
-      const calendar = calendars.find(cal => 
+      const calendar = calendars.find(cal =>
         cal._id === content.calendar_id || cal.id === content.calendar_id
       );
-      
+
       if (calendar && Array.isArray(calendar.contentItems)) {
-        const calendarItem = calendar.contentItems.find(item => 
+        const calendarItem = calendar.contentItems.find(item =>
           (content.item_id && item.id === content.item_id) ||
           (content.item_name && (item.title === content.item_name || item.description === content.item_name))
         );
-        
+
         if (calendarItem && calendarItem.published === true) {
           return true;
         }
       }
     }
-    
+
     if (scheduledPosts && scheduledPosts.length > 0) {
       const match = scheduledPosts.find(post => {
         return (
@@ -1239,7 +1253,7 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
   if (selectedContent) {
     const currentVersion = selectedContent.versions[selectedVersionIndex];
     const currentMedia = currentVersion?.media?.[selectedMediaIndex];
-    
+
     return (
       <div
         className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center overflow-y-auto py-4 px-2"
@@ -1304,11 +1318,10 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
                           <div className="flex justify-center mb-3">
                             <button
                               onClick={() => setIsVideoCommentMode(v => !v)}
-                              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
-                                isVideoCommentMode
+                              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${isVideoCommentMode
                                   ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
                                   : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200'
-                              }`}
+                                }`}
                             >
                               <MessageSquare className="h-3 w-3" />
                               {isVideoCommentMode ? '✓ Comment Mode ON — click video to pin comment' : 'Add Comment at Timestamp'}
@@ -1496,11 +1509,10 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
                               <button
                                 key={mIdx}
                                 onClick={() => setSelectedMediaIndex(mIdx)}
-                                className={`w-10 h-10 rounded overflow-hidden border-2 transition-all ${
-                                  selectedMediaIndex === mIdx
+                                className={`w-10 h-10 rounded overflow-hidden border-2 transition-all ${selectedMediaIndex === mIdx
                                     ? 'border-indigo-500 ring-2 ring-indigo-100'
                                     : 'border-slate-200 hover:border-slate-350'
-                                }`}
+                                  }`}
                               >
                                 {media.type === 'image' && media.url ? (
                                   <img src={media.url} alt="" className="w-full h-full object-cover" />
@@ -1605,11 +1617,10 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
                       <div className="relative border-b border-gray-105 last:border-0" key={version.id}>
                         <button
                           onClick={() => handleVersionSelect(index)}
-                          className={`w-full text-left px-3 py-2 flex flex-col border-l-2 transition-colors ${
-                            selectedVersionIndex === index
+                          className={`w-full text-left px-3 py-2 flex flex-col border-l-2 transition-colors ${selectedVersionIndex === index
                               ? 'bg-purple-50 border-l-purple-600'
                               : 'bg-white border-l-transparent hover:bg-gray-50'
-                          }`}
+                            }`}
                         >
                           <span className="font-semibold text-gray-900 text-xs">V{version.versionNumber}</span>
                           <div className="flex items-center text-[10px] text-gray-500 gap-2 mt-0.5">
@@ -1665,22 +1676,19 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
                       return (
                         <div
                           key={comment.id || idx}
-                          className={`rounded-lg border transition-colors overflow-hidden cursor-pointer ${
-                            isActive
+                          className={`rounded-lg border transition-colors overflow-hidden cursor-pointer ${isActive
                               ? isAdminComment ? 'bg-purple-50 border-purple-200' : 'bg-blue-50 border-blue-200'
                               : isAdminComment ? 'bg-white border-purple-100 hover:bg-purple-50/40' : 'bg-gray-50 border-gray-200 hover:bg-blue-50/40'
-                          }`}
+                            }`}
                           onClick={() => handleCommentListClick(comment.id)}
                         >
                           <div className="p-2 flex items-start gap-2">
-                            <span className={`font-bold rounded-full w-5 h-5 flex items-center justify-center text-[10px] flex-shrink-0 border ${
-                              isAdminComment ? 'text-purple-700 bg-purple-100 border-purple-200' : 'text-blue-700 bg-blue-100 border-blue-200'
-                            }`}>{idx + 1}</span>
+                            <span className={`font-bold rounded-full w-5 h-5 flex items-center justify-center text-[10px] flex-shrink-0 border ${isAdminComment ? 'text-purple-700 bg-purple-100 border-purple-200' : 'text-blue-700 bg-blue-100 border-blue-200'
+                              }`}>{idx + 1}</span>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-1 mb-0.5 flex-wrap">
-                                <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold ${
-                                  isAdminComment ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
-                                }`}>
+                                <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold ${isAdminComment ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                                  }`}>
                                   {isAdminComment ? <UserCog className="h-2 w-2" /> : <User className="h-2 w-2" />}
                                   {isAdminComment ? 'Admin' : 'Customer'}
                                 </span>
@@ -1689,9 +1697,8 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
                                     {comment.authorEmail || comment.authorName || comment.author}
                                   </span>
                                 )}
-                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ml-auto ${
-                                  isInternal ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
-                                }`}>
+                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ml-auto ${isInternal ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                                  }`}>
                                   {isInternal ? 'Internal' : 'External'}
                                 </span>
                               </div>
@@ -1872,9 +1879,8 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
                         {comment.authorEmail || comment.authorName}
                       </span>
                     )}
-                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ml-auto ${
-                      (isAdminComment || comment.reviewType === 'internal') ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
-                    }`}>
+                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ml-auto ${(isAdminComment || comment.reviewType === 'internal') ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                      }`}>
                       {(isAdminComment || comment.reviewType === 'internal') ? 'Internal' : 'External'}
                     </span>
                   </div>
@@ -1882,67 +1888,67 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
                     {comment.comment}
                     {comment.done && <span className="ml-1.5 text-green-600 text-[10px]">✓</span>}
                   </p>
-                {/* Reply block */}
-                {(comment.adminReply || comment.reply) && (
-                  <div className="mt-1.5 p-1.5 bg-purple-50 border border-purple-200 rounded-md">
-                    <div className="flex items-center gap-1 mb-0.5">
-                      <UserCog className="h-2.5 w-2.5 text-purple-600" />
-                      <span className="text-[10px] font-bold text-purple-700">
-                        {comment.adminReply?.adminName || comment.reply?.creatorName || 'Creator'}
-                      </span>
+                  {/* Reply block */}
+                  {(comment.adminReply || comment.reply) && (
+                    <div className="mt-1.5 p-1.5 bg-purple-50 border border-purple-200 rounded-md">
+                      <div className="flex items-center gap-1 mb-0.5">
+                        <UserCog className="h-2.5 w-2.5 text-purple-600" />
+                        <span className="text-[10px] font-bold text-purple-700">
+                          {comment.adminReply?.adminName || comment.reply?.creatorName || 'Creator'}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-gray-700 break-words">
+                        {comment.adminReply?.text || comment.reply?.text}
+                      </p>
                     </div>
-                    <p className="text-[10px] text-gray-700 break-words">
-                      {comment.adminReply?.text || comment.reply?.text}
-                    </p>
+                  )}
+                  {/* Action buttons */}
+                  <div className="flex items-center gap-1 mt-2 pt-1.5 border-t border-gray-100 flex-wrap">
+                    {comment.videoTimestamp != null && (
+                      <button
+                        className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] bg-orange-50 text-orange-700 rounded-md hover:bg-orange-100 font-semibold"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (videoRef.current) { videoRef.current.currentTime = comment.videoTimestamp; videoRef.current.pause(); }
+                        }}
+                      >
+                        ▶ {formatVideoTime(comment.videoTimestamp)}
+                      </button>
+                    )}
+                    {!comment.done && (
+                      <button
+                        className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] bg-green-50 text-green-700 rounded-md hover:bg-green-100"
+                        onClick={(e) => { e.stopPropagation(); handleMarkDone(comment.id); }}
+                      >
+                        <CheckCircle className="h-2.5 w-2.5" />Done
+                      </button>
+                    )}
+                    <button
+                      className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] bg-amber-50 text-amber-700 rounded-md hover:bg-amber-100"
+                      onClick={(e) => { e.stopPropagation(); handleEditComment(comment.id); }}
+                    >
+                      <Edit3 className="h-2.5 w-2.5" />Edit
+                    </button>
+                    <button
+                      className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] bg-cyan-50 text-cyan-700 rounded-md hover:bg-cyan-100"
+                      onClick={(e) => { e.stopPropagation(); handleRepositionStart(comment.id); }}
+                    >
+                      <Move className="h-2.5 w-2.5" />Move
+                    </button>
+                    <button
+                      className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] bg-red-50 text-red-500 rounded-md hover:bg-red-100 ml-auto"
+                      onClick={(e) => { e.stopPropagation(); handleDeleteComment(comment.id); }}
+                    >
+                      <Trash2 className="h-2.5 w-2.5" />
+                    </button>
                   </div>
-                )}
-                {/* Action buttons */}
-                <div className="flex items-center gap-1 mt-2 pt-1.5 border-t border-gray-100 flex-wrap">
-                  {comment.videoTimestamp != null && (
-                    <button
-                      className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] bg-orange-50 text-orange-700 rounded-md hover:bg-orange-100 font-semibold"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (videoRef.current) { videoRef.current.currentTime = comment.videoTimestamp; videoRef.current.pause(); }
-                      }}
-                    >
-                      ▶ {formatVideoTime(comment.videoTimestamp)}
-                    </button>
-                  )}
-                  {!comment.done && (
-                    <button
-                      className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] bg-green-50 text-green-700 rounded-md hover:bg-green-100"
-                      onClick={(e) => { e.stopPropagation(); handleMarkDone(comment.id); }}
-                    >
-                      <CheckCircle className="h-2.5 w-2.5" />Done
-                    </button>
-                  )}
-                  <button
-                    className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] bg-amber-50 text-amber-700 rounded-md hover:bg-amber-100"
-                    onClick={(e) => { e.stopPropagation(); handleEditComment(comment.id); }}
-                  >
-                    <Edit3 className="h-2.5 w-2.5" />Edit
-                  </button>
-                  <button
-                    className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] bg-cyan-50 text-cyan-700 rounded-md hover:bg-cyan-100"
-                    onClick={(e) => { e.stopPropagation(); handleRepositionStart(comment.id); }}
-                  >
-                    <Move className="h-2.5 w-2.5" />Move
-                  </button>
-                  <button
-                    className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] bg-red-50 text-red-500 rounded-md hover:bg-red-100 ml-auto"
-                    onClick={(e) => { e.stopPropagation(); handleDeleteComment(comment.id); }}
-                  >
-                    <Trash2 className="h-2.5 w-2.5" />
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        );
-      })()}
-    </div>
-  );
+                </>
+              )}
+            </div>
+          );
+        })()}
+      </div>
+    );
   }
 
   // Standalone list view fallback (direct access route without selectedContent/targetItemId)

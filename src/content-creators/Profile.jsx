@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, User, AtSign, Phone, Palette, Briefcase, Camera, Save, Edit3, CheckCircle, AlertCircle, MapPin, Calendar, Award, Star } from 'lucide-react';
-import Footer from '../admin/components/layout/Footer';
 import ContentCreatorLayout from './Layout';
 
 // Helper to get creator email from localStorage

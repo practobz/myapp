@@ -4,7 +4,6 @@ import { PlusCircle, Clock, MessageSquare, CheckCircle, Globe, User, ChevronDown
 import { format } from 'date-fns';
 import { useAuth } from "../admin/contexts/AuthContext";
 import Logo from '../admin/components/layout/Logo';
-import Footer from '../admin/components/layout/Footer';
 import ContentCreatorLayout from './Layout';
 
 const parsePlatforms = (val) => {

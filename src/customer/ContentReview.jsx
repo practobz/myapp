@@ -851,6 +851,9 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
   };
 
   const [approvingContent, setApprovingContent] = useState(false);
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [replyText, setReplyText] = useState('');
+  const [savingReply, setSavingReply] = useState(false);
   const [sendingToCreator, setSendingToCreator] = useState(false);
   const [undoingApprove, setUndoingApprove] = useState(false);
   const [isVideoCommentMode, setIsVideoCommentMode] = useState(false);
@@ -1002,6 +1005,78 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
     }
   };
 
+  const handleStartReply = (commentId) => {
+    setReplyingTo(commentId);
+    setReplyText('');
+    setActiveComment(commentId);
+  };
+
+  const handleCancelReply = () => {
+    setReplyingTo(null);
+    setReplyText('');
+  };
+
+  const handleReplySubmit = async (commentId) => {
+    if (!replyText.trim()) return;
+    setSavingReply(true);
+    const targetComment = comments.find(c => c.id === commentId);
+    if (!targetComment) {
+      setSavingReply(false);
+      return;
+    }
+    const newReply = {
+      id: uuidv4(),
+      authorRole: 'customer',
+      authorName: user?.name || 'Customer',
+      authorEmail: user?.email || '',
+      message: replyText.trim(),
+      timestamp: new Date().toISOString(),
+    };
+    const existingReplies = targetComment.replies || (targetComment.adminReply ? [{
+      id: 'legacy-reply',
+      authorRole: 'admin',
+      authorName: targetComment.adminReply.adminName || 'Admin',
+      authorEmail: targetComment.adminReply.adminEmail || '',
+      message: targetComment.adminReply.text,
+      timestamp: targetComment.adminReply.timestamp
+    }] : []);
+    const updatedReplies = [...existingReplies, newReply];
+
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(selectedContent.id)}/comments/${commentId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          replies: updatedReplies,
+          status: 'customer_feedback_pending_admin'
+        })
+      });
+
+      if (response.ok) {
+        setComments(comments.map((c) => (c.id === commentId ? { ...c, replies: updatedReplies } : c)));
+        setCommentsForCurrentMedia(commentsForCurrentMedia.map((c) => (c.id === commentId ? { ...c, replies: updatedReplies } : c)));
+        setReplyingTo(null);
+        setReplyText('');
+        // Update submission status as well
+        await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(selectedContent.id)}/status`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            versionId: selectedContent.versions[selectedVersionIndex]?.id,
+            status: 'customer_feedback_pending_admin'
+          })
+        });
+        await fetchContentSubmissions();
+      }
+    } catch (error) {
+      console.error('Error saving customer reply:', error);
+    } finally {
+      setSavingReply(false);
+    }
+  };
+
   const getAssignedCreator = (item) => {
     if (calendars && calendars.length > 0 && item.calendar_id) {
       const calendar = calendars.find(cal =>
@@ -1129,13 +1204,23 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
       case 'approved_by_customer':
         return 'bg-emerald-100 text-emerald-800 border-emerald-300';
       case 'approved_by_admin':
-        return 'bg-orange-100 text-orange-800 border-orange-300';
+        return 'bg-orange-100 text-orange-850 border-orange-300';
       case 'rejected':
         return 'bg-rose-100 text-rose-800 border-rose-300';
       case 'published':
         return 'bg-blue-100 text-blue-800 border-blue-300';
       case 'sent_to_creator':
+      case 'revision_requested':
+      case 'changes_requested':
         return 'bg-violet-100 text-violet-800 border-violet-300';
+      case 'pending_customer_review':
+        return 'bg-cyan-100 text-cyan-800 border-cyan-305';
+      case 'changes_requested_admin':
+        return 'bg-orange-100 text-orange-800 border-orange-300';
+      case 'customer_feedback_pending_admin':
+        return 'bg-purple-100 text-purple-800 border-purple-300';
+      case 'changes_requested_customer_approved_admin':
+        return 'bg-rose-100 text-rose-800 border-rose-305';
       default:
         return 'bg-slate-100 text-slate-800 border-slate-300';
     }
@@ -1156,6 +1241,17 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
         return 'Published';
       case 'sent_to_creator':
         return 'Sent to Creator';
+      case 'pending_customer_review':
+        return 'Pending Customer Review';
+      case 'changes_requested_admin':
+        return 'Changes Requested by Admin';
+      case 'customer_feedback_pending_admin':
+        return 'Customer Feedback Pending Admin Review';
+      case 'changes_requested_customer_approved_admin':
+        return 'Changes Requested by Customer (Approved by Admin)';
+      case 'changes_requested':
+      case 'revision_requested':
+        return 'Changes Requested';
       default: return 'Pending';
     }
   };
@@ -1482,7 +1578,7 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
                                     top: py - 12,
                                     left: px - 12,
                                     width: 24, height: 24,
-                                    background: comment.done ? "#10b981" : comment.repositioning ? "#8b5cf6" : comment.editing ? "#3b82f6" : "#ef4444",
+                                    background: comment.discarded ? "#94a3b8" : (comment.done ? "#10b981" : comment.repositioning ? "#8b5cf6" : comment.editing ? "#3b82f6" : "#ef4444"),
                                     color: "#fff",
                                     borderRadius: "50%",
                                     display: "flex", alignItems: "center", justifyContent: "center",
@@ -1687,6 +1783,7 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
                       const isInternal = isAdminComment || comment.reviewType === 'internal';
                       const isDone = comment.done || comment.status === 'completed';
                       const isActive = activeComment === comment.id;
+                      const isReplying = replyingTo === comment.id;
                       return (
                         <div
                           key={comment.id || idx}
@@ -1716,9 +1813,10 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
                                   {isInternal ? 'Internal' : 'External'}
                                 </span>
                               </div>
-                              <p className="text-xs font-medium text-gray-950 break-words">
+                              <p className={`text-xs font-medium break-words ${comment.discarded ? 'text-gray-400 line-through' : 'text-gray-955'}`}>
                                 {comment.message || comment.comment}
                                 {isDone && <span className="ml-1.5 text-green-600 text-[10px]">✓</span>}
+                                {comment.discarded && <span className="ml-1.5 text-orange-600 text-[10px] font-bold">(Discarded)</span>}
                               </p>
                               <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                                 <span className="text-[9px] text-gray-400">
@@ -1749,28 +1847,62 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
                             </div>
                           </div>
 
-                          {/* Admin reply */}
-                          {comment.adminReply && (
-                            <div className="mx-2 mb-2 p-1.5 bg-purple-50 border border-purple-200 rounded-md">
-                              <div className="flex items-center gap-1 mb-0.5">
-                                <UserCog className="h-2.5 w-2.5 text-purple-650" />
-                                <span className="text-[10px] font-bold text-purple-700">{comment.adminReply.adminName || 'Admin'}</span>
-                                {comment.adminReply.adminEmail && (
-                                  <span className="text-[9px] text-gray-400 truncate max-w-[90px]">{comment.adminReply.adminEmail}</span>
-                                )}
-                              </div>
-                              <p className="text-[10px] text-gray-700 break-words">{comment.adminReply.text}</p>
-                            </div>
-                          )}
+                          {/* Threaded Discussion replies */}
+                          <div className="mx-2 mb-2 pl-4 border-l-2 border-indigo-100 space-y-1.5">
+                            {(() => {
+                              const replies = comment.replies || (comment.adminReply ? [{
+                                id: 'legacy-reply',
+                                authorRole: 'admin',
+                                authorName: comment.adminReply.adminName || 'Admin',
+                                authorEmail: comment.adminReply.adminEmail || '',
+                                message: comment.adminReply.text,
+                                timestamp: comment.adminReply.timestamp
+                              }] : []);
+                              return replies.map((rep, rIdx) => {
+                                const isRepAdmin = rep.authorRole === 'admin';
+                                return (
+                                  <div key={rep.id || rIdx} className={`p-1.5 rounded text-[10px] border ${isRepAdmin ? 'bg-purple-50/50 border-purple-100' : 'bg-blue-50/50 border-blue-100'}`}>
+                                    <div className="flex items-center gap-1 mb-0.5 flex-wrap">
+                                      <span className={`font-semibold ${isRepAdmin ? 'text-purple-750 font-bold' : 'text-blue-750 font-bold'}`}>
+                                        {isRepAdmin ? 'Admin' : 'Customer'}
+                                      </span>
+                                      <span className="text-[8px] text-gray-400 ml-auto">
+                                        {rep.timestamp ? new Date(rep.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                                      </span>
+                                    </div>
+                                    <p className="text-[10px] text-gray-700 break-words font-medium">{rep.message || rep.text}</p>
+                                  </div>
+                                );
+                              });
+                            })()}
+                          </div>
 
-                          {/* Creator reply */}
-                          {comment.reply && (
-                            <div className="mx-2 mb-2 p-1.5 bg-indigo-50 border border-indigo-200 rounded-md">
-                              <div className="flex items-center gap-1 mb-0.5">
-                                <User className="h-2.5 w-2.5 text-indigo-600" />
-                                <span className="text-[10px] font-bold text-indigo-700">{comment.reply.creatorName || 'Creator'}</span>
+                          {/* Inline reply textarea for Customer */}
+                          {isReplying && isActive && (
+                            <div className="mx-2 mb-2" onClick={(e) => e.stopPropagation()}>
+                              <textarea
+                                autoFocus
+                                className="w-full rounded-lg border border-blue-200 bg-blue-50 text-xs text-gray-900 placeholder-gray-400 p-2 resize-none focus:outline-none focus:ring-2 focus:ring-blue-300"
+                                rows={2}
+                                placeholder="Type reply to Admin… (Ctrl+Enter to send)"
+                                value={replyText}
+                                onChange={(e) => setReplyText(e.target.value)}
+                                onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleReplySubmit(comment.id); }}
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                              <div className="flex gap-1.5 mt-1">
+                                <button
+                                  className="flex-1 py-1 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-semibold disabled:opacity-50"
+                                  disabled={savingReply}
+                                  onClick={(e) => { e.stopPropagation(); handleReplySubmit(comment.id); }}
+                                >
+                                  {savingReply ? 'Sending…' : 'Send Reply'}
+                                </button>
+                                <button
+                                  className="flex-1 py-1 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-600 text-[10px] font-semibold"
+                                  onClick={(e) => { e.stopPropagation(); handleCancelReply(); }}
+                                >Cancel</button>
                               </div>
-                              <p className="text-[10px] text-gray-700 break-words">{comment.reply.text}</p>
                             </div>
                           )}
 
@@ -1787,6 +1919,12 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
                               )}
                               {!isAdminComment && (
                                 <>
+                                  <button
+                                    className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] bg-purple-50 text-purple-700 border border-purple-200 rounded-md font-medium hover:bg-purple-100 transition-colors"
+                                    onClick={(e) => { e.stopPropagation(); handleStartReply(comment.id); }}
+                                  >
+                                    Reply
+                                  </button>
                                   <button
                                     className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] bg-blue-50 text-blue-700 border border-blue-200 rounded-md hover:bg-blue-105 transition-colors"
                                     onClick={(e) => { e.stopPropagation(); handleEditComment(comment.id); }}
@@ -1827,6 +1965,8 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
           if (!popupCommentId || !activeMarkerRect) return null;
           const comment = commentsForCurrentMedia.find(c => c.id === popupCommentId);
           if (!comment || comment.repositioning) return null;
+          const isReplying = replyingTo === comment.id;
+          const isActive = activeComment === comment.id;
           const isAdminComment = comment.authorRole === 'admin';
           const borderColor = isAdminComment ? '#7c3aed' : '#3b82f6';
           const boxShadow = isAdminComment ? '0 6px 24px rgba(124,58,237,0.18)' : '0 4px 20px rgba(59,130,246,0.15)';
@@ -1898,24 +2038,59 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
                       {(isAdminComment || comment.reviewType === 'internal') ? 'Internal' : 'External'}
                     </span>
                   </div>
-                  <p className="text-xs font-medium text-gray-900 break-words">
+                  <p className={`text-xs font-medium break-words ${comment.discarded ? 'text-gray-400 line-through' : 'text-gray-905'}`}>
                     {comment.comment}
                     {comment.done && <span className="ml-1.5 text-green-600 text-[10px]">✓</span>}
+                    {comment.discarded && <span className="ml-1.5 text-orange-600 text-[10px] font-bold">(Discarded)</span>}
                   </p>
-                  {/* Reply block */}
-                  {(comment.adminReply || comment.reply) && (
-                    <div className="mt-1.5 p-1.5 bg-purple-50 border border-purple-200 rounded-md">
-                      <div className="flex items-center gap-1 mb-0.5">
-                        <UserCog className="h-2.5 w-2.5 text-purple-600" />
-                        <span className="text-[10px] font-bold text-purple-700">
-                          {comment.adminReply?.adminName || comment.reply?.creatorName || 'Creator'}
-                        </span>
+                  {/* Threaded replies */}
+                  <div className="mt-1.5 max-h-32 overflow-y-auto pl-2 border-l border-gray-200 space-y-1">
+                    {(() => {
+                      const replies = comment.replies || (comment.adminReply ? [{
+                        id: 'legacy-reply',
+                        authorRole: 'admin',
+                        authorName: comment.adminReply.adminName || 'Admin',
+                        authorEmail: comment.adminReply.adminEmail || '',
+                        message: comment.adminReply.text,
+                        timestamp: comment.adminReply.timestamp
+                      }] : []);
+                      return replies.map((rep, rIdx) => {
+                        const isRepAdmin = rep.authorRole === 'admin';
+                        return (
+                          <div key={rep.id || rIdx} className={`p-1 rounded text-[9px] border ${isRepAdmin ? 'bg-purple-50 border-purple-100' : 'bg-blue-50 border-blue-100'}`}>
+                            <span className="font-semibold">{isRepAdmin ? 'Admin' : 'Customer'}: </span>
+                            <span className="text-gray-700">{rep.message || rep.text}</span>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+
+                  {/* Viewport popup reply input */}
+                  {isReplying && isActive && (
+                    <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>
+                      <textarea
+                        autoFocus
+                        className="w-full rounded border border-blue-200 bg-blue-50 text-[11px] text-gray-900 p-1 resize-none focus:outline-none"
+                        rows={2}
+                        placeholder="Reply…"
+                        value={replyText}
+                        onChange={(e) => setReplyText(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleReplySubmit(comment.id); }}
+                      />
+                      <div className="flex gap-1 mt-0.5">
+                        <button
+                          className="flex-1 py-0.5 rounded bg-blue-600 text-white text-[9px] font-semibold"
+                          onClick={(e) => { e.stopPropagation(); handleReplySubmit(comment.id); }}
+                        >Send</button>
+                        <button
+                          className="flex-1 py-0.5 rounded bg-gray-100 text-gray-650 text-[9px]"
+                          onClick={(e) => { e.stopPropagation(); handleCancelReply(); }}
+                        >Cancel</button>
                       </div>
-                      <p className="text-[10px] text-gray-700 break-words">
-                        {comment.adminReply?.text || comment.reply?.text}
-                      </p>
                     </div>
                   )}
+
                   {/* Action buttons */}
                   <div className="flex items-center gap-1 mt-2 pt-1.5 border-t border-gray-100 flex-wrap">
                     {comment.videoTimestamp != null && (
@@ -1937,6 +2112,12 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
                         <CheckCircle className="h-2.5 w-2.5" />Done
                       </button>
                     )}
+                    <button
+                      className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] bg-purple-50 text-purple-700 rounded-md hover:bg-purple-100"
+                      onClick={(e) => { e.stopPropagation(); handleStartReply(comment.id); }}
+                    >
+                      Reply
+                    </button>
                     <button
                       className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] bg-amber-50 text-amber-700 rounded-md hover:bg-amber-100"
                       onClick={(e) => { e.stopPropagation(); handleEditComment(comment.id); }}

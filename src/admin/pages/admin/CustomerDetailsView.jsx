@@ -9,16 +9,15 @@ import ContentDetailView from '../../components/modals/ContentDetailView';
 import ContentCalendar from '../../../customer/ContentCalendar';
 import ContentItemModal from '../../components/modals/ContentItemModal';
 import ContentCalendarModal from '../../components/modals/ContentCalendarModal';
-import AssignCreatorModal from '../../components/modals/AssignCreatorModal';
 import ReportModal from '../../components/modals/ReportModal';
 import SchedulePostModal from '../../components/modals/SchedulePostModal';
 import ManualPublishModal from '../../components/modals/ManualPublishModal';
 import SummaryReport from './SummaryReport';
 import CustomerSocialAccounts from './CustomerSocialAccounts';
-import MultiCustomerAnalytics from './MultiCustomerAnalytics';
 import {
   ArrowLeft,
   User,
+  UserCheck,
   Mail,
   Phone,
   MapPin,
@@ -123,7 +122,12 @@ const getPortfolioStatusColor = (status) => {
     case 'approved': return 'bg-green-100 text-green-800';
     case 'published': return 'bg-blue-100 text-blue-800';
     case 'revision_requested': return 'bg-orange-100 text-orange-800';
+    case 'changes_requested': return 'bg-orange-100 text-orange-800';
     case 'rejected': return 'bg-red-100 text-red-800';
+    case 'pending_customer_review': return 'bg-cyan-100 text-cyan-800 border-cyan-200';
+    case 'changes_requested_admin': return 'bg-orange-100 text-orange-850 border-orange-205';
+    case 'customer_feedback_pending_admin': return 'bg-purple-100 text-purple-800 border-purple-200';
+    case 'changes_requested_customer_approved_admin': return 'bg-rose-100 text-rose-800 border-rose-200';
     default: return 'bg-gray-100 text-gray-800';
   }
 };
@@ -138,9 +142,14 @@ const getPortfolioStatusLabel = (status) => {
     case 'approved_both': return 'Fully Approved';
     case 'under_review': return 'Under Review';
     case 'revision_requested': return 'Revision Needed';
+    case 'changes_requested': return 'Changes Requested';
     case 'published': return 'Published';
     case 'submitted': return 'Submitted';
     case 'rejected': return 'Rejected';
+    case 'pending_customer_review': return 'Pending Customer Review';
+    case 'changes_requested_admin': return 'Changes Requested by Admin';
+    case 'customer_feedback_pending_admin': return 'Customer Feedback Pending Admin Review';
+    case 'changes_requested_customer_approved_admin': return 'Changes Requested by Customer (Approved by Admin)';
     default: return (status || '').replace(/_/g, ' ');
   }
 };
@@ -246,8 +255,8 @@ const TrendChart = memo(({ calendars, onClose }) => {
               key={opt.label}
               onClick={() => setRange(opt.months)}
               className={`px-2.5 py-0.5 rounded-md text-xs font-medium transition-colors ${range === opt.months
-                ? 'bg-emerald-600 text-white'
-                : 'text-gray-500 hover:bg-gray-100'
+                  ? 'bg-emerald-600 text-white'
+                  : 'text-gray-500 hover:bg-gray-100'
                 }`}
             >
               {opt.label}
@@ -511,26 +520,26 @@ const ItemTimeline = ({ item, itemStatus, scheduledPosts = [], submissions = [] 
   // Derive customer approval from submission or item status
   const customerApprovedSub = submissions.length > 0 && (() => {
     const latest = submissions[submissions.length - 1];
-    const isApproved = latest.approved_by_customer === true ||
-      latest.status === 'approved_customer' ||
-      latest.status === 'approved_both';
-    const isReverted = latest.status === 'under_review' ||
-      latest.status === 'sent_to_creator' ||
-      latest.status === 'revision_requested' ||
-      latest.status === 'rejected';
+    const isApproved = latest.approved_by_customer === true || 
+                       latest.status === 'approved_customer' || 
+                       latest.status === 'approved_both';
+    const isReverted = latest.status === 'under_review' || 
+                       latest.status === 'sent_to_creator' || 
+                       latest.status === 'revision_requested' || 
+                       latest.status === 'rejected';
     return isApproved && !isReverted ? latest : null;
   })();
-
-  const isCustomerApproved = !!customerApprovedSub ||
-    itemStatus === 'published' ||
-    item.status === 'published' ||
-    item.published === true ||
-    (item.reviewedAt && submissions.length === 0);
-
-  const customerApprovedAt = customerApprovedSub?.approvedAt ||
-    customerApprovedSub?.updatedAt ||
-    (isCustomerApproved ? (item.reviewedAt || item.publishedAt) : null);
-
+  
+  const isCustomerApproved = !!customerApprovedSub || 
+                             itemStatus === 'published' || 
+                             item.status === 'published' || 
+                             item.published === true ||
+                             (item.reviewedAt && submissions.length === 0);
+                             
+  const customerApprovedAt = customerApprovedSub?.approvedAt || 
+                             customerApprovedSub?.updatedAt || 
+                             (isCustomerApproved ? (item.reviewedAt || item.publishedAt) : null);
+                             
   const customerApprovedDate = fmtDate(customerApprovedAt);
   const publishedAt = matchedPost?.publishedAt || item.publishedAt;
 
@@ -616,8 +625,8 @@ const ItemTimeline = ({ item, itemStatus, scheduledPosts = [], submissions = [] 
 const PostTrendButton = memo(({ isLoading, isActive, onClick }) => (
   <button
     className={`flex items-center gap-1 px-1.5 py-0.5 rounded border transition-colors flex-shrink-0 ${isActive
-      ? 'bg-blue-100 border-blue-300 text-blue-700'
-      : 'bg-blue-50 hover:bg-blue-100 border-blue-100 text-blue-600'
+        ? 'bg-blue-100 border-blue-300 text-blue-700'
+        : 'bg-blue-50 hover:bg-blue-100 border-blue-100 text-blue-600'
       }`}
     onClick={onClick}
     title="View post engagement trend"
@@ -723,8 +732,8 @@ const ExpandedTrendChart = memo(({ platformData, dateRange, onDateRangeChange, o
                 key={r.value}
                 onClick={() => onDateRangeChange(r.value)}
                 className={`px-2 py-0.5 text-[10px] rounded-full font-medium transition-colors ${dateRange === r.value
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-white text-gray-500 hover:bg-gray-100 border border-gray-200'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white text-gray-500 hover:bg-gray-100 border border-gray-200'
                   }`}
               >
                 {r.label}
@@ -808,6 +817,8 @@ function CustomerDetailsView() {
   const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
   const [isContentModalOpen, setIsContentModalOpen] = useState(false);
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
+  const [assignSelectedCreator, setAssignSelectedCreator] = useState('');
+  const [assignCreatorLoading, setAssignCreatorLoading] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isEditCalendarModalOpen, setIsEditCalendarModalOpen] = useState(false);
   const [calendarToEdit, setCalendarToEdit] = useState(null);
@@ -1399,10 +1410,10 @@ function CustomerDetailsView() {
         status: latest.status || 'submitted',
         approved_by_admin: latest.approved_by_admin,
         approved_by_customer: latest.approved_by_customer === true &&
-          latest.status !== 'under_review' &&
-          latest.status !== 'sent_to_creator' &&
-          latest.status !== 'revision_requested' &&
-          latest.status !== 'rejected',
+                              latest.status !== 'under_review' &&
+                              latest.status !== 'sent_to_creator' &&
+                              latest.status !== 'revision_requested' &&
+                              latest.status !== 'rejected',
         submission_stage: latest.submission_stage || latest.submissionStage || 'internal',
         createdDate: base.created_at,
         lastUpdated: latest.created_at,
@@ -1418,10 +1429,10 @@ function CustomerDetailsView() {
           status: v.status || 'submitted',
           approved_by_admin: v.approved_by_admin,
           approved_by_customer: v.approved_by_customer === true &&
-            v.status !== 'under_review' &&
-            v.status !== 'sent_to_creator' &&
-            v.status !== 'revision_requested' &&
-            v.status !== 'rejected',
+                                v.status !== 'under_review' &&
+                                v.status !== 'sent_to_creator' &&
+                                v.status !== 'revision_requested' &&
+                                v.status !== 'rejected',
           submission_stage: v.submission_stage || v.submissionStage || 'internal',
           comments: v.comments || [],
         })),
@@ -1462,7 +1473,7 @@ function CustomerDetailsView() {
     let adminReviewCount = 0, customerReviewCount = 0;
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
+    
     const twoDaysFromNow = new Date(today);
     twoDaysFromNow.setDate(today.getDate() + 2);
     twoDaysFromNow.setHours(23, 59, 59, 999);
@@ -1502,31 +1513,31 @@ function CustomerDetailsView() {
           const latest = sorted[sorted.length - 1];
           const status = latest.status || 'submitted';
           const stage = latest.submission_stage || latest.submissionStage || 'internal';
-
+          
           const approvedByAdmin = latest.approved_by_admin === true || status === 'approved_admin' || status === 'approved_both';
           const approvedByCustomer = (latest.approved_by_customer === true || status === 'approved_customer' || status === 'approved_both') &&
-            status !== 'under_review' &&
-            status !== 'sent_to_creator' &&
-            status !== 'revision_requested' &&
-            status !== 'rejected';
-
-          const isAdminRev = (stage !== 'customer') &&
-            !approvedByAdmin &&
-            status !== 'approved' &&
-            status !== 'rejected' &&
-            status !== 'revision_requested' &&
-            status !== 'sent_to_creator' &&
-            status !== 'published';
-
-          const isCustomerRev = (stage === 'customer') &&
-            !approvedByCustomer &&
-            status !== 'approved_customer' &&
-            status !== 'approved_both' &&
-            status !== 'rejected' &&
-            status !== 'revision_requested' &&
-            status !== 'sent_to_creator' &&
-            status !== 'published';
-
+                                     status !== 'under_review' &&
+                                     status !== 'sent_to_creator' &&
+                                     status !== 'revision_requested' &&
+                                     status !== 'rejected';
+          
+          const isAdminRev = (stage !== 'customer') && 
+                             !approvedByAdmin && 
+                             status !== 'approved' &&
+                             status !== 'rejected' && 
+                             status !== 'revision_requested' && 
+                             status !== 'sent_to_creator' &&
+                             status !== 'published';
+                             
+          const isCustomerRev = (stage === 'customer') && 
+                                !approvedByCustomer && 
+                                status !== 'approved_customer' &&
+                                status !== 'approved_both' &&
+                                status !== 'rejected' && 
+                                status !== 'revision_requested' && 
+                                status !== 'sent_to_creator' &&
+                                status !== 'published';
+                                
           if (isAdminRev) adminReviewCount++;
           if (isCustomerRev) customerReviewCount++;
         }
@@ -1583,31 +1594,31 @@ function CustomerDetailsView() {
           const latest = sorted[sorted.length - 1];
           const status = latest.status || 'submitted';
           const stage = latest.submission_stage || latest.submissionStage || 'internal';
-
+          
           const approvedByAdmin = latest.approved_by_admin === true || status === 'approved_admin' || status === 'approved_both';
           const approvedByCustomer = (latest.approved_by_customer === true || status === 'approved_customer' || status === 'approved_both') &&
-            status !== 'under_review' &&
-            status !== 'sent_to_creator' &&
-            status !== 'revision_requested' &&
-            status !== 'rejected';
-
-          const isAdminRev = (stage !== 'customer') &&
-            !approvedByAdmin &&
-            status !== 'approved' &&
-            status !== 'rejected' &&
-            status !== 'revision_requested' &&
-            status !== 'sent_to_creator' &&
-            status !== 'published';
-
-          const isCustomerRev = (stage === 'customer') &&
-            !approvedByCustomer &&
-            status !== 'approved_customer' &&
-            status !== 'approved_both' &&
-            status !== 'rejected' &&
-            status !== 'revision_requested' &&
-            status !== 'sent_to_creator' &&
-            status !== 'published';
-
+                                     status !== 'under_review' &&
+                                     status !== 'sent_to_creator' &&
+                                     status !== 'revision_requested' &&
+                                     status !== 'rejected';
+          
+          const isAdminRev = (stage !== 'customer') && 
+                             !approvedByAdmin && 
+                             status !== 'approved' &&
+                             status !== 'rejected' && 
+                             status !== 'revision_requested' && 
+                             status !== 'sent_to_creator' &&
+                             status !== 'published';
+                             
+          const isCustomerRev = (stage === 'customer') && 
+                                !approvedByCustomer && 
+                                status !== 'approved_customer' &&
+                                status !== 'approved_both' &&
+                                status !== 'rejected' && 
+                                status !== 'revision_requested' && 
+                                status !== 'sent_to_creator' &&
+                                status !== 'published';
+                                
           if (isAdminRev) adminReviewCount++;
           if (isCustomerRev) customerReviewCount++;
         }
@@ -1714,6 +1725,24 @@ function CustomerDetailsView() {
     } catch (err) {
       console.error('Error adding content item:', err);
     }
+  };
+
+  const handleModalAssignCreator = async () => {
+    if (!assignSelectedCreator || !selectedCalendar) return;
+    const creator = creators.find(c => c.email === assignSelectedCreator);
+    if (!creator) return;
+    setAssignCreatorLoading(true);
+    await handleAssignCreator(creator);
+    setAssignCreatorLoading(false);
+    setAssignSelectedCreator('');
+    setIsAssignModalOpen(false);
+    setSelectedCalendar(null);
+  };
+
+  const handleCloseAssignModal = () => {
+    setAssignSelectedCreator('');
+    setIsAssignModalOpen(false);
+    setSelectedCalendar(null);
   };
 
   const handleAssignCreator = async (creator) => {
@@ -2253,7 +2282,7 @@ function CustomerDetailsView() {
             <h3 className="text-lg font-bold text-gray-900 mb-1">Not Found</h3>
             <p className="text-base text-gray-600 mb-4">{error || "Customer doesn't exist."}</p>
             <button
-              onClick={() => navigate('/admin/customers-list')}
+              onClick={() => navigate('/admin/dashboard')}
               className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
             >
               <ArrowLeft className="h-4 w-4 mr-1" />
@@ -2300,8 +2329,8 @@ function CustomerDetailsView() {
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all flex-shrink-0 ${isActive
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                     }`}
                 >
                   <Icon className="h-3.5 w-3.5" />
@@ -2372,8 +2401,8 @@ function CustomerDetailsView() {
                     <button
                       onClick={() => setShowTrend(v => !v)}
                       className={`inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${showTrend
-                        ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                        : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                          ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                          : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
                         }`}
                     >
                       <TrendingUp className="h-4 w-4 mr-1.5" />
@@ -2825,15 +2854,105 @@ function CustomerDetailsView() {
         multiPlatform={true}
       />
 
-      <AssignCreatorModal
-        isOpen={isAssignModalOpen}
-        onClose={() => {
-          setIsAssignModalOpen(false);
-          setSelectedCalendar(null);
-        }}
-        onAssign={handleAssignCreator}
-        calendarName={selectedCalendar?.name || ''}
-      />
+      {/* Assign Creator Modal */}
+      {isAssignModalOpen && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            {/* Backdrop */}
+            <div 
+              className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
+              onClick={handleCloseAssignModal}
+            />
+
+            {/* Modal */}
+            <div className="inline-block w-full max-w-md p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white/95 backdrop-blur-sm shadow-2xl rounded-2xl border border-gray-200/50 relative">
+              {/* Header */}
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center">
+                  <div className="p-2 bg-purple-100 rounded-xl mr-3">
+                    <UserCheck className="h-6 w-6 text-purple-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-900">Assign Content Creator</h3>
+                    <p className="text-sm text-gray-600 mt-1">Calendar: {selectedCalendar?.name || ''}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleCloseAssignModal}
+                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all duration-200"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* Content */}
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-3">
+                    Select Content Creator
+                  </label>
+                  <div className="space-y-3 max-h-64 overflow-y-auto">
+                    {creators.length > 0 ? (
+                      creators.map((creator) => (
+                        <div
+                          key={creator._id}
+                          className={`p-4 border rounded-xl cursor-pointer transition-all duration-200 ${
+                            assignSelectedCreator === creator.email
+                              ? 'border-purple-500 bg-purple-50'
+                              : 'border-gray-200 hover:border-purple-300 hover:bg-purple-25'
+                          }`}
+                          onClick={() => setAssignSelectedCreator(creator.email)}
+                        >
+                          <div className="flex items-center space-x-3">
+                            <div className="h-10 w-10 bg-gradient-to-r from-purple-500 to-indigo-600 rounded-full flex items-center justify-center">
+                              <span className="text-white font-semibold text-sm">
+                                {(creator.name || 'U').charAt(0).toUpperCase()}
+                              </span>
+                            </div>
+                            <div className="flex-1">
+                              <h4 className="font-semibold text-gray-900">{creator.name || 'Unnamed Creator'}</h4>
+                              <p className="text-sm text-gray-600">{creator.email}</p>
+                              {creator.mobile && (
+                                <p className="text-sm text-gray-500">{creator.mobile}</p>
+                              )}
+                            </div>
+                            {assignSelectedCreator === creator.email && (
+                              <UserCheck className="h-5 w-5 text-purple-600" />
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center py-8">
+                        <User className="h-12 w-12 text-gray-400 mx-auto mb-3" />
+                        <p className="text-gray-500">No content creators available</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex space-x-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={handleCloseAssignModal}
+                    className="flex-1 px-4 py-3 bg-white border border-gray-300 rounded-xl text-gray-700 font-semibold hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-all duration-200"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleModalAssignCreator}
+                    disabled={assignCreatorLoading || !assignSelectedCreator}
+                    className="flex-1 px-4 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-semibold rounded-xl hover:from-purple-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                  >
+                    {assignCreatorLoading ? 'Assigning...' : 'Assign Creator'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <ContentItemModal
         isOpen={isEditModalOpen}

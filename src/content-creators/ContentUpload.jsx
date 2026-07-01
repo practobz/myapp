@@ -468,7 +468,9 @@ function ContentUpload() {
         }
         
         setAssignment(found);
-        setReviewTabMode(normalizeReviewTabMode(found?.reviewTabMode));
+        const initialMode = normalizeReviewTabMode(found?.reviewTabMode) || 'admin';
+        setActiveTab(initialMode === 'both' ? 'admin' : initialMode);
+        setReviewTabMode(initialMode);
       } catch (err) {
         console.error('❌ Error fetching assignment:', err);
         setAssignment(null);
@@ -647,32 +649,7 @@ function ContentUpload() {
     }
   }, [assignment, creatorEmail, previousSubmissionLoaded]);
 
-  useEffect(() => {
-    if (isAdmin) return;
-    const mode = normalizeReviewTabMode(reviewTabMode);
-    if (mode === 'admin' && activeTab !== 'admin') {
-      setActiveTab('admin');
-      return;
-    }
-    if (mode === 'customer' && activeTab !== 'customer') {
-      setActiveTab('customer');
-    }
-  }, [reviewTabMode, activeTab, isAdmin]);
-
-  // Reset selected version when activeTab changes
-  useEffect(() => {
-    const tabVersions = allPreviousVersions.filter(v =>
-      activeTab === 'admin'
-        ? (v.submissionStage !== 'customer' || v.sentToCustomerAt)
-        : (v.submissionStage === 'customer' || v.submissionStage === '')
-    );
-    if (tabVersions.length > 0) {
-      setSelectedVersionIndex(tabVersions.length - 1);
-    } else {
-      setSelectedVersionIndex(0);
-    }
-    setSelectedMediaIndex(0);
-  }, [activeTab, allPreviousVersions]);
+  // No-op: Removed reactive activeTab enforcement to allow manual version selection switching tabs.
 
   // Sync comments when version or media selection changes and activeTab changes
   useEffect(() => {
@@ -680,7 +657,7 @@ function ContentUpload() {
       const allComments = previousVersions[selectedVersionIndex].comments || [];
       const filteredComments = allComments.filter(c => {
         const isAdmin = c.reviewType === 'internal' || c.authorRole === 'admin' || c.author === 'Admin';
-        return activeTab === 'admin' ? isAdmin : !isAdmin;
+        return activeTab === 'admin' ? (isAdmin && !c.discarded) : (!isAdmin && c.finalized && !c.discarded);
       });
       setCommentsForVersion(filteredComments);
     } else {
@@ -1676,7 +1653,13 @@ function ContentUpload() {
         {!isAdmin && reviewTabMode === 'both' && (
           <div className="flex border-b border-gray-200 bg-white rounded-2xl p-1.5 shadow-sm border border-gray-200/50 mb-6">
             <button
-              onClick={() => setActiveTab('admin')}
+              onClick={() => {
+                setActiveTab('admin');
+                const tabVersions = allPreviousVersions.filter(v => v.submissionStage !== 'customer' || v.sentToCustomerAt);
+                if (tabVersions.length > 0) setSelectedVersionIndex(tabVersions.length - 1);
+                else setSelectedVersionIndex(0);
+                setSelectedMediaIndex(0);
+              }}
               className={`flex-1 py-3 text-sm font-semibold rounded-xl transition-all duration-300 flex items-center justify-center gap-2 ${
                 activeTab === 'admin'
                   ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
@@ -1687,7 +1670,13 @@ function ContentUpload() {
               Admin Review
             </button>
             <button
-              onClick={() => setActiveTab('customer')}
+              onClick={() => {
+                setActiveTab('customer');
+                const tabVersions = allPreviousVersions.filter(v => v.submissionStage === 'customer' || v.submissionStage === '');
+                if (tabVersions.length > 0) setSelectedVersionIndex(tabVersions.length - 1);
+                else setSelectedVersionIndex(0);
+                setSelectedMediaIndex(0);
+              }}
               className={`flex-1 py-3 text-sm font-semibold rounded-xl transition-all duration-300 flex items-center justify-center gap-2 ${
                 activeTab === 'customer'
                   ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'

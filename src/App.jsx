@@ -72,14 +72,9 @@ import ContentCreatorDashboard from './content-creators/Dashboard';
 import ContentCreatorSignup from './content-creators/auth/ContentCreatorSignup';
 import ContentCreatorLogin from './content-creators/auth/ContentCreatorLogin';
 import Assignments from './content-creators/Assignments';
-import ContentPortfolio from './content-creators/ContentPortfolio';
 import ContentUpload from './content-creators/ContentUpload';
 import Profile from './content-creators/Profile';
-import Settings from './content-creators/Settings';
-import ContentCreatorMediaLibrary from './content-creators/MediaLibrary';
-import ContentDetails from './content-creators/ContentDetails';
-import CustomerFeedback from './content-creators/CustomerFeedback';
-import ContentCreatorLayout from './content-creators/Layout';
+
 
 
 import { useAuth } from './admin/contexts/AuthContext';
@@ -633,11 +628,6 @@ function App() {
                   <Assignments />
                 </ProtectedRoutePortal>
               } />
-              <Route path="/content-creator/portfolio" element={
-                <ProtectedRoutePortal role="content_creator">
-                  <ContentPortfolio />
-                </ProtectedRoutePortal>
-              } />
  <Route path="/content-creator/content-upload/:calendarId/:itemIndex" element={
                 <ProtectedRoutePortal role="content_creator">
                   <ContentUpload />
@@ -646,11 +636,6 @@ function App() {
               <Route path="/content-creator/upload/:calendarId/:itemIndex" element={
                 <ProtectedRoutePortal role="content_creator">
                   <ContentUpload />
-                </ProtectedRoutePortal>
-              } />
-               <Route path="/content-creator/content-details/:calendarId/:itemIndex" element={
-                <ProtectedRoutePortal role="content_creator">
-                  <ContentDetails />
                 </ProtectedRoutePortal>
               } />
               <Route path="/content-creator/upload/:assignmentId" element={
@@ -668,21 +653,7 @@ function App() {
                   <Profile />
                 </ProtectedRoutePortal>
               } />
-              <Route path="/content-creator/settings" element={
-                <ProtectedRoutePortal role="content_creator">
-                  <Settings />
-                </ProtectedRoutePortal>
-              } />
-              <Route path="/content-creator/media-library" element={
-                <ProtectedRoutePortal role="content_creator">
-                  <ContentCreatorMediaLibrary />
-                </ProtectedRoutePortal>
-              } />
-                 <Route path="/content-creator/customer-feedback" element={
-                <ProtectedRoutePortal role="content_creator">
-                  <CustomerFeedback />
-                </ProtectedRoutePortal>
-              } />
+              
               {/* AI Image Generator route for content creators */}
               <Route path="/content-creator/ai-image-generator" element={
                 <ProtectedRoutePortal role="content_creator">

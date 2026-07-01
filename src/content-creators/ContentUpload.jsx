@@ -602,7 +602,10 @@ function ContentUpload() {
               caption: sub.caption || '',
               hashtags: sub.hashtags || '',
               notes: sub.notes || '',
-              media: normMedia(sub.media || sub.images || []),
+              media: [
+                ...normMedia(sub.media || sub.images || []),
+                ...(sub.thumbnailUrl ? [{ url: sub.thumbnailUrl, type: 'image', isThumbnail: true }] : [])
+              ],
               createdAt: sub.created_at || sub.createdAt || '',
               status: sub.status || 'submitted',
               submissionStage: sub.submission_stage || sub.submissionStage || 'internal',

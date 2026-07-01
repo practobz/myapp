@@ -2223,7 +2223,10 @@ function CustomerDetailsView() {
             id: s._id,
             assignment_id: s.assignment_id,
             versionNumber: idx + 1,
-            media: normalizeMedia(s.media || s.images || []),
+            media: [
+              ...normalizeMedia(s.media || s.images || []),
+              ...(s.thumbnailUrl ? [{ url: s.thumbnailUrl, type: 'image', isThumbnail: true }] : [])
+            ],
             caption: s.caption || '',
             hashtags: s.hashtags || '',
             notes: s.notes || '',

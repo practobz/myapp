@@ -128,14 +128,18 @@ const processSubmissionsData = (submissions, user, targetItemId, filterStatus) =
       versions: versions.map((version, index) => ({
         id: version._id,
         versionNumber: index + 1,
-        media: normalizeMedia(version.media || version.images || []),
+        media: [
+          ...normalizeMedia(version.media || version.images || []),
+          ...(version.thumbnailUrl ? [{ url: version.thumbnailUrl, type: 'image', isThumbnail: true }] : [])
+        ],
         caption: version.caption || '',
         notes: version.notes || '',
         hashtags: version.hashtags || '',
         createdAt: version.created_at,
         status: version.status || 'under_review',
         approvalNotes: version.approvalNotes || '',
-        comments: version.comments || []
+        comments: version.comments || [],
+        thumbnailUrl: version.thumbnailUrl || null
       })),
       totalVersions: versions.length
     });
@@ -1492,6 +1496,7 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
                                 <video
                                   ref={videoRef}
                                   src={videoCompatibleUrl || currentMedia.url}
+                                  poster={currentVersion?.thumbnailUrl || undefined}
                                   controls
                                   playsInline
                                   className="rounded-lg shadow border border-gray-200 bg-black max-w-full h-auto max-h-[60vh] object-contain"
@@ -1619,7 +1624,7 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
                               <button
                                 key={mIdx}
                                 onClick={() => setSelectedMediaIndex(mIdx)}
-                                className={`w-10 h-10 rounded overflow-hidden border-2 transition-all ${selectedMediaIndex === mIdx
+                                className={`relative w-10 h-10 rounded overflow-hidden border-2 transition-all ${selectedMediaIndex === mIdx
                                     ? 'border-indigo-500 ring-2 ring-indigo-100'
                                     : 'border-slate-200 hover:border-slate-350'
                                   }`}
@@ -1629,6 +1634,11 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
                                 ) : (
                                   <div className="w-full h-full bg-slate-100 flex items-center justify-center">
                                     <Video className="h-4 w-4 text-slate-400" />
+                                  </div>
+                                )}
+                                {media.isThumbnail && (
+                                  <div className="absolute inset-0 bg-black/55 flex items-center justify-center text-[7px] text-white font-black uppercase tracking-wider">
+                                    Cover
                                   </div>
                                 )}
                               </button>
@@ -1658,6 +1668,16 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
                     <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Notes</label>
                     <p className="text-gray-855 text-xs leading-relaxed whitespace-pre-wrap">{currentVersion.notes || 'No notes'}</p>
                   </div>
+                  {currentVersion?.thumbnailUrl && (
+                    <div className="bg-white rounded-xl p-3 border border-gray-200/50 shadow-sm inline-block self-start">
+                      <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Video Thumbnail</label>
+                      <img
+                        src={currentVersion.thumbnailUrl}
+                        alt="Video thumbnail"
+                        className="w-20 h-20 object-cover rounded border border-gray-250 mt-1"
+                      />
+                    </div>
+                  )}
                 </div>
               )}
 

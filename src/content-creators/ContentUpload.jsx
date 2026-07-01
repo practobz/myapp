@@ -48,6 +48,7 @@ function ContentUpload() {
   const { calendarId, itemIndex } = useParams();
   const [searchParams] = useSearchParams();
   const fileInputRef = useRef(null);
+  const thumbnailInputRef = useRef(null);
   const isAdminPortal = useMemo(() => location.pathname.startsWith('/admin'), [location.pathname]);
   const isAdmin = useMemo(() => getUserRole() === 'admin' || window.location.hash.includes('admin') || isAdminPortal, [isAdminPortal]);
   const [activeTab, setActiveTab] = useState(() => (getUserRole() === 'admin' || window.location.hash.includes('admin') || window.location.pathname.startsWith('/admin')) ? 'customer' : 'admin');
@@ -58,6 +59,7 @@ function ContentUpload() {
   const [loading, setLoading] = useState(true);
 
   const [uploadedFiles, setUploadedFiles] = useState([]);
+  const [thumbnailFileObj, setThumbnailFileObj] = useState(null);
   const [dragActive, setDragActive] = useState(false);
   const [caption, setCaption] = useState('');
   const [hashtags, setHashtags] = useState('');
@@ -608,6 +610,7 @@ function ContentUpload() {
               comments: sub.comments || [],
               id: sub._id || sub.id || idx,
               sentToCustomerAt: sub.sent_to_customer_at || sub.sentToCustomerAt || null,
+              thumbnailUrl: sub.thumbnailUrl || null,
             }));
           setAllPreviousVersions(normalized);
           const tabVersions = normalized.filter(v =>
@@ -841,6 +844,32 @@ function ContentUpload() {
     }
   };
 
+  const handleThumbnailChange = (e) => {
+    e.preventDefault();
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      if (!file.type.startsWith('image/')) {
+        alert('Please select an image file for the thumbnail.');
+        return;
+      }
+      const preview = URL.createObjectURL(file);
+      setThumbnailFileObj({
+        file,
+        preview,
+        name: file.name,
+        size: file.size,
+        uploaded: false,
+        uploading: false,
+        publicUrl: null,
+        error: null
+      });
+    }
+  };
+
+  const onThumbnailButtonClick = () => {
+    thumbnailInputRef.current?.click();
+  };
+
   const handleFiles = async (files) => {
     const incomingFiles = Array.from(files || []);
     const validationPlatforms = getValidationPlatforms(assignment?.platform);
@@ -1042,6 +1071,60 @@ function ContentUpload() {
     }
   };
 
+  const uploadThumbnailToGCS = async (fileObj) => {
+    try {
+      setThumbnailFileObj(prev => prev ? { ...prev, uploading: true, error: null } : null);
+      
+      let publicUrl;
+      const fileSizeMB = fileObj.file.size / (1024 * 1024);
+
+      if (fileSizeMB >= 10) {
+        const signedUrlResponse = await fetch(`${process.env.REACT_APP_API_URL}/api/gcs/signed-url`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename: fileObj.name, contentType: fileObj.file.type }),
+        });
+        if (!signedUrlResponse.ok) throw new Error('Failed to get signed URL');
+        const { signedUrl, publicUrl: signedPublicUrl } = await signedUrlResponse.json();
+
+        const gcsUploadResponse = await fetch(signedUrl, {
+          method: 'PUT',
+          headers: { 'Content-Type': fileObj.file.type },
+          body: fileObj.file,
+        });
+        if (!gcsUploadResponse.ok) throw new Error('GCS upload failed');
+        publicUrl = signedPublicUrl;
+      } else {
+        const base64Data = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result.split(',')[1]);
+          reader.onerror = () => reject(new Error('FileReader error'));
+          reader.readAsDataURL(fileObj.file);
+        });
+
+        const uploadResponse = await fetch(`${process.env.REACT_APP_API_URL}/api/gcs/upload-base64`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            filename: fileObj.name,
+            contentType: fileObj.file.type,
+            base64Data
+          }),
+        });
+        if (!uploadResponse.ok) throw new Error('Upload failed');
+        const responseData = await uploadResponse.json();
+        publicUrl = responseData.publicUrl;
+      }
+
+      setThumbnailFileObj(prev => prev ? { ...prev, uploading: false, uploaded: true, publicUrl } : null);
+      return { url: publicUrl };
+    } catch (error) {
+      console.error('Thumbnail upload failed:', error);
+      setThumbnailFileObj(prev => prev ? { ...prev, uploading: false, uploaded: false, error: error.message } : null);
+      throw error;
+    }
+  };
+
   const handleSubmit = async () => {
     if (uploadedFiles.length === 0) {
       alert('Please upload at least one image or video');
@@ -1084,8 +1167,20 @@ function ContentUpload() {
 
     setSubmitting(true);
     const uploadedMediaUrls = [];
+    let uploadedThumbnailUrl = null;
 
     try {
+      // Upload thumbnail if present and not uploaded yet
+      if (thumbnailFileObj) {
+        if (!thumbnailFileObj.uploaded) {
+          console.log(`📤 Uploading thumbnail file: ${thumbnailFileObj.name}`);
+          const thumbRes = await uploadThumbnailToGCS(thumbnailFileObj);
+          uploadedThumbnailUrl = thumbRes.url;
+        } else {
+          uploadedThumbnailUrl = thumbnailFileObj.publicUrl;
+        }
+      }
+
       // Upload all files that haven't been uploaded yet
       const filesToUpload = uploadedFiles.filter(f => !f.uploaded);
       const alreadyUploaded = uploadedFiles.filter(f => f.uploaded);
@@ -1129,6 +1224,7 @@ function ContentUpload() {
         notes: notes || '',
         images: uploadedMediaUrls, // ✅ This contains the media URLs and metadata
         media: uploadedMediaUrls,  // ✅ Duplicate for backward compatibility
+        thumbnailUrl: uploadedThumbnailUrl || null, // ✅ Include video thumbnail url
         created_by: creatorEmail,
         customer_id: finalCustomerId,
         customer_name: finalCustomerName,
@@ -1856,8 +1952,42 @@ function ContentUpload() {
                       <Image className="h-3 w-3 mr-1" />
                       Browse Files
                     </button>
+                    <input
+                      ref={thumbnailInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleThumbnailChange}
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={onThumbnailButtonClick}
+                      className="inline-flex items-center px-2 py-1 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-colors"
+                    >
+                      <Image className="h-3 w-3 mr-1" />
+                      Browse Thumbnail
+                    </button>
                   </div>
                 </div>
+
+                {thumbnailFileObj && (
+                  <div className="mt-3 p-3 bg-indigo-50/80 border border-indigo-100 rounded-xl flex items-center justify-between shadow-sm">
+                    <div className="flex items-center gap-3">
+                      <img src={thumbnailFileObj.preview} alt="Thumbnail preview" className="w-12 h-12 object-cover rounded-lg border border-indigo-200" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-indigo-900 truncate">{thumbnailFileObj.name}</p>
+                        <p className="text-[10px] text-indigo-600">{formatFileSize(thumbnailFileObj.size)}</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setThumbnailFileObj(null)}
+                      className="p-1 rounded-full text-indigo-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Accordion body */}
@@ -1962,6 +2092,7 @@ function ContentUpload() {
                                             ) : (
                                               <video
                                                 src={previousVersions[selectedVersionIndex].media[selectedMediaIndex].url}
+                                                poster={previousVersions[selectedVersionIndex].thumbnailUrl || undefined}
                                                 controls
                                                 className="max-w-full h-auto max-h-96 rounded-xl shadow-lg border border-gray-200"
                                               />
@@ -2108,6 +2239,18 @@ function ContentUpload() {
                                       <p className="text-gray-900">{previousVersions[selectedVersionIndex].notes || 'No notes'}</p>
                                     </div>
                                   </div>
+                                  {previousVersions[selectedVersionIndex].thumbnailUrl && (
+                                    <div>
+                                      <label className="block text-sm font-medium text-gray-700 mb-2">Video Thumbnail</label>
+                                      <div className="bg-white rounded-lg p-2 border border-gray-200 inline-block">
+                                        <img
+                                          src={previousVersions[selectedVersionIndex].thumbnailUrl}
+                                          alt="Video thumbnail"
+                                          className="w-24 h-24 object-cover rounded border"
+                                        />
+                                      </div>
+                                    </div>
+                                  )}
                                   <div className="flex items-center justify-between text-sm text-gray-500">
                                     <span>Created: {formatVersionDateLong(previousVersions[selectedVersionIndex].createdAt)}</span>
                                     <div className="flex items-center gap-2 flex-wrap justify-end">

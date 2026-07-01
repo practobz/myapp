@@ -193,10 +193,10 @@ const normalizePlatforms = (platformValue) => {
     ? platformValue.flatMap(value => normalizePlatforms(value))
     : typeof platformValue === 'string'
       ? (() => {
-        const matches = platformValue.match(/facebook|instagram|youtube|linkedin|twitter|x|tiktok/gi);
-        if (matches?.length) return matches;
-        return platformValue.split(',');
-      })()
+          const matches = platformValue.match(/facebook|instagram|youtube|linkedin|twitter|x|tiktok/gi);
+          if (matches?.length) return matches;
+          return platformValue.split(',');
+        })()
       : [platformValue];
 
   return [...new Set(rawValues
@@ -504,37 +504,37 @@ const ItemTimeline = ({ item, itemStatus, scheduledPosts = [], submissions = [],
     // Derive customer approval from submission or item status
     const customerApprovedSub = sortedSubmissions.length > 0 && (() => {
       const latest = sortedSubmissions[sortedSubmissions.length - 1];
-      const isApproved = latest.approved_by_customer === true ||
-        latest.status === 'approved_customer' ||
-        latest.status === 'approved_both';
-      const isReverted = latest.status === 'under_review' ||
-        latest.status === 'sent_to_creator' ||
-        latest.status === 'revision_requested' ||
-        latest.status === 'rejected';
+      const isApproved = latest.approved_by_customer === true || 
+                         latest.status === 'approved_customer' || 
+                         latest.status === 'approved_both';
+      const isReverted = latest.status === 'under_review' || 
+                         latest.status === 'sent_to_creator' || 
+                         latest.status === 'revision_requested' || 
+                         latest.status === 'rejected';
       return isApproved && !isReverted ? latest : null;
     })();
-
-    const isCustomerApproved = !!customerApprovedSub ||
-      itemStatus === 'published' ||
-      item.status === 'published' ||
-      item.published === true ||
-      (item.reviewedAt && sortedSubmissions.length === 0);
-
-    const customerApprovedAt = customerApprovedSub?.approvedAt ||
-      customerApprovedSub?.updatedAt ||
-      (isCustomerApproved ? (item.reviewedAt || item.publishedAt) : null);
-
+    
+    const isCustomerApproved = !!customerApprovedSub || 
+                               itemStatus === 'published' || 
+                               item.status === 'published' || 
+                               item.published === true ||
+                               (item.reviewedAt && sortedSubmissions.length === 0);
+                               
+    const customerApprovedAt = customerApprovedSub?.approvedAt || 
+                               customerApprovedSub?.updatedAt || 
+                               (isCustomerApproved ? (item.reviewedAt || item.publishedAt) : null);
+                               
     const customerApprovedDate = fmtDate(customerApprovedAt);
     const publishedAt = matchedPost?.publishedAt || item.publishedAt;
 
     // Order: Created → Assigned → Due → V1 → V2 → ... → Approved by Customer → Published
     steps = [
-      { key: 'created', label: 'Created', done: hasReachedDate(item.createdAt), date: fmtDate(item.createdAt), tone: 'blue' },
-      { key: 'assigned', label: 'Assigned', done: hasReachedDate(item.assignedAt), date: fmtDate(item.assignedAt), tone: 'blue' },
-      { key: 'due', label: 'Due', done: hasReachedDate(item.date), date: fmtDate(item.date), tone: 'orange' },
+      { key: 'created',   label: 'Created',   done: hasReachedDate(item.createdAt),   date: fmtDate(item.createdAt),   tone: 'blue' },
+      { key: 'assigned',  label: 'Assigned',  done: hasReachedDate(item.assignedAt),  date: fmtDate(item.assignedAt),  tone: 'blue' },
+      { key: 'due',       label: 'Due',       done: hasReachedDate(item.date),        date: fmtDate(item.date),        tone: 'orange' },
       ...versionSteps,
-      { key: 'reviewed', label: 'Approved by Customer', done: isCustomerApproved, date: customerApprovedDate, tone: 'blue' },
-      { key: 'published', label: 'Published', done: hasReachedDate(publishedAt), date: fmtDate(publishedAt), tone: 'green' },
+      { key: 'reviewed',  label: 'Approved by Customer',  done: isCustomerApproved, date: customerApprovedDate, tone: 'blue' },
+      { key: 'published', label: 'Published', done: hasReachedDate(publishedAt),       date: fmtDate(publishedAt),      tone: 'green' },
     ];
 
     toneClasses = {
@@ -603,8 +603,8 @@ const ItemTimeline = ({ item, itemStatus, scheduledPosts = [], submissions = [],
     const sortedSubmissions = submissions
       .filter(isVisibleToCustomerSubmission)
       .sort(
-        (a, b) => new Date(a.created_at || a.createdAt || 0) - new Date(b.created_at || b.createdAt || 0)
-      );
+      (a, b) => new Date(a.created_at || a.createdAt || 0) - new Date(b.created_at || b.createdAt || 0)
+    );
 
     const customerApprovedSub = sortedSubmissions.length > 0 && (() => {
       const latest = sortedSubmissions[sortedSubmissions.length - 1];
@@ -695,29 +695,29 @@ const ItemTimeline = ({ item, itemStatus, scheduledPosts = [], submissions = [],
     datePlaceholder: "—"
   };
 
-  return (
-    <div className={layout.divClass}>
-      {steps.map((step, idx) => (
-        <React.Fragment key={step.key}>
-          <div className={`flex flex-col items-center flex-shrink-0 transition-opacity ${!step.done ? 'opacity-35' : ''}`}>
-            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${step.done ? (toneClasses[step.tone || 'blue']?.dotDone || 'bg-blue-500') : (toneClasses[step.tone || 'blue']?.dotTodo || 'bg-blue-100')}`} />
-            <span className={`text-[9px] leading-none ${layout.labelMargin} whitespace-nowrap ${layout.labelClass(step)}`}>
-              {step.label}
-            </span>
-            <span className={`text-[8px] leading-none ${layout.dateMargin} whitespace-nowrap ${step.date ? (step.done ? (toneClasses[step.tone || 'blue']?.dateDone || 'text-blue-500') : (toneClasses[step.tone || 'blue']?.dateTodo || 'text-blue-200')) : 'text-transparent select-none'}`}>
-              {step.date || layout.datePlaceholder}
-            </span>
-          </div>
-          {idx < steps.length - 1 && (
-            <div
-              className={`flex-1 h-px mt-1 ${layout.lineMargin} ${step.done && steps[idx + 1].done ? (toneClasses[steps[idx + 1].tone || 'blue']?.lineDone || 'bg-blue-400') : (toneClasses[steps[idx + 1].tone || 'blue']?.lineTodo || 'bg-blue-100')}`}
-              style={{ minWidth: layout.minWidth }}
-            />
-          )}
-        </React.Fragment>
-      ))}
-    </div>
-  );
+return (
+  <div className={layout.divClass}>
+    {steps.map((step, idx) => (
+      <React.Fragment key={step.key}>
+        <div className={`flex flex-col items-center flex-shrink-0 transition-opacity ${!step.done ? 'opacity-35' : ''}`}>
+          <div className={`w-2 h-2 rounded-full flex-shrink-0 ${step.done ? (toneClasses[step.tone || 'blue']?.dotDone || 'bg-blue-500') : (toneClasses[step.tone || 'blue']?.dotTodo || 'bg-blue-100')}`} />
+          <span className={`text-[9px] leading-none ${layout.labelMargin} whitespace-nowrap ${layout.labelClass(step)}`}>
+            {step.label}
+          </span>
+          <span className={`text-[8px] leading-none ${layout.dateMargin} whitespace-nowrap ${step.date ? (step.done ? (toneClasses[step.tone || 'blue']?.dateDone || 'text-blue-500') : (toneClasses[step.tone || 'blue']?.dateTodo || 'text-blue-200')) : 'text-transparent select-none'}`}>
+            {step.date || layout.datePlaceholder}
+          </span>
+        </div>
+        {idx < steps.length - 1 && (
+          <div
+            className={`flex-1 h-px mt-1 ${layout.lineMargin} ${step.done && steps[idx + 1].done ? (toneClasses[steps[idx + 1].tone || 'blue']?.lineDone || 'bg-blue-400') : (toneClasses[steps[idx + 1].tone || 'blue']?.lineTodo || 'bg-blue-100')}`}
+            style={{ minWidth: layout.minWidth }}
+          />
+        )}
+      </React.Fragment>
+    ))}
+  </div>
+);
 };
 
 function ContentCalendar({
@@ -990,10 +990,10 @@ function ContentCalendar({
       setSubmissions(submissionsData.filter(s => {
         const subCalId = String(s.calendar_id || s.calendarId || '').trim();
         const matchesCalendar = subCalId && calendarIds.includes(subCalId);
-
+        
         const subItemId = String(s.item_id || s.assignment_id || '').trim();
         const matchesItemId = subItemId && calendarItemIds.has(subItemId);
-
+        
         const subItemName = String(s.item_name || '').trim().toLowerCase();
         const matchesItemName = subItemName && calendarItemTitles.has(subItemName);
 
@@ -1072,10 +1072,10 @@ function ContentCalendar({
         setSubmissions(submissionsData.filter(s => {
           const subCalId = String(s.calendar_id || s.calendarId || '').trim();
           const matchesCalendar = subCalId && calendarIds.includes(subCalId);
-
+          
           const subItemId = String(s.item_id || s.assignment_id || '').trim();
           const matchesItemId = subItemId && calendarItemIds.has(subItemId);
-
+          
           const subItemName = String(s.item_name || '').trim().toLowerCase();
           const matchesItemName = subItemName && calendarItemTitles.has(subItemName);
 
@@ -1989,9 +1989,16 @@ function ContentCalendar({
                             </div>
                           </div>
                           <div className="p-4 pb-0">
-                            <div className="flex items-center gap-2 text-xs text-gray-500 mb-2">
-                              <CalendarIcon className="h-3.5 w-3.5" />
-                              <span>{format(new Date(item.date), 'MMM dd, yyyy')}</span>
+                            <div className="flex items-center justify-between gap-2 text-xs text-gray-500 mb-2">
+                              <div className="flex items-center gap-2">
+                                <CalendarIcon className="h-3.5 w-3.5" />
+                                <span>{format(new Date(item.date), 'MMM dd, yyyy')}</span>
+                              </div>
+                              {item.postType && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-100 capitalize">
+                                  {item.postType}
+                                </span>
+                              )}
                             </div>
                             <p className="text-sm text-gray-850 font-semibold mb-1 line-clamp-1">{item.title || 'Untitled'}</p>
                             <p className="text-xs text-gray-500 line-clamp-2 mb-3">{item.description || 'No description'}</p>
@@ -2148,7 +2155,7 @@ function ContentCalendar({
                           </button>
                         </div>
                       </div>
-                    )) : (
+                  )) : (
                     isAdmin ? (
                       <div
                         key={itemKey}
@@ -2271,6 +2278,16 @@ function ContentCalendar({
                                     </div>
                                   </div>
                                 )}
+                                {item.postType && (
+                                  <div>
+                                    <span className="text-xs text-gray-500">Post Type:</span>
+                                    <div className="mt-1.5">
+                                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700 border border-amber-200 capitalize">
+                                        {item.postType}
+                                      </span>
+                                    </div>
+                                  </div>
+                                )}
                                 {publishedLinks?.length > 0 && (
                                   <div className="flex items-center gap-2">
                                     <div className="flex items-center gap-1.5">
@@ -2376,17 +2393,17 @@ function ContentCalendar({
                                 </div>
                                 <div className="flex flex-col items-end gap-1">
                                   <div className="flex items-center gap-2">
-                                    {item.status === 'published' && (
-                                      <div className="flex items-center gap-1 text-xs text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg">
-                                        <ExternalLink className="h-3.5 w-3.5" /><span className="font-medium">View Details</span>
-                                      </div>
-                                    )}
-                                    <button
-                                      onClick={(e) => handleOpenReviewPanel(item, e)}
-                                      className="flex items-center gap-1 text-xs text-purple-650 bg-purple-50 hover:bg-purple-105 active:bg-purple-200 px-3 py-1.5 rounded-lg transition-colors font-medium"
-                                    >
-                                      <MessageSquare className="h-3.5 w-3.5" /><span>Content Review</span>
-                                    </button>
+                                  {item.status === 'published' && (
+                                    <div className="flex items-center gap-1 text-xs text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg">
+                                      <ExternalLink className="h-3.5 w-3.5" /><span className="font-medium">View Details</span>
+                                    </div>
+                                  )}
+                                  <button
+                                    onClick={(e) => handleOpenReviewPanel(item, e)}
+                                    className="flex items-center gap-1 text-xs text-purple-650 bg-purple-50 hover:bg-purple-105 active:bg-purple-200 px-3 py-1.5 rounded-lg transition-colors font-medium"
+                                  >
+                                    <MessageSquare className="h-3.5 w-3.5" /><span>Content Review</span>
+                                  </button>
                                   </div>
                                   {item.creator && (
                                     <div
@@ -2496,7 +2513,7 @@ function ContentCalendar({
             <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
               <div className="space-y-6">
                 <div className="bg-gradient-to-br from-slate-50 to-gray-50 rounded-xl p-5 border border-gray-100">
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                     <div className="flex items-center gap-3">
                       <div className="h-10 w-10 rounded-lg bg-indigo-100 flex items-center justify-center">
                         <CalendarIcon className="h-5 w-5 text-indigo-600" />
@@ -2525,6 +2542,19 @@ function ContentCalendar({
                         <div>
                           <p className="text-xs text-gray-500 font-medium">Assigned to</p>
                           <p className="text-sm font-semibold text-gray-900">{selectedContent.creator}</p>
+                        </div>
+                      </div>
+                    )}
+                    {selectedContent.postType && (
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-lg bg-amber-100 flex items-center justify-center">
+                          <Sparkles className="h-5 w-5 text-amber-600" />
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 font-medium">Post Type</p>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700 capitalize">
+                            {selectedContent.postType}
+                          </span>
                         </div>
                       </div>
                     )}

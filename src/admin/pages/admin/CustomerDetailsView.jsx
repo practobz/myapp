@@ -1812,7 +1812,8 @@ function CustomerDetailsView() {
         status,
         title,
         assignedTo,
-        assignedToName
+        assignedToName,
+        postType
       } = updatedItem;
 
       if (!_calendarId || !originalDate || !originalDescription) return;
@@ -1851,6 +1852,7 @@ function CustomerDetailsView() {
             assignedTo: newAssignedTo,
             assignedToName: assignedToName !== undefined ? assignedToName : item.assignedToName,
             assignedAt: item.assignedAt || (newAssignedTo && !item.assignedAt ? new Date().toISOString() : undefined),
+            postType: postType !== undefined ? postType : item.postType,
           };
         }
         return item;

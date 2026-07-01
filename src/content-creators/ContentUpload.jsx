@@ -1540,13 +1540,20 @@ function ContentUpload() {
                               </div>
                             </div>
 
-                            {/* Calendar Name row */}
-                            {a.calendarName && (
-                              <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                                <span className="flex items-center gap-1 text-xs text-gray-400">
-                                  <Calendar className="h-3 w-3 flex-shrink-0" />
-                                  {a.calendarName}
-                                </span>
+                            {/* Calendar Name / Post Type row */}
+                            {(a.calendarName || a.postType) && (
+                              <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                                {a.calendarName && (
+                                  <span className="flex items-center gap-1 text-xs text-gray-400">
+                                    <Calendar className="h-3 w-3 flex-shrink-0" />
+                                    {a.calendarName}
+                                  </span>
+                                )}
+                                {a.postType && (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-100 capitalize">
+                                    {a.postType}
+                                  </span>
+                                )}
                               </div>
                             )}
 
@@ -1722,6 +1729,11 @@ function ContentUpload() {
                     {p.charAt(0).toUpperCase() + p.slice(1)}
                   </span>
                 ))}
+                {assignment.postType && (
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded border text-xs font-semibold bg-amber-50 text-amber-700 border-amber-200 capitalize">
+                    {assignment.postType}
+                  </span>
+                )}
               </div>
             </div>
           </div>

@@ -1332,6 +1332,14 @@ function Assignments() {
                                               </span>
                                             ))}
                                           </div>
+                                          {assignment.postType && (
+                                            <div className="flex items-center gap-1">
+                                              <span className="text-xs font-semibold text-gray-400 uppercase">Post Type:</span>
+                                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-100 capitalize">
+                                                {assignment.postType}
+                                              </span>
+                                            </div>
+                                          )}
                                           <div className="flex items-center gap-1">
                                             <span className="text-xs font-semibold text-gray-400 uppercase">Due:</span>
                                             <span className="text-xs text-gray-600">{assignment.dueDate ? format(new Date(assignment.dueDate), 'MMM dd, yyyy') : 'N/A'}</span>

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams, useLocation } from 'react-router-dom';
+import { v4 as uuidv4 } from 'uuid';
 import { ArrowLeft, Upload, Image, X, Check, CheckCircle, FileText, Calendar, Clock, Palette, Send, MapPin, Tag, MessageSquare, Play, Video, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, User, ShieldCheck, AlertCircle, History, Search, Globe } from 'lucide-react';
 import { Facebook, Instagram, Linkedin, Youtube, Twitter } from 'lucide-react';
 import ContentCreatorLayout from './Layout';
@@ -111,6 +112,7 @@ function ContentUpload() {
   const [replyText, setReplyText] = useState('');
   const [replySubmitting, setReplySubmitting] = useState(false);
   const versionImgRef = useRef(null);
+  const videoRef = useRef(null);
 
   // Send-to-customer state
   const [sendingToCustomer, setSendingToCustomer] = useState(false);
@@ -751,6 +753,12 @@ function ContentUpload() {
 
   const handleVersionCommentClick = (id) => {
     setActiveVersionComment(activeVersionComment === id ? null : id);
+    const comment = commentsForCurrentMedia.find(c => c.id === id);
+    if (comment && comment.videoTimestamp != null && videoRef.current) {
+      videoRef.current.currentTime = comment.videoTimestamp;
+      videoRef.current.pause();
+      videoRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
   };
 
   const handleVersionToggleDone = async (id) => {
@@ -774,12 +782,30 @@ function ContentUpload() {
     const comment = commentsForCurrentMedia.find(c => c.id === commentId);
     if (!comment) return;
     setReplySubmitting(true);
+    const newReply = {
+      id: uuidv4(),
+      authorRole: 'creator',
+      authorName: 'Creator',
+      authorEmail: creatorEmail || '',
+      message: replyText.trim(),
+      timestamp: new Date().toISOString(),
+    };
+    const existingReplies = comment.replies || (comment.reply ? [{
+      id: 'legacy-creator-reply',
+      authorRole: 'creator',
+      authorName: 'Creator',
+      authorEmail: comment.reply.creatorEmail || '',
+      message: comment.reply.text,
+      timestamp: comment.reply.timestamp
+    }] : []);
+    const updatedReplies = [...existingReplies, newReply];
     const replyPayload = {
       reply: {
         text: replyText.trim(),
         creatorEmail: creatorEmail,
         timestamp: new Date().toISOString(),
-      }
+      },
+      replies: updatedReplies,
     };
     try {
       await fetch(
@@ -2094,6 +2120,7 @@ function ContentUpload() {
                                               />
                                             ) : (
                                               <video
+                                                ref={videoRef}
                                                 src={previousVersions[selectedVersionIndex].media[selectedMediaIndex].url}
                                                 poster={previousVersions[selectedVersionIndex].thumbnailUrl || undefined}
                                                 controls
@@ -2160,14 +2187,23 @@ function ContentUpload() {
                                                         {comment.timestamp ? new Date(comment.timestamp).toLocaleString() : ''}
                                                       </p>
                                                     </div>
-                                                    {comment.reply && (
-                                                      <div className="mt-2 p-2 bg-indigo-50 border border-indigo-200 rounded-lg">
-                                                        <p className="text-[10px] font-bold text-indigo-700 mb-0.5">
-                                                          Reply by {comment.reply.creatorName || 'Creator'}
-                                                        </p>
-                                                        <p className="text-xs text-gray-800 break-words">{comment.reply.text}</p>
-                                                      </div>
-                                                    )}
+                                                    {(() => {
+                                                      const replies = comment.replies || (comment.reply ? [{
+                                                        id: 'legacy-creator-reply',
+                                                        authorRole: 'creator',
+                                                        authorName: comment.reply.creatorName || 'Creator',
+                                                        message: comment.reply.text,
+                                                        timestamp: comment.reply.timestamp
+                                                      }] : []);
+                                                      return replies.map((rep, rIdx) => (
+                                                        <div key={rep.id || rIdx} className="mt-2 p-2 bg-indigo-50 border border-indigo-200 rounded-lg">
+                                                          <p className="text-[10px] font-bold text-indigo-700 mb-0.5">
+                                                            Reply by {rep.authorRole === 'admin' ? 'Admin' : rep.authorRole === 'creator' ? 'Creator' : 'Customer'}
+                                                          </p>
+                                                          <p className="text-xs text-gray-800 break-words">{rep.message || rep.text}</p>
+                                                        </div>
+                                                      ));
+                                                    })()}
                                                     <button
                                                       onClick={() => handleVersionToggleDone(comment.id)}
                                                       className={`w-full px-3 py-1.5 text-xs rounded-lg font-medium transition-all flex items-center justify-center mt-2 ${
@@ -2495,21 +2531,33 @@ function ContentUpload() {
                                       </div>
                                     </div>
 
-                                    {/* Existing reply */}
-                                    {comment.reply && replyingToComment !== comment.id && (
-                                      <div className="mx-3 mb-3 p-2.5 bg-indigo-50 border border-indigo-200 rounded-lg">
-                                        <div className="flex items-center gap-1.5 mb-1">
-                                          <span className="text-[10px] font-bold text-indigo-700 uppercase tracking-wide">Reply</span>
-                                          <span className="text-[10px] font-semibold text-indigo-600 bg-indigo-100 px-1.5 py-0.5 rounded-full">
-                                            {comment.reply.creatorName || 'Creator'}
-                                          </span>
-                                          <span className="text-[10px] text-gray-400 ml-auto">
-                                            {comment.reply.timestamp ? new Date(comment.reply.timestamp).toLocaleString() : ''}
-                                          </span>
+                                    {/* Existing replies */}
+                                    {replyingToComment !== comment.id && (() => {
+                                      const replies = comment.replies || (comment.reply ? [{
+                                        id: 'legacy-creator-reply',
+                                        authorRole: 'creator',
+                                        authorName: comment.reply.creatorName || 'Creator',
+                                        message: comment.reply.text,
+                                        timestamp: comment.reply.timestamp
+                                      }] : []);
+                                      return replies.map((rep, rIdx) => (
+                                        <div key={rep.id || rIdx} className="mx-3 mb-3 p-2.5 bg-indigo-50 border border-indigo-200 rounded-lg">
+                                          <div className="flex items-center gap-1.5 mb-1">
+                                            <span className="text-[10px] font-bold text-indigo-700 uppercase tracking-wide">Reply</span>
+                                            <span className="text-[10px] font-semibold text-indigo-600 bg-indigo-100 px-1.5 py-0.5 rounded-full">
+                                              {rep.authorRole === 'admin' ? 'Admin' : rep.authorRole === 'creator' ? 'Creator' : 'Customer'}
+                                            </span>
+                                            {rep.authorEmail && (
+                                              <span className="text-[9px] text-gray-400 truncate max-w-[120px] ml-1.5">{rep.authorEmail}</span>
+                                            )}
+                                            <span className="text-[10px] text-gray-400 ml-auto">
+                                              {rep.timestamp ? new Date(rep.timestamp).toLocaleString() : ''}
+                                            </span>
+                                          </div>
+                                          <p className="text-xs text-gray-800 break-words leading-relaxed">{rep.message || rep.text}</p>
                                         </div>
-                                        <p className="text-xs text-gray-800 break-words leading-relaxed">{comment.reply.text}</p>
-                                      </div>
-                                    )}
+                                      ));
+                                    })()}
 
                                     {/* Reply input */}
                                     {replyingToComment === comment.id && (

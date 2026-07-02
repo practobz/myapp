@@ -216,10 +216,10 @@ const CommentMarker = memo(({
               return replies.map((rep, rIdx) => {
                 const isRepAdmin = rep.authorRole === 'admin';
                 return (
-                  <div key={rep.id || rIdx} className={`p-1 text-[10px] rounded-md border ${isRepAdmin ? 'bg-purple-50 border-purple-100' : 'bg-blue-50 border-blue-100'}`}>
+                  <div key={rep.id || rIdx} className={`p-1 text-[10px] rounded-md border ${rep.authorRole === 'admin' ? 'bg-purple-50 border-purple-100' : rep.authorRole === 'creator' ? 'bg-green-50 border-green-100' : 'bg-blue-50 border-blue-100'}`}>
                     <div className="flex items-center gap-1 mb-0.5 flex-wrap">
-                      <span className={`font-semibold ${isRepAdmin ? 'text-purple-700' : 'text-blue-700'}`}>
-                        {isRepAdmin ? 'Admin' : 'Customer'}
+                      <span className={`font-semibold ${rep.authorRole === 'admin' ? 'text-purple-700' : rep.authorRole === 'creator' ? 'text-green-700' : 'text-blue-700'}`}>
+                        {rep.authorRole === 'admin' ? 'Admin' : rep.authorRole === 'creator' ? 'Creator' : 'Customer'}
                       </span>
                       {rep.authorEmail && (
                         <span className="text-[8px] text-gray-400 truncate max-w-[80px]">{rep.authorEmail}</span>
@@ -267,10 +267,12 @@ const CommentMarker = memo(({
                 onClick={(e) => { e.stopPropagation(); onToggleDiscard(comment.id); }}>
                 <XCircle className="h-2.5 w-2.5" />{comment.discarded ? 'Discarded' : 'Discard'}
               </button>
-              <button className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] bg-red-50 text-red-500 rounded-md hover:bg-red-100 ml-auto"
-                onClick={(e) => { e.stopPropagation(); onDelete(comment.id); }}>
-                <Trash2 className="h-2.5 w-2.5" />
-              </button>
+              {isAdmin && (
+                <button className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] bg-red-50 text-red-500 rounded-md hover:bg-red-100 ml-auto"
+                  onClick={(e) => { e.stopPropagation(); onDelete(comment.id); }}>
+                  <Trash2 className="h-2.5 w-2.5" />
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -724,6 +726,10 @@ function ContentDetailView({
   // ── Image click → place new marker or reposition ───────────────────────
   const handleImageClick = useCallback(async (e) => {
     const repositioning = commentsForCurrentMedia.find(c => c.repositioning);
+    if (repositioning || addingComment) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     if (repositioning) {
       const rect = e.currentTarget.getBoundingClientRect();
       const x = rect.width > 0 ? (e.clientX - rect.left) / rect.width : 0;
@@ -803,6 +809,7 @@ function ContentDetailView({
               authorRole: comment.authorRole,
               authorName: comment.authorName,
               authorEmail: comment.authorEmail,
+              ...(comment.videoTimestamp != null && { videoTimestamp: comment.videoTimestamp }),
             },
           }),
         });
@@ -1177,6 +1184,7 @@ function ContentDetailView({
                                 ref={videoRef}
                                 data-cdv-media
                                 src={currentMedia.url}
+                                poster={currentVersion?.thumbnailUrl || undefined}
                                 controls
                                 className={`max-w-full h-auto max-h-[50vh] sm:max-h-[60vh] lg:max-h-[70vh] rounded-lg shadow border border-gray-200 object-contain transition-all ${addingComment ? 'cursor-crosshair ring-2 ring-purple-400 ring-offset-1' : ''
                                   }`}
@@ -1287,6 +1295,18 @@ function ContentDetailView({
                         <p className="text-xs text-gray-900">{currentVersion.notes || 'No notes'}</p>
                       </div>
                     </div>
+                    {currentVersion?.thumbnailUrl && (
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-700 mb-1">Video Thumbnail</label>
+                        <div className="bg-gray-50 rounded-lg p-2 border border-gray-200 inline-block">
+                          <img
+                            src={currentVersion.thumbnailUrl}
+                            alt="Video thumbnail"
+                            className="w-20 h-20 object-cover rounded border border-gray-300"
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center justify-between text-[10px] text-gray-500">
                     <span>Created: {formatDate(currentVersion.createdAt)}</span>
@@ -1639,12 +1659,11 @@ function ContentDetailView({
                               timestamp: comment.adminReply.timestamp
                             }] : []);
                             return replies.map((rep, rIdx) => {
-                              const isRepAdmin = rep.authorRole === 'admin';
                               return (
-                                <div key={rep.id || rIdx} className={`p-2 rounded-md border text-[11px] ${isRepAdmin ? 'bg-purple-50/50 border-purple-100' : 'bg-blue-50/50 border-blue-100'}`}>
+                                <div key={rep.id || rIdx} className={`p-2 rounded-md border text-[11px] ${rep.authorRole === 'admin' ? 'bg-purple-50/50 border-purple-100' : rep.authorRole === 'creator' ? 'bg-green-50/50 border-green-100' : 'bg-blue-50/50 border-blue-100'}`}>
                                   <div className="flex items-center gap-1 mb-0.5 flex-wrap">
-                                    <span className={`inline-flex items-center gap-0.5 px-1 rounded text-[8px] font-bold ${isRepAdmin ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
-                                      {isRepAdmin ? 'Admin' : 'Customer'}
+                                    <span className={`inline-flex items-center gap-0.5 px-1 rounded text-[8px] font-bold ${rep.authorRole === 'admin' ? 'bg-purple-100 text-purple-700' : rep.authorRole === 'creator' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                                      {rep.authorRole === 'admin' ? 'Admin' : rep.authorRole === 'creator' ? 'Creator' : 'Customer'}
                                     </span>
                                     {rep.authorEmail && (
                                       <span className="text-[9px] text-gray-405 truncate max-w-[120px]">{rep.authorEmail}</span>
@@ -1714,12 +1733,14 @@ function ContentDetailView({
                             >
                               <XCircle className="h-2.5 w-2.5" />{comment.discarded ? 'Discarded' : 'Discard'}
                             </button>
-                            <button
-                              className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] bg-red-50 text-red-500 border border-red-200 rounded-md hover:bg-red-100 transition-colors ml-auto"
-                              onClick={(e) => { e.stopPropagation(); handleDeleteComment(comment.id); }}
-                            >
-                              <Trash2 className="h-2.5 w-2.5" />
-                            </button>
+                            {isAdminComment && (
+                              <button
+                                className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] bg-red-50 text-red-500 border border-red-200 rounded-md hover:bg-red-100 transition-colors ml-auto"
+                                onClick={(e) => { e.stopPropagation(); handleDeleteComment(comment.id); }}
+                              >
+                                <Trash2 className="h-2.5 w-2.5" />
+                              </button>
+                            )}
                           </div>
                         )}
                       </div>

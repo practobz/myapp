@@ -427,6 +427,8 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
   };
 
   const handleImageClick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
     const rect = e.target.getBoundingClientRect();
     const nw = e.target.naturalWidth || e.target.videoWidth || rect.width;
     const nh = e.target.naturalHeight || e.target.videoHeight || rect.height;
@@ -690,6 +692,8 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
   };
 
   const handleImageClickWithReposition = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
     const repositioningComment = commentsForCurrentMedia.find((c) => c.repositioning);
     if (repositioningComment) {
       const rect = e.target.getBoundingClientRect();
@@ -1685,15 +1689,6 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
               <div className="flex justify-center pt-2">
                 {!['approved', 'approved_by_customer', 'published'].includes(getDisplayStatus(selectedContent)) ? (
                   <div className="flex gap-2 w-full max-w-md justify-center">
-                    {commentsForCurrentMedia.length > 0 && (
-                      <button
-                        onClick={handleSendToCreator}
-                        disabled={sendingToCreator}
-                        className="flex-1 max-w-[200px] inline-flex items-center justify-center px-4 py-2 bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white rounded-xl font-bold text-xs shadow-md transition-all disabled:opacity-50"
-                      >
-                        {sendingToCreator ? 'Sending...' : 'Send to Creator'}
-                      </button>
-                    )}
                     <button
                       onClick={handleApproveContent}
                       disabled={approvingContent}
@@ -1879,12 +1874,11 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
                                 timestamp: comment.adminReply.timestamp
                               }] : []);
                               return replies.map((rep, rIdx) => {
-                                const isRepAdmin = rep.authorRole === 'admin';
                                 return (
-                                  <div key={rep.id || rIdx} className={`p-1.5 rounded text-[10px] border ${isRepAdmin ? 'bg-purple-50/50 border-purple-100' : 'bg-blue-50/50 border-blue-100'}`}>
+                                  <div key={rep.id || rIdx} className={`p-1.5 rounded text-[10px] border ${rep.authorRole === 'admin' ? 'bg-purple-50/50 border-purple-100' : rep.authorRole === 'creator' ? 'bg-green-50/50 border-green-100' : 'bg-blue-50/50 border-blue-100'}`}>
                                     <div className="flex items-center gap-1 mb-0.5 flex-wrap">
-                                      <span className={`font-semibold ${isRepAdmin ? 'text-purple-750 font-bold' : 'text-blue-750 font-bold'}`}>
-                                        {isRepAdmin ? 'Admin' : 'Customer'}
+                                      <span className={`font-semibold ${rep.authorRole === 'admin' ? 'text-purple-750 font-bold' : rep.authorRole === 'creator' ? 'text-green-750 font-bold' : 'text-blue-750 font-bold'}`}>
+                                        {rep.authorRole === 'admin' ? 'Admin' : rep.authorRole === 'creator' ? 'Creator' : 'Customer'}
                                       </span>
                                       <span className="text-[8px] text-gray-400 ml-auto">
                                         {rep.timestamp ? new Date(rep.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
@@ -2075,10 +2069,9 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
                         timestamp: comment.adminReply.timestamp
                       }] : []);
                       return replies.map((rep, rIdx) => {
-                        const isRepAdmin = rep.authorRole === 'admin';
                         return (
-                          <div key={rep.id || rIdx} className={`p-1 rounded text-[9px] border ${isRepAdmin ? 'bg-purple-50 border-purple-100' : 'bg-blue-50 border-blue-100'}`}>
-                            <span className="font-semibold">{isRepAdmin ? 'Admin' : 'Customer'}: </span>
+                          <div key={rep.id || rIdx} className={`p-1 rounded text-[9px] border ${rep.authorRole === 'admin' ? 'bg-purple-50 border-purple-100' : rep.authorRole === 'creator' ? 'bg-green-50 border-green-100' : 'bg-blue-50 border-blue-100'}`}>
+                            <span className="font-semibold">{rep.authorRole === 'admin' ? 'Admin' : rep.authorRole === 'creator' ? 'Creator' : 'Customer'}: </span>
                             <span className="text-gray-700">{rep.message || rep.text}</span>
                           </div>
                         );

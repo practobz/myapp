@@ -143,6 +143,7 @@ const getStatusColor = (status) => {
   switch (status) {
     case 'published': return 'bg-green-100 text-green-800';
     case 'under_review': return 'bg-yellow-100 text-yellow-800';
+    case 'customer_approved': return 'bg-emerald-100 text-emerald-800';
     case 'scheduled': return 'bg-blue-100 text-blue-800';
     case 'waiting_input': return 'bg-orange-100 text-orange-800';
     default: return 'bg-gray-100 text-gray-800';
@@ -155,6 +156,7 @@ const getStatusLabel = (status) => {
     case 'pending': return 'Pending';
     case 'published': return 'Published';
     case 'under_review': return 'Under Review';
+    case 'customer_approved': return 'Customer Approved';
     case 'scheduled': return 'Scheduled';
     case 'waiting_input': return 'Waiting Input';
     default: return status.replace('_', ' ').charAt(0).toUpperCase() + status.slice(1);
@@ -1149,6 +1151,38 @@ function ContentCalendar({
     return Boolean(post.item_name && itemTitle && String(post.item_name).trim() === String(itemTitle).trim());
   };
 
+  const getDisplayStatus = (item) => {
+    if (!item) return '';
+    if (item.status === 'published') return 'published';
+    
+    const itemSubs = submissions.filter(s => isSubmissionForItem(s, item, item.calendarId));
+    const sortedSubmissions = [...itemSubs].sort(
+      (a, b) => new Date(a.created_at || a.createdAt || 0) - new Date(b.created_at || b.createdAt || 0)
+    );
+    
+    const customerApprovedSub = sortedSubmissions.length > 0 && (() => {
+      const latest = sortedSubmissions[sortedSubmissions.length - 1];
+      const isApproved = latest.approved_by_customer === true || 
+                         latest.status === 'approved_customer' || 
+                         latest.status === 'approved_both';
+      const isReverted = latest.status === 'under_review' || 
+                         latest.status === 'sent_to_creator' || 
+                         latest.status === 'revision_requested' || 
+                         latest.status === 'rejected';
+      return isApproved && !isReverted ? latest : null;
+    })();
+    
+    const isCustomerApproved = !!customerApprovedSub || 
+                               item.status === 'published' || 
+                               item.published === true ||
+                               (item.reviewedAt && sortedSubmissions.length === 0);
+
+    if (isCustomerApproved && item.status === 'under_review') {
+      return 'customer_approved';
+    }
+    return item.status;
+  };
+
   const hasContentSubmitted = (item, calendarId) =>
     submissions.some(sub => isSubmissionForItem(sub, item, calendarId));
 
@@ -1948,6 +1982,7 @@ function ContentCalendar({
                   const isTrendLoading = itemTrendData === null;
                   const isExpanded = expandedTrendItem === itemKey;
                   const publishedLinks = getItemPublishedLinks(item);
+                  const displayStatus = getDisplayStatus(item);
 
                   return viewMode === 'grid' ? (
                     isAdmin ? (
@@ -1979,12 +2014,13 @@ function ContentCalendar({
                               <div className="w-full h-full flex items-center justify-center"><Image className="h-10 w-10 text-gray-300" /></div>
                             )}
                             <div className="absolute top-3 left-3">
-                              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold shadow-sm ${item.status === 'published' ? 'bg-emerald-500 text-white' :
-                                item.status === 'under_review' ? 'bg-amber-500 text-white' :
-                                  item.status === 'scheduled' ? 'bg-blue-500 text-white' : 'bg-gray-600 text-white'
+                              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold shadow-sm ${displayStatus === 'published' ? 'bg-emerald-500 text-white' :
+                                displayStatus === 'customer_approved' ? 'bg-emerald-600 text-white' :
+                                displayStatus === 'under_review' ? 'bg-amber-500 text-white' :
+                                  displayStatus === 'scheduled' ? 'bg-blue-500 text-white' : 'bg-gray-600 text-white'
                                 }`}>
-                                {item.status === 'published' && <CheckCircle className="h-3 w-3" />}
-                                {getStatusLabel(item.status)}
+                                {(displayStatus === 'published' || displayStatus === 'customer_approved') && <CheckCircle className="h-3 w-3" />}
+                                {getStatusLabel(displayStatus)}
                               </span>
                             </div>
                           </div>
@@ -2100,12 +2136,13 @@ function ContentCalendar({
                             <div className="w-full h-full flex items-center justify-center"><Image className="h-10 w-10 text-gray-300" /></div>
                           )}
                           <div className="absolute top-3 left-3">
-                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold shadow-sm ${item.status === 'published' ? 'bg-emerald-500 text-white' :
-                              item.status === 'under_review' ? 'bg-amber-500 text-white' :
-                                item.status === 'scheduled' ? 'bg-blue-500 text-white' : 'bg-gray-600 text-white'
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold shadow-sm ${displayStatus === 'published' ? 'bg-emerald-500 text-white' :
+                              displayStatus === 'customer_approved' ? 'bg-emerald-600 text-white' :
+                              displayStatus === 'under_review' ? 'bg-amber-500 text-white' :
+                                displayStatus === 'scheduled' ? 'bg-blue-500 text-white' : 'bg-gray-600 text-white'
                               }`}>
-                              {item.status === 'published' && <CheckCircle className="h-3 w-3" />}
-                              {getStatusLabel(item.status)}
+                              {(displayStatus === 'published' || displayStatus === 'customer_approved') && <CheckCircle className="h-3 w-3" />}
+                              {getStatusLabel(displayStatus)}
                             </span>
                           </div>
                         </div>
@@ -2193,14 +2230,15 @@ function ContentCalendar({
                             <div className="flex-1 min-w-0">
                               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
                                 <div className="flex items-center gap-3">
-                                  <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${item.status === 'published' ? 'bg-emerald-100 text-emerald-700' :
-                                    item.status === 'under_review' ? 'bg-amber-100 text-amber-700' :
-                                      item.status === 'scheduled' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
+                                  <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${displayStatus === 'published' ? 'bg-emerald-100 text-emerald-700' :
+                                    displayStatus === 'customer_approved' ? 'bg-emerald-100 text-emerald-700' :
+                                    displayStatus === 'under_review' ? 'bg-amber-100 text-amber-700' :
+                                      displayStatus === 'scheduled' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
                                     }`}>
-                                    {item.status === 'published' && <CheckCircle className="h-3 w-3" />}
-                                    {item.status === 'scheduled' && <Clock className="h-3 w-3" />}
-                                    {item.status === 'under_review' && <Eye className="h-3 w-3" />}
-                                    {getStatusLabel(item.status)}
+                                    {(displayStatus === 'published' || displayStatus === 'customer_approved') && <CheckCircle className="h-3 w-3" />}
+                                    {displayStatus === 'scheduled' && <Clock className="h-3 w-3" />}
+                                    {displayStatus === 'under_review' && <Eye className="h-3 w-3" />}
+                                    {getStatusLabel(displayStatus)}
                                   </span>
                                   <span className="text-sm text-gray-500 flex items-center gap-1.5">
                                     <CalendarIcon className="h-3.5 w-3.5" />
@@ -2377,14 +2415,15 @@ function ContentCalendar({
                             <div className="flex-1 min-w-0">
                               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
                                 <div className="flex items-center gap-3">
-                                  <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${item.status === 'published' ? 'bg-emerald-100 text-emerald-700' :
-                                    item.status === 'under_review' ? 'bg-amber-100 text-amber-700' :
-                                      item.status === 'scheduled' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
+                                  <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${displayStatus === 'published' ? 'bg-emerald-100 text-emerald-700' :
+                                    displayStatus === 'customer_approved' ? 'bg-emerald-100 text-emerald-700' :
+                                    displayStatus === 'under_review' ? 'bg-amber-100 text-amber-700' :
+                                      displayStatus === 'scheduled' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
                                     }`}>
-                                    {item.status === 'published' && <CheckCircle className="h-3 w-3" />}
-                                    {item.status === 'scheduled' && <Clock className="h-3 w-3" />}
-                                    {item.status === 'under_review' && <Eye className="h-3 w-3" />}
-                                    {getStatusLabel(item.status)}
+                                    {(displayStatus === 'published' || displayStatus === 'customer_approved') && <CheckCircle className="h-3 w-3" />}
+                                    {displayStatus === 'scheduled' && <Clock className="h-3 w-3" />}
+                                    {displayStatus === 'under_review' && <Eye className="h-3 w-3" />}
+                                    {getStatusLabel(displayStatus)}
                                   </span>
                                   <span className="text-sm text-gray-500 flex items-center gap-1.5">
                                     <CalendarIcon className="h-3.5 w-3.5" />
@@ -2524,13 +2563,13 @@ function ContentCalendar({
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
-                      <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${selectedContent.status === 'published' ? 'bg-emerald-100' : 'bg-gray-100'}`}>
-                        {selectedContent.status === 'published' ? <CheckCircle className="h-5 w-5 text-emerald-600" /> : <Clock className="h-5 w-5 text-gray-500" />}
+                      <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${(getDisplayStatus(selectedContent) === 'published' || getDisplayStatus(selectedContent) === 'customer_approved') ? 'bg-emerald-100' : 'bg-gray-100'}`}>
+                        {(getDisplayStatus(selectedContent) === 'published' || getDisplayStatus(selectedContent) === 'customer_approved') ? <CheckCircle className="h-5 w-5 text-emerald-600" /> : <Clock className="h-5 w-5 text-gray-500" />}
                       </div>
                       <div>
                         <p className="text-xs text-gray-500 font-medium">Status</p>
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${selectedContent.status === 'published' ? 'bg-emerald-100 text-emerald-700' : getStatusColor(selectedContent.status)}`}>
-                          {getStatusLabel(selectedContent.status)}
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${(getDisplayStatus(selectedContent) === 'published' || getDisplayStatus(selectedContent) === 'customer_approved') ? 'bg-emerald-100 text-emerald-700' : getStatusColor(getDisplayStatus(selectedContent))}`}>
+                          {getStatusLabel(getDisplayStatus(selectedContent))}
                         </span>
                       </div>
                     </div>

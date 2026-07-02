@@ -1310,7 +1310,7 @@ function ContentDetailView({
                   </div>
                   <div className="flex items-center justify-between text-[10px] text-gray-500">
                     <span>Created: {formatDate(currentVersion.createdAt)}</span>
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getStatusColorLocal(currentVersion.status)}`}>
+                    <span className={`border px-2.5 py-1 rounded-md text-xs font-bold uppercase tracking-wider shadow-sm ${getStatusColorLocal(currentVersion.status)}`}>
                       {getStatusLabel(currentVersion.status)}
                     </span>
                   </div>

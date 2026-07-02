@@ -179,3 +179,73 @@ export async function validateMediaForPlatforms(file, options = {}) {
   const blocked = issues.some(issue => issue.level === 'error');
   return { blocked, issues, metadata, aspectRatio, pixelCount };
 }
+
+export function hasMixedContent(files) {
+  if (!files || files.length <= 1) return false;
+  let hasImage = false;
+  let hasVideo = false;
+  for (const f of files) {
+    const fileObj = f.file || f;
+    const type = fileObj.type || f.type || '';
+    if (type.startsWith('image/') || f.type === 'image') {
+      hasImage = true;
+    } else if (type.startsWith('video/') || f.type === 'video') {
+      hasVideo = true;
+    }
+  }
+  return hasImage && hasVideo;
+}
+
+export function hasMultipleVideos(files) {
+  if (!files || files.length <= 1) return false;
+  let videoCount = 0;
+  for (const f of files) {
+    const fileObj = f.file || f;
+    const type = fileObj.type || f.type || '';
+    if (type.startsWith('video/') || f.type === 'video') {
+      videoCount++;
+    }
+  }
+  return videoCount > 1;
+}
+
+export async function validateThumbnail(file, options = {}) {
+  const platforms = normalizePlatforms(options.platforms || options.platform || []);
+  const issues = [];
+
+  if (!file) {
+    issues.push(buildIssue('error', 'No thumbnail file selected.'));
+    return { blocked: true, issues, metadata: null };
+  }
+
+  if (!file.type || !file.type.startsWith('image/')) {
+    issues.push(buildIssue('error', 'Thumbnail must be an image.'));
+    return { blocked: true, issues, metadata: null };
+  }
+
+  const metadata = await readImageMetadata(file);
+  const aspectRatio = metadata.width && metadata.height ? metadata.width / metadata.height : 0;
+
+  const targets = platforms.length > 0 ? platforms : [];
+  const includesYouTube = targets.includes('youtube');
+  const includesInstagram = targets.includes('instagram');
+
+  if (includesYouTube) {
+    const diff = Math.abs(aspectRatio - (16 / 9));
+    if (diff > 0.05) {
+      issues.push(buildIssue('warning', 'YouTube thumbnail aspect ratio should be 16:9 (1.78).'));
+    }
+  } else if (includesInstagram) {
+    if (aspectRatio < 0.8 || aspectRatio > 1.91) {
+      issues.push(buildIssue('warning', 'Instagram thumbnail/cover aspect ratio should be between 4:5 (0.8) and 1.91:1.'));
+    }
+  } else {
+    const diff = Math.abs(aspectRatio - (16 / 9));
+    if (diff > 0.1) {
+      issues.push(buildIssue('warning', 'Recommended thumbnail aspect ratio is 16:9 (1.78).'));
+    }
+  }
+
+  const blocked = issues.some(issue => issue.level === 'error');
+  return { blocked, issues, metadata, aspectRatio };
+}

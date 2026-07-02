@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { ArrowLeft, Upload, Image, X, Check, CheckCircle, FileText, Calendar, Clock, Palette, Send, MapPin, Tag, MessageSquare, Play, Video, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, User, ShieldCheck, AlertCircle, History, Search, Globe } from 'lucide-react';
 import { Facebook, Instagram, Linkedin, Youtube, Twitter } from 'lucide-react';
 import ContentCreatorLayout from './Layout';
-import { validateMediaForPlatforms } from './mediaValidation';
+import { validateMediaForPlatforms, validateThumbnail, hasMixedContent, hasMultipleVideos } from './mediaValidation';
 
 // Helper to get creator email from localStorage
 function getCreatorEmail() {
@@ -62,6 +62,8 @@ function ContentUpload() {
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [thumbnailFileObj, setThumbnailFileObj] = useState(null);
   const [dragActive, setDragActive] = useState(false);
+  const replaceFileInputRef = useRef(null);
+  const [replacingFileId, setReplacingFileId] = useState(null);
   const [caption, setCaption] = useState('');
   const [hashtags, setHashtags] = useState('');
   const [notes, setNotes] = useState('');
@@ -496,6 +498,20 @@ function ContentUpload() {
       }
 
       try {
+        const normMedia = (media) => {
+          if (!media || !Array.isArray(media)) return [];
+          const getType = (url) => {
+            if (!url || typeof url !== 'string') return 'image';
+            const ext = url.toLowerCase().split('.').pop();
+            return ['mp4','webm','ogg','mov','avi'].includes(ext) ? 'video' : 'image';
+          };
+          return media.map(item => {
+            if (typeof item === 'string') return { url: item, type: getType(item) };
+            if (item?.url && typeof item.url === 'string') return { url: item.url, type: item.type || getType(item.url) };
+            return null;
+          }).filter(Boolean);
+        };
+
         console.log('🔍 Fetching previous submissions for assignment:', assignment.id, 'by creator:', creatorEmail);
         
         const response = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions`);
@@ -585,19 +601,6 @@ function ContentUpload() {
         // Show ALL versions in history (creator should see all their submissions,
         // including ones that have been sent to the customer)
         if (allVersionsSorted.length > 0) {
-          const normMedia = (media) => {
-            if (!media || !Array.isArray(media)) return [];
-            const getType = (url) => {
-              if (!url || typeof url !== 'string') return 'image';
-              const ext = url.toLowerCase().split('.').pop();
-              return ['mp4','webm','ogg','mov','avi'].includes(ext) ? 'video' : 'image';
-            };
-            return media.map(item => {
-              if (typeof item === 'string') return { url: item, type: getType(item) };
-              if (item?.url && typeof item.url === 'string') return { url: item.url, type: item.type || getType(item.url) };
-              return null;
-            }).filter(Boolean);
-          };
           const normalized = allVersionsSorted
             .map((sub, idx) => ({
               versionNumber: idx + 1,
@@ -643,6 +646,34 @@ function ContentUpload() {
           if (latestSubmission.caption) setCaption(latestSubmission.caption);
           if (latestSubmission.hashtags) setHashtags(latestSubmission.hashtags);
           if (latestSubmission.notes) setNotes(latestSubmission.notes);
+
+          const revisionStatuses = [
+            'revision_requested',
+            'changes_requested',
+            'changes_requested_admin',
+            'changes_requested_customer_approved_admin'
+          ];
+          if (revisionStatuses.includes(latestSubmission.status)) {
+            const mediaItems = normMedia(latestSubmission.media || latestSubmission.images || []);
+            const prepopulated = mediaItems.map((item, idx) => {
+              const url = item.url;
+              const type = item.type || 'image';
+              const name = item.name || url.split('/').pop() || `media-${idx}`;
+              return {
+                id: `existing-${idx}-${Date.now()}`,
+                isExisting: true,
+                file: null,
+                preview: url,
+                publicUrl: url,
+                type: type,
+                name: name,
+                uploaded: true,
+                uploading: false,
+                error: null
+              };
+            });
+            setUploadedFiles(prepopulated);
+          }
         }
 
         setPreviousSubmissionLoaded(true);
@@ -873,7 +904,7 @@ function ContentUpload() {
     }
   };
 
-  const handleThumbnailChange = (e) => {
+  const handleThumbnailChange = async (e) => {
     e.preventDefault();
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
@@ -881,6 +912,28 @@ function ContentUpload() {
         alert('Please select an image file for the thumbnail.');
         return;
       }
+
+      const validationPlatforms = getValidationPlatforms(assignment?.platform);
+      const validationResult = await validateThumbnail(file, {
+        platforms: validationPlatforms,
+      });
+
+      const validationIssues = validationResult.issues || [];
+      const errorIssue = validationIssues.find(issue => issue.level === 'error') || null;
+      const warningIssues = validationIssues.filter(issue => issue.level === 'warning');
+
+      if (validationIssues.length > 0) {
+        setValidationNotice(validationIssues.map(issue => issue.message).join(' '));
+        if (errorIssue) {
+          window.alert(errorIssue.message);
+          return;
+        } else {
+          window.alert(validationIssues.map(issue => issue.message).join(' '));
+        }
+      } else {
+        setValidationNotice('');
+      }
+
       const preview = URL.createObjectURL(file);
       setThumbnailFileObj({
         file,
@@ -890,7 +943,9 @@ function ContentUpload() {
         uploaded: false,
         uploading: false,
         publicUrl: null,
-        error: null
+        error: errorIssue ? errorIssue.message : null,
+        warnings: warningIssues.map(issue => issue.message),
+        validationIssues
       });
     }
   };
@@ -902,6 +957,22 @@ function ContentUpload() {
   const handleFiles = async (files) => {
     const incomingFiles = Array.from(files || []);
     const validationPlatforms = getValidationPlatforms(assignment?.platform);
+
+    const incomingTypes = incomingFiles.map(f => f.type.startsWith('image/') ? 'image' : f.type.startsWith('video/') ? 'video' : null).filter(Boolean);
+    const existingTypes = uploadedFiles.map(f => f.type);
+    const allTypes = [...new Set([...existingTypes, ...incomingTypes])];
+
+    if (allTypes.includes('image') && allTypes.includes('video')) {
+      window.alert('Mixed content is not allowed for carousel posts. You cannot select images and videos together.');
+      return;
+    }
+
+    const incomingVideosCount = incomingFiles.filter(f => f.type.startsWith('video/')).length;
+    const existingVideosCount = uploadedFiles.filter(f => f.type === 'video').length;
+    if (incomingVideosCount + existingVideosCount > 1) {
+      window.alert('Multiple videos are not allowed. A carousel post can only contain a single video or multiple images.');
+      return;
+    }
 
     for (const file of incomingFiles) {
       if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
@@ -950,11 +1021,90 @@ function ContentUpload() {
   };
 
   const formatFileSize = (bytes) => {
-    if (bytes === 0) return '0 Bytes';
+    if (!bytes || typeof bytes !== 'number' || bytes === 0) return '0 Bytes';
     const k = 1024;
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  const handleReplaceClick = (fileId) => {
+    setReplacingFileId(fileId);
+    replaceFileInputRef.current?.click();
+  };
+
+  const handleReplaceChange = async (e) => {
+    e.preventDefault();
+    if (e.target.files && e.target.files[0] && replacingFileId !== null) {
+      const file = e.target.files[0];
+      await handleReplaceFile(replacingFileId, file);
+      e.target.value = '';
+      setReplacingFileId(null);
+    }
+  };
+
+  const handleReplaceFile = async (fileId, file) => {
+    if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
+      window.alert('Please select an image or video file.');
+      return;
+    }
+
+    const validationPlatforms = getValidationPlatforms(assignment?.platform);
+
+    const incomingType = file.type.startsWith('image/') ? 'image' : 'video';
+    const otherFilesTypes = uploadedFiles.filter(f => f.id !== fileId).map(f => f.type);
+    const allTypes = [...new Set([...otherFilesTypes, incomingType])];
+
+    if (allTypes.includes('image') && allTypes.includes('video')) {
+      window.alert('Mixed content is not allowed for carousel posts. You cannot select images and videos together.');
+      return;
+    }
+
+    const isVideo = file.type.startsWith('video/');
+    const otherVideosCount = uploadedFiles.filter(f => f.id !== fileId && f.type === 'video').length;
+    if ((isVideo ? 1 : 0) + otherVideosCount > 1) {
+      window.alert('Multiple videos are not allowed. A carousel post can only contain a single video or multiple images.');
+      return;
+    }
+
+    const validationResult = await validateMediaForPlatforms(file, {
+      platforms: validationPlatforms,
+    });
+
+    const preview = URL.createObjectURL(file);
+    const validationIssues = validationResult.issues || [];
+    const errorIssue = validationIssues.find(issue => issue.level === 'error') || null;
+    const warningIssues = validationIssues.filter(issue => issue.level === 'warning');
+
+    if (validationIssues.length > 0) {
+      setValidationNotice(validationIssues.map(issue => issue.message).join(' '));
+      if (errorIssue) {
+        window.alert(errorIssue.message);
+      }
+    } else {
+      setValidationNotice('');
+    }
+
+    setUploadedFiles(prev => prev.map(f => {
+      if (f.id === fileId) {
+        return {
+          id: f.id,
+          file,
+          preview,
+          name: file.name,
+          size: file.size,
+          type: file.type.startsWith('image/') ? 'image' : 'video',
+          isExisting: false,
+          uploaded: false,
+          uploading: false,
+          publicUrl: null,
+          error: errorIssue ? errorIssue.message : null,
+          warnings: warningIssues.map(issue => issue.message),
+          validationIssues,
+        };
+      }
+      return f;
+    }));
   };
 
   // Upload single file - uses streaming upload for large files (>=10MB), base64 for small files
@@ -1160,6 +1310,16 @@ function ContentUpload() {
       return;
     }
 
+    if (hasMixedContent(uploadedFiles)) {
+      alert('Mixed content is not allowed for carousel posts. You cannot upload images and videos together.');
+      return;
+    }
+
+    if (hasMultipleVideos(uploadedFiles)) {
+      alert('Multiple videos are not allowed. A carousel post can only contain a single video or multiple images.');
+      return;
+    }
+
     if (!assignment) {
       alert('Assignment data not found. Please try again.');
       return;
@@ -1210,40 +1370,26 @@ function ContentUpload() {
         }
       }
 
-      // Upload all files that haven't been uploaded yet
-      const filesToUpload = uploadedFiles.filter(f => !f.uploaded);
-      const alreadyUploaded = uploadedFiles.filter(f => f.uploaded);
-
-      console.log(`📤 Uploading ${filesToUpload.length} files, ${alreadyUploaded.length} already uploaded`);
-
-      // Upload files in parallel (but limit concurrency to avoid overwhelming the server)
-      const uploadPromises = filesToUpload.map(fileObj => uploadFileToGCS(fileObj));
-      const uploadResults = await Promise.allSettled(uploadPromises);
-
-      // Process upload results
-      uploadResults.forEach((result, index) => {
-        if (result.status === 'fulfilled') {
-          uploadedMediaUrls.push(result.value);
-        } else {
-          console.error(`❌ Failed to upload file ${filesToUpload[index].name}:`, result.reason);
-          throw new Error(`Upload failed for ${filesToUpload[index].name}: ${result.reason.message}`);
-        }
-      });
-
-      // Add already uploaded files
-      alreadyUploaded.forEach(fileObj => {
-        if (fileObj.publicUrl) {
-          uploadedMediaUrls.push({
+      // Upload new files and keep existing ones, preserving exact carousel order
+      const uploadPromises = uploadedFiles.map(async (fileObj) => {
+        if ((fileObj.isExisting || fileObj.uploaded) && fileObj.publicUrl) {
+          return {
             url: fileObj.publicUrl,
             type: fileObj.type,
             name: fileObj.name,
             size: fileObj.size,
             originalName: fileObj.name
-          });
+          };
+        } else {
+          return await uploadFileToGCS(fileObj);
         }
       });
 
-      console.log(`✅ All files uploaded successfully. Total: ${uploadedMediaUrls.length}`);
+      console.log(`📤 Processing ${uploadedFiles.length} files (uploading new/replaced files, keeping existing)...`);
+      const results = await Promise.all(uploadPromises);
+      uploadedMediaUrls.push(...results);
+
+      console.log(`✅ All files processed successfully. Total: ${uploadedMediaUrls.length}`);
 
       // Prepare submission data with comprehensive customer information
       const submissionData = {
@@ -2612,6 +2758,13 @@ function ContentUpload() {
             {/* Media Preview Grid */}
             {uploadedFiles.length > 0 && (
               <div className="bg-white rounded-lg shadow-sm p-6">
+                <input
+                  ref={replaceFileInputRef}
+                  type="file"
+                  accept="image/*,video/*"
+                  onChange={handleReplaceChange}
+                  className="hidden"
+                />
                 <h3 className="font-semibold text-gray-900 mb-4 flex items-center">
                   <Image className="h-5 w-5 mr-2 text-purple-600" />
                   Media Files ({uploadedFiles.length})
@@ -2628,6 +2781,15 @@ function ContentUpload() {
                         className="aspect-square rounded-lg overflow-hidden bg-gray-100 ring-2 ring-transparent group-hover:ring-purple-200 transition-all relative cursor-pointer"
                         onClick={() => setSelectedMedia(file)}
                       >
+                        {/* Existing vs New Badge */}
+                        <div className={`absolute top-2 left-2 px-1.5 py-0.5 rounded text-[9px] font-bold text-white shadow-sm z-10 ${
+                          file.isExisting 
+                            ? 'bg-emerald-600/90 backdrop-blur-sm' 
+                            : 'bg-purple-600/90 backdrop-blur-sm'
+                        }`}>
+                          {file.isExisting ? 'Existing' : 'New'}
+                        </div>
+
                         {file.type === 'image' ? (
                           <img
                             src={file.preview}
@@ -2644,7 +2806,7 @@ function ContentUpload() {
                             <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30">
                               <Play className="h-8 w-8 text-white" />
                             </div>
-                            <div className="absolute top-2 left-2 bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded">
+                            <div className="absolute bottom-2 left-2 bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded">
                               VIDEO
                             </div>
                           </div>
@@ -2661,13 +2823,13 @@ function ContentUpload() {
                         )}
                         
                         {file.uploaded && (
-                          <div className="absolute top-2 right-2 bg-green-500 text-white rounded-full p-1">
+                          <div className="absolute top-2 right-2 bg-green-500 text-white rounded-full p-1 z-10">
                             <Check className="h-3 w-3" />
                           </div>
                         )}
                         
                         {file.error && (
-                          <div className="absolute inset-0 bg-red-500 bg-opacity-50 flex items-center justify-center">
+                          <div className="absolute inset-0 bg-red-500 bg-opacity-50 flex items-center justify-center z-10">
                             <div className="text-white text-center p-2">
                               <X className="h-4 w-4 mx-auto mb-1" />
                               <p className="text-xs">Failed</p>
@@ -2682,6 +2844,15 @@ function ContentUpload() {
                         )}
                       </div>
                       
+                      <button
+                        type="button"
+                        onClick={() => handleReplaceClick(file.id)}
+                        className="absolute -top-2 right-6 bg-blue-600 hover:bg-blue-700 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+                        title="Replace file"
+                      >
+                        <Upload className="h-3 w-3" />
+                      </button>
+
                       <button
                         onClick={() => removeFile(file.id)}
                         className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"

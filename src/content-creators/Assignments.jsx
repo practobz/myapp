@@ -1300,6 +1300,19 @@ function Assignments() {
                                             {/* Main Badge */}
                                             {(() => {
                                               const statusInfo = getItemApprovalStatus(assignment);
+                                              
+                                              // Check if sub status will be rendered
+                                              const subStatusInfo = getFilterStatus(assignment) !== 'published' ? getSubmissionStatusInfo(assignment.id) : null;
+                                              const willShowSubStatus = subStatusInfo && 
+                                                subStatusInfo.label !== 'Approved by Admin' && 
+                                                subStatusInfo.label !== 'Customer Approved' && 
+                                                subStatusInfo.label !== 'Both Approved';
+
+                                              // If main is Pending and we have a specific sub-status, hide Pending
+                                              if (statusInfo.label === 'Pending' && willShowSubStatus) {
+                                                return null;
+                                              }
+
                                               return (
                                                 <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${statusInfo.color}`}>
                                                   {statusInfo.icon}

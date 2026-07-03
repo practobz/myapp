@@ -1359,27 +1359,42 @@ function ContentDetailView({
 
                 {/* Internal Review Actions */}
                 <div className="space-y-1.5 pt-1">
-                  {currentVersion?.status === 'customer_feedback_pending_admin' ? (
+                  {currentVersion?.status === 'customer_feedback_pending_admin' || currentVersion?.status === 'changes_requested_admin' || (currentVersion?.comments || []).some(c => c.authorRole === 'admin' && !c.finalized && !c.discarded) ? (
                     <div className="space-y-2">
-                      <div className="text-xs font-semibold text-purple-900 bg-purple-50 p-2.5 rounded-lg border border-purple-250 flex items-start gap-1">
-                        <AlertCircle className="h-4 w-4 text-purple-600 flex-shrink-0 mt-0.5" />
-                        <span>Customer requested changes. Review comments/replies below.</span>
-                      </div>
-                      <button
-                        onClick={() => handleFinalizeFeedback('direct')}
-                        disabled={finalizingFeedback}
-                        className="w-full py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg text-xs font-semibold hover:from-purple-700 hover:to-indigo-700 shadow-sm transition-all disabled:opacity-50 flex items-center justify-center gap-1.5"
-                      >
-                        {finalizingFeedback ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-                        Send to Creator
-                      </button>
+                      {currentVersion?.status === 'customer_feedback_pending_admin' && (
+                        <div className="text-xs font-semibold text-purple-900 bg-purple-50 p-2.5 rounded-lg border border-purple-250 flex items-start gap-1">
+                          <AlertCircle className="h-4 w-4 text-purple-600 flex-shrink-0 mt-0.5" />
+                          <span>Customer requested changes. Review comments/replies below.</span>
+                        </div>
+                      )}
+                      {currentVersion?.status === 'customer_feedback_pending_admin' && (
+                        <button
+                          onClick={() => handleFinalizeFeedback('direct')}
+                          disabled={finalizingFeedback}
+                          className="w-full py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg text-xs font-semibold hover:from-purple-700 hover:to-indigo-700 shadow-sm transition-all disabled:opacity-50 flex items-center justify-center gap-1.5"
+                        >
+                          {finalizingFeedback ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                          Send to Creator (Direct)
+                        </button>
+                      )}
                       <button
                         onClick={() => handleFinalizeFeedback('finalized')}
                         disabled={finalizingFeedback}
-                        className="w-full py-2 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-lg text-xs font-semibold hover:from-emerald-700 hover:to-teal-700 shadow-sm transition-all disabled:opacity-50 flex items-center justify-center gap-1.5"
+                        className="w-full py-2 bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-lg text-xs font-semibold hover:from-orange-600 hover:to-red-600 shadow-sm transition-all disabled:opacity-50 flex items-center justify-center gap-1.5"
                       >
-                        {finalizingFeedback ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle className="h-3.5 w-3.5" />}
-                        Send Finalized Comments to Creator
+                        {finalizingFeedback ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                        Send to Creator (Request Revisions)
+                      </button>
+                      <button
+                        onClick={handleApproveAdmin}
+                        disabled={approvingAdmin}
+                        className="w-full py-2 bg-gradient-to-r from-emerald-600 to-green-600 text-white rounded-lg text-xs font-semibold hover:from-emerald-700 hover:to-green-700 shadow-sm transition-all disabled:opacity-50 flex items-center justify-center gap-1.5"
+                      >
+                        {approvingAdmin ? (
+                          <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Approving...</>
+                        ) : (
+                          <><CheckCircle className="h-3.5 w-3.5" /> Approve (Internal Review)</>
+                        )}
                       </button>
                     </div>
                   ) : !(currentVersion?.approved_by_admin || currentVersion?.status === 'approved' || currentVersion?.status === 'approved_both' || currentVersion?.status === 'pending_customer_review') ? (

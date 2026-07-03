@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams, useLocation } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
-import { ArrowLeft, Upload, Image, X, Check, CheckCircle, FileText, Calendar, Clock, Palette, Send, MapPin, Tag, MessageSquare, Play, Video, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, User, ShieldCheck, AlertCircle, History, Search, Globe } from 'lucide-react';
+import { ArrowLeft, Upload, Image, X, Check, CheckCircle, FileText, Calendar, Clock, Palette, Send, MapPin, Tag, MessageSquare, Play, Video, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, User, ShieldCheck, AlertCircle, History, Search, Globe, Plus } from 'lucide-react';
 import { Facebook, Instagram, Linkedin, Youtube, Twitter } from 'lucide-react';
 import ContentCreatorLayout from './Layout';
 import { validateMediaForPlatforms, validateThumbnail, hasMixedContent, hasMultipleVideos } from './mediaValidation';
@@ -101,7 +101,7 @@ function ContentUpload() {
   const previousVersions = useMemo(() => {
     return activeTab === 'admin' ? adminVersions : customerVersions;
   }, [activeTab, adminVersions, customerVersions]);
-  const [versionsAccordionOpen, setVersionsAccordionOpen] = useState(false);
+  const [versionsAccordionOpen, setVersionsAccordionOpen] = useState(true);
   const [selectedVersionIndex, setSelectedVersionIndex] = useState(0);
   const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
   const [validationNotice, setValidationNotice] = useState('');
@@ -695,8 +695,14 @@ function ContentUpload() {
     if (previousVersions.length > 0 && previousVersions[selectedVersionIndex]) {
       const allComments = previousVersions[selectedVersionIndex].comments || [];
       const filteredComments = allComments.filter(c => {
-        const isAdmin = c.reviewType === 'internal' || c.authorRole === 'admin' || c.author === 'Admin';
-        return activeTab === 'admin' ? (isAdmin && !c.discarded) : (!isAdmin && c.finalized && !c.discarded);
+        const isAdminComment = c.reviewType === 'internal' || c.authorRole === 'admin' || c.author === 'Admin';
+        
+        // Hide unfinalized admin comments from the creator
+        if (!isAdmin && isAdminComment && !c.finalized) {
+          return false;
+        }
+
+        return activeTab === 'admin' ? (isAdminComment && !c.discarded) : (!isAdminComment && c.finalized && !c.discarded);
       });
       setCommentsForVersion(filteredComments);
     } else {
@@ -1966,50 +1972,7 @@ function ContentUpload() {
             </button>
           </div>
         )}
-        {/* Assignment Details - Top */}
-        <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
-          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-            <div>
-              <h1 className="text-lg font-bold text-gray-900">{assignment.title}</h1>
-              <p className="text-sm text-gray-600">for {assignment.customerName}</p>
-              {assignment.description && (
-                <p className="text-sm text-gray-600 mt-2">{assignment.description}</p>
-              )}
-            </div>
-            <div className="text-left sm:text-right">
-              <div className="flex items-center text-xs text-gray-500 mb-2 sm:justify-end">
-                <Calendar className="h-3 w-3 mr-1" />
-                {assignment.dueDate ? new Date(assignment.dueDate).toLocaleDateString() : 'N/A'}
-              </div>
-              <div className="flex items-center gap-1 flex-wrap sm:justify-end">
-                {(Array.isArray(assignment.platform) ? assignment.platform : [assignment.platform]).filter(Boolean).map((p, pi) => (
-                  <span key={pi} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-xs font-medium ${
-                    p.toLowerCase() === 'facebook'  ? 'bg-blue-100 text-blue-700 border-blue-200' :
-                    p.toLowerCase() === 'instagram' ? 'bg-pink-100 text-pink-700 border-pink-200' :
-                    p.toLowerCase() === 'youtube'   ? 'bg-red-100 text-red-700 border-red-200' :
-                    p.toLowerCase() === 'linkedin'  ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                    p.toLowerCase() === 'twitter'   ? 'bg-sky-100 text-sky-700 border-sky-200' :
-                    'bg-gray-100 text-gray-700 border-gray-200'
-                  }`}>
-                    {p.toLowerCase() === 'facebook'  ? <Facebook  className="h-3 w-3" /> :
-                     p.toLowerCase() === 'instagram' ? <Instagram className="h-3 w-3" /> :
-                     p.toLowerCase() === 'linkedin'  ? <Linkedin  className="h-3 w-3" /> :
-                     p.toLowerCase() === 'youtube'   ? <Youtube   className="h-3 w-3" /> :
-                     p.toLowerCase() === 'twitter'   ? <Twitter   className="h-3 w-3" /> :
-                     <Globe className="h-3 w-3" />}
-                    {p.charAt(0).toUpperCase() + p.slice(1)}
-                  </span>
-                ))}
-                {assignment.postType && (
-                  <span className="inline-flex items-center px-1.5 py-0.5 rounded border text-xs font-semibold bg-amber-50 text-amber-700 border-amber-200 capitalize">
-                    {assignment.postType}
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-
+        {/* Assignment Details moved to right column */}
         {/* Admin Uploaded Banner — shown when admin already sent content to customer */}
         {adminUploadedForThis && (
           <div className="bg-blue-50 border border-blue-200 rounded-xl shadow-sm px-5 py-4 mb-6 flex flex-col sm:flex-row sm:items-start gap-3">
@@ -2061,10 +2024,10 @@ function ContentUpload() {
           {/* Left Column - Upload Section */}
           <div className="lg:col-span-2 space-y-6">
             {/* Version History Accordion — ContentDetails style */}
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="space-y-4">
               {/* Accordion trigger */}
-              <div className="w-full p-5 hover:bg-gray-50 transition-colors duration-200">
-                <div className="flex items-center justify-between gap-3 mb-4">
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden w-full p-5 hover:bg-gray-50 transition-colors duration-200">
+                <div className={`flex items-center justify-between gap-3 ${(previousVersions.length === 0 || validationNotice) ? 'mb-4' : ''}`}>
                   <button
                     type="button"
                     onClick={() => setVersionsAccordionOpen(!versionsAccordionOpen)}
@@ -2093,81 +2056,177 @@ function ContentUpload() {
                   </button>
                 </div>
 
-                <div
-                  className={`relative w-full border-2 border-dashed rounded-xl px-4 py-4 transition-all duration-200 ${
-                    dragActive
-                      ? 'border-purple-400 bg-purple-50'
-                      : 'border-gray-300 hover:border-purple-400 hover:bg-purple-50/50'
-                  }`}
-                  onDragEnter={handleDrag}
-                  onDragLeave={handleDrag}
-                  onDragOver={handleDrag}
-                  onDrop={handleDrop}
-                >
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    multiple
-                    accept="image/*,video/*"
-                    onChange={handleChange}
-                    className="hidden"
-                  />
+                {/* Hidden inputs always rendered in DOM */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept="image/*,video/*"
+                  onChange={handleChange}
+                  className="hidden"
+                />
+                <input
+                  ref={thumbnailInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleThumbnailChange}
+                  className="hidden"
+                />
+                <input
+                  ref={replaceFileInputRef}
+                  type="file"
+                  accept="image/*,video/*"
+                  onChange={handleReplaceChange}
+                  className="hidden"
+                />
 
-                  <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-                    <div className="flex items-center gap-1.5 text-gray-500">
-                      <Upload className="h-4 w-4" />
-                      <Video className="h-4 w-4" />
-                      <p className="text-sm whitespace-nowrap">Drop files here</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={onButtonClick}
-                      className="inline-flex items-center px-2 py-1 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors"
+                {previousVersions.length === 0 && (
+                  <>
+                    <div
+                      className={`relative w-full border-2 border-dashed rounded-xl px-4 py-4 transition-all duration-200 ${
+                        dragActive
+                          ? 'border-purple-400 bg-purple-50'
+                          : 'border-gray-300 hover:border-purple-400 hover:bg-purple-50/50'
+                      }`}
+                      onDragEnter={handleDrag}
+                      onDragLeave={handleDrag}
+                      onDragOver={handleDrag}
+                      onDrop={handleDrop}
                     >
-                      <Image className="h-3 w-3 mr-1" />
-                      Browse Files
-                    </button>
-                    <input
-                      ref={thumbnailInputRef}
-                      type="file"
-                      accept="image/*"
-                      onChange={handleThumbnailChange}
-                      className="hidden"
-                    />
-                    <button
-                      type="button"
-                      onClick={onThumbnailButtonClick}
-                      className="inline-flex items-center px-2 py-1 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-colors"
-                    >
-                      <Image className="h-3 w-3 mr-1" />
-                      Browse Thumbnail
-                    </button>
-                  </div>
-                </div>
-
-                {thumbnailFileObj && (
-                  <div className="mt-3 p-3 bg-indigo-50/80 border border-indigo-100 rounded-xl flex items-center justify-between shadow-sm">
-                    <div className="flex items-center gap-3">
-                      <img src={thumbnailFileObj.preview} alt="Thumbnail preview" className="w-12 h-12 object-cover rounded-lg border border-indigo-200" />
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold text-indigo-900 truncate">{thumbnailFileObj.name}</p>
-                        <p className="text-[10px] text-indigo-600">{formatFileSize(thumbnailFileObj.size)}</p>
+                      <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                        <div className="flex items-center gap-1.5 text-gray-500">
+                          <Upload className="h-4 w-4" />
+                          <Video className="h-4 w-4" />
+                          <p className="text-sm whitespace-nowrap">Drop files here</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={onButtonClick}
+                          className="inline-flex items-center px-2 py-1 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors"
+                        >
+                          <Image className="h-3 w-3 mr-1" />
+                          Browse Files
+                        </button>
+                        <button
+                          type="button"
+                          onClick={onThumbnailButtonClick}
+                          className="inline-flex items-center px-2 py-1 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-colors"
+                        >
+                          <Image className="h-3 w-3 mr-1" />
+                          Browse Thumbnail
+                        </button>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setThumbnailFileObj(null)}
-                      className="p-1 rounded-full text-indigo-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
+
+                    {thumbnailFileObj && (
+                      <div className="mt-3 p-3 bg-indigo-50/80 border border-indigo-100 rounded-xl flex items-center justify-between shadow-sm">
+                        <div className="flex items-center gap-3">
+                          <img src={thumbnailFileObj.preview} alt="Thumbnail preview" className="w-12 h-12 object-cover rounded-lg border border-indigo-200" />
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold text-indigo-900 truncate">{thumbnailFileObj.name}</p>
+                            <p className="text-[10px] text-indigo-600">{formatFileSize(thumbnailFileObj.size)}</p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setThumbnailFileObj(null)}
+                          className="p-1 rounded-full text-indigo-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    )}
+
+                    {/* ── WhatsApp-style compact thumbnail strip for initial upload (No versions yet) ── */}
+                    {uploadedFiles.length > 0 && (
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        {uploadedFiles.map((file) => (
+                          <div
+                            key={file.id}
+                            className="relative group w-16 h-16 rounded-lg overflow-hidden bg-gray-100 ring-1 ring-gray-200 hover:ring-purple-400 transition-all cursor-pointer flex-shrink-0"
+                            onClick={() => handleReplaceClick(file.id)}
+                            title={`${file.name} — click to replace`}
+                          >
+                            {/* Thumbnail preview */}
+                            {file.type === 'image' ? (
+                              <img
+                                src={file.preview}
+                                alt={file.name}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <div className="relative w-full h-full">
+                                <video
+                                  src={file.preview}
+                                  className="w-full h-full object-cover"
+                                  muted
+                                />
+                                <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                                  <Play className="h-4 w-4 text-white" />
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Top-left badge: green check (existing) or purple NEW */}
+                            <div className={`absolute top-0.5 left-0.5 flex items-center justify-center rounded text-[8px] font-bold leading-none z-10 ${
+                              file.isExisting
+                                ? 'w-3.5 h-3.5 bg-emerald-500 text-white'
+                                : 'px-1 py-0.5 bg-purple-600 text-white'
+                            }`}>
+                              {file.isExisting ? <Check className="h-2.5 w-2.5" /> : 'NEW'}
+                            </div>
+
+                            {/* Spinner overlay when uploading */}
+                            {file.uploading && (
+                              <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-20">
+                                <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
+                              </div>
+                            )}
+
+                            {/* Error overlay */}
+                            {file.error && (
+                              <div className="absolute inset-0 bg-red-500/60 flex items-center justify-center z-20">
+                                <X className="h-4 w-4 text-white" />
+                              </div>
+                            )}
+
+                            {/* Hover remove button (top-right) */}
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); removeFile(file.id); }}
+                              className="absolute top-0 right-0 w-4 h-4 bg-red-500 hover:bg-red-600 text-white rounded-bl-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-30"
+                              title="Remove"
+                            >
+                              <X className="h-2.5 w-2.5" />
+                            </button>
+                          </div>
+                        ))}
+
+                        {/* "+" add-media tile */}
+                        <button
+                          type="button"
+                          onClick={onButtonClick}
+                          className="w-16 h-16 rounded-lg border-2 border-dashed border-gray-300 hover:border-purple-400 hover:bg-purple-50 flex items-center justify-center transition-all flex-shrink-0"
+                          title="Add media"
+                        >
+                          <Plus className="h-6 w-6 text-gray-400 group-hover:text-purple-500" />
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* Validation notice */}
+                {validationNotice && (
+                  <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
+                    {validationNotice}
                   </div>
                 )}
               </div>
 
               {/* Accordion body */}
               {versionsAccordionOpen && (
-                <div className="border-t border-gray-100 p-6">
+                <div className="">
                   {previousVersions.length === 0 ? (
                     <div className="text-center py-12">
                       <div className="bg-gray-100 rounded-full w-14 h-14 flex items-center justify-center mx-auto mb-3">
@@ -2224,6 +2283,99 @@ function ContentUpload() {
                               <div className="space-y-5">
                                 {/* Media */}
                                 <div>
+                                  {/* ── WhatsApp-style uploaded-files thumbnail strip ── */}
+                                  {uploadedFiles.length > 0 && (
+                                    <div className="flex flex-wrap justify-center items-center gap-2 mb-6 bg-gray-50 p-3 rounded-xl border border-gray-100">
+                                      {uploadedFiles.map((file) => (
+                                        <div
+                                          key={file.id}
+                                          className="relative group w-16 h-16 rounded-lg overflow-hidden bg-white ring-1 ring-gray-200 hover:ring-purple-400 transition-all cursor-pointer flex-shrink-0"
+                                          onClick={() => handleReplaceClick(file.id)}
+                                          title={`${file.name} — click to replace`}
+                                        >
+                                          {/* Thumbnail preview */}
+                                          {file.type === 'image' ? (
+                                            <img
+                                              src={file.preview}
+                                              alt={file.name}
+                                              className="w-full h-full object-cover"
+                                            />
+                                          ) : (
+                                            <div className="relative w-full h-full">
+                                              <video
+                                                src={file.preview}
+                                                className="w-full h-full object-cover"
+                                                muted
+                                              />
+                                              <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                                                <Play className="h-4 w-4 text-white" />
+                                              </div>
+                                            </div>
+                                          )}
+
+                                          {/* Top-left badge: green check (existing) or purple NEW */}
+                                          <div className={`absolute top-0.5 left-0.5 flex items-center justify-center rounded text-[8px] font-bold leading-none z-10 ${
+                                            file.isExisting
+                                              ? 'w-3.5 h-3.5 bg-emerald-500 text-white'
+                                              : 'px-1 py-0.5 bg-purple-600 text-white'
+                                          }`}>
+                                            {file.isExisting ? <Check className="h-2.5 w-2.5" /> : 'NEW'}
+                                          </div>
+
+                                          {/* Spinner overlay when uploading */}
+                                          {file.uploading && (
+                                            <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-20">
+                                              <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
+                                            </div>
+                                          )}
+
+                                          {/* Error overlay */}
+                                          {file.error && (
+                                            <div className="absolute inset-0 bg-red-500/60 flex items-center justify-center z-20">
+                                              <X className="h-4 w-4 text-white" />
+                                            </div>
+                                          )}
+
+                                          {/* Hover remove button (top-right) */}
+                                          <button
+                                            type="button"
+                                            onClick={(e) => { e.stopPropagation(); removeFile(file.id); }}
+                                            className="absolute top-0 right-0 w-4 h-4 bg-red-500 hover:bg-red-600 text-white rounded-bl-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-30"
+                                            title="Remove"
+                                          >
+                                            <X className="h-2.5 w-2.5" />
+                                          </button>
+                                        </div>
+                                      ))}
+
+                                      {/* "+" add-media tile */}
+                                      <button
+                                        type="button"
+                                        onClick={onButtonClick}
+                                        className="w-16 h-16 rounded-lg border-2 border-dashed border-gray-300 hover:border-purple-400 hover:bg-purple-50 flex items-center justify-center transition-all flex-shrink-0 bg-white"
+                                        title="Add media"
+                                      >
+                                        <Plus className="h-6 w-6 text-gray-400" />
+                                      </button>
+
+                                      {/* Send button (appears if any new files are added or replaced) */}
+                                      {uploadedFiles.some(f => !f.isExisting) && (
+                                        <button
+                                          type="button"
+                                          onClick={handleSubmit}
+                                          disabled={uploadedFiles.some(f => f.uploading) || submitting}
+                                          className="w-12 h-12 rounded-full bg-green-500 hover:bg-green-600 disabled:bg-green-300 text-white flex items-center justify-center transition-all shadow-md group ml-2 flex-shrink-0"
+                                          title="Send to Admin"
+                                        >
+                                          {submitting ? (
+                                            <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
+                                          ) : (
+                                            <Send className="h-5 w-5 transform group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
+                                          )}
+                                        </button>
+                                      )}
+                                    </div>
+                                  )}
                                   {previousVersions[selectedVersionIndex].media?.length > 0 ? (
                                     <div>
                                       {previousVersions[selectedVersionIndex].media.length > 1 && (
@@ -2369,30 +2521,7 @@ function ContentUpload() {
                                         </div>
                                       </div>
 
-                                      {/* Media thumbnails strip */}
-                                      {previousVersions[selectedVersionIndex].media.length > 1 && (
-                                        <div className="flex justify-center gap-2 mt-4">
-                                          {previousVersions[selectedVersionIndex].media.map((media, index) => (
-                                            <button
-                                              key={index}
-                                              onClick={() => setSelectedMediaIndex(index)}
-                                              className={`w-16 h-16 rounded-lg overflow-hidden border-2 transition-all ${
-                                                selectedMediaIndex === index
-                                                  ? 'border-purple-500 ring-2 ring-purple-200'
-                                                  : 'border-gray-200 hover:border-gray-300'
-                                              }`}
-                                            >
-                                              {media.type === 'image' && media.url ? (
-                                                <img src={media.url} alt={`Thumbnail ${index + 1}`} className="w-full h-full object-cover" />
-                                              ) : (
-                                                <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-                                                  <Video className="h-6 w-6 text-gray-400" />
-                                                </div>
-                                              )}
-                                            </button>
-                                          ))}
-                                        </div>
-                                      )}
+
                                     </div>
                                   ) : (
                                     <div className="h-64 bg-gray-200 rounded-xl flex items-center justify-center">
@@ -2404,26 +2533,7 @@ function ContentUpload() {
                                   )}
                                 </div>
 
-                                {/* Caption / Hashtags / Notes / Status */}
                                 <div className="space-y-4">
-                                  <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Caption</label>
-                                    <div className="bg-white rounded-lg p-4 border border-gray-200">
-                                      <p className="text-gray-900">{previousVersions[selectedVersionIndex].caption || 'No caption'}</p>
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Hashtags</label>
-                                    <div className="bg-white rounded-lg p-4 border border-gray-200">
-                                      <p className="text-blue-600 font-medium">{previousVersions[selectedVersionIndex].hashtags || 'No hashtags'}</p>
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
-                                    <div className="bg-white rounded-lg p-4 border border-gray-200">
-                                      <p className="text-gray-900">{previousVersions[selectedVersionIndex].notes || 'No notes'}</p>
-                                    </div>
-                                  </div>
                                   {previousVersions[selectedVersionIndex].thumbnailUrl && (
                                     <div>
                                       <label className="block text-sm font-medium text-gray-700 mb-2">Video Thumbnail</label>
@@ -2436,7 +2546,8 @@ function ContentUpload() {
                                       </div>
                                     </div>
                                   )}
-                                  <div className="flex items-center justify-between text-sm text-gray-500">
+                                </div>
+                                <div className="flex items-center justify-between text-sm text-gray-500">
                                     <span>Created: {formatVersionDateLong(previousVersions[selectedVersionIndex].createdAt)}</span>
                                     <div className="flex items-center gap-2 flex-wrap justify-end">
                                       {(previousVersions[selectedVersionIndex].status === 'approved' ||
@@ -2462,7 +2573,6 @@ function ContentUpload() {
                                       </div>
                                     </div>
                                   )}
-                                </div>
                               </div>
                             )}
                           </div>
@@ -2755,147 +2865,55 @@ function ContentUpload() {
               )}
             </div>
 
-            {/* Media Preview Grid */}
-            {uploadedFiles.length > 0 && (
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <input
-                  ref={replaceFileInputRef}
-                  type="file"
-                  accept="image/*,video/*"
-                  onChange={handleReplaceChange}
-                  className="hidden"
-                />
-                <h3 className="font-semibold text-gray-900 mb-4 flex items-center">
-                  <Image className="h-5 w-5 mr-2 text-purple-600" />
-                  Media Files ({uploadedFiles.length})
-                </h3>
-                {validationNotice && (
-                  <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                    {validationNotice}
-                  </div>
-                )}
-                <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-                  {uploadedFiles.map((file) => (
-                    <div key={file.id} className="relative group">
-                      <div 
-                        className="aspect-square rounded-lg overflow-hidden bg-gray-100 ring-2 ring-transparent group-hover:ring-purple-200 transition-all relative cursor-pointer"
-                        onClick={() => setSelectedMedia(file)}
-                      >
-                        {/* Existing vs New Badge */}
-                        <div className={`absolute top-2 left-2 px-1.5 py-0.5 rounded text-[9px] font-bold text-white shadow-sm z-10 ${
-                          file.isExisting 
-                            ? 'bg-emerald-600/90 backdrop-blur-sm' 
-                            : 'bg-purple-600/90 backdrop-blur-sm'
-                        }`}>
-                          {file.isExisting ? 'Existing' : 'New'}
-                        </div>
 
-                        {file.type === 'image' ? (
-                          <img
-                            src={file.preview}
-                            alt={file.name}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="relative w-full h-full">
-                            <video
-                              src={file.preview}
-                              className="w-full h-full object-cover"
-                              muted
-                            />
-                            <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30">
-                              <Play className="h-8 w-8 text-white" />
-                            </div>
-                            <div className="absolute bottom-2 left-2 bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded">
-                              VIDEO
-                            </div>
-                          </div>
-                        )}
-                        
-                        {/* Upload Status Overlay */}
-                        {file.uploading && (
-                          <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-                            <div className="text-white text-center">
-                              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mx-auto mb-2"></div>
-                              <p className="text-xs">Uploading...</p>
-                            </div>
-                          </div>
-                        )}
-                        
-                        {file.uploaded && (
-                          <div className="absolute top-2 right-2 bg-green-500 text-white rounded-full p-1 z-10">
-                            <Check className="h-3 w-3" />
-                          </div>
-                        )}
-                        
-                        {file.error && (
-                          <div className="absolute inset-0 bg-red-500 bg-opacity-50 flex items-center justify-center z-10">
-                            <div className="text-white text-center p-2">
-                              <X className="h-4 w-4 mx-auto mb-1" />
-                              <p className="text-xs">Failed</p>
-                              <button
-                                onClick={() => retryUpload(file)}
-                                className="text-xs underline mt-1"
-                              >
-                                Retry
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                      
-                      <button
-                        type="button"
-                        onClick={() => handleReplaceClick(file.id)}
-                        className="absolute -top-2 right-6 bg-blue-600 hover:bg-blue-700 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
-                        title="Replace file"
-                      >
-                        <Upload className="h-3 w-3" />
-                      </button>
-
-                      <button
-                        onClick={() => removeFile(file.id)}
-                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                      
-                      <div className="mt-2">
-                        <p className="text-xs font-medium text-gray-900 truncate">{file.name}</p>
-                        <div className="flex items-center justify-between">
-                          <p className="text-xs text-gray-500">{formatFileSize(file.size)}</p>
-                          <span className={`text-xs px-2 py-1 rounded-full ${
-                            file.type === 'image' 
-                              ? 'bg-green-100 text-green-800' 
-                              : 'bg-blue-100 text-blue-800'
-                          }`}>
-                            {file.type.toUpperCase()}
-                          </span>
-                        </div>
-                        {file.error && (
-                          <p className="text-xs text-red-500 mt-1 truncate" title={file.error}>
-                            {file.error}
-                          </p>
-                        )}
-                        {file.warnings && file.warnings.length > 0 && (
-                          <div className="mt-1 space-y-1">
-                            {file.warnings.map((warning, index) => (
-                              <p key={`${file.id}-warning-${index}`} className="text-xs text-amber-700 truncate" title={warning}>
-                                {warning}
-                              </p>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Right Column - Content Details & Assignment Info */}
           <div className="space-y-6">
+            {/* Assignment Details (Moved here) */}
+            <div className="bg-white rounded-lg shadow-sm p-4">
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                <div>
+                  <h1 className="text-lg font-bold text-gray-900">{assignment.title}</h1>
+                  <p className="text-sm text-gray-600">for {assignment.customerName}</p>
+                  {assignment.description && (
+                    <p className="text-sm text-gray-600 mt-2">{assignment.description}</p>
+                  )}
+                </div>
+                <div className="text-left sm:text-right">
+                  <div className="flex items-center text-xs text-gray-500 mb-2 sm:justify-end">
+                    <Calendar className="h-3 w-3 mr-1" />
+                    {assignment.dueDate ? new Date(assignment.dueDate).toLocaleDateString() : 'N/A'}
+                  </div>
+                  <div className="flex items-center gap-1 flex-wrap sm:justify-end">
+                    {(Array.isArray(assignment.platform) ? assignment.platform : [assignment.platform]).filter(Boolean).map((p, pi) => (
+                      <span key={pi} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-xs font-medium ${
+                        p.toLowerCase() === 'facebook'  ? 'bg-blue-100 text-blue-700 border-blue-200' :
+                        p.toLowerCase() === 'instagram' ? 'bg-pink-100 text-pink-700 border-pink-200' :
+                        p.toLowerCase() === 'youtube'   ? 'bg-red-100 text-red-700 border-red-200' :
+                        p.toLowerCase() === 'linkedin'  ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                        p.toLowerCase() === 'twitter'   ? 'bg-sky-100 text-sky-700 border-sky-200' :
+                        'bg-gray-100 text-gray-700 border-gray-200'
+                      }`}>
+                        {p.toLowerCase() === 'facebook'  ? <Facebook  className="h-3 w-3" /> :
+                         p.toLowerCase() === 'instagram' ? <Instagram className="h-3 w-3" /> :
+                         p.toLowerCase() === 'linkedin'  ? <Linkedin  className="h-3 w-3" /> :
+                         p.toLowerCase() === 'youtube'   ? <Youtube   className="h-3 w-3" /> :
+                         p.toLowerCase() === 'twitter'   ? <Twitter   className="h-3 w-3" /> :
+                         <Globe className="h-3 w-3" />}
+                        {p.charAt(0).toUpperCase() + p.slice(1)}
+                      </span>
+                    ))}
+                    {assignment.postType && (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded border text-xs font-semibold bg-amber-50 text-amber-700 border-amber-200 capitalize">
+                        {assignment.postType}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* Content Details Form */}
             <div className="bg-white rounded-lg shadow-sm p-6">
               <h2 className="text-lg font-semibold mb-4 flex items-center">

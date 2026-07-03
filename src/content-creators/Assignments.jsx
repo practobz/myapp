@@ -622,6 +622,8 @@ function Assignments() {
   const [assignments, setAssignments] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [customerMap, setCustomerMap] = useState({});
+  const [customersLoaded, setCustomersLoaded] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [expandedCustomers, setExpandedCustomers] = useState({});
   const [expandedCalendars, setExpandedCalendars] = useState({});
   const [selectedCustomerId, setSelectedCustomerId] = useState(null);
@@ -666,6 +668,8 @@ function Assignments() {
       } catch (err) {
         setCustomers([]);
         setCustomerMap({});
+      } finally {
+        setCustomersLoaded(true);
       }
     };
     fetchCustomers();
@@ -742,12 +746,16 @@ function Assignments() {
       }
     };
 
-    if (creatorEmail && creatorEmail.length > 0 && Object.keys(customerMap).length > 0) {
-      fetchAssignments();
-      fetchScheduledPosts();
-      fetchSubmissions();
+    if (creatorEmail && creatorEmail.length > 0 && customersLoaded) {
+      Promise.all([
+        fetchAssignments(),
+        fetchScheduledPosts(),
+        fetchSubmissions()
+      ]).finally(() => {
+        setLoading(false);
+      });
     }
-  }, [creatorEmail, customerMap]);
+  }, [creatorEmail, customerMap, customersLoaded]);
 
   // Helper: check if content is published on any platform
   const isContentPublished = (assignmentId) => {
@@ -1194,6 +1202,13 @@ function Assignments() {
         <div className="space-y-4">
           {selectedFilter === 'review_updates' ? (
             <CustomerFeedback isTab={true} />
+          ) : loading ? (
+            <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-gray-200/50">
+              <div className="text-center py-12">
+                <div className="animate-spin rounded-full h-10 w-10 border-4 border-gray-200 border-t-purple-600 mx-auto mb-4" />
+                <p className="text-gray-500 font-medium">Loading assignments...</p>
+              </div>
+            </div>
           ) : sortedCustomers.length > 0 ? (
             sortedCustomers.map((custGroup) => {
               const isCustExpanded = expandedCustomers[custGroup.customerId] === true;

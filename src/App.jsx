@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 
 import { AuthProvider } from './admin/contexts/AuthContext';
@@ -41,9 +41,6 @@ import Subscription from './customer/Subscription';
 import ContentReview from './customer/ContentReview';
 import MediaLibrary from './customer/MediaLibrary';
 
-import AdminCustomerSocialManager from './components/AdminCustomerSocialManager';
-import IntegratedPostAnalytics from './components/IntegratedPostAnalytics';
-import CustomerValueDashboard from './components/CustomerValueDashboard';
 import SocialAnalyticsDashboard from './customer/Integration/SocialAnalyticsDashboard';
 
 // Integration imports
@@ -168,12 +165,6 @@ function SocialIntegrationsPublic() {
 }
 
 function App() {
-  // State to hold integration data
-  const [facebookPages] = useState([]);
-  const [instagramAccount] = useState(null);
-  const [youtubeChannels] = useState([]);
-  const [customerInfo] = useState(null);
-
   // If the QR was generated with search params but the hash points somewhere else
   // (for example ".../configure?...# /login"), rewrite the hash to load /configure
   // with the original query so Configure.jsx runs under HashRouter.
@@ -202,16 +193,6 @@ function App() {
     <Router>
       <AuthProvider>
           <div className="min-h-screen bg-gray-50">
-            <div>
-              {/* Remove duplicated IntegratedPostAnalytics here */}
-              {/* Pass data as props to dashboard */}
-              {/* <IntegratedPostAnalytics
-                instagramAccount={instagramAccount}
-                facebookPages={facebookPages}
-                youtubeChannels={youtubeChannels}
-                customerInfo={customerInfo}
-              /> */}
-            </div>
             <Routes>
               {/* Public Auth Routes */}
               <Route path="/signup" element={<Signup />} />
@@ -325,27 +306,6 @@ function App() {
                   <SummaryReport />
                 </ProtectedRoutePortal>
               } />
-              {/* Admin Social Manager Route */}
-              <Route path="/admin/customer-social-manager" element={
-                <ProtectedRoutePortal role="admin">
-                  <AdminCustomerSocialManager />
-                </ProtectedRoutePortal>
-              } />
-              <Route path="/admin/integrated-post-analytics" element={
-                <ProtectedRoutePortal role="admin">
-                  <IntegratedPostAnalytics
-                    instagramAccount={instagramAccount}
-                    facebookPages={facebookPages}
-                    youtubeChannels={youtubeChannels}
-                    customerInfo={customerInfo}
-                  />
-                </ProtectedRoutePortal>
-              } />
-              <Route path="/admin/customer-value-dashboard" element={
-                <ProtectedRoutePortal role="admin">
-                  <CustomerValueDashboard />
-                </ProtectedRoutePortal>
-              } />
               <Route path="/admin/social-analytics-dashboard" element={
                 <ProtectedRoutePortal role="admin">
                   <SocialAnalyticsDashboard />
@@ -434,25 +394,6 @@ function App() {
                 <ProtectedRoutePortal role="customer">
                   <CustomerLayout>
                     <ContentUpload />
-                  </CustomerLayout>
-                </ProtectedRoutePortal>
-              } />
-              <Route path="/customer/customer-value-dashboard" element={
-                <ProtectedRoutePortal role="customer">
-                  <CustomerLayout>
-                    <CustomerValueDashboard />
-                  </CustomerLayout>
-                </ProtectedRoutePortal>
-              } />
-              <Route path="/customer/integrated-post-analytics" element={
-                <ProtectedRoutePortal role="customer">
-                  <CustomerLayout>
-                    <IntegratedPostAnalytics
-                      instagramAccount={instagramAccount}
-                      facebookPages={facebookPages}
-                      youtubeChannels={youtubeChannels}
-                      customerInfo={customerInfo}
-                    />
                   </CustomerLayout>
                 </ProtectedRoutePortal>
               } />

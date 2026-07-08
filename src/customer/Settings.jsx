@@ -15,7 +15,6 @@ import InstagramAdsIntegration from './Integration/InstagramAdsIntegration';
 import YouTubeIntegration from './Integration/YouTubeIntegration';
 import TwitterIntegration from './Integration/TwitterIntegration';
 import LinkedInIntegration from './Integration/LinkedInIntegration';
-import CustomerSocialMediaLinks from '../components/CustomerSocialMediaLinks';
 import { getUserData } from '../utils/sessionUtils'; // Add this import if not present
 
 // Enhanced platform configuration with better styling

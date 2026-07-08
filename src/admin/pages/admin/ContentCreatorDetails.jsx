@@ -579,11 +579,11 @@ function ContentCreatorDetails() {
             <p className="text-gray-500 text-sm">{error || "This creator doesn't exist."}</p>
           </div>
           <button
-            onClick={() => navigate('/admin/content-creators')}
+            onClick={() => navigate('/admin/dashboard')}
             className="flex items-center gap-2 px-5 py-2.5 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back to Creators
+            Back to Dashboard
           </button>
         </div>
       </AdminLayout>
@@ -597,12 +597,6 @@ function ContentCreatorDetails() {
         <div className="bg-white rounded-xl border border-gray-100 p-6">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5 mb-6">
             <div className="flex items-center gap-4">
-              <button
-                onClick={() => navigate('/admin/content-creators')}
-                className="h-10 w-10 flex items-center justify-center rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors"
-              >
-                <ArrowLeft className="h-5 w-5 text-gray-600" />
-              </button>
               <div className="h-14 w-14 bg-gray-900 rounded-xl flex items-center justify-center flex-shrink-0">
                 <span className="text-white font-bold text-xl">
                   {(creator.name || creator.email || 'U').charAt(0).toUpperCase()}

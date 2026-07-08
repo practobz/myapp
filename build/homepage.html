@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Airspark – Aureum Solutions</title>
+  <meta name="description" content="Airspark is a secure web application developed by Aureum Solutions. Users can sign in using Google to access their accounts." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+  <style>
+    :root{--accent:#0ea5a4;--muted:#64748b;--bg1:#0f172a;--bg2:#0b1220}
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,'Helvetica Neue',Arial}
+    body{background:linear-gradient(180deg,var(--bg1),var(--bg2));color:#e6eef3;display:flex;align-items:center;justify-content:center;padding:40px}
+    .container{max-width:1100px;width:100%;background:linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.02));border:1px solid rgba(255,255,255,0.04);border-radius:16px;padding:36px;box-shadow:0 8px 30px rgba(2,6,23,0.6)}
+    .header{display:flex;align-items:center;gap:18px}
+    .logo{width:64px;height:64px;border-radius:12px;background:linear-gradient(135deg,#06b6d4,#7c3aed);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:20px;color:white}
+    h1{margin:0;font-size:28px}
+    .lead{color:var(--muted);margin-top:8px}
+    .hero{display:flex;gap:32px;align-items:center;margin-top:26px}
+    .hero-left{flex:1}
+    .card{background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);padding:20px;border-radius:12px}
+    .cta{margin-top:18px;display:flex;gap:12px;align-items:center}
+    .btn{display:inline-flex;align-items:center;gap:10px;padding:10px 16px;border-radius:10px;font-weight:600;text-decoration:none;color:inherit}
+    .btn-primary{background:linear-gradient(90deg,#06b6d4,#7c3aed);color:#021124;box-shadow:0 6px 18px rgba(92,33,195,0.18)}
+    .btn-outline{border:1px solid rgba(255,255,255,0.06);color:#cfefff;background:transparent}
+    .features{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-top:22px}
+    .feature{background:rgba(255,255,255,0.02);padding:14px;border-radius:10px}
+    .muted{color:var(--muted);font-size:14px}
+    footer{display:flex;justify-content:space-between;align-items:center;margin-top:22px;color:var(--muted);font-size:13px}
+    a{color:inherit}
+    .google-icon{width:18px;height:18px}
+    @media (max-width:720px){.hero{flex-direction:column}.header{gap:12px}.logo{width:56px;height:56px}}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="logo">AS</div>
+      <div>
+        <h1>Airspark — by Aureum Solutions</h1>
+        <div class="lead">Secure, simple access to your account and services. Built with privacy and scale in mind.</div>
+      </div>
+    </div>
+
+    <div class="hero">
+      <div class="hero-left">
+        <div class="card">
+          <h2 style="margin:0 0 8px 0">Welcome back — streamline your workflow</h2>
+          <p class="muted">Airspark helps you manage your services, analytics and integrations from one secure dashboard. Sign in with Google to continue.</p>
+          <div class="cta">
+            <a class="btn btn-primary" href="/#/login" title="Sign in with Google">
+              <svg class="google-icon" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path fill="#EA4335" d="M24 9.5c3.9 0 6.7 1.6 8.2 2.9l6-6C34.9 3 30.9 1.5 24 1.5 14.7 1.5 6.9 6.8 3 14l7 5.4C12.7 15 17.7 9.5 24 9.5z"/>
+                <path fill="#34A853" d="M46.5 24c0-1.7-.2-3.3-.6-4.8H24v9.1h12.7c-.6 3-2.5 5.6-5.4 7.3l8.3 6.3C43.8 38.6 46.5 31.6 46.5 24z"/>
+                <path fill="#4A90E2" d="M10 29.4A14.9 14.9 0 0 1 9 24c0-1.6.3-3.2.8-4.6L3 14c-1.8 3.2-2.8 6.8-2.8 10.7 0 3.9 1 7.5 2.8 10.7l6.8-6.0z"/>
+                <path fill="#FBBC05" d="M24 46.5c6.9 0 12.9-2.3 17.3-6.2l-8.3-6.3c-2.6 1.8-6 2.9-9 2.9-6.3 0-11.6-4.9-12.8-11.2L3 34.5C6.9 41.7 14.7 46.5 24 46.5z"/>
+              </svg>
+              Sign in with Google
+            </a>
+            <a class="btn btn-outline" href="/privacy.html">Privacy Policy</a>
+          </div>
+        </div>
+
+        <div class="features">
+          <div class="feature">
+            <strong>Single sign-on</strong>
+            <div class="muted">Fast, secure Google authentication for teams and individuals.</div>
+          </div>
+          <div class="feature">
+            <strong>Privacy-focused</strong>
+            <div class="muted">We follow strict data handling practices — view our policy.</div>
+          </div>
+          <div class="feature">
+            <strong>Real-time insights</strong>
+            <div class="muted">Dashboards and reports to help you make better decisions.</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="width:320px;flex-shrink:0">
+        <div class="card" style="text-align:center">
+          <h3 style="margin-top:0">Get started</h3>
+          <p class="muted">New to Airspark? Create an account using Google — no password required.</p>
+          <a class="btn btn-primary" href="/#/login">Create account</a>
+          <hr style="border:none;border-top:1px solid rgba(255,255,255,0.04);margin:18px 0">
+          <div class="muted" style="font-size:13px">Questions? Email <a href="mailto:prachi@aureumsolutions.in">prachi@aureumsolutions.in</a></div>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      <div>© <strong>Aureum Solutions</strong> — Airspark</div>
+      <div>
+        <a href="/privacy.html">Privacy</a> &nbsp;|&nbsp; <a href="/terms.html">Terms</a>
+      </div>
+    </footer>
+  </div>
+</body>
+</html>

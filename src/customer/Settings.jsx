@@ -15,7 +15,6 @@ import InstagramAdsIntegration from './Integration/InstagramAdsIntegration';
 import YouTubeIntegration from './Integration/YouTubeIntegration';
 import TwitterIntegration from './Integration/TwitterIntegration';
 import LinkedInIntegration from './Integration/LinkedInIntegration';
-import WhatsAppIntegration from '../components/WhatsAppIntegration';
 import CustomerSocialMediaLinks from '../components/CustomerSocialMediaLinks';
 import { getUserData } from '../utils/sessionUtils'; // Add this import if not present
 
@@ -936,46 +935,6 @@ function Settings() {
               <TwitterIntegration
                 onConnectionStatusChange={status => handleConnectionStatusChange('twitter', status)}
               />
-            )}
-            {activeIntegration === 'whatsapp' && (
-              <div>
-                {/* Debug info to show what data we have */}
-                <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                  <h4 className="text-sm font-medium text-blue-900 mb-2">Customer Data Debug</h4>
-                  <div className="text-xs text-blue-800 space-y-1">
-                    <div><strong>Name:</strong> {customerData?.name || 'Not loaded'}</div>
-                    <div><strong>Email:</strong> {customerData?.email || 'Not loaded'}</div>
-                    <div><strong>Mobile:</strong> {customerData?.mobile || 'Not loaded'}</div>
-                    <div><strong>Customer ID:</strong> {currentUser?._id || 'Not loaded'}</div>
-                    <div><strong>Mobile Type:</strong> {typeof customerData?.mobile}</div>
-                    <div><strong>Mobile Length:</strong> {customerData?.mobile?.length || 0}</div>
-                    <div><strong>Raw Customer Data:</strong> {JSON.stringify(customerData, null, 2)}</div>
-                  </div>
-                </div>
-                
-                <WhatsAppIntegration 
-                  contentDetails={{
-                    id: 'test-content-id',
-                    creatorId: currentUser?._id || '',
-                    creatorName: customerData?.name || currentUser?.name || 'Test Creator',
-                    title: 'Test Content Notification',
-                    contentType: 'Instagram Post',
-                    customerId: currentUser?._id || '',
-                    customerEmail: customerData?.email || currentUser?.email || '',
-                    customerPhone: customerData?.mobile || currentUser?.mobile || null
-                  }}
-                  onNotificationSent={(data) => {
-                    console.log('WhatsApp notification sent:', data);
-                    // Update connection status if successful
-                    if (data.success) {
-                      setConnectionStatus(prev => ({
-                        ...prev,
-                        whatsapp: true
-                      }));
-                    }
-                  }}
-                />
-              </div>
             )}
           </div>
         </div>

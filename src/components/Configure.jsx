@@ -37,6 +37,8 @@ export default function Configure() {
 
   // NEW: awaiting user gesture to allow opening popup
   const [awaitingUserGesture, setAwaitingUserGesture] = useState(false);
+  
+  // NEW: show accept/reject confirmation when QR is scanned
   const [showConfirmation, setShowConfirmation] = useState(false);
 
   const socialRef = useRef(null);
@@ -47,7 +49,7 @@ export default function Configure() {
     const platform = params.get('platform') || '';
     const auto = params.get('autoConnect') || params.get('auto') || '';
     const timestamp = params.get('t');
-const source = params.get('source') || '';
+    const source = params.get('source') || '';
 
     console.log('🔍 Configure URL params:', { customerId, platform, auto, timestamp, source });
     console.log('🔍 Current URL:', window.location.href);
@@ -60,11 +62,11 @@ const source = params.get('source') || '';
     }
 
     setPlatformKey(platform);
-   
     // Show accept/reject for QR scans OR explicit autoConnect
     // If timestamp is present, it's likely from a QR code
     const isQrScan = timestamp || source === 'admin-qr-generator' || auto === '1' || auto === 'true';
     setAutoConnect(isQrScan);
+
     // Use a local timer id and do NOT return early so fetchCustomer runs
     let tId = null;
 
@@ -208,9 +210,52 @@ const source = params.get('source') || '';
     // then show accept/reject confirmation dialog
     if (!autoConnect || !customer || !platformKey) return;
 
-    // show confirmation dialog for QR scan
+    // Show confirmation dialog first
     setShowConfirmation(true);
   }, [autoConnect, customer, platformKey]);
+  
+  const handleAcceptConnection = () => {
+    // User accepted, now show the connect prompt
+    setShowConfirmation(false);
+    setAwaitingUserGesture(true);
+    
+    // focus the button shortly after render so mobile users can tap faster
+    setTimeout(() => {
+      const btn = document.getElementById('auto-connect-btn');
+      if (btn) btn.focus();
+    }, 300);
+  };
+  
+  const handleRejectConnection = () => {
+    // User rejected the connection
+    setShowConfirmation(false);
+    
+    // Show rejection overlay
+    const rejectOverlay = document.createElement('div');
+    rejectOverlay.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-6';
+    rejectOverlay.innerHTML = `
+      <div class="bg-white rounded-xl p-8 max-w-md w-full text-center shadow-lg">
+        <div class="flex justify-center mb-4">
+          <svg class="w-16 h-16 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </div>
+        <h3 class="text-xl font-semibold mb-2 text-slate-900">Connection Cancelled</h3>
+        <p class="text-sm text-slate-600 mb-6">
+          The account connection was cancelled. No changes were made.
+        </p>
+        <p class="text-xs text-slate-500">
+          You can now close this window.
+        </p>
+      </div>
+    `;
+    document.body.appendChild(rejectOverlay);
+    
+    // Try to close the window after 2 seconds
+    setTimeout(() => {
+      window.close();
+    }, 2000);
+  };
 
   const mapPlatform = (key) => {
     switch (key) {
@@ -224,41 +269,6 @@ const source = params.get('source') || '';
   };
 
   const platform = mapPlatform(platformKey);
-
-  // Handle accept connection from confirmation dialog
-  const handleAcceptConnection = () => {
-    setShowConfirmation(false);
-    setAwaitingUserGesture(true);
-  };
-
-  // Handle reject connection from confirmation dialog
-  const handleRejectConnection = () => {
-    setShowConfirmation(false);
-    setError('Connection request was rejected.');
-    
-    // Show rejection message and close window
-    const rejectOverlay = document.createElement('div');
-    rejectOverlay.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-6';
-    rejectOverlay.innerHTML = `
-      <div class="bg-white rounded-xl p-8 max-w-md w-full text-center shadow-lg">
-        <div class="flex justify-center mb-4">
-          <svg class="w-16 h-16 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-          </svg>
-        </div>
-        <h3 class="text-xl font-semibold mb-2 text-slate-900">Connection Rejected</h3>
-        <p class="text-sm text-slate-600 mb-4">
-          You can close this window now.
-        </p>
-      </div>
-    `;
-    document.body.appendChild(rejectOverlay);
-    
-    // Try to close the window after 2 seconds
-    setTimeout(() => {
-      window.close();
-    }, 2000);
-  };
 
   if (error) {
     return (
@@ -331,8 +341,7 @@ const source = params.get('source') || '';
           customer={customer}
           compact={true}
           onConnectionSuccess={() => {
-            // minimal success UX: show confirmation then redirect to app home
-           // Show success message and close window/tab after QR scan connection
+            // Show success message and close window/tab after QR scan connection
             setAwaitingUserGesture(false);
             setError('');
             
@@ -383,7 +392,8 @@ const source = params.get('source') || '';
             }, 2000);
           }}
         />
- {/* NEW: Accept/Reject confirmation dialog when QR is scanned */}
+             
+        {/* NEW: Accept/Reject confirmation dialog when QR is scanned */}
         {showConfirmation && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-6">
             <div className="bg-white rounded-xl p-6 max-w-md w-full shadow-lg">

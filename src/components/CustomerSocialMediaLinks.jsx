@@ -72,7 +72,7 @@ function CustomerSocialMediaLinks({ customerId: propCustomerId }) {
         appId: FACEBOOK_APP_ID,
         cookie: true,
         xfbml: false,
-        version: 'v19.0'
+        version: 'v22.0'
       });
       setFbSdkLoaded(true);
     };

@@ -20,7 +20,7 @@ const PersonCard = React.memo(({ person, variant, href, contentCount }) => {
   const isCustomer = variant === 'customer';
   const Icon = isCustomer ? Users : UserCheck;
   const displayName = person.name || `${person.firstName || ''} ${person.lastName || ''}`.trim() || 'Unnamed';
-
+  
   const handleOpen = () => {
     const path = href.startsWith('/') ? href.slice(1) : href;
     const targetUrl = `${window.location.origin}${window.location.pathname}${path}`;

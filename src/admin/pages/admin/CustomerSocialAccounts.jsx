@@ -782,6 +782,8 @@ function AccountDetailModal({ account, customer, onClose, onDisconnect }) {
               </div>
             )}
           </div>
+
+
         </div>
       </div>
 

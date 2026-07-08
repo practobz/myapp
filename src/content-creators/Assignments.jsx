@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
-import { ArrowLeft, Filter, Search, MessageSquare, CheckCircle, Clock, AlertCircle, Palette, Calendar, User, ChevronDown, ChevronUp, Building2, Users, Globe, ShieldCheck, Bell, Send, Image, Eye, Play, MapPin, Video } from 'lucide-react';
+import { ArrowLeft, Filter, Search, MessageSquare, CheckCircle, Clock, AlertCircle, Palette, Calendar, User, ChevronDown, ChevronUp, Building2, Users, Globe, ShieldCheck, Bell, Send, Image, Eye, Play, MapPin, Video, FileText } from 'lucide-react';
 import { Facebook, Instagram, Linkedin, Youtube, Twitter } from 'lucide-react';
 import Logo from '../admin/components/layout/Logo';
 import ContentCreatorLayout from './Layout';
@@ -826,7 +826,8 @@ function Assignments() {
 
       const isCustomerApproved = (s.approved_by_customer === true || s.status === 'approved_customer' || s.status === 'approved_both') &&
         s.status !== 'under_review' && s.status !== 'sent_to_creator' && s.status !== 'revision_requested' && s.status !== 'rejected';
-      const isAdminApproved = s.approved_by_admin === true || s.status === 'approved_admin' || s.status === 'approved_both' || (s.status === 'approved' && !s.approved_by_customer) || stage === 'customer';
+      const isAdminApproved = (s.approved_by_admin === true || s.status === 'approved_admin' || s.status === 'approved_both' || (s.status === 'approved' && !s.approved_by_customer) || stage === 'customer') &&
+        s.status !== 'revision_requested' && s.status !== 'rejected';
 
       if (isAdminApproved) {
         keys.forEach(k => adminApprovedKeys.add(k));
@@ -858,11 +859,11 @@ function Assignments() {
     if (isCustApproved) {
       return { label: 'Customer Approved', color: 'bg-emerald-100 text-emerald-700 border-emerald-200', icon: <CheckCircle className="h-3 w-3" />, canReupload: false, revisionNotes: '' };
     }
-    if (sub.submission_stage === 'customer') {
-      return { label: 'Under Customer Review', color: 'bg-blue-100 text-blue-700 border-blue-200', icon: <Eye className="h-3 w-3" />, canReupload: false, revisionNotes: '' };
-    }
     if (sub.status === 'revision_requested') {
       return { label: 'Revision Requested', color: 'bg-orange-100 text-orange-700 border-orange-200', icon: <AlertCircle className="h-3 w-3" />, canReupload: true, revisionNotes: sub.rejectionReason || '' };
+    }
+    if (sub.submission_stage === 'customer') {
+      return { label: 'Under Customer Review', color: 'bg-blue-100 text-blue-700 border-blue-200', icon: <Eye className="h-3 w-3" />, canReupload: false, revisionNotes: '' };
     }
     if (sub.status === 'approved') {
       return { label: 'Approved by Admin', color: 'bg-orange-100 text-orange-700 border-orange-200', icon: <CheckCircle className="h-3 w-3" />, canReupload: false, revisionNotes: '' };
@@ -1361,12 +1362,10 @@ function Assignments() {
                                             ))}
                                           </div>
                                           {assignment.postType && (
-                                            <div className="flex items-center gap-1">
-                                              <span className="text-xs font-semibold text-gray-400 uppercase">Post Type:</span>
-                                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-100 capitalize">
-                                                {assignment.postType}
-                                              </span>
-                                            </div>
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-100 capitalize">
+                                              <FileText className="h-3 w-3" />
+                                              Type: {assignment.postType}
+                                            </span>
                                           )}
                                           <div className="flex items-center gap-1">
                                             <span className="text-xs font-semibold text-gray-400 uppercase">Due:</span>

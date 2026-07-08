@@ -380,9 +380,11 @@ function Dashboard() {
       <style>{CSS}</style>
       <div className="space-y-6">
         {/* Welcome Banner */}
-        <div className="bg-gradient-to-r from-purple-600 via-purple-500 to-indigo-600 rounded-2xl shadow-lg p-6 sm:p-8 text-white">
-          <h1 className="text-2xl sm:text-3xl font-bold mb-2">Welcome, Content Creator!</h1>
-          <p className="text-purple-100 text-sm sm:text-base max-w-xl">Manage your content assignments and track your progress</p>
+        <div className="bg-gradient-to-r from-purple-600 via-purple-500 to-indigo-600 rounded-xl shadow p-3 sm:p-4 text-white mb-3 flex items-center">
+          <div>
+            <h1 className="text-base sm:text-lg font-bold mb-0.5">Welcome, Content Creator!</h1>
+            <p className="text-purple-100 text-xs sm:text-sm">Manage your content assignments and track your progress</p>
+          </div>
         </div>
 
         {/* Customers Section */}

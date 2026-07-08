@@ -1865,7 +1865,7 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
                           {/* Threaded Discussion replies */}
                           <div className="mx-2 mb-2 pl-4 border-l-2 border-indigo-100 space-y-1.5">
                             {(() => {
-                              const replies = comment.replies || (comment.adminReply ? [{
+                              const rawReplies = comment.replies || (comment.adminReply ? [{
                                 id: 'legacy-reply',
                                 authorRole: 'admin',
                                 authorName: comment.adminReply.adminName || 'Admin',
@@ -1873,6 +1873,23 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
                                 message: comment.adminReply.text,
                                 timestamp: comment.adminReply.timestamp
                               }] : []);
+                              
+                              const replies = [];
+                              let hasCreatorReply = false;
+                              for (const rep of rawReplies) {
+                                if (rep.authorRole === 'creator') {
+                                  hasCreatorReply = true;
+                                } else if (rep.authorRole === 'customer') {
+                                  replies.push(rep);
+                                } else if (rep.authorRole === 'admin') {
+                                  if (!hasCreatorReply) {
+                                    replies.push(rep);
+                                  }
+                                } else {
+                                  replies.push(rep); // fallback
+                                }
+                              }
+
                               return replies.map((rep, rIdx) => {
                                 return (
                                   <div key={rep.id || rIdx} className={`p-1.5 rounded text-[10px] border ${rep.authorRole === 'admin' ? 'bg-purple-50/50 border-purple-100' : rep.authorRole === 'creator' ? 'bg-green-50/50 border-green-100' : 'bg-blue-50/50 border-blue-100'}`}>
@@ -2060,7 +2077,7 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
                   {/* Threaded replies */}
                   <div className="mt-1.5 max-h-32 overflow-y-auto pl-2 border-l border-gray-200 space-y-1">
                     {(() => {
-                      const replies = comment.replies || (comment.adminReply ? [{
+                      const rawReplies = comment.replies || (comment.adminReply ? [{
                         id: 'legacy-reply',
                         authorRole: 'admin',
                         authorName: comment.adminReply.adminName || 'Admin',
@@ -2068,6 +2085,23 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
                         message: comment.adminReply.text,
                         timestamp: comment.adminReply.timestamp
                       }] : []);
+                      
+                      const replies = [];
+                      let hasCreatorReply = false;
+                      for (const rep of rawReplies) {
+                        if (rep.authorRole === 'creator') {
+                          hasCreatorReply = true;
+                        } else if (rep.authorRole === 'customer') {
+                          replies.push(rep);
+                        } else if (rep.authorRole === 'admin') {
+                          if (!hasCreatorReply) {
+                            replies.push(rep);
+                          }
+                        } else {
+                          replies.push(rep); // fallback
+                        }
+                      }
+
                       return replies.map((rep, rIdx) => {
                         return (
                           <div key={rep.id || rIdx} className={`p-1 rounded text-[9px] border ${rep.authorRole === 'admin' ? 'bg-purple-50 border-purple-100' : rep.authorRole === 'creator' ? 'bg-green-50 border-green-100' : 'bg-blue-50 border-blue-100'}`}>

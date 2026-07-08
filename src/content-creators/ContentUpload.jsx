@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams, useLocation } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
-import { ArrowLeft, Upload, Image, X, Check, CheckCircle, FileText, Calendar, Clock, Palette, Send, MapPin, Tag, MessageSquare, Play, Video, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, User, ShieldCheck, AlertCircle, History, Search, Globe, Plus } from 'lucide-react';
+import { ArrowLeft, Upload, Image, X, Check, CheckCircle, FileText, Calendar, Clock, Palette, Send, MapPin, Tag, MessageSquare, Play, Video, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, User, ShieldCheck, AlertCircle, History, Search, Globe, Plus, Edit3 } from 'lucide-react';
 import { Facebook, Instagram, Linkedin, Youtube, Twitter } from 'lucide-react';
 import ContentCreatorLayout from './Layout';
 import { validateMediaForPlatforms, validateThumbnail, hasMixedContent, hasMultipleVideos } from './mediaValidation';
@@ -111,6 +111,7 @@ function ContentUpload() {
   const [hoveredVersionComment, setHoveredVersionComment] = useState(null);
   const [versionImgDimensions, setVersionImgDimensions] = useState(null);
   const [replyingToComment, setReplyingToComment] = useState(null);
+  const [editingReplyId, setEditingReplyId] = useState(null);
   const [replyText, setReplyText] = useState('');
   const [replySubmitting, setReplySubmitting] = useState(false);
   const versionImgRef = useRef(null);
@@ -615,7 +616,7 @@ function ContentUpload() {
               status: sub.status || 'submitted',
               submissionStage: sub.submission_stage || sub.submissionStage || 'internal',
               approvalNotes: sub.approval_notes || sub.approvalNotes || '',
-              comments: sub.comments || [],
+              comments: (sub.comments || []).filter((c, i, arr) => i === arr.findIndex(x => x.id === c.id)),
               id: sub._id || sub.id || idx,
               sentToCustomerAt: sub.sent_to_customer_at || sub.sentToCustomerAt || null,
               thumbnailUrl: sub.thumbnailUrl || null,
@@ -835,7 +836,22 @@ function ContentUpload() {
       message: comment.reply.text,
       timestamp: comment.reply.timestamp
     }] : []);
-    const updatedReplies = [...existingReplies, newReply];
+    
+    let updatedReplies = [...existingReplies];
+    
+    if (editingReplyId) {
+      const index = updatedReplies.findIndex(r => r.id === editingReplyId);
+      if (index !== -1) {
+        updatedReplies[index] = {
+          ...updatedReplies[index],
+          message: replyText.trim(),
+          timestamp: new Date().toISOString()
+        };
+      }
+    } else {
+      updatedReplies.push(newReply);
+    }
+    
     const replyPayload = {
       reply: {
         text: replyText.trim(),
@@ -853,6 +869,7 @@ function ContentUpload() {
       setCommentsForVersion(commentsForVersion.map(c => c.id === commentId ? updated : c));
       setCommentsForCurrentMedia(commentsForCurrentMedia.map(c => c.id === commentId ? updated : c));
       setReplyingToComment(null);
+      setEditingReplyId(null);
       setReplyText('');
     } catch (err) {
       console.error('Failed to save reply:', err);
@@ -964,6 +981,33 @@ function ContentUpload() {
     const incomingFiles = Array.from(files || []);
     const validationPlatforms = getValidationPlatforms(assignment?.platform);
 
+    const postType = (assignment?.postType || '').toLowerCase();
+
+    if (postType === 'post' || postType === 'story') {
+      if (uploadedFiles.length + incomingFiles.length > 1) {
+        window.alert(`Only 1 image is allowed for a ${postType}.`);
+        return;
+      }
+      if (incomingFiles.some(f => f.type.startsWith('video/'))) {
+        window.alert(`Videos are not allowed for a ${postType}.`);
+        return;
+      }
+    } else if (postType === 'carousel') {
+      if (uploadedFiles.length + incomingFiles.length > 10) {
+        window.alert('Up to 10 images are allowed for a carousel.');
+        return;
+      }
+    } else if (postType === 'reel' || postType === 'video') {
+      if (uploadedFiles.length + incomingFiles.length > 1) {
+        window.alert('Only 1 video is allowed for a Reel/Video.');
+        return;
+      }
+      if (incomingFiles.some(f => !f.type.startsWith('video/'))) {
+        window.alert('Only video files are allowed for a Reel/Video.');
+        return;
+      }
+    }
+
     const incomingTypes = incomingFiles.map(f => f.type.startsWith('image/') ? 'image' : f.type.startsWith('video/') ? 'video' : null).filter(Boolean);
     const existingTypes = uploadedFiles.map(f => f.type);
     const allTypes = [...new Set([...existingTypes, ...incomingTypes])];
@@ -1056,6 +1100,19 @@ function ContentUpload() {
     }
 
     const validationPlatforms = getValidationPlatforms(assignment?.platform);
+    const postType = (assignment?.postType || '').toLowerCase();
+
+    if (postType === 'post' || postType === 'story') {
+      if (file.type.startsWith('video/')) {
+        window.alert(`Videos are not allowed for a ${postType}.`);
+        return;
+      }
+    } else if (postType === 'reel' || postType === 'video') {
+      if (!file.type.startsWith('video/')) {
+        window.alert('Only video files are allowed for a Reel/Video.');
+        return;
+      }
+    }
 
     const incomingType = file.type.startsWith('image/') ? 'image' : 'video';
     const otherFilesTypes = uploadedFiles.filter(f => f.id !== fileId).map(f => f.type);
@@ -1101,6 +1158,7 @@ function ContentUpload() {
           size: file.size,
           type: file.type.startsWith('image/') ? 'image' : 'video',
           isExisting: false,
+          isReplaced: true,
           uploaded: false,
           uploading: false,
           publicUrl: null,
@@ -1316,6 +1374,33 @@ function ContentUpload() {
       return;
     }
 
+    const postType = (assignment?.postType || '').toLowerCase();
+
+    if (postType === 'post' || postType === 'story') {
+      if (uploadedFiles.length > 1) {
+        alert(`Only 1 image is allowed for a ${postType}.`);
+        return;
+      }
+      if (uploadedFiles.some(f => f.type === 'video')) {
+        alert(`Videos are not allowed for a ${postType}.`);
+        return;
+      }
+    } else if (postType === 'carousel') {
+      if (uploadedFiles.length > 10) {
+        alert('Up to 10 images are allowed for a carousel.');
+        return;
+      }
+    } else if (postType === 'reel' || postType === 'video') {
+      if (uploadedFiles.length > 1) {
+        alert('Only 1 video is allowed for a Reel/Video.');
+        return;
+      }
+      if (uploadedFiles.some(f => f.type !== 'video')) {
+        alert('Only video files are allowed for a Reel/Video.');
+        return;
+      }
+    }
+
     if (hasMixedContent(uploadedFiles)) {
       alert('Mixed content is not allowed for carousel posts. You cannot upload images and videos together.');
       return;
@@ -1419,15 +1504,15 @@ function ContentUpload() {
         assignment_description: assignment.description,
         due_date: assignment.dueDate,
         status: 'submitted',
-        // Content creators submit for internal review; customers/admins upload directly for customer review
-        submission_stage: activeTab === 'admin' ? 'internal' : 'customer',
+        // Content creators submit for internal review; they can no longer upload directly for customer review
+        submission_stage: 'internal',
         item_index: assignment.itemIndex !== undefined ? Number(assignment.itemIndex) : parseInt(itemIndex, 10),
         created_at: new Date().toISOString(),
         type: 'submission',
         geo_location: (geoLocation.latitude && geoLocation.longitude) ? geoLocation : undefined,
         address: address || undefined,
         contact_info: contactInfo || undefined,
-        notify_admins: activeTab === 'admin' ? displayAdminsList : [],
+        notify_admins: displayAdminsList,
       };
 
       // FINAL VALIDATION - Ensure all critical fields are present
@@ -1827,8 +1912,9 @@ function ContentUpload() {
                                   </span>
                                 )}
                                 {a.postType && (
-                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-100 capitalize">
-                                    {a.postType}
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-100 capitalize">
+                                    <FileText className="h-2.5 w-2.5" />
+                                    Type: {a.postType}
                                   </span>
                                 )}
                               </div>
@@ -2027,7 +2113,7 @@ function ContentUpload() {
             <div className="space-y-4">
               {/* Accordion trigger */}
               <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden w-full p-5 hover:bg-gray-50 transition-colors duration-200">
-                <div className={`flex items-center justify-between gap-3 ${(previousVersions.length === 0 || validationNotice) ? 'mb-4' : ''}`}>
+                <div className={`flex items-center justify-between gap-3 ${(previousSubmissionLoaded && previousVersions.length === 0 || validationNotice) ? 'mb-4' : ''}`}>
                   <button
                     type="button"
                     onClick={() => setVersionsAccordionOpen(!versionsAccordionOpen)}
@@ -2080,42 +2166,25 @@ function ContentUpload() {
                   className="hidden"
                 />
 
-                {previousVersions.length === 0 && (
+                {previousSubmissionLoaded && previousVersions.length === 0 && (
                   <>
-                    <div
-                      className={`relative w-full border-2 border-dashed rounded-xl px-4 py-4 transition-all duration-200 ${
-                        dragActive
-                          ? 'border-purple-400 bg-purple-50'
-                          : 'border-gray-300 hover:border-purple-400 hover:bg-purple-50/50'
-                      }`}
-                      onDragEnter={handleDrag}
-                      onDragLeave={handleDrag}
-                      onDragOver={handleDrag}
-                      onDrop={handleDrop}
-                    >
-                      <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-                        <div className="flex items-center gap-1.5 text-gray-500">
-                          <Upload className="h-4 w-4" />
-                          <Video className="h-4 w-4" />
-                          <p className="text-sm whitespace-nowrap">Drop files here</p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={onButtonClick}
-                          className="inline-flex items-center px-2 py-1 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors"
-                        >
-                          <Image className="h-3 w-3 mr-1" />
-                          Browse Files
-                        </button>
-                        <button
-                          type="button"
-                          onClick={onThumbnailButtonClick}
-                          className="inline-flex items-center px-2 py-1 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-colors"
-                        >
-                          <Image className="h-3 w-3 mr-1" />
-                          Browse Thumbnail
-                        </button>
-                      </div>
+                    <div className="flex flex-col sm:flex-row items-center justify-start gap-3 mb-4">
+                      <button
+                        type="button"
+                        onClick={onButtonClick}
+                        className="inline-flex items-center px-4 py-2 text-sm font-medium bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors shadow-sm"
+                      >
+                        <Image className="h-4 w-4 mr-2" />
+                        Create first version
+                      </button>
+                      <button
+                        type="button"
+                        onClick={onThumbnailButtonClick}
+                        className="inline-flex items-center px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
+                      >
+                        <Image className="h-4 w-4 mr-2" />
+                        Add thumbnail
+                      </button>
                     </div>
 
                     {thumbnailFileObj && (
@@ -2227,7 +2296,12 @@ function ContentUpload() {
               {/* Accordion body */}
               {versionsAccordionOpen && (
                 <div className="">
-                  {previousVersions.length === 0 ? (
+                  {!previousSubmissionLoaded ? (
+                    <div className="text-center py-12">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto mb-3"></div>
+                      <p className="text-gray-600 font-medium">Loading versions...</p>
+                    </div>
+                  ) : previousVersions.length === 0 ? (
                     <div className="text-center py-12">
                       <div className="bg-gray-100 rounded-full w-14 h-14 flex items-center justify-center mx-auto mb-3">
                         <History className="h-7 w-7 text-gray-400" />
@@ -2283,99 +2357,7 @@ function ContentUpload() {
                               <div className="space-y-5">
                                 {/* Media */}
                                 <div>
-                                  {/* ── WhatsApp-style uploaded-files thumbnail strip ── */}
-                                  {uploadedFiles.length > 0 && (
-                                    <div className="flex flex-wrap justify-center items-center gap-2 mb-6 bg-gray-50 p-3 rounded-xl border border-gray-100">
-                                      {uploadedFiles.map((file) => (
-                                        <div
-                                          key={file.id}
-                                          className="relative group w-16 h-16 rounded-lg overflow-hidden bg-white ring-1 ring-gray-200 hover:ring-purple-400 transition-all cursor-pointer flex-shrink-0"
-                                          onClick={() => handleReplaceClick(file.id)}
-                                          title={`${file.name} — click to replace`}
-                                        >
-                                          {/* Thumbnail preview */}
-                                          {file.type === 'image' ? (
-                                            <img
-                                              src={file.preview}
-                                              alt={file.name}
-                                              className="w-full h-full object-cover"
-                                            />
-                                          ) : (
-                                            <div className="relative w-full h-full">
-                                              <video
-                                                src={file.preview}
-                                                className="w-full h-full object-cover"
-                                                muted
-                                              />
-                                              <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                                                <Play className="h-4 w-4 text-white" />
-                                              </div>
-                                            </div>
-                                          )}
 
-                                          {/* Top-left badge: green check (existing) or purple NEW */}
-                                          <div className={`absolute top-0.5 left-0.5 flex items-center justify-center rounded text-[8px] font-bold leading-none z-10 ${
-                                            file.isExisting
-                                              ? 'w-3.5 h-3.5 bg-emerald-500 text-white'
-                                              : 'px-1 py-0.5 bg-purple-600 text-white'
-                                          }`}>
-                                            {file.isExisting ? <Check className="h-2.5 w-2.5" /> : 'NEW'}
-                                          </div>
-
-                                          {/* Spinner overlay when uploading */}
-                                          {file.uploading && (
-                                            <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-20">
-                                              <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
-                                            </div>
-                                          )}
-
-                                          {/* Error overlay */}
-                                          {file.error && (
-                                            <div className="absolute inset-0 bg-red-500/60 flex items-center justify-center z-20">
-                                              <X className="h-4 w-4 text-white" />
-                                            </div>
-                                          )}
-
-                                          {/* Hover remove button (top-right) */}
-                                          <button
-                                            type="button"
-                                            onClick={(e) => { e.stopPropagation(); removeFile(file.id); }}
-                                            className="absolute top-0 right-0 w-4 h-4 bg-red-500 hover:bg-red-600 text-white rounded-bl-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-30"
-                                            title="Remove"
-                                          >
-                                            <X className="h-2.5 w-2.5" />
-                                          </button>
-                                        </div>
-                                      ))}
-
-                                      {/* "+" add-media tile */}
-                                      <button
-                                        type="button"
-                                        onClick={onButtonClick}
-                                        className="w-16 h-16 rounded-lg border-2 border-dashed border-gray-300 hover:border-purple-400 hover:bg-purple-50 flex items-center justify-center transition-all flex-shrink-0 bg-white"
-                                        title="Add media"
-                                      >
-                                        <Plus className="h-6 w-6 text-gray-400" />
-                                      </button>
-
-                                      {/* Send button (appears if any new files are added or replaced) */}
-                                      {uploadedFiles.some(f => !f.isExisting) && (
-                                        <button
-                                          type="button"
-                                          onClick={handleSubmit}
-                                          disabled={uploadedFiles.some(f => f.uploading) || submitting}
-                                          className="w-12 h-12 rounded-full bg-green-500 hover:bg-green-600 disabled:bg-green-300 text-white flex items-center justify-center transition-all shadow-md group ml-2 flex-shrink-0"
-                                          title="Send to Admin"
-                                        >
-                                          {submitting ? (
-                                            <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
-                                          ) : (
-                                            <Send className="h-5 w-5 transform group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
-                                          )}
-                                        </button>
-                                      )}
-                                    </div>
-                                  )}
                                   {previousVersions[selectedVersionIndex].media?.length > 0 ? (
                                     <div>
                                       {previousVersions[selectedVersionIndex].media.length > 1 && (
@@ -2533,7 +2515,115 @@ function ContentUpload() {
                                   )}
                                 </div>
 
-                                <div className="space-y-4">
+                                {/* ── WhatsApp-style uploaded-files thumbnail strip (Moved Below) ── */}
+                                {uploadedFiles.length > 0 && (
+                                  <div className="flex flex-wrap justify-center items-center gap-2 mt-4 bg-gray-50 p-3 rounded-xl border border-gray-100">
+                                    {uploadedFiles.map((file, idx) => (
+                                      <div
+                                        key={file.id}
+                                        className={`relative group w-16 h-16 rounded-lg overflow-hidden bg-white hover:ring-purple-400 transition-all cursor-pointer flex-shrink-0 ${
+                                          idx === selectedMediaIndex ? 'ring-2 ring-purple-500 shadow-md' : 'ring-1 ring-gray-200'
+                                        }`}
+                                        onClick={() => setSelectedMediaIndex(idx)}
+                                        title={`${file.name} — click to view`}
+                                      >
+                                        {/* Thumbnail preview */}
+                                        {file.type === 'image' ? (
+                                          <img
+                                            src={file.preview}
+                                            alt={file.name}
+                                            className="w-full h-full object-cover"
+                                          />
+                                        ) : (
+                                          <div className="relative w-full h-full">
+                                            <video
+                                              src={file.preview}
+                                              className="w-full h-full object-cover"
+                                              muted
+                                            />
+                                            <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                                              <Play className="h-4 w-4 text-white" />
+                                            </div>
+                                          </div>
+                                        )}
+
+                                        {/* Top-left badge: green check (existing), blue REPLACE, or purple NEW */}
+                                        <div className={`absolute top-0.5 left-0.5 flex items-center justify-center rounded text-[8px] font-bold leading-none z-10 ${
+                                          file.isExisting
+                                            ? 'w-3.5 h-3.5 bg-emerald-500 text-white'
+                                            : file.isReplaced
+                                              ? 'px-1 py-0.5 bg-blue-500 text-white'
+                                              : 'px-1 py-0.5 bg-purple-600 text-white'
+                                        }`}>
+                                          {file.isExisting ? <Check className="h-2.5 w-2.5" /> : file.isReplaced ? 'REPLACE' : 'NEW'}
+                                        </div>
+
+                                        {/* Spinner overlay when uploading */}
+                                        {file.uploading && (
+                                          <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-20">
+                                            <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
+                                          </div>
+                                        )}
+
+                                        {/* Error overlay */}
+                                        {file.error && (
+                                          <div className="absolute inset-0 bg-red-500/60 flex items-center justify-center z-20">
+                                            <X className="h-4 w-4 text-white" />
+                                          </div>
+                                        )}
+
+                                        {/* Hover replace button (bottom-right) */}
+                                        <button
+                                          type="button"
+                                          onClick={(e) => { e.stopPropagation(); handleReplaceClick(file.id); }}
+                                          className="absolute bottom-0 right-0 w-6 h-6 bg-blue-500 hover:bg-blue-600 text-white rounded-tl-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-30 shadow-sm"
+                                          title="Replace Media"
+                                        >
+                                          <Edit3 className="h-3 w-3" />
+                                        </button>
+
+                                        {/* Hover remove button (top-right) */}
+                                        <button
+                                          type="button"
+                                          onClick={(e) => { e.stopPropagation(); removeFile(file.id); }}
+                                          className="absolute top-0 right-0 w-4 h-4 bg-red-500 hover:bg-red-600 text-white rounded-bl-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-30"
+                                          title="Remove"
+                                        >
+                                          <X className="h-2.5 w-2.5" />
+                                        </button>
+                                      </div>
+                                    ))}
+
+                                    {/* "+" add-media tile */}
+                                    <button
+                                      type="button"
+                                      onClick={onButtonClick}
+                                      className="w-16 h-16 rounded-lg border-2 border-dashed border-gray-300 hover:border-purple-400 hover:bg-purple-50 flex items-center justify-center transition-all flex-shrink-0 bg-white"
+                                      title="Add media"
+                                    >
+                                      <Plus className="h-6 w-6 text-gray-400" />
+                                    </button>
+
+                                    {/* Send button (appears if any new files are added or replaced) */}
+                                    {uploadedFiles.some(f => !f.isExisting) && (
+                                      <button
+                                        type="button"
+                                        onClick={handleSubmit}
+                                        disabled={uploadedFiles.some(f => f.uploading) || submitting}
+                                        className="w-12 h-12 rounded-full bg-green-500 hover:bg-green-600 disabled:bg-green-300 text-white flex items-center justify-center transition-all shadow-md group ml-2 flex-shrink-0"
+                                        title="Send to Admin"
+                                      >
+                                        {submitting ? (
+                                          <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
+                                        ) : (
+                                          <Send className="h-5 w-5 transform group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
+                                        )}
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+
+                                <div className="space-y-4 mt-4">
                                   {previousVersions[selectedVersionIndex].thumbnailUrl && (
                                     <div>
                                       <label className="block text-sm font-medium text-gray-700 mb-2">Video Thumbnail</label>
@@ -2712,7 +2802,7 @@ function ContentUpload() {
                               </span>
                             </div>
                           </div>
-                          <div className="max-h-96 overflow-y-auto p-4">
+                          <div className="max-h-96 overflow-y-auto px-1.5 py-3">
                             {commentsForCurrentMedia.length === 0 ? (
                               <div className="text-center py-10">
                                 <div className="bg-gray-100 rounded-full w-14 h-14 flex items-center justify-center mx-auto mb-3">
@@ -2726,69 +2816,69 @@ function ContentUpload() {
                                 {commentsForCurrentMedia.map((comment, idx) => (
                                   <div
                                     key={comment.id || idx}
-                                    className={`rounded-xl border transition-all duration-200 overflow-hidden ${
+                                    className={`flex flex-col gap-2 transition-all duration-200 ${
                                       activeVersionComment === comment.id
-                                        ? 'bg-purple-50 border-purple-200 shadow-sm'
-                                        : 'bg-gray-50 border-gray-100 hover:border-gray-200'
+                                        ? 'bg-purple-50/50 px-1 py-2 rounded-lg'
+                                        : 'py-2 hover:bg-gray-50/50 px-1 rounded-lg'
                                     }`}
                                   >
-                                    <div
-                                      className="p-3 cursor-pointer"
+                                    {/* The initial comment bubble (Left aligned) */}
+                                    <div 
+                                      className="flex items-start gap-2 max-w-[90%] self-start cursor-pointer group"
                                       onClick={() => handleVersionCommentClick(comment.id)}
                                     >
-                                      <div className="flex items-start gap-3">
-                                        <span className="font-bold text-white bg-purple-500 rounded-full w-6 h-6 flex items-center justify-center text-xs flex-shrink-0">
-                                          {idx + 1}
-                                        </span>
-                                        <div className="flex-1 min-w-0">
-                                          <p className="text-sm text-gray-800 break-words leading-relaxed">
-                                            {comment.message || comment.comment}
-                                          </p>
-                                          <div className="flex items-center gap-3 mt-2 flex-wrap">
-                                            <p className="text-xs text-gray-400">
-                                              {comment.timestamp ? new Date(comment.timestamp).toLocaleString() : ''}
-                                            </p>
-                                            {comment.done ? (
-                                              <button
-                                                onClick={(e) => { e.stopPropagation(); handleVersionToggleDone(comment.id); }}
-                                                className="flex items-center gap-1 text-xs bg-emerald-50 hover:bg-gray-100 px-1.5 py-0.5 rounded transition-colors"
-                                              >
-                                                <CheckCircle className="h-3 w-3 text-emerald-600" />
-                                                <span className="text-emerald-600 font-semibold">Done</span>
-                                                <span className="text-gray-400">· Undo</span>
-                                              </button>
-                                            ) : (
-                                              <button
-                                                onClick={(e) => { e.stopPropagation(); handleVersionToggleDone(comment.id); }}
-                                                className="flex items-center gap-1 text-xs text-gray-400 hover:text-green-600 bg-gray-50 hover:bg-green-50 px-1.5 py-0.5 rounded transition-colors"
-                                              >
-                                                <CheckCircle className="h-3 w-3" />
-                                                Mark Done
-                                              </button>
-                                            )}
+                                      <span className="font-bold text-white bg-purple-500 rounded-full w-5 h-5 flex items-center justify-center text-[10px] flex-shrink-0 mt-1 shadow-sm">
+                                        {idx + 1}
+                                      </span>
+                                      <div className={`shadow-sm rounded-2xl rounded-tl-sm px-3 py-2 flex flex-col relative ${activeVersionComment === comment.id ? 'bg-purple-100 border border-purple-200' : 'bg-white border border-gray-200'}`}>
+                                        <p className="text-[13px] text-gray-800 break-words leading-snug">
+                                          {comment.message || comment.comment}
+                                        </p>
+                                        
+                                        <div className="flex items-center justify-end gap-2 mt-1.5 pt-1.5 border-t border-gray-100">
+                                          <span className="text-[9px] text-gray-400">
+                                            {comment.timestamp ? new Date(comment.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}
+                                          </span>
+                                          
+                                          {comment.done ? (
                                             <button
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                if (replyingToComment === comment.id) {
-                                                  setReplyingToComment(null);
-                                                  setReplyText('');
-                                                } else {
-                                                  setReplyingToComment(comment.id);
-                                                  setReplyText('');
-                                                }
-                                              }}
-                                              className="flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-1.5 py-0.5 rounded transition-colors"
+                                              onClick={(e) => { e.stopPropagation(); handleVersionToggleDone(comment.id); }}
+                                              className="flex items-center gap-0.5 text-[10px] text-emerald-600 hover:text-emerald-700 transition-colors font-medium ml-1"
                                             >
-                                              <MessageSquare className="h-3 w-3" />
-                                              {comment.reply ? 'Edit Reply' : 'Reply'}
+                                              <CheckCircle className="h-3 w-3" /> Done
                                             </button>
-                                          </div>
+                                          ) : (
+                                            <button
+                                              onClick={(e) => { e.stopPropagation(); handleVersionToggleDone(comment.id); }}
+                                              className="flex items-center gap-0.5 text-[10px] text-gray-400 hover:text-emerald-600 transition-colors font-medium ml-1"
+                                            >
+                                              <CheckCircle className="h-3 w-3" /> Mark
+                                            </button>
+                                          )}
+                                          
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              if (replyingToComment === comment.id && !editingReplyId) {
+                                                setReplyingToComment(null);
+                                                setEditingReplyId(null);
+                                                setReplyText('');
+                                              } else {
+                                                setReplyingToComment(comment.id);
+                                                setEditingReplyId(null);
+                                                setReplyText('');
+                                              }
+                                            }}
+                                            className="flex items-center gap-0.5 text-[10px] text-indigo-500 hover:text-indigo-700 transition-colors font-medium ml-1"
+                                          >
+                                            <MessageSquare className="h-3 w-3" /> Reply
+                                          </button>
                                         </div>
                                       </div>
                                     </div>
 
                                     {/* Existing replies */}
-                                    {replyingToComment !== comment.id && (() => {
+                                    {(() => {
                                       const replies = comment.replies || (comment.reply ? [{
                                         id: 'legacy-creator-reply',
                                         authorRole: 'creator',
@@ -2796,58 +2886,109 @@ function ContentUpload() {
                                         message: comment.reply.text,
                                         timestamp: comment.reply.timestamp
                                       }] : []);
-                                      return replies.map((rep, rIdx) => (
-                                        <div key={rep.id || rIdx} className="mx-3 mb-3 p-2.5 bg-indigo-50 border border-indigo-200 rounded-lg">
-                                          <div className="flex items-center gap-1.5 mb-1">
-                                            <span className="text-[10px] font-bold text-indigo-700 uppercase tracking-wide">Reply</span>
-                                            <span className="text-[10px] font-semibold text-indigo-600 bg-indigo-100 px-1.5 py-0.5 rounded-full">
-                                              {rep.authorRole === 'admin' ? 'Admin' : rep.authorRole === 'creator' ? 'Creator' : 'Customer'}
-                                            </span>
-                                            {rep.authorEmail && (
-                                              <span className="text-[9px] text-gray-400 truncate max-w-[120px] ml-1.5">{rep.authorEmail}</span>
-                                            )}
-                                            <span className="text-[10px] text-gray-400 ml-auto">
-                                              {rep.timestamp ? new Date(rep.timestamp).toLocaleString() : ''}
-                                            </span>
+                                      
+                                      return replies.map((rep, rIdx) => {
+                                        const isCreator = rep.authorRole === 'creator';
+                                        return (
+                                          <div 
+                                            key={rep.id || rIdx} 
+                                            className={`flex items-start gap-2 max-w-[90%] group ${isCreator ? 'self-end flex-row-reverse' : 'self-start'}`}
+                                          >
+                                            <div className="w-5 h-5 flex-shrink-0 flex items-center justify-center rounded-full bg-gray-100 border border-gray-200 text-[9px] font-bold text-gray-500 mt-1 shadow-sm">
+                                              {isCreator ? 'C' : (rep.authorRole === 'admin' ? 'A' : 'U')}
+                                            </div>
+                                            
+                                            <div className={`px-3 py-2 shadow-sm flex flex-col relative ${
+                                              isCreator 
+                                                ? 'bg-[#E7FFDB] border border-[#d3f5c0] rounded-2xl rounded-tr-sm' 
+                                                : 'bg-white border border-gray-200 rounded-2xl rounded-tl-sm'
+                                            }`}>
+                                              <p className="text-[13px] text-gray-800 break-words leading-snug">{rep.message || rep.text}</p>
+                                              
+                                              <div className="flex items-center justify-end gap-3 mt-1">
+                                                <button
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    if (replyingToComment === comment.id) {
+                                                      setReplyingToComment(null);
+                                                      setReplyText('');
+                                                      setEditingReplyId(null);
+                                                    } else {
+                                                      setReplyingToComment(comment.id);
+                                                      setReplyText('');
+                                                      setEditingReplyId(null);
+                                                    }
+                                                  }}
+                                                  className="flex items-center gap-0.5 text-[9px] text-indigo-500 hover:text-indigo-700 transition-colors font-medium"
+                                                >
+                                                  <MessageSquare className="h-2.5 w-2.5" /> Reply
+                                                </button>
+                                                <span className="text-[9px] text-gray-500">
+                                                  {rep.timestamp ? new Date(rep.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}
+                                                </span>
+                                                
+                                                {isCreator && (
+                                                  <button
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      setReplyingToComment(comment.id);
+                                                      setEditingReplyId(rep.id);
+                                                      setReplyText(rep.message || rep.text);
+                                                    }}
+                                                    className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] text-emerald-700 hover:text-emerald-900 font-semibold"
+                                                  >
+                                                    Edit
+                                                  </button>
+                                                )}
+                                              </div>
+                                            </div>
                                           </div>
-                                          <p className="text-xs text-gray-800 break-words leading-relaxed">{rep.message || rep.text}</p>
-                                        </div>
-                                      ));
+                                        );
+                                      });
                                     })()}
 
                                     {/* Reply input */}
                                     {replyingToComment === comment.id && (
                                       <div
-                                        className="mx-3 mb-3 p-2.5 bg-indigo-50 border border-indigo-200 rounded-lg"
+                                        className="mt-1 flex flex-col self-end max-w-[90%] w-full bg-white p-2.5 rounded-2xl shadow-sm border border-indigo-100"
                                         onClick={(e) => e.stopPropagation()}
                                       >
-                                        {comment.reply && (
-                                          <p className="text-[10px] text-indigo-500 mb-1.5 font-medium">Editing your existing reply…</p>
-                                        )}
+                                        <div className="flex items-center gap-2 mb-1.5">
+                                          <p className="text-[10px] text-indigo-500 font-medium">
+                                            {editingReplyId ? 'Editing reply…' : 'New reply…'}
+                                          </p>
+                                        </div>
                                         <textarea
                                           value={replyText}
                                           onChange={(e) => setReplyText(e.target.value)}
-                                          placeholder="Write your reply…"
+                                          placeholder="Type a message..."
                                           rows={2}
                                           autoFocus
-                                          className="w-full border border-indigo-300 rounded-lg px-2.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none bg-white"
+                                          className="w-full text-xs focus:outline-none resize-none bg-transparent placeholder-gray-400"
+                                          onKeyDown={(e) => {
+                                            if (e.key === 'Enter' && !e.shiftKey) {
+                                              e.preventDefault();
+                                              if (replyText.trim() && !replySubmitting) {
+                                                handleVersionReplySubmit(comment.id);
+                                              }
+                                            }
+                                          }}
                                         />
-                                        <div className="flex gap-2 mt-2">
+                                        <div className="flex items-center justify-end gap-2 mt-2">
+                                          <button
+                                            onClick={() => { setReplyingToComment(null); setEditingReplyId(null); setReplyText(''); }}
+                                            className="text-[10px] text-gray-500 hover:text-gray-700 font-medium px-2 py-1"
+                                          >
+                                            Cancel
+                                          </button>
                                           <button
                                             onClick={() => handleVersionReplySubmit(comment.id)}
                                             disabled={replySubmitting || !replyText.trim()}
-                                            className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white text-xs font-medium rounded-lg transition-colors"
+                                            className="flex items-center justify-center w-7 h-7 bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white rounded-full transition-colors shadow-sm"
                                           >
                                             {replySubmitting
-                                              ? <div className="animate-spin rounded-full h-3 w-3 border-b border-white" />
-                                              : <Send className="h-3 w-3" />}
-                                            Send
-                                          </button>
-                                          <button
-                                            onClick={() => { setReplyingToComment(null); setReplyText(''); }}
-                                            className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 text-xs font-medium rounded-lg transition-colors"
-                                          >
-                                            Cancel
+                                              ? <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent" />
+                                              : <Send className="h-3 w-3 ml-0.5" />}
                                           </button>
                                         </div>
                                       </div>
@@ -2905,8 +3046,9 @@ function ContentUpload() {
                       </span>
                     ))}
                     {assignment.postType && (
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded border text-xs font-semibold bg-amber-50 text-amber-700 border-amber-200 capitalize">
-                        {assignment.postType}
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border text-xs font-semibold bg-amber-50 text-amber-700 border-amber-200 capitalize">
+                        <FileText className="h-3 w-3" />
+                        Type: {assignment.postType}
                       </span>
                     )}
                   </div>
@@ -3016,23 +3158,17 @@ function ContentUpload() {
             <div className="bg-white rounded-lg shadow-sm p-6">
               <div className="text-center">
                 <h3 className="font-semibold text-gray-900 mb-1">
-                  {activeTab === 'admin' ? 'Submit for Admin Review' : 'Submit for Customer Review'}
+                  Submit for Admin Review
                 </h3>
-                {activeTab === 'admin' ? (
-                  displayAdminsList.length > 0 ? (
-                    <p className="text-sm text-gray-600 mb-4">
-                      Will be sent to <span className="font-medium text-purple-700">{displayAdminsList.map(a => a.name).join(', ')}</span> for review.
-                      Content only reaches the customer after admin approval.
-                    </p>
-                  ) : (
-                    <p className="text-sm text-gray-600 mb-4 flex items-center justify-center gap-1">
-                      <AlertCircle className="h-4 w-4 text-amber-500 flex-shrink-0" />
-                      No assigned admins. Submission will be reviewed by System Admins.
-                    </p>
-                  )
-                ) : (
+                {displayAdminsList.length > 0 ? (
                   <p className="text-sm text-gray-600 mb-4">
-                    Will be sent directly to the customer for review, bypassing the internal admin review process.
+                    Will be sent to <span className="font-medium text-purple-700">{displayAdminsList.map(a => a.name).join(', ')}</span> for review.
+                    Content only reaches the customer after admin approval.
+                  </p>
+                ) : (
+                  <p className="text-sm text-gray-600 mb-4 flex items-center justify-center gap-1">
+                    <AlertCircle className="h-4 w-4 text-amber-500 flex-shrink-0" />
+                    No assigned admins. Submission will be reviewed by System Admins.
                   </p>
                 )}
                 <button
@@ -3048,7 +3184,7 @@ function ContentUpload() {
                   ) : (
                     <>
                       <Send className="h-4 w-4 mr-2" />
-                      {activeTab === 'admin' ? 'Submit to Admin for Review' : 'Submit to Customer'}
+                      Submit to Admin for Review
                     </>
                   )}
                 </button>
@@ -3084,7 +3220,7 @@ function ContentUpload() {
                 <div className="mt-2 space-y-1 text-xs text-gray-700">
                   <p><span className="font-semibold">Customer:</span> {assignment?.customerName || 'N/A'}</p>
                   <p><span className="font-semibold">Due:</span> {assignment?.dueDate ? new Date(assignment.dueDate).toLocaleDateString() : 'N/A'}</p>
-                  <p><span className="font-semibold">Stage:</span> {activeTab === 'admin' ? 'Admin Review' : 'Customer Review'}</p>
+                  <p><span className="font-semibold">Stage:</span> Admin Review</p>
                 </div>
               </div>
               <p className="text-sm text-gray-700 leading-relaxed">{submitSuccessModal.message}</p>

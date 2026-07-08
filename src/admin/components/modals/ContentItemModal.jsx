@@ -97,12 +97,48 @@ function ContentItemModal({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [dropdownOpen]);
 
+  const availablePostTypes = [
+    { value: 'post', label: 'Post' },
+    { value: 'reel', label: 'Reel/Video' },
+    { value: 'carousel', label: 'Carousel' },
+    { value: 'story', label: 'Story' }
+  ];
+
+  const platformCapabilities = {
+    facebook: ['post', 'reel', 'carousel', 'story'],
+    instagram: ['post', 'reel', 'carousel', 'story'],
+    linkedin: ['post', 'carousel', 'reel'], // 'reel' maps to video for LinkedIn
+    youtube: ['reel'] // YouTube only supports reels/videos
+  };
+
+  const getValidPostTypes = () => {
+    if (selectedPlatforms.length === 0) return availablePostTypes;
+    
+    let validTypes = platformCapabilities[selectedPlatforms[0]] || availablePostTypes.map(pt => pt.value);
+    
+    for (let i = 1; i < selectedPlatforms.length; i++) {
+      const caps = platformCapabilities[selectedPlatforms[i]] || availablePostTypes.map(pt => pt.value);
+      validTypes = validTypes.filter(t => caps.includes(t));
+    }
+    
+    return availablePostTypes.filter(pt => validTypes.includes(pt.value));
+  };
+
+  const validPostTypes = getValidPostTypes();
+
+  useEffect(() => {
+    if (validPostTypes.length > 0 && !validPostTypes.find(pt => pt.value === postType)) {
+      setPostType(validPostTypes[0].value);
+    }
+  }, [selectedPlatforms]); // Recalculate post type when selectedPlatforms changes
+
   const validate = () => {
     const newErrors = {};
     if (!description.trim()) newErrors.description = 'Content description is required';
     if (!contentTitle.trim()) newErrors.contentTitle = 'Title is required';
     if (!dueDate) newErrors.dueDate = 'Due date is required';
     if (!assignedTo) newErrors.assignedTo = 'Please select a content creator';
+    if (validPostTypes.length === 0) newErrors.postType = 'No common post types available for selected platforms';
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -218,12 +254,20 @@ function ContentItemModal({
                   className="input-field"
                   value={postType}
                   onChange={(e) => setPostType(e.target.value)}
+                  disabled={validPostTypes.length === 0}
                 >
-                  <option value="post">Post</option>
-                  <option value="reel">Reel</option>
-                  <option value="carousel">Carousel</option>
-                  <option value="story">Story</option>
+                  {validPostTypes.length > 0 ? (
+                    validPostTypes.map(pt => (
+                      <option key={pt.value} value={pt.value}>{pt.label}</option>
+                    ))
+                  ) : (
+                    <option value="">No compatible type</option>
+                  )}
                 </select>
+                {errors.postType && <p className="text-sm text-red-600 mt-1">{errors.postType}</p>}
+                {validPostTypes.length > 0 && selectedPlatforms.length > 1 && (
+                  <p className="text-xs text-gray-500 mt-1">Showing post types supported by all selected platforms.</p>
+                )}
               </div>
 
               <div className="mb-4">

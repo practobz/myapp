@@ -450,6 +450,7 @@ function ContentDetailView({
             finalized: true
           }));
         }
+        setCommentsForVersion(prev => prev.map(c => ({ ...c, finalized: true })));
         setTick(t => t + 1);
         onRefresh?.();
         alert('Feedback sent to Content Creator successfully!');
@@ -725,11 +726,9 @@ function ContentDetailView({
 
   // ── Image click → place new marker or reposition ───────────────────────
   const handleImageClick = useCallback(async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
     const repositioning = commentsForCurrentMedia.find(c => c.repositioning);
-    if (repositioning || addingComment) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
     if (repositioning) {
       const rect = e.currentTarget.getBoundingClientRect();
       const x = rect.width > 0 ? (e.clientX - rect.left) / rect.width : 0;
@@ -744,7 +743,6 @@ function ContentDetailView({
       } catch { }
       return;
     }
-    if (!addingComment) return;
     if (commentsForCurrentMedia.some(c => c.editing)) return;
     const isVideo = currentMedia && isVideoUrl(currentMedia.url);
     const videoTimestamp = (isVideo && videoRef.current && !isNaN(videoRef.current.currentTime))
@@ -776,8 +774,7 @@ function ContentDetailView({
     };
     setCommentsForVersion(prev => [...prev, newComment]);
     setActiveComment(newComment.id);
-    setAddingComment(false);
-  }, [addingComment, commentsForCurrentMedia, adminUser, currentVersion, selectedMediaIndex, currentMedia, isVideoUrl]);
+  }, [commentsForCurrentMedia, adminUser, currentVersion, selectedMediaIndex, currentMedia, isVideoUrl]);
 
   const handleCommentChange = useCallback((id, text) => {
     patchCommentLocally(id, { comment: text });
@@ -785,11 +782,13 @@ function ContentDetailView({
 
   const handleCommentSubmit = useCallback(async (id) => {
     const comment = commentsForVersion.find(c => c.id === id);
-    if (!comment || !comment.comment?.trim()) {
+    if (!comment || comment.isSubmitting) return;
+    if (!comment.comment?.trim()) {
       removeCommentLocally(id);
       setActiveComment(null);
       return;
     }
+    patchCommentLocally(id, { isSubmitting: true });
     try {
       if (comment.isNew) {
         await fetch(`${API_URL}/api/content-submissions/${encodeURIComponent(selectedContent.id)}/comment`, {
@@ -826,12 +825,12 @@ function ContentDetailView({
           }),
         });
       }
-      patchCommentLocally(id, { editing: false, isNew: false });
+      patchCommentLocally(id, { editing: false, isNew: false, isSubmitting: false });
       setActiveComment(null);
       onRefresh?.();
     } catch (err) {
       console.error('Error saving admin comment:', err);
-      patchCommentLocally(id, { editing: false, isNew: false });
+      patchCommentLocally(id, { editing: false, isNew: false, isSubmitting: false });
       setActiveComment(null);
     }
   }, [commentsForVersion, selectedContent, currentVersion, patchCommentLocally, removeCommentLocally, onRefresh]);
@@ -992,21 +991,7 @@ function ContentDetailView({
 
               {/* Status + Action */}
               <div className="flex flex-wrap items-center gap-2">
-                <button
-                  onClick={() => {
-                    const calId = selectedContent?.calendarId || selectedContent?._calendarId;
-                    const idx = selectedContent?.itemIndex !== undefined ? selectedContent.itemIndex : 0;
-                    if (calId) {
-                      navigate(`/content-creator/content-upload/${calId}/${idx}`);
-                    } else {
-                      navigate(`/content-creator/upload`);
-                    }
-                  }}
-                  className="inline-flex items-center justify-center px-3 py-1.5 bg-purple-600 text-white text-xs font-medium rounded-lg hover:bg-purple-700 transition-colors"
-                >
-                  <Upload className="h-3 w-3 mr-1" />
-                  Upload Content
-                </button>
+
                 <button
                   onClick={() => handleScheduleContent(selectedContent)}
                   className="inline-flex items-center justify-center px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors"
@@ -1156,23 +1141,11 @@ function ContentDetailView({
                         </div>
                       )}
 
-                      {/* Add Comment toggle */}
-                      <div className="flex items-center justify-between">
+                      {/* Comment Info */}
+                      <div className="flex items-center justify-between mb-2">
                         <p className="text-[10px] text-gray-400">
-                          {addingComment
-                            ? '📍 Click on the image to pin a comment'
-                            : `${commentsForCurrentMedia.length} comment${commentsForCurrentMedia.length !== 1 ? 's' : ''} on this media`}
+                          {commentsForCurrentMedia.length} comment{commentsForCurrentMedia.length !== 1 ? 's' : ''} on this media
                         </p>
-                        <button
-                          onClick={() => setAddingComment(v => !v)}
-                          className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors ${addingComment
-                              ? 'bg-purple-600 text-white border-purple-600 hover:bg-purple-700'
-                              : 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100'
-                            }`}
-                        >
-                          <MessageCircle className="h-3 w-3" />
-                          {addingComment ? 'Cancel' : 'Add Comment'}
-                        </button>
                       </div>
 
                       {/* Media + markers */}
@@ -1186,8 +1159,7 @@ function ContentDetailView({
                                 src={currentMedia.url}
                                 poster={currentVersion?.thumbnailUrl || undefined}
                                 controls
-                                className={`max-w-full h-auto max-h-[50vh] sm:max-h-[60vh] lg:max-h-[70vh] rounded-lg shadow border border-gray-200 object-contain transition-all ${addingComment ? 'cursor-crosshair ring-2 ring-purple-400 ring-offset-1' : ''
-                                  }`}
+                                className="max-w-full h-auto max-h-[50vh] sm:max-h-[60vh] lg:max-h-[70vh] rounded-lg shadow border border-gray-200 object-contain transition-all cursor-crosshair hover:ring-2 hover:ring-purple-400 hover:ring-offset-1"
                                 loading="lazy"
                                 onClick={handleImageClick}
                               />
@@ -1197,8 +1169,7 @@ function ContentDetailView({
                                 ref={imgRef}
                                 src={currentMedia.url}
                                 alt={`V${currentVersion.versionNumber} M${selectedMediaIndex + 1}`}
-                                className={`max-w-full h-auto max-h-[50vh] sm:max-h-[60vh] lg:max-h-[70vh] rounded-lg shadow border border-gray-200 object-contain transition-all ${addingComment ? 'cursor-crosshair ring-2 ring-purple-400 ring-offset-1' : ''
-                                  }`}
+                                className="max-w-full h-auto max-h-[50vh] sm:max-h-[60vh] lg:max-h-[70vh] rounded-lg shadow border border-gray-200 object-contain transition-all cursor-crosshair hover:ring-2 hover:ring-purple-400 hover:ring-offset-1"
                                 loading="lazy"
                                 onLoad={handleImgLoad}
                                 onClick={handleImageClick}
@@ -1359,7 +1330,7 @@ function ContentDetailView({
 
                 {/* Internal Review Actions */}
                 <div className="space-y-1.5 pt-1">
-                  {currentVersion?.status === 'customer_feedback_pending_admin' || currentVersion?.status === 'changes_requested_admin' || (currentVersion?.comments || []).some(c => c.authorRole === 'admin' && !c.finalized && !c.discarded) ? (
+                  {currentVersion?.status === 'customer_feedback_pending_admin' || commentsForVersion.some(c => c.authorRole === 'admin' && !c.finalized && !c.discarded && !c.isNew && !c.editing) ? (
                     <div className="space-y-2">
                       {currentVersion?.status === 'customer_feedback_pending_admin' && (
                         <div className="text-xs font-semibold text-purple-900 bg-purple-50 p-2.5 rounded-lg border border-purple-250 flex items-start gap-1">
@@ -1367,16 +1338,7 @@ function ContentDetailView({
                           <span>Customer requested changes. Review comments/replies below.</span>
                         </div>
                       )}
-                      {currentVersion?.status === 'customer_feedback_pending_admin' && (
-                        <button
-                          onClick={() => handleFinalizeFeedback('direct')}
-                          disabled={finalizingFeedback}
-                          className="w-full py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg text-xs font-semibold hover:from-purple-700 hover:to-indigo-700 shadow-sm transition-all disabled:opacity-50 flex items-center justify-center gap-1.5"
-                        >
-                          {finalizingFeedback ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-                          Send to Creator (Direct)
-                        </button>
-                      )}
+
                       <button
                         onClick={() => handleFinalizeFeedback('finalized')}
                         disabled={finalizingFeedback}
@@ -1447,56 +1409,7 @@ function ContentDetailView({
                   )}
                 </div>
 
-                {/* Delete section */}
-                <div className="border-t border-purple-100 pt-2 space-y-1.5">
-                  {selectedContent?.versions?.length > 1 && (
-                    <button
-                      onClick={() => setDeleteConfirm('version')}
-                      className="w-full py-1.5 text-rose-600 border border-rose-200 rounded-lg text-[11px] font-semibold hover:bg-rose-50 transition-all flex items-center justify-center gap-1"
-                    >
-                      <Trash2 className="h-3 w-3" /> Delete Version v{selectedVersionIndex + 1}
-                    </button>
-                  )}
-                  <button
-                    onClick={() => setDeleteConfirm('all')}
-                    className="w-full py-1.5 text-rose-700 border border-rose-200 bg-rose-50/50 rounded-lg text-[11px] font-semibold hover:bg-rose-100 transition-all flex items-center justify-center gap-1"
-                  >
-                    <Trash2 className="h-3 w-3" /> Delete Entire Submission
-                  </button>
-                </div>
 
-                {/* Delete confirmation box */}
-                {deleteConfirm && (
-                  <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg space-y-2 mt-2">
-                    <div className="flex items-start gap-1.5">
-                      <AlertCircle className="h-4 w-4 text-rose-600 flex-shrink-0 mt-0.5" />
-                      <div>
-                        <p className="text-xs font-bold text-rose-900">
-                          {deleteConfirm === 'version' ? `Delete version v${selectedVersionIndex + 1}?` : `Delete entire submission?`}
-                        </p>
-                        <p className="text-[10px] text-rose-700 mt-0.5">
-                          {deleteConfirm === 'version' ? 'This version will be permanently removed.' : 'All versions will be permanently removed.'}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={deleteConfirm === 'version' ? handleDeleteVersionConfirm : handleDeleteEntireSubmission}
-                        disabled={deleting}
-                        className="flex-1 py-1 bg-rose-600 text-white rounded-md text-xs font-semibold hover:bg-rose-700 disabled:opacity-50 flex items-center justify-center gap-1"
-                      >
-                        {deleting ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Yes, Delete'}
-                      </button>
-                      <button
-                        onClick={() => setDeleteConfirm(null)}
-                        disabled={deleting}
-                        className="flex-1 py-1 border border-gray-300 bg-white rounded-md text-xs text-gray-700 font-semibold hover:bg-gray-50"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
           )}
@@ -1534,18 +1447,7 @@ function ContentDetailView({
                         )}
                       </div>
                     </button>
-                    <button
-                      className="absolute top-2 right-2 p-1 bg-white rounded-full shadow hover:bg-red-50 transition-colors"
-                      title="Delete Version"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (window.confirm('Delete this version?')) {
-                          onDeleteVersion(version.id, selectedContent.id, selectedContent.customerId);
-                        }
-                      }}
-                    >
-                      <Trash2 className="h-3 w-3 text-red-500" />
-                    </button>
+
                   </div>
                 );
               })}
@@ -1572,74 +1474,122 @@ function ContentDetailView({
               </div>
             </div>
 
-            <div className="max-h-72 overflow-y-auto p-3">
+            <div className="max-h-72 overflow-y-auto px-1.5 py-3">
               {commentsForCurrentMedia.length === 0 ? (
                 <div className="text-center py-6">
                   <div className="bg-gray-50 rounded-full w-10 h-10 flex items-center justify-center mx-auto mb-2">
                     <MessageSquare className="h-5 w-5 text-gray-400" />
                   </div>
                   <p className="text-gray-500 text-xs">No comments yet</p>
-                  <p className="text-[10px] text-gray-400 mt-0.5">Click "Add Comment" then pin on the image</p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">Click anywhere on the media to pin a comment</p>
                 </div>
               ) : (
                 <div className="space-y-2">
                   {commentsForCurrentMedia.map((comment, idx) => {
-                    const isAdminComment = comment.authorRole === 'admin';
+                    const isAdminComment = comment.authorRole === 'admin' || comment.reviewType === 'internal';
+                    const isOutgoing = isAdminComment;
                     const isActive = activeComment === comment.id;
                     const isReplying = replyingTo === comment.id;
                     return (
                       <div
                         key={comment.id || idx}
-                        className={`rounded-lg border transition-colors overflow-hidden cursor-pointer ${isActive
-                            ? isAdminComment ? 'bg-purple-50 border-purple-200' : 'bg-blue-50 border-blue-200'
-                            : isAdminComment ? 'bg-white border-purple-100 hover:bg-purple-50/40' : 'bg-gray-50 border-gray-200 hover:bg-blue-50/40'
-                          }`}
-                        onClick={() => {
-                          const next = isActive ? null : comment.id;
-                          setActiveComment(next);
-                          if (next) {
-                            const c = commentsForCurrentMedia.find(x => x.id === next);
-                            if (c && c.videoTimestamp != null && videoRef.current) {
-                              videoRef.current.currentTime = c.videoTimestamp;
-                              videoRef.current.pause();
-                              videoPausedAtRef.current = c.videoTimestamp;
-                              videoRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                            }
-                          }
-                        }}
+                        className={`flex flex-col gap-2 transition-all duration-200 ${
+                          isActive
+                            ? 'bg-purple-50/50 px-1 py-2 rounded-lg'
+                            : 'py-2 hover:bg-gray-50/50 px-1 rounded-lg'
+                        }`}
                       >
-                        <div className="p-2 flex items-start gap-2">
-                          {/* Index badge */}
-                          <span className={`font-bold rounded-full w-5 h-5 flex items-center justify-center text-[10px] flex-shrink-0 border ${isAdminComment ? 'text-purple-700 bg-purple-100 border-purple-200' : 'text-blue-700 bg-blue-100 border-blue-200'
-                            }`}>{idx + 1}</span>
-                          <div className="flex-1 min-w-0">
-                            {/* Author row */}
-                            <div className="flex items-center gap-1 mb-0.5 flex-wrap">
-                              <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold ${isAdminComment ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
-                                }`}>
-                                {isAdminComment ? <UserCog className="h-2 w-2" /> : <User className="h-2 w-2" />}
-                                {isAdminComment ? 'Admin' : 'Customer'}
+                        {/* The initial comment bubble */}
+                        <div 
+                          className={`flex items-start gap-2 max-w-[90%] cursor-pointer group ${isOutgoing ? 'self-end flex-row-reverse' : 'self-start'}`}
+                          onClick={() => {
+                            const next = isActive ? null : comment.id;
+                            setActiveComment(next);
+                            if (next) {
+                              const c = commentsForCurrentMedia.find(x => x.id === next);
+                              if (c && c.videoTimestamp != null && videoRef.current) {
+                                videoRef.current.currentTime = c.videoTimestamp;
+                                videoRef.current.pause();
+                                videoPausedAtRef.current = c.videoTimestamp;
+                                videoRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                              }
+                            }
+                          }}
+                        >
+                          <span className={`font-bold text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] flex-shrink-0 mt-1 shadow-sm ${isOutgoing ? 'bg-purple-500' : 'bg-blue-500'}`}>
+                            {idx + 1}
+                          </span>
+                          <div className={`shadow-sm px-3 py-2 flex flex-col relative ${
+                            isOutgoing 
+                              ? 'bg-[#E7FFDB] border border-[#d3f5c0] rounded-2xl rounded-tr-sm' 
+                              : 'bg-white border border-gray-200 rounded-2xl rounded-tl-sm'
+                          } ${isActive ? 'ring-1 ring-purple-300' : ''}`}>
+                            <div className="flex items-center gap-1 mb-0.5">
+                              <span className={`text-[9px] font-bold ${isOutgoing ? 'text-green-700' : 'text-blue-700'}`}>
+                                {isOutgoing ? 'Internal' : 'External'}
                               </span>
                               {comment.authorEmail && (
-                                <span className="text-[9px] text-gray-400 truncate max-w-[110px]">{comment.authorEmail}</span>
+                                <span className="text-[9px] text-gray-500 truncate max-w-[110px]">• {comment.authorEmail}</span>
                               )}
-                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ml-auto ${(isAdminComment || comment.reviewType === 'internal') ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
-                                }`}>
-                                {(isAdminComment || comment.reviewType === 'internal') ? 'Internal' : 'External'}
-                              </span>
                             </div>
-                            <p className={`text-xs font-medium break-words ${comment.discarded ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
+                            
+                            <p className={`text-[13px] break-words leading-snug ${comment.discarded ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
                               {comment.message || comment.comment}
-                              {comment.done && <span className="ml-1.5 text-green-600 text-[10px]">✓</span>}
                             </p>
-                            <div className="flex items-center justify-between gap-2 mt-0.5 flex-wrap">
-                              <p className="text-[9px] text-gray-400">
-                                {comment.timestamp ? new Date(comment.timestamp).toLocaleString() : ''}
-                              </p>
+                            
+                            <div className="flex items-center justify-end gap-2 mt-1.5 pt-1.5 border-t border-black/5">
+                              <span className="text-[9px] text-gray-500/80">
+                                {comment.timestamp ? new Date(comment.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}
+                              </span>
+                              
+                              {comment.done ? (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleMarkDone(comment.id); }}
+                                  className="flex items-center gap-0.5 text-[10px] text-emerald-600 hover:text-emerald-700 transition-colors font-medium ml-1"
+                                >
+                                  <CheckCircle className="h-3 w-3" /> Done
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleMarkDone(comment.id); }}
+                                  className="flex items-center gap-0.5 text-[10px] text-gray-400 hover:text-emerald-600 transition-colors font-medium ml-1"
+                                >
+                                  <CheckCircle className="h-3 w-3" /> Mark
+                                </button>
+                              )}
+                              
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleToggleDiscard(comment.id); }}
+                                className={`flex items-center gap-0.5 text-[10px] font-medium ml-1 transition-colors ${comment.discarded ? 'text-orange-600' : 'text-gray-400 hover:text-orange-500'}`}
+                              >
+                                <XCircle className="h-3 w-3" />{comment.discarded ? 'Discarded' : 'Discard'}
+                              </button>
+                              
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (replyingTo === comment.id) {
+                                    handleCancelReply();
+                                  } else {
+                                    handleStartReply(comment.id);
+                                  }
+                                }}
+                                className="flex items-center gap-0.5 text-[10px] text-indigo-500 hover:text-indigo-700 transition-colors font-medium ml-1"
+                              >
+                                <MessageSquare className="h-3 w-3" /> Reply
+                              </button>
+                              
+                              {isAdminComment && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleDeleteComment(comment.id); }}
+                                  className="flex items-center gap-0.5 text-[10px] text-red-400 hover:text-red-600 transition-colors font-medium ml-1"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </button>
+                              )}
+                              
                               {comment.videoTimestamp != null && (
                                 <button
-                                  title="Jump to this moment in the video"
-                                  className="inline-flex items-center gap-1 bg-orange-500 text-white px-2 py-0.5 rounded-full text-[9px] font-bold hover:bg-orange-600 active:scale-95 transition-all shadow-sm"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     if (videoRef.current) {
@@ -1650,11 +1600,8 @@ function ContentDetailView({
                                     }
                                     setActiveComment(comment.id);
                                   }}
+                                  className="flex items-center gap-0.5 text-[9px] text-white bg-orange-500 hover:bg-orange-600 px-1.5 py-0.5 rounded-full transition-colors ml-1 font-bold shadow-sm"
                                 >
-                                  <span className="relative flex h-1.5 w-1.5">
-                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
-                                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-white" />
-                                  </span>
                                   ⏱ {formatVideoTime(comment.videoTimestamp)}
                                 </button>
                               )}
@@ -1662,100 +1609,106 @@ function ContentDetailView({
                           </div>
                         </div>
 
-                        {/* Threaded Discussion replies */}
-                        <div className="mx-2 mb-2 pl-5 border-l-2 border-purple-100 space-y-1.5">
-                          {(() => {
-                            const replies = comment.replies || (comment.adminReply ? [{
-                              id: 'legacy-reply',
-                              authorRole: 'admin',
-                              authorName: comment.adminReply.adminName || 'Admin',
-                              authorEmail: comment.adminReply.adminEmail || '',
-                              message: comment.adminReply.text,
-                              timestamp: comment.adminReply.timestamp
-                            }] : []);
-                            return replies.map((rep, rIdx) => {
-                              return (
-                                <div key={rep.id || rIdx} className={`p-2 rounded-md border text-[11px] ${rep.authorRole === 'admin' ? 'bg-purple-50/50 border-purple-100' : rep.authorRole === 'creator' ? 'bg-green-50/50 border-green-100' : 'bg-blue-50/50 border-blue-100'}`}>
-                                  <div className="flex items-center gap-1 mb-0.5 flex-wrap">
-                                    <span className={`inline-flex items-center gap-0.5 px-1 rounded text-[8px] font-bold ${rep.authorRole === 'admin' ? 'bg-purple-100 text-purple-700' : rep.authorRole === 'creator' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
-                                      {rep.authorRole === 'admin' ? 'Admin' : rep.authorRole === 'creator' ? 'Creator' : 'Customer'}
-                                    </span>
-                                    {rep.authorEmail && (
-                                      <span className="text-[9px] text-gray-405 truncate max-w-[120px]">{rep.authorEmail}</span>
-                                    )}
-                                    <span className="text-[9px] text-gray-400 ml-auto">
+                        {/* Existing replies */}
+                        {(() => {
+                          const replies = comment.replies || (comment.adminReply ? [{
+                            id: 'legacy-reply',
+                            authorRole: 'admin',
+                            authorName: comment.adminReply.adminName || 'Admin',
+                            authorEmail: comment.adminReply.adminEmail || '',
+                            message: comment.adminReply.text,
+                            timestamp: comment.adminReply.timestamp
+                          }] : []);
+                          
+                          return replies.map((rep, rIdx) => {
+                            const isRepOutgoing = rep.authorRole === 'admin';
+                            return (
+                              <div 
+                                key={rep.id || rIdx} 
+                                className={`flex items-start gap-2 max-w-[90%] group ${isRepOutgoing ? 'self-end flex-row-reverse' : 'self-start'}`}
+                              >
+                                <div className="w-5 h-5 flex-shrink-0 flex items-center justify-center rounded-full bg-gray-100 border border-gray-200 text-[9px] font-bold text-gray-500 mt-1 shadow-sm">
+                                  {isRepOutgoing ? 'A' : (rep.authorRole === 'creator' ? 'C' : 'U')}
+                                </div>
+                                
+                                <div className={`px-3 py-2 shadow-sm flex flex-col relative ${
+                                  isRepOutgoing 
+                                    ? 'bg-[#E7FFDB] border border-[#d3f5c0] rounded-2xl rounded-tr-sm' 
+                                    : 'bg-white border border-gray-200 rounded-2xl rounded-tl-sm'
+                                }`}>
+                                  {rep.authorEmail && !isRepOutgoing && (
+                                    <span className="text-[9px] font-medium text-gray-500 mb-0.5">{rep.authorEmail}</span>
+                                  )}
+                                  <p className="text-[13px] text-gray-800 break-words leading-snug">{rep.message || rep.text}</p>
+                                  
+                                  <div className="flex items-center justify-end gap-3 mt-1">
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (replyingTo === comment.id) {
+                                          handleCancelReply();
+                                        } else {
+                                          handleStartReply(comment.id);
+                                        }
+                                      }}
+                                      className="flex items-center gap-0.5 text-[9px] text-indigo-500 hover:text-indigo-700 transition-colors font-medium"
+                                    >
+                                      <MessageSquare className="h-2.5 w-2.5" /> Reply
+                                    </button>
+                                    <span className="text-[9px] text-gray-500/80">
                                       {rep.timestamp ? new Date(rep.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}
                                     </span>
                                   </div>
-                                  <p className="text-[11px] text-gray-750 break-words font-medium">{rep.message || rep.text}</p>
                                 </div>
-                              );
-                            });
-                          })()}
-                        </div>
+                              </div>
+                            );
+                          });
+                        })()}
 
-                        {/* Inline reply textarea */}
-                        {!isAdminComment && isReplying && isActive && (
-                          <div className="mx-2 mb-2" onClick={(e) => e.stopPropagation()}>
+                        {/* Reply input */}
+                        {isReplying && isActive && (
+                          <div
+                            className="mt-1 flex flex-col self-end max-w-[90%] w-full bg-white p-2.5 rounded-2xl shadow-sm border border-indigo-100"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div className="flex items-center gap-2 mb-1.5">
+                              <p className="text-[10px] text-indigo-500 font-medium">
+                                New reply…
+                              </p>
+                            </div>
                             <textarea
-                              autoFocus
-                              className="w-full rounded-lg border border-purple-200 bg-purple-50 text-xs text-gray-900 placeholder-gray-400 p-2 resize-none focus:outline-none focus:ring-2 focus:ring-purple-300"
-                              rows={2}
-                              placeholder="Type admin reply… (Ctrl+Enter to send)"
                               value={replyText}
                               onChange={(e) => setReplyText(e.target.value)}
-                              onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleReplySubmit(comment.id); }}
-                              onClick={(e) => e.stopPropagation()}
+                              placeholder="Type a message..."
+                              rows={2}
+                              autoFocus
+                              className="w-full text-xs focus:outline-none resize-none bg-transparent placeholder-gray-400"
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' && !e.shiftKey) {
+                                  e.preventDefault();
+                                  if (replyText.trim() && !savingReply) {
+                                    handleReplySubmit(comment.id);
+                                  }
+                                }
+                              }}
                             />
-                            <div className="flex gap-1.5 mt-1">
+                            <div className="flex items-center justify-end gap-2 mt-2">
                               <button
-                                className="flex-1 py-1 rounded-md bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-semibold disabled:opacity-50"
-                                disabled={savingReply}
-                                onClick={(e) => { e.stopPropagation(); handleReplySubmit(comment.id); }}
+                                onClick={() => handleCancelReply()}
+                                className="text-[10px] text-gray-500 hover:text-gray-700 font-medium px-2 py-1"
                               >
-                                {savingReply ? 'Sending…' : 'Send Reply'}
+                                Cancel
                               </button>
                               <button
-                                className="flex-1 py-1 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-600 text-[10px] font-semibold"
-                                onClick={(e) => { e.stopPropagation(); handleCancelReply(); }}
-                              >Cancel</button>
+                                onClick={() => handleReplySubmit(comment.id)}
+                                disabled={savingReply || !replyText.trim()}
+                                className="flex items-center justify-center w-7 h-7 bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white rounded-full transition-colors shadow-sm"
+                              >
+                                {savingReply
+                                  ? <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent" />
+                                  : <Send className="h-3 w-3 ml-0.5" />}
+                              </button>
                             </div>
-                          </div>
-                        )}
-
-                        {/* Action buttons (when active, not in reply mode) */}
-                        {isActive && !isReplying && (
-                          <div className="flex items-center gap-1 px-2 pb-2" onClick={(e) => e.stopPropagation()}>
-                            {!isAdminComment && (
-                              <button
-                                className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] bg-purple-50 text-purple-700 border border-purple-200 rounded-md font-medium hover:bg-purple-100 transition-colors"
-                                onClick={(e) => { e.stopPropagation(); handleStartReply(comment.id); }}
-                              >
-                                <CornerDownRight className="h-2.5 w-2.5" />Reply
-                              </button>
-                            )}
-                            {!comment.done && (
-                              <button
-                                className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] bg-green-50 text-green-700 border border-green-200 rounded-md hover:bg-green-100 transition-colors"
-                                onClick={(e) => { e.stopPropagation(); handleMarkDone(comment.id); }}
-                              >
-                                <Check className="h-2.5 w-2.5" />Done
-                              </button>
-                            )}
-                            <button
-                              className={`flex items-center gap-0.5 px-2 py-0.5 text-[10px] rounded-md font-semibold transition-colors ${comment.discarded ? 'bg-orange-100 text-orange-700' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'}`}
-                              onClick={(e) => { e.stopPropagation(); handleToggleDiscard(comment.id); }}
-                            >
-                              <XCircle className="h-2.5 w-2.5" />{comment.discarded ? 'Discarded' : 'Discard'}
-                            </button>
-                            {isAdminComment && (
-                              <button
-                                className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] bg-red-50 text-red-500 border border-red-200 rounded-md hover:bg-red-100 transition-colors ml-auto"
-                                onClick={(e) => { e.stopPropagation(); handleDeleteComment(comment.id); }}
-                              >
-                                <Trash2 className="h-2.5 w-2.5" />
-                              </button>
-                            )}
                           </div>
                         )}
                       </div>

@@ -35,8 +35,7 @@ function LinkedInIntegration({ onConnectionStatusChange }) {
   const LINKEDIN_CLIENT_ID = process.env.REACT_APP_LINKEDIN_CLIENT_ID;
   const LINKEDIN_REDIRECT_URI = process.env.REACT_APP_LINKEDIN_REDIRECT_URI;
   // Updated scopes to include all necessary permissions for analytics and comment management
-  const LINKEDIN_SCOPE = 'r_basicprofile w_member_social r_member_postAnalytics r_organization_social w_organization_social rw_organization_admin r_organization_followers w_member_social_feed w_organization_social_feed r_organization_social_feed';
-
+    const LINKEDIN_SCOPE = process.env.REACT_APP_LINKEDIN_SCOPE;
   // Helper: Get current customerId (same logic as storeCustomerSocialAccount)
   const getCustomerId = () => {
     let customerId = null;

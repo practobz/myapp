@@ -7,8 +7,7 @@ import { subDays, format } from 'date-fns';
 import { getUserData, setUserData, removeUserData, migrateToUserSpecificStorage } from '../../utils/sessionUtils';
 
 // Your Facebook App ID (Instagram uses Facebook's Graph API)
-const FACEBOOK_APP_ID = '4416243821942660';
-
+const FACEBOOK_APP_ID = process.env.REACT_APP_FACEBOOK_APP_ID;
 // Time period options for historical data
 const TIME_PERIOD_OPTIONS = [
   { value: 7, label: 'Last 7 days' },

@@ -8,7 +8,7 @@ import { getUserData, setUserData, removeUserData, migrateToUserSpecificStorage 
 import FacebookPostInsights from './FacebookPostInsights';
 
 // Your Facebook App ID
-const FACEBOOK_APP_ID = '4416243821942660';
+const FACEBOOK_APP_ID = process.env.REACT_APP_FACEBOOK_APP_ID;
 
 function FacebookIntegration() {
   // Multi-account state

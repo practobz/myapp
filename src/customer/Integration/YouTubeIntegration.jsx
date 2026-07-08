@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Youtube, TrendingUp, ExternalLink, CheckCircle, AlertCircle, Loader2, Users, Eye, Play, Clock, Plus, UserCheck, Trash2, RefreshCw, BarChart3, ThumbsUp, MessageSquare, ChevronUp, LayoutGrid, X, Key, Calendar, XCircle } from 'lucide-react';
-import YouTubePostAnalytics from './components/YouTubePostAnalytics';
+import YouTubePostAnalytics from './YouTubePostAnalytics';
 import TimePeriodChart from '../../components/TimeperiodChart';
 import { getUserData, setUserData, removeUserData, migrateToUserSpecificStorage } from '../../utils/sessionUtils';
 
 // YouTube Integration Constants
-const CLIENT_ID = '593529385135-snp35l6s9dtje8g8f1l1b3ajtp375cjr.apps.googleusercontent.com';
-const API_KEY = 'AIzaSyD2fYMvhlDJwk6cMEJSBRQmJnsidFjCFtc';
-const DISCOVERY_DOCS = ['https://www.googleapis.com/discovery/v1/apis/youtube/v3/rest'];
-const SCOPES = 'https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/yt-analytics.readonly https://www.googleapis.com/auth/youtube.upload';
+const CLIENT_ID = process.env.REACT_APP_YOUTUBE_CLIENT_ID;
+const API_KEY = process.env.REACT_APP_YOUTUBE_API_KEY;
+const DISCOVERY_DOCS = [process.env.REACT_APP_YOUTUBE_DISCOVERY_DOCS];
+const SCOPES = process.env.REACT_APP_YOUTUBE_SCOPES;
 
 // Helper to parse ISO 8601 duration (e.g. PT1M30S => 90 seconds)
 function parseISO8601Duration(iso) {

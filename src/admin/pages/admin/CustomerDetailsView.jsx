@@ -2214,6 +2214,7 @@ function CustomerDetailsView() {
           title: (matching[0]?.caption) || item.title || '',
           description: (matching[0]?.notes) || item.description || '',
           platform: item.type || (matching[0]?.platform) || '',
+          postType: item.postType || (matching[0]?.postType) || '',
           status: (matching[matching.length - 1]?.status) || item.status || 'pending',
           published: item.published === true,
           publishedPlatforms: item.publishedPlatforms || [],

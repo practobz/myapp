@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef, memo } from '
 import { useNavigate } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
 import {
-  Send, Image, FileText, MessageSquare, Calendar, ChevronLeft, ChevronRight,
+  Send, Image, MessageSquare, ChevronLeft, ChevronRight,
   Trash2, Check, X, CornerDownRight, UserCog, User, MessageCircle,
   Clock, CheckCircle, XCircle, Loader2, Facebook, Instagram, Video, RotateCcw,
   Edit3, Move, AlertCircle, Upload
@@ -427,9 +427,20 @@ function ContentDetailView({
   const [undoingAdmin, setUndoingAdmin] = useState(false);
   const [finalizingFeedback, setFinalizingFeedback] = useState(false);
 
+  const hasPendingAdminCommentsToSend = useMemo(() => {
+    return commentsForVersion.some(c =>
+      (c.authorRole === 'admin' || c.reviewType === 'internal') &&
+      !c.finalized &&
+      !c.discarded &&
+      !c.isNew &&
+      !c.editing
+    );
+  }, [commentsForVersion]);
+
   const handleFinalizeFeedback = useCallback(async (option) => {
     const vId = selectedContent?.versions?.[selectedVersionIndex]?.id;
     if (!vId) return;
+    if (!hasPendingAdminCommentsToSend) return;
     setFinalizingFeedback(true);
     const targetStatus = option === 'direct' ? 'changes_requested_customer_approved_admin' : 'revision_requested';
     try {
@@ -460,7 +471,7 @@ function ContentDetailView({
     } finally {
       setFinalizingFeedback(false);
     }
-  }, [selectedContent, selectedVersionIndex, onRefresh]);
+  }, [selectedContent, selectedVersionIndex, onRefresh, hasPendingAdminCommentsToSend]);
 
   const handleApproveAdmin = useCallback(async () => {
     const vId = selectedContent?.versions?.[selectedVersionIndex]?.id;
@@ -682,6 +693,19 @@ function ContentDetailView({
     [selectedContent, selectedVersionIndex]
   );
 
+  const isCustomerApprovedForPosting = useMemo(() => {
+    const approvedStatuses = ['approved_customer', 'approved_both', 'published'];
+    const topLevelStatus = (selectedContent?.status || '').toLowerCase();
+    if (selectedContent?.approved_by_customer === true || approvedStatuses.includes(topLevelStatus)) {
+      return true;
+    }
+
+    const latestVersion = selectedContent?.versions?.[selectedContent?.versions?.length - 1];
+    if (!latestVersion) return false;
+    const latestStatus = (latestVersion.status || '').toLowerCase();
+    return latestVersion.approved_by_customer === true || approvedStatuses.includes(latestStatus);
+  }, [selectedContent]);
+
   const hasInternalReviewHistory = useMemo(() => {
     const versions = selectedContent?.versions || [];
     return versions.some(version => (version.submission_stage || version.submissionStage || 'internal') !== 'customer');
@@ -876,13 +900,20 @@ function ContentDetailView({
     removeCommentLocally(id);
     setActiveComment(null);
     try {
-      await fetch(`${API_URL}/api/content-submissions/${encodeURIComponent(selectedContent.id)}/comments/${id}`, {
+      const res = await fetch(`${API_URL}/api/content-submissions/${encodeURIComponent(selectedContent.id)}/comments/${id}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
       });
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const nextStatus = data?.status;
+        if (nextStatus && selectedContent?.versions?.[selectedVersionIndex]) {
+          selectedContent.versions[selectedVersionIndex].status = nextStatus;
+        }
+      }
       onRefresh?.();
     } catch (err) { console.error('Error deleting comment:', err); }
-  }, [selectedContent, removeCommentLocally, onRefresh]);
+  }, [selectedContent, selectedVersionIndex, removeCommentLocally, onRefresh]);
 
   // ── Admin reply ──────────────────────────────────────────────────────────
   const handleStartReply = useCallback((commentId) => {
@@ -994,7 +1025,9 @@ function ContentDetailView({
 
                 <button
                   onClick={() => handleScheduleContent(selectedContent)}
-                  className="inline-flex items-center justify-center px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                  disabled={!isCustomerApprovedForPosting}
+                  title={!isCustomerApprovedForPosting ? 'Content can be posted only after customer approval' : ''}
+                  className="inline-flex items-center justify-center px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Send className="h-3 w-3 mr-1" />
                   Post Content
@@ -1157,7 +1190,6 @@ function ContentDetailView({
                                 ref={videoRef}
                                 data-cdv-media
                                 src={currentMedia.url}
-                                poster={currentVersion?.thumbnailUrl || undefined}
                                 controls
                                 className="max-w-full h-auto max-h-[50vh] sm:max-h-[60vh] lg:max-h-[70vh] rounded-lg shadow border border-gray-200 object-contain transition-all cursor-crosshair hover:ring-2 hover:ring-purple-400 hover:ring-offset-1"
                                 loading="lazy"
@@ -1330,7 +1362,7 @@ function ContentDetailView({
 
                 {/* Internal Review Actions */}
                 <div className="space-y-1.5 pt-1">
-                  {currentVersion?.status === 'customer_feedback_pending_admin' || commentsForVersion.some(c => c.authorRole === 'admin' && !c.finalized && !c.discarded && !c.isNew && !c.editing) ? (
+                  {currentVersion?.status === 'customer_feedback_pending_admin' || hasPendingAdminCommentsToSend ? (
                     <div className="space-y-2">
                       {currentVersion?.status === 'customer_feedback_pending_admin' && (
                         <div className="text-xs font-semibold text-purple-900 bg-purple-50 p-2.5 rounded-lg border border-purple-250 flex items-start gap-1">
@@ -1341,12 +1373,15 @@ function ContentDetailView({
 
                       <button
                         onClick={() => handleFinalizeFeedback('finalized')}
-                        disabled={finalizingFeedback}
-                        className="w-full py-2 bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-lg text-xs font-semibold hover:from-orange-600 hover:to-red-600 shadow-sm transition-all disabled:opacity-50 flex items-center justify-center gap-1.5"
+                        disabled={finalizingFeedback || !hasPendingAdminCommentsToSend}
+                        className="w-full py-2 bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-lg text-xs font-semibold hover:from-orange-600 hover:to-red-600 shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
                       >
                         {finalizingFeedback ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
                         Send to Creator (Request Revisions)
                       </button>
+                      {!hasPendingAdminCommentsToSend && (
+                        <p className="text-[11px] text-gray-500">No pending admin comments to send.</p>
+                      )}
                       <button
                         onClick={handleApproveAdmin}
                         disabled={approvingAdmin}
@@ -1413,46 +1448,6 @@ function ContentDetailView({
               </div>
             </div>
           )}
-
-          {/* Version History */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200/50 overflow-hidden">
-            <div className="px-3 py-2 border-b border-gray-200/50 bg-green-50/50">
-              <h3 className="text-sm font-bold text-gray-900 flex items-center">
-                <FileText className="h-4 w-4 text-green-600 mr-1.5" />
-                Version History
-              </h3>
-            </div>
-            <div className="max-h-64 sm:max-h-80 overflow-y-auto">
-              {selectedContent.versions.map((version, index) => {
-                const fd = new Date(version.createdAt).toLocaleDateString('en-US', {
-                  month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
-                });
-                return (
-                  <div className="relative" key={version.id}>
-                    <button
-                      onClick={() => { setSelectedVersionIndex(index); setSelectedMediaIndex(0); }}
-                      className={`w-full text-left px-3 py-2 flex flex-col border-l-2 transition-colors ${selectedVersionIndex === index
-                          ? 'bg-purple-50 border-l-purple-600'
-                          : 'bg-white border-l-transparent hover:bg-gray-50'
-                        }`}
-                    >
-                      <span className="font-semibold text-gray-900 text-xs">V{version.versionNumber}</span>
-                      <div className="flex items-center text-[10px] text-gray-500 gap-2 mt-0.5">
-                        <span className="flex items-center"><Calendar className="h-2.5 w-2.5 mr-0.5" />{fd}</span>
-                        {version.media?.length > 0 && (
-                          <span className="flex items-center"><Image className="h-2.5 w-2.5 mr-0.5" />{version.media.length}</span>
-                        )}
-                        {version.comments?.length > 0 && (
-                          <span className="flex items-center"><MessageSquare className="h-2.5 w-2.5 mr-0.5" />{version.comments.length}</span>
-                        )}
-                      </div>
-                    </button>
-
-                  </div>
-                );
-              })}
-            </div>
-          </div>
 
           {/* Comments panel */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200/50 overflow-hidden">

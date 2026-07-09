@@ -209,6 +209,51 @@ export function hasMultipleVideos(files) {
   return videoCount > 1;
 }
 
+function getMediaType(entry) {
+  const fileObj = entry?.file || entry;
+  const declaredType = entry?.type || '';
+  const mimeType = fileObj?.type || '';
+
+  if (declaredType === 'image' || mimeType.startsWith('image/')) return 'image';
+  if (declaredType === 'video' || mimeType.startsWith('video/')) return 'video';
+  return null;
+}
+
+export function validateMediaSelectionForPostType(files, postType) {
+  const normalizedPostType = String(postType || '').toLowerCase();
+  const mediaTypes = (files || []).map(getMediaType).filter(Boolean);
+  const videoCount = mediaTypes.filter(type => type === 'video').length;
+
+  if (normalizedPostType === 'post' || normalizedPostType === 'story') {
+    if (mediaTypes.length > 1) {
+      return `Only 1 image is allowed for a ${normalizedPostType}.`;
+    }
+    if (videoCount > 0) {
+      return `Videos are not allowed for a ${normalizedPostType}.`;
+    }
+  }
+
+  if (normalizedPostType === 'carousel') {
+    if (mediaTypes.length > 10) {
+      return 'Up to 10 images are allowed for a carousel.';
+    }
+    if (videoCount > 0) {
+      return 'Carousel posts only allow images. Videos and reels are not allowed.';
+    }
+  }
+
+  if (normalizedPostType === 'reel' || normalizedPostType === 'video') {
+    if (mediaTypes.length > 1) {
+      return 'Only 1 video is allowed for a Reel/Video.';
+    }
+    if (mediaTypes.some(type => type !== 'video')) {
+      return 'Only video files are allowed for a Reel/Video.';
+    }
+  }
+
+  return null;
+}
+
 export async function validateThumbnail(file, options = {}) {
   const platforms = normalizePlatforms(options.platforms || options.platform || []);
   const issues = [];

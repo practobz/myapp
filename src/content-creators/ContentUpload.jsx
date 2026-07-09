@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { ArrowLeft, Upload, Image, X, Check, CheckCircle, FileText, Calendar, Clock, Palette, Send, MapPin, Tag, MessageSquare, Play, Video, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, User, ShieldCheck, AlertCircle, History, Search, Globe, Plus, Edit3 } from 'lucide-react';
 import { Facebook, Instagram, Linkedin, Youtube, Twitter } from 'lucide-react';
 import ContentCreatorLayout from './Layout';
-import { validateMediaForPlatforms, validateThumbnail, hasMixedContent, hasMultipleVideos } from './mediaValidation';
+import { validateMediaForPlatforms, validateThumbnail, hasMixedContent, hasMultipleVideos, validateMediaSelectionForPostType } from './mediaValidation';
 
 // Helper to get creator email from localStorage
 function getCreatorEmail() {
@@ -34,7 +34,7 @@ function getUserRole() {
       const userObj = JSON.parse(userStr);
       return (userObj.role || '').toLowerCase();
     }
-  } catch (e) {}
+  } catch (e) { }
   return '';
 }
 
@@ -61,6 +61,7 @@ function ContentUpload() {
 
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [thumbnailFileObj, setThumbnailFileObj] = useState(null);
+  const [thumbnailFileRemoved, setThumbnailFileRemoved] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const replaceFileInputRef = useRef(null);
   const [replacingFileId, setReplacingFileId] = useState(null);
@@ -103,6 +104,7 @@ function ContentUpload() {
   }, [activeTab, adminVersions, customerVersions]);
   const [versionsAccordionOpen, setVersionsAccordionOpen] = useState(true);
   const [selectedVersionIndex, setSelectedVersionIndex] = useState(0);
+  const selectedVersionId = previousVersions[selectedVersionIndex]?.id || null;
   const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
   const [validationNotice, setValidationNotice] = useState('');
   const [commentsForVersion, setCommentsForVersion] = useState([]);
@@ -164,7 +166,7 @@ function ContentUpload() {
           })).filter(a => a.email));
         }
       } catch (err) {
-        console.error('❌ Failed to fetch admins:', err);
+        console.error('Ã¢ÂÅ’ Failed to fetch admins:', err);
       } finally {
         setAdminsLoading(false);
       }
@@ -328,10 +330,10 @@ function ContentUpload() {
     }).length;
 
     return {
-      total:         customerAssignments.length,
-      pending:       customerAssignments.filter(a => getPickerFilterStatus(a) === 'pending').length,
-      approved:      customerAssignments.filter(a => getPickerFilterStatus(a) === 'approved').length,
-      published:     customerAssignments.filter(a => getPickerFilterStatus(a) === 'published').length,
+      total: customerAssignments.length,
+      pending: customerAssignments.filter(a => getPickerFilterStatus(a) === 'pending').length,
+      approved: customerAssignments.filter(a => getPickerFilterStatus(a) === 'approved').length,
+      published: customerAssignments.filter(a => getPickerFilterStatus(a) === 'published').length,
       adminApproved: adminApprovedCount
     };
   }, [pickerAssignments, pickerSubmissions, pickerScheduledPosts, pickerCustomer]);
@@ -404,6 +406,7 @@ function ContentUpload() {
     setSentToCustomer(false);
     setAdminUploadedForThis(false);
     setReviewTabMode('both');
+    setThumbnailFileObj(null);
   }, [calendarId, itemIndex]);
 
   // Fetch real assignment data based on calendarId and itemIndex
@@ -426,16 +429,16 @@ function ContentUpload() {
             };
           });
         }
-        
+
         // Then fetch the specific calendar
         const res = await fetch(`${process.env.REACT_APP_API_URL}/calendars`);
         const calendars = await res.json();
-        
+
         let found = null;
         calendars.forEach((calendar) => {
           const customerId = calendar.customerId || calendar.customer_id || calendar.customer?._id || '';
           const customerInfo = customerMap[customerId] || {};
-          
+
           if (Array.isArray(calendar.contentItems)) {
             // Use itemIndex to get the correct item
             const idx = parseInt(itemIndex, 10);
@@ -458,28 +461,28 @@ function ContentUpload() {
                 reviewTabMode: normalizeReviewTabMode(customerInfo.reviewTabMode),
                 createdAt: item.createdAt || item.created_at || null,
               };
-              
+
               // Only log if customer data is missing
               if (!found.customerId) {
-                console.error('❌ Customer ID is missing for calendarId:', calendarId, 'itemIndex:', itemIndex);
+                console.error('Ã¢ÂÅ’ Customer ID is missing for calendarId:', calendarId, 'itemIndex:', itemIndex);
               }
               if (!found.customerName) {
-                console.error('❌ Customer name is missing for calendarId:', calendarId, 'itemIndex:', itemIndex);
+                console.error('Ã¢ÂÅ’ Customer name is missing for calendarId:', calendarId, 'itemIndex:', itemIndex);
               }
             }
           }
         });
-        
+
         if (!found) {
-          console.error('❌ Assignment not found for calendarId:', calendarId, 'itemIndex:', itemIndex);
+          console.error('Ã¢ÂÅ’ Assignment not found for calendarId:', calendarId, 'itemIndex:', itemIndex);
         }
-        
+
         setAssignment(found);
         const initialMode = normalizeReviewTabMode(found?.reviewTabMode) || 'admin';
         setActiveTab(initialMode === 'both' ? 'admin' : initialMode);
         setReviewTabMode(initialMode);
       } catch (err) {
-        console.error('❌ Error fetching assignment:', err);
+        console.error('Ã¢ÂÅ’ Error fetching assignment:', err);
         setAssignment(null);
       } finally {
         setLoading(false);
@@ -494,58 +497,91 @@ function ContentUpload() {
   useEffect(() => {
     const fetchPreviousSubmission = async () => {
       if (!assignment || !assignment.id || previousSubmissionLoaded) {
-        console.log('⏭️ Skipping fetch - assignment:', !!assignment, 'id:', assignment?.id, 'loaded:', previousSubmissionLoaded);
+        console.log('Ã¢ÂÂ­Ã¯Â¸Â Skipping fetch - assignment:', !!assignment, 'id:', assignment?.id, 'loaded:', previousSubmissionLoaded);
         return;
       }
 
       try {
-        const normMedia = (media) => {
+        const normalizeUrlForCompare = (value) => {
+          if (!value || typeof value !== 'string') return '';
+          return value.split('?')[0].split('#')[0].trim().toLowerCase();
+        };
+
+        const normMedia = (media, thumbnailUrl = '') => {
           if (!media || !Array.isArray(media)) return [];
+          const isReelOrVideoPost = ['reel', 'video'].includes((assignment?.postType || '').toLowerCase());
           const getType = (url) => {
             if (!url || typeof url !== 'string') return 'image';
             const ext = url.toLowerCase().split('.').pop();
-            return ['mp4','webm','ogg','mov','avi'].includes(ext) ? 'video' : 'image';
+            return ['mp4', 'webm', 'ogg', 'mov', 'avi'].includes(ext) ? 'video' : 'image';
           };
-          return media.map(item => {
-            if (typeof item === 'string') return { url: item, type: getType(item) };
-            if (item?.url && typeof item.url === 'string') return { url: item.url, type: item.type || getType(item.url) };
+
+          const normalizedThumbUrl = normalizeUrlForCompare(thumbnailUrl);
+
+          const cleaned = media.map(item => {
+            if (typeof item === 'string') {
+              return { url: item, type: getType(item) };
+            }
+            if (item?.url && typeof item.url === 'string') {
+              return {
+                url: item.url,
+                type: item.type || getType(item.url),
+                isThumbnail: item.isThumbnail === true || item.kind === 'thumbnail' || item.role === 'thumbnail'
+              };
+            }
             return null;
-          }).filter(Boolean);
+          }).filter(item => {
+            if (!item) return false;
+            if (item.isThumbnail) return false;
+            if (normalizedThumbUrl && normalizeUrlForCompare(item.url) === normalizedThumbUrl) return false;
+            return true;
+          });
+
+          // Reel/Video submissions should only show actual video media in the main media carousel.
+          if (isReelOrVideoPost) {
+            const videosOnly = cleaned.filter(item => {
+              if (item.type === 'video') return true;
+              return /\.(mp4|webm|ogg|mov|avi|mkv)(\?|$)/i.test(item.url || '');
+            });
+            return videosOnly.length > 0 ? videosOnly : cleaned;
+          }
+
+          return cleaned;
         };
 
-        console.log('🔍 Fetching previous submissions for assignment:', assignment.id, 'by creator:', creatorEmail);
-        
+        console.log('Ã°Å¸â€Â Fetching previous submissions for assignment:', assignment.id, 'by creator:', creatorEmail);
+
         const response = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions`);
-        
+
         if (!response.ok) {
-          console.error('❌ Failed to fetch previous submissions:', response.status);
+          console.error('Ã¢ÂÅ’ Failed to fetch previous submissions:', response.status);
           setPreviousSubmissionLoaded(true);
           return;
         }
 
         const data = await response.json();
-        console.log('📦 Received submissions data:', data);
-        
+        console.log('Ã°Å¸â€œÂ¦ Received submissions data:', data);
+
         // Handle both array response and object with submissions property
         const submissions = Array.isArray(data) ? data : (data.submissions || []);
-        console.log('📋 Total submissions count:', submissions.length);
-        
+        console.log('Ã°Å¸â€œâ€¹ Total submissions count:', submissions.length);
+
         if (submissions.length > 0) {
-          console.log('🔍 Sample submission structure:', {
+          console.log('Ã°Å¸â€Â Sample submission structure:', {
             assignment_id: submissions[0].assignment_id,
             created_by: submissions[0].created_by,
             caption: submissions[0].caption?.substring(0, 50),
             hashtags: submissions[0].hashtags?.substring(0, 50)
           });
         }
-        
+
         // Filter submissions for this specific assignment
         // Primary: match by calendar_id + item_index (unambiguous)
         // Fallback: match by assignment_id title (for older submissions)
         const assignmentCreatedAt = assignment.createdAt ? new Date(assignment.createdAt).getTime() : 0;
         const previousSubmissions = submissions.filter(sub => {
           const subCalendarId = sub.calendar_id || sub.calendarId;
-          const subItemIndex  = (sub.item_index !== undefined && sub.item_index !== null)
+          const subItemIndex = (sub.item_index !== undefined && sub.item_index !== null)
             ? String(sub.item_index)
             : undefined;
           const subAssignmentId = sub.assignment_id || sub.assignmentId || sub.assignmentID;
@@ -557,19 +593,19 @@ function ContentUpload() {
             return false;
           }
 
-          // Primary — most reliable: calendar_id + item_index
+          // Primary — most reliable: calendar_id + item_index
           if (subCalendarId && subItemIndex !== undefined) {
             return subCalendarId === calendarId && subItemIndex === String(itemIndex);
           }
 
-          // Secondary — calendar_id + assignment_id (covers old submissions without item_index)
+          // Secondary — calendar_id + assignment_id (covers old submissions without item_index)
           if (subCalendarId && subAssignmentId && assignment.id) {
             return subCalendarId === calendarId &&
               String(subAssignmentId) === String(assignment.id) &&
               String(subAssignmentId) !== 'undefined';
           }
 
-          // Final fallback — assignment_id only (legacy)
+          // Final fallback — assignment_id only (legacy)
           return (
             subAssignmentId === assignment.id ||
             subAssignmentId === assignment._id ||
@@ -579,7 +615,7 @@ function ContentUpload() {
           );
         });
 
-        console.log('✅ Found', previousSubmissions.length, 'previous submissions for this assignment (any creator)');
+        console.log('Ã¢Å“â€¦ Found', previousSubmissions.length, 'previous submissions for this assignment (any creator)');
 
         // Show ALL versions (internal and customer-stage) so history is always visible
         const allVersionsSorted = [...previousSubmissions].sort((a, b) =>
@@ -595,7 +631,7 @@ function ContentUpload() {
         // Detect if admin (not this creator) already uploaded and sent to customer
         const adminUploaded = allVersionsSorted.some(
           sub => (sub.submission_stage || sub.submissionStage || '') === 'customer' &&
-                 (sub.created_by || '') !== creatorEmail
+            (sub.created_by || '') !== creatorEmail
         );
         setAdminUploadedForThis(adminUploaded);
 
@@ -603,24 +639,45 @@ function ContentUpload() {
         // including ones that have been sent to the customer)
         if (allVersionsSorted.length > 0) {
           const normalized = allVersionsSorted
-            .map((sub, idx) => ({
-              versionNumber: idx + 1,
-              caption: sub.caption || '',
-              hashtags: sub.hashtags || '',
-              notes: sub.notes || '',
-              media: [
-                ...normMedia(sub.media || sub.images || []),
-                ...(sub.thumbnailUrl ? [{ url: sub.thumbnailUrl, type: 'image', isThumbnail: true }] : [])
-              ],
-              createdAt: sub.created_at || sub.createdAt || '',
-              status: sub.status || 'submitted',
-              submissionStage: sub.submission_stage || sub.submissionStage || 'internal',
-              approvalNotes: sub.approval_notes || sub.approvalNotes || '',
-              comments: (sub.comments || []).filter((c, i, arr) => i === arr.findIndex(x => x.id === c.id)),
-              id: sub._id || sub.id || idx,
-              sentToCustomerAt: sub.sent_to_customer_at || sub.sentToCustomerAt || null,
-              thumbnailUrl: sub.thumbnailUrl || null,
-            }));
+            .map((sub, idx) => {
+              const thumbnailUrl = sub.thumbnailUrl || sub.thumbnail_url || sub.thumbnail?.url || null;
+              const media = normMedia(
+                sub.media || sub.images || [],
+                thumbnailUrl || ''
+              );
+              const maxMediaIndex = thumbnailUrl ? media.length : Math.max(0, media.length - 1);
+              const dedupedComments = (sub.comments || []).filter((c, i, arr) => i === arr.findIndex(x => x.id === c.id));
+              const normalizedComments = dedupedComments.map(comment => {
+                const rawIdx = comment?.mediaIndex ?? comment?.media_index ?? 0;
+                const parsedIdx = Number(rawIdx);
+                const safeIdx = Number.isFinite(parsedIdx)
+                  ? Math.min(Math.max(parsedIdx, 0), maxMediaIndex)
+                  : 0;
+
+                // Admin UI appends thumbnail as the last media item; clamp that index
+                // back to a real media index so creator can still see the comment.
+                return {
+                  ...comment,
+                  mediaIndex: safeIdx,
+                };
+              });
+
+              return {
+                thumbnailUrl,
+                versionNumber: idx + 1,
+                caption: sub.caption || '',
+                hashtags: sub.hashtags || '',
+                notes: sub.notes || '',
+                media,
+                createdAt: sub.created_at || sub.createdAt || '',
+                status: sub.status || 'submitted',
+                submissionStage: sub.submission_stage || sub.submissionStage || 'internal',
+                approvalNotes: sub.approval_notes || sub.approvalNotes || '',
+                comments: normalizedComments,
+                id: sub._id || sub.id || idx,
+                sentToCustomerAt: sub.sent_to_customer_at || sub.sentToCustomerAt || null,
+              };
+            });
           setAllPreviousVersions(normalized);
           const tabVersions = normalized.filter(v =>
             activeTab === 'admin'
@@ -644,6 +701,7 @@ function ContentUpload() {
 
         if (prefillSource.length > 0) {
           const latestSubmission = prefillSource[0];
+          const latestThumbnailUrl = latestSubmission.thumbnailUrl || latestSubmission.thumbnail_url || latestSubmission.thumbnail?.url || '';
           if (latestSubmission.caption) setCaption(latestSubmission.caption);
           if (latestSubmission.hashtags) setHashtags(latestSubmission.hashtags);
           if (latestSubmission.notes) setNotes(latestSubmission.notes);
@@ -655,7 +713,10 @@ function ContentUpload() {
             'changes_requested_customer_approved_admin'
           ];
           if (revisionStatuses.includes(latestSubmission.status)) {
-            const mediaItems = normMedia(latestSubmission.media || latestSubmission.images || []);
+            const mediaItems = normMedia(
+              latestSubmission.media || latestSubmission.images || [],
+              latestThumbnailUrl
+            );
             const prepopulated = mediaItems.map((item, idx) => {
               const url = item.url;
               const type = item.type || 'image';
@@ -679,7 +740,7 @@ function ContentUpload() {
 
         setPreviousSubmissionLoaded(true);
       } catch (err) {
-        console.error('❌ Error fetching previous submission:', err);
+        console.error('Ã¢ÂÅ’ Error fetching previous submission:', err);
         setPreviousSubmissionLoaded(true);
       }
     };
@@ -697,10 +758,11 @@ function ContentUpload() {
       const allComments = previousVersions[selectedVersionIndex].comments || [];
       const filteredComments = allComments.filter(c => {
         const isAdminComment = c.reviewType === 'internal' || c.authorRole === 'admin' || c.author === 'Admin';
-        
-        // Hide unfinalized admin comments from the creator
-        if (!isAdmin && isAdminComment && !c.finalized) {
-          return false;
+
+        if (!isAdmin) {
+          // Creator sees all customer comments and finalized admin comments
+          if (c.discarded) return false;
+          return isAdminComment ? c.finalized === true : true;
         }
 
         return activeTab === 'admin' ? (isAdminComment && !c.discarded) : (!isAdminComment && c.finalized && !c.discarded);
@@ -714,7 +776,7 @@ function ContentUpload() {
 
   useEffect(() => {
     const filtered = commentsForVersion.filter(c => {
-      const idx = c.mediaIndex !== undefined ? c.mediaIndex : 0;
+      const idx = Number(c.mediaIndex !== undefined ? c.mediaIndex : 0);
       return idx === selectedMediaIndex;
     });
     setCommentsForCurrentMedia(filtered);
@@ -724,7 +786,7 @@ function ContentUpload() {
     setVersionImgDimensions(null);
   }, [selectedVersionIndex, selectedMediaIndex]);
 
-  // ── Version history helpers ───────────────────────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Version history helpers Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const getVersionStatusColor = (status) => {
     switch (status) {
       case 'under_review': case 'submitted': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
@@ -736,16 +798,6 @@ function ContentUpload() {
     }
   };
 
-  const formatVersionDate = (dateString) => {
-    try {
-      const date = new Date(dateString);
-      return {
-        date: date.toLocaleDateString('en-US', { day: 'numeric', month: 'long' }),
-        time: date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-      };
-    } catch { return { date: 'Invalid Date', time: '' }; }
-  };
-
   const formatVersionDateLong = (dateString) => {
     try {
       return new Date(dateString).toLocaleDateString('en-US', {
@@ -753,27 +805,6 @@ function ContentUpload() {
         hour: '2-digit', minute: '2-digit',
       });
     } catch { return 'Unknown date'; }
-  };
-
-  const groupVersionsByDate = (versionList) => {
-    const today = new Date();
-    const groups = {};
-    versionList.forEach((version, idx) => {
-      const versionDate = new Date(version.createdAt);
-      let label;
-      if (
-        versionDate.getDate() === today.getDate() &&
-        versionDate.getMonth() === today.getMonth() &&
-        versionDate.getFullYear() === today.getFullYear()
-      ) {
-        label = 'Today';
-      } else {
-        label = versionDate.toLocaleDateString('en-US', { weekday: 'long' });
-      }
-      if (!groups[label]) groups[label] = [];
-      groups[label].push({ ...version, idx });
-    });
-    return groups;
   };
 
   const handleVersionSelect = (index) => {
@@ -808,7 +839,7 @@ function ContentUpload() {
           `${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(assignment.id)}/comments/${comment.id}`,
           { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ done: newDone, status: newDone ? 'completed' : 'pending' }) }
         );
-      } catch (err) {}
+      } catch (err) { }
       setCommentsForVersion(commentsForVersion.map(c => c.id === id ? { ...c, done: newDone } : c));
       setCommentsForCurrentMedia(commentsForCurrentMedia.map(c => c.id === id ? { ...c, done: newDone } : c));
       if (newDone) setActiveVersionComment(null);
@@ -836,9 +867,9 @@ function ContentUpload() {
       message: comment.reply.text,
       timestamp: comment.reply.timestamp
     }] : []);
-    
+
     let updatedReplies = [...existingReplies];
-    
+
     if (editingReplyId) {
       const index = updatedReplies.findIndex(r => r.id === editingReplyId);
       if (index !== -1) {
@@ -851,7 +882,7 @@ function ContentUpload() {
     } else {
       updatedReplies.push(newReply);
     }
-    
+
     const replyPayload = {
       reply: {
         text: replyText.trim(),
@@ -982,45 +1013,9 @@ function ContentUpload() {
     const validationPlatforms = getValidationPlatforms(assignment?.platform);
 
     const postType = (assignment?.postType || '').toLowerCase();
-
-    if (postType === 'post' || postType === 'story') {
-      if (uploadedFiles.length + incomingFiles.length > 1) {
-        window.alert(`Only 1 image is allowed for a ${postType}.`);
-        return;
-      }
-      if (incomingFiles.some(f => f.type.startsWith('video/'))) {
-        window.alert(`Videos are not allowed for a ${postType}.`);
-        return;
-      }
-    } else if (postType === 'carousel') {
-      if (uploadedFiles.length + incomingFiles.length > 10) {
-        window.alert('Up to 10 images are allowed for a carousel.');
-        return;
-      }
-    } else if (postType === 'reel' || postType === 'video') {
-      if (uploadedFiles.length + incomingFiles.length > 1) {
-        window.alert('Only 1 video is allowed for a Reel/Video.');
-        return;
-      }
-      if (incomingFiles.some(f => !f.type.startsWith('video/'))) {
-        window.alert('Only video files are allowed for a Reel/Video.');
-        return;
-      }
-    }
-
-    const incomingTypes = incomingFiles.map(f => f.type.startsWith('image/') ? 'image' : f.type.startsWith('video/') ? 'video' : null).filter(Boolean);
-    const existingTypes = uploadedFiles.map(f => f.type);
-    const allTypes = [...new Set([...existingTypes, ...incomingTypes])];
-
-    if (allTypes.includes('image') && allTypes.includes('video')) {
-      window.alert('Mixed content is not allowed for carousel posts. You cannot select images and videos together.');
-      return;
-    }
-
-    const incomingVideosCount = incomingFiles.filter(f => f.type.startsWith('video/')).length;
-    const existingVideosCount = uploadedFiles.filter(f => f.type === 'video').length;
-    if (incomingVideosCount + existingVideosCount > 1) {
-      window.alert('Multiple videos are not allowed. A carousel post can only contain a single video or multiple images.');
+    const selectionError = validateMediaSelectionForPostType([...uploadedFiles, ...incomingFiles], postType);
+    if (selectionError) {
+      window.alert(selectionError);
       return;
     }
 
@@ -1102,31 +1097,19 @@ function ContentUpload() {
     const validationPlatforms = getValidationPlatforms(assignment?.platform);
     const postType = (assignment?.postType || '').toLowerCase();
 
-    if (postType === 'post' || postType === 'story') {
-      if (file.type.startsWith('video/')) {
-        window.alert(`Videos are not allowed for a ${postType}.`);
-        return;
+    const nextUploadedFiles = uploadedFiles.map(existingFile => {
+      if (existingFile.id === fileId) {
+        return {
+          ...existingFile,
+          file,
+          type: file.type.startsWith('image/') ? 'image' : 'video'
+        };
       }
-    } else if (postType === 'reel' || postType === 'video') {
-      if (!file.type.startsWith('video/')) {
-        window.alert('Only video files are allowed for a Reel/Video.');
-        return;
-      }
-    }
-
-    const incomingType = file.type.startsWith('image/') ? 'image' : 'video';
-    const otherFilesTypes = uploadedFiles.filter(f => f.id !== fileId).map(f => f.type);
-    const allTypes = [...new Set([...otherFilesTypes, incomingType])];
-
-    if (allTypes.includes('image') && allTypes.includes('video')) {
-      window.alert('Mixed content is not allowed for carousel posts. You cannot select images and videos together.');
-      return;
-    }
-
-    const isVideo = file.type.startsWith('video/');
-    const otherVideosCount = uploadedFiles.filter(f => f.id !== fileId && f.type === 'video').length;
-    if ((isVideo ? 1 : 0) + otherVideosCount > 1) {
-      window.alert('Multiple videos are not allowed. A carousel post can only contain a single video or multiple images.');
+      return existingFile;
+    });
+    const selectionError = validateMediaSelectionForPostType(nextUploadedFiles, postType);
+    if (selectionError) {
+      window.alert(selectionError);
       return;
     }
 
@@ -1175,24 +1158,24 @@ function ContentUpload() {
   const uploadFileToGCS = async (fileObj) => {
     try {
       const fileSizeMB = fileObj.file.size / (1024 * 1024);
-      console.log(`📤 Starting upload for ${fileObj.name} (${formatFileSize(fileObj.size)})`);      
+      console.log(`Ã°Å¸â€œÂ¤ Starting upload for ${fileObj.name} (${formatFileSize(fileObj.size)})`);
       // Validate file object
       if (!fileObj.file || !fileObj.file.size || fileObj.file.size === 0) {
         throw new Error(`Invalid file: ${fileObj.name} has no content or is corrupted`);
       }
-      
+
       // Update file status to uploading
-      setUploadedFiles(prev => 
+      setUploadedFiles(prev =>
         prev.map(f => f.id === fileObj.id ? { ...f, uploading: true, error: null } : f)
       );
 
       let publicUrl;
 
       // Use streaming upload (proxied via backend) for large files (>=10MB).
-      // Direct browser→GCS signed URL uploads require bucket-level CORS config.
+      // Direct browserÃ¢â€ â€™GCS signed URL uploads require bucket-level CORS config.
       // Streaming through the backend avoids that requirement entirely.
       if (fileSizeMB >= 10) {
-        console.log(`📤 Using signed-URL upload for large file: ${fileObj.name} (${fileSizeMB.toFixed(2)} MB)`);
+        console.log(`Ã°Å¸â€œÂ¤ Using signed-URL upload for large file: ${fileObj.name} (${fileSizeMB.toFixed(2)} MB)`);
 
         // Step 1: Get a signed URL from the backend
         const signedUrlResponse = await fetch(`${process.env.REACT_APP_API_URL}/api/gcs/signed-url`, {
@@ -1220,11 +1203,11 @@ function ContentUpload() {
         }
 
         publicUrl = signedPublicUrl;
-        console.log(`✅ Successfully uploaded ${fileObj.name} via signed URL`);
+        console.log(`Ã¢Å“â€¦ Successfully uploaded ${fileObj.name} via signed URL`);
 
       } else {
         // Use base64 upload for small files (<10MB)
-        console.log(`📤 Using base64 upload for small file: ${fileObj.name} (${fileSizeMB.toFixed(2)} MB)`);
+        console.log(`Ã°Å¸â€œÂ¤ Using base64 upload for small file: ${fileObj.name} (${fileSizeMB.toFixed(2)} MB)`);
 
         const base64Data = await new Promise((resolve, reject) => {
           const reader = new FileReader();
@@ -1271,7 +1254,7 @@ function ContentUpload() {
         const responseData = await uploadResponse.json();
         publicUrl = responseData.publicUrl;
 
-        console.log(`✅ Successfully uploaded ${fileObj.name} via base64`);
+        console.log(`Ã¢Å“â€¦ Successfully uploaded ${fileObj.name} via base64`);
       }
 
       if (!publicUrl) {
@@ -1279,13 +1262,13 @@ function ContentUpload() {
       }
 
       // Update file status to uploaded
-      setUploadedFiles(prev => 
-        prev.map(f => f.id === fileObj.id ? { 
-          ...f, 
-          uploading: false, 
-          uploaded: true, 
+      setUploadedFiles(prev =>
+        prev.map(f => f.id === fileObj.id ? {
+          ...f,
+          uploading: false,
+          uploaded: true,
           publicUrl: publicUrl,
-          error: null 
+          error: null
         } : f)
       );
 
@@ -1298,15 +1281,15 @@ function ContentUpload() {
       };
 
     } catch (error) {
-      console.error(`❌ Upload failed for ${fileObj.name}:`, error);
-      
+      console.error(`Ã¢ÂÅ’ Upload failed for ${fileObj.name}:`, error);
+
       // Update file status to error
-      setUploadedFiles(prev => 
-        prev.map(f => f.id === fileObj.id ? { 
-          ...f, 
-          uploading: false, 
-          uploaded: false, 
-          error: error.message 
+      setUploadedFiles(prev =>
+        prev.map(f => f.id === fileObj.id ? {
+          ...f,
+          uploading: false,
+          uploaded: false,
+          error: error.message
         } : f)
       );
 
@@ -1317,7 +1300,7 @@ function ContentUpload() {
   const uploadThumbnailToGCS = async (fileObj) => {
     try {
       setThumbnailFileObj(prev => prev ? { ...prev, uploading: true, error: null } : null);
-      
+
       let publicUrl;
       const fileSizeMB = fileObj.file.size / (1024 * 1024);
 
@@ -1375,30 +1358,10 @@ function ContentUpload() {
     }
 
     const postType = (assignment?.postType || '').toLowerCase();
-
-    if (postType === 'post' || postType === 'story') {
-      if (uploadedFiles.length > 1) {
-        alert(`Only 1 image is allowed for a ${postType}.`);
-        return;
-      }
-      if (uploadedFiles.some(f => f.type === 'video')) {
-        alert(`Videos are not allowed for a ${postType}.`);
-        return;
-      }
-    } else if (postType === 'carousel') {
-      if (uploadedFiles.length > 10) {
-        alert('Up to 10 images are allowed for a carousel.');
-        return;
-      }
-    } else if (postType === 'reel' || postType === 'video') {
-      if (uploadedFiles.length > 1) {
-        alert('Only 1 video is allowed for a Reel/Video.');
-        return;
-      }
-      if (uploadedFiles.some(f => f.type !== 'video')) {
-        alert('Only video files are allowed for a Reel/Video.');
-        return;
-      }
+    const selectionError = validateMediaSelectionForPostType(uploadedFiles, postType);
+    if (selectionError) {
+      alert(selectionError);
+      return;
     }
 
     if (hasMixedContent(uploadedFiles)) {
@@ -1422,8 +1385,8 @@ function ContentUpload() {
     let finalCustomerEmail = assignment.customerEmail;
 
     if (!finalCustomerId || !finalCustomerName) {
-      console.error('❌ Missing customer information in assignment');
-      
+      console.error('Ã¢ÂÅ’ Missing customer information in assignment');
+
       // Use calendar data as fallback
       finalCustomerId = finalCustomerId || assignment.calendarId || '';
       finalCustomerName = finalCustomerName || assignment.calendarName || 'Unknown Customer';
@@ -1431,16 +1394,16 @@ function ContentUpload() {
 
     // Additional validation to ensure we have proper customer name
     if (!finalCustomerName || finalCustomerName === 'Unknown Customer') {
-      finalCustomerName = finalCustomerName || 
-                         assignment.customer || 
-                         assignment.client || 
-                         assignment.calendarName || 
-                         'Unknown Customer';
+      finalCustomerName = finalCustomerName ||
+        assignment.customer ||
+        assignment.client ||
+        assignment.calendarName ||
+        'Unknown Customer';
     }
 
     // CRITICAL: Ensure we have valid customer information before proceeding
     if (!finalCustomerId || !finalCustomerName || finalCustomerName === 'Unknown Customer') {
-      console.error('❌ CRITICAL: Cannot proceed without valid customer information!');
+      console.error('Ã¢ÂÅ’ CRITICAL: Cannot proceed without valid customer information!');
       alert(`Missing customer information. Please contact support.\n\nDetails:\n- Customer ID: ${finalCustomerId || 'Missing'}\n- Customer Name: ${finalCustomerName || 'Missing'}\n- Assignment ID: ${assignment.id}`);
       return;
     }
@@ -1453,7 +1416,7 @@ function ContentUpload() {
       // Upload thumbnail if present and not uploaded yet
       if (thumbnailFileObj) {
         if (!thumbnailFileObj.uploaded) {
-          console.log(`📤 Uploading thumbnail file: ${thumbnailFileObj.name}`);
+          console.log(`Ã°Å¸â€œÂ¤ Uploading thumbnail file: ${thumbnailFileObj.name}`);
           const thumbRes = await uploadThumbnailToGCS(thumbnailFileObj);
           uploadedThumbnailUrl = thumbRes.url;
         } else {
@@ -1476,11 +1439,11 @@ function ContentUpload() {
         }
       });
 
-      console.log(`📤 Processing ${uploadedFiles.length} files (uploading new/replaced files, keeping existing)...`);
+      console.log(`Ã°Å¸â€œÂ¤ Processing ${uploadedFiles.length} files (uploading new/replaced files, keeping existing)...`);
       const results = await Promise.all(uploadPromises);
       uploadedMediaUrls.push(...results);
 
-      console.log(`✅ All files processed successfully. Total: ${uploadedMediaUrls.length}`);
+      console.log(`Ã¢Å“â€¦ All files processed successfully. Total: ${uploadedMediaUrls.length}`);
 
       // Prepare submission data with comprehensive customer information
       const submissionData = {
@@ -1488,9 +1451,9 @@ function ContentUpload() {
         caption: caption || '',
         hashtags: hashtags || '',
         notes: notes || '',
-        images: uploadedMediaUrls, // ✅ This contains the media URLs and metadata
-        media: uploadedMediaUrls,  // ✅ Duplicate for backward compatibility
-        thumbnailUrl: uploadedThumbnailUrl || null, // ✅ Include video thumbnail url
+        images: uploadedMediaUrls, // Ã¢Å“â€¦ This contains the media URLs and metadata
+        media: uploadedMediaUrls,  // Ã¢Å“â€¦ Duplicate for backward compatibility
+        thumbnailUrl: uploadedThumbnailUrl || null, // Ã¢Å“â€¦ Include video thumbnail url
         created_by: creatorEmail,
         customer_id: finalCustomerId,
         customer_name: finalCustomerName,
@@ -1524,24 +1487,24 @@ function ContentUpload() {
       if (!submissionData.images || submissionData.images.length === 0) missingFields.push('images');
 
       if (missingFields.length > 0) {
-        console.error('❌ VALIDATION FAILED: Missing required fields:', missingFields);
+        console.error('Ã¢ÂÅ’ VALIDATION FAILED: Missing required fields:', missingFields);
         alert(`Validation failed. Missing required fields: ${missingFields.join(', ')}`);
         setSubmitting(false);
         return;
       }
 
       // Additional validation for customer info quality
-      if (submissionData.customer_name === 'Unknown Customer' || 
-          submissionData.customer_name.length < 2 ||
-          !submissionData.customer_id ||
-          submissionData.customer_id.length < 5) {
-        console.error('❌ QUALITY CHECK FAILED: Invalid customer information quality');
+      if (submissionData.customer_name === 'Unknown Customer' ||
+        submissionData.customer_name.length < 2 ||
+        !submissionData.customer_id ||
+        submissionData.customer_id.length < 5) {
+        console.error('Ã¢ÂÅ’ QUALITY CHECK FAILED: Invalid customer information quality');
         alert('Invalid customer information detected. Please refresh the page and try again.');
         setSubmitting(false);
         return;
       }
 
-      console.log('📤 Submitting content to API...');
+      console.log('Ã°Å¸â€œÂ¤ Submitting content to API...');
       const response = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions`, {
         method: 'POST',
         headers: {
@@ -1552,12 +1515,12 @@ function ContentUpload() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        console.error('❌ Backend submission failed:', errorData);
+        console.error('Ã¢ÂÅ’ Backend submission failed:', errorData);
         throw new Error(`Backend error: ${errorData.error || 'Unknown error'}`);
       }
 
       const result = await response.json();
-      console.log('✅ Content submission successful:', result);
+      console.log('Ã¢Å“â€¦ Content submission successful:', result);
 
       if (activeTab === 'admin') {
         const adminNames = displayAdminsList.map(a => a.name).join(', ');
@@ -1577,7 +1540,7 @@ function ContentUpload() {
         });
       }
     } catch (err) {
-      console.error('❌ Upload error:', err);
+      console.error('Ã¢ÂÅ’ Upload error:', err);
       alert(`Upload failed: ${err.message}. Please try again.`);
     } finally {
       setSubmitting(false);
@@ -1629,11 +1592,11 @@ function ContentUpload() {
     navigate('/content-creator/assignments');
   };
 
-  // No params — show assignment picker
+  // No params — show assignment picker
   if (!calendarId || itemIndex === undefined) {
     // Derived filter options
     const allPlatforms = [...new Set(pickerAssignments.flatMap(a => flatPlatforms(a.platform).map(p => p.charAt(0).toUpperCase() + p.slice(1))))].sort();
-    const allStatuses  = [...new Set(pickerAssignments.map(a => getPickerFilterStatus(a)))].sort();
+    const allStatuses = [...new Set(pickerAssignments.map(a => getPickerFilterStatus(a)))].sort();
     const allCustomers = [...new Set(pickerAssignments.map(a => a.customerName || a.calendarName || 'Unknown'))].sort();
 
     const filtered = pickerAssignments
@@ -1646,7 +1609,7 @@ function ContentUpload() {
           platforms.some(p => p.includes(q)) ||
           (a.description || '').toLowerCase().includes(q);
         const matchPlatform = pickerPlatform === 'all' || platforms.some(p => p === pickerPlatform.toLowerCase());
-        
+
         let matchStatus = false;
         if (pickerStatus === 'all') {
           matchStatus = true;
@@ -1681,24 +1644,24 @@ function ContentUpload() {
 
     const platformColor = (p) => {
       switch ((p || '').toLowerCase()) {
-        case 'facebook':  return 'bg-blue-100 text-blue-700 border-blue-200';
+        case 'facebook': return 'bg-blue-100 text-blue-700 border-blue-200';
         case 'instagram': return 'bg-pink-100 text-pink-700 border-pink-200';
-        case 'youtube':   return 'bg-red-100 text-red-700 border-red-200';
-        case 'linkedin':  return 'bg-blue-50 text-blue-700 border-blue-200';
-        case 'twitter':   return 'bg-sky-100 text-sky-700 border-sky-200';
-        case 'tiktok':    return 'bg-gray-900 text-white border-gray-700';
-        default:          return 'bg-gray-100 text-gray-700 border-gray-200';
+        case 'youtube': return 'bg-red-100 text-red-700 border-red-200';
+        case 'linkedin': return 'bg-blue-50 text-blue-700 border-blue-200';
+        case 'twitter': return 'bg-sky-100 text-sky-700 border-sky-200';
+        case 'tiktok': return 'bg-gray-900 text-white border-gray-700';
+        default: return 'bg-gray-100 text-gray-700 border-gray-200';
       }
     };
 
     const PlatformIcon = ({ platform, className = 'h-3 w-3' }) => {
       switch ((platform || '').toLowerCase()) {
-        case 'facebook':  return <Facebook  className={className} />;
+        case 'facebook': return <Facebook className={className} />;
         case 'instagram': return <Instagram className={className} />;
-        case 'linkedin':  return <Linkedin  className={className} />;
-        case 'youtube':   return <Youtube   className={className} />;
-        case 'twitter':   return <Twitter   className={className} />;
-        default:          return <Globe     className={className} />;
+        case 'linkedin': return <Linkedin className={className} />;
+        case 'youtube': return <Youtube className={className} />;
+        case 'twitter': return <Twitter className={className} />;
+        default: return <Globe className={className} />;
       }
     };
 
@@ -1715,11 +1678,11 @@ function ContentUpload() {
 
     const statusColor = (s) => {
       switch (s) {
-        case 'approved':    return 'bg-green-100 text-green-800';
-        case 'published':   return 'bg-purple-100 text-purple-800';
+        case 'approved': return 'bg-green-100 text-green-800';
+        case 'published': return 'bg-purple-100 text-purple-800';
         case 'in_progress': return 'bg-amber-100 text-amber-800';
-        case 'pending':     return 'bg-orange-100 text-orange-800';
-        default:            return 'bg-gray-100 text-gray-700';
+        case 'pending': return 'bg-orange-100 text-orange-800';
+        default: return 'bg-gray-100 text-gray-700';
       }
     };
 
@@ -1744,7 +1707,7 @@ function ContentUpload() {
           <div className="flex-1 flex items-center justify-center py-20">
             <div className="text-center">
               <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-600 mx-auto mb-3"></div>
-              <span className="text-gray-600">Loading your assignments…</span>
+              <span className="text-gray-600">Loading your assignments...</span>
             </div>
           </div>
         ) : pickerAssignments.length === 0 ? (
@@ -1760,7 +1723,7 @@ function ContentUpload() {
           </div>
         ) : (
           <div className="flex flex-1 overflow-hidden h-[calc(100vh-64px)]">
-            {/* ── MAIN LIST ── */}
+            {/* Ã¢â€â‚¬Ã¢â€â‚¬ MAIN LIST Ã¢â€â‚¬Ã¢â€â‚¬ */}
             <main className="flex-1 overflow-y-auto p-4 sm:p-6">
               {/* banner */}
               {selectedCustomer && (
@@ -1791,25 +1754,23 @@ function ContentUpload() {
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <div className="flex flex-wrap gap-2">
                     {[
-                      { key: 'all',           label: 'All',               count: pickerStats.total         },
-                      { key: 'pending',       label: 'Pending',           count: pickerStats.pending       },
-                      { key: 'approved',      label: 'Customer Approved', count: pickerStats.approved      },
-                      { key: 'published',     label: 'Published',         count: pickerStats.published     },
-                      { key: 'admin_approved',label: 'Admin Approved',    count: pickerStats.adminApproved },
+                      { key: 'all', label: 'All', count: pickerStats.total },
+                      { key: 'pending', label: 'Pending', count: pickerStats.pending },
+                      { key: 'approved', label: 'Customer Approved', count: pickerStats.approved },
+                      { key: 'published', label: 'Published', count: pickerStats.published },
+                      { key: 'admin_approved', label: 'Admin Approved', count: pickerStats.adminApproved },
                     ].map(opt => (
                       <button
                         key={opt.key}
                         onClick={() => setPickerStatus(opt.key)}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                          pickerStatus === opt.key
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${pickerStatus === opt.key
                             ? 'bg-purple-600 text-white shadow-sm'
                             : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                        }`}
+                          }`}
                       >
                         {opt.label}
-                        <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${
-                          pickerStatus === opt.key ? 'bg-white/20 text-white' : 'bg-white text-gray-600'
-                        }`}>{opt.count}</span>
+                        <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${pickerStatus === opt.key ? 'bg-white/20 text-white' : 'bg-white text-gray-600'
+                          }`}>{opt.count}</span>
                       </button>
                     ))}
                   </div>
@@ -1817,7 +1778,7 @@ function ContentUpload() {
                     <Search className="h-4 w-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
                     <input
                       type="text"
-                      placeholder="Search assignments…"
+                      placeholder="Search assignments..."
                       value={pickerSearch}
                       onChange={e => setPickerSearch(e.target.value)}
                       className="pl-9 pr-4 py-2 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent shadow-sm w-full"
@@ -1866,10 +1827,10 @@ function ContentUpload() {
                         <div className={`h-1 w-full ${(() => {
                           const fps = flatPlatforms(a.platform);
                           if (fps.includes('instagram')) return 'bg-gradient-to-r from-pink-400 to-purple-500';
-                          if (fps.includes('facebook'))  return 'bg-blue-500';
-                          if (fps.includes('youtube'))   return 'bg-red-500';
-                          if (fps.includes('linkedin'))  return 'bg-blue-700';
-                          if (fps.includes('twitter'))   return 'bg-sky-400';
+                          if (fps.includes('facebook')) return 'bg-blue-500';
+                          if (fps.includes('youtube')) return 'bg-red-500';
+                          if (fps.includes('linkedin')) return 'bg-blue-700';
+                          if (fps.includes('twitter')) return 'bg-sky-400';
                           return 'bg-purple-400';
                         })()}`} />
                         <div className="p-4 flex items-start gap-4">
@@ -2019,7 +1980,7 @@ function ContentUpload() {
       homePath={isAdmin ? '/admin/dashboard' : '/content-creator'}
     >
       <div>
-        {/* ── Tabs Selector ────────────────────────────────────────────────── */}
+        {/* Ã¢â€â‚¬Ã¢â€â‚¬ Tabs Selector Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */}
         {!isAdmin && reviewTabMode === 'both' && (
           <div className="flex border-b border-gray-200 bg-white rounded-2xl p-1.5 shadow-sm border border-gray-200/50 mb-6">
             <button
@@ -2030,11 +1991,10 @@ function ContentUpload() {
                 else setSelectedVersionIndex(0);
                 setSelectedMediaIndex(0);
               }}
-              className={`flex-1 py-3 text-sm font-semibold rounded-xl transition-all duration-300 flex items-center justify-center gap-2 ${
-                activeTab === 'admin'
+              className={`flex-1 py-3 text-sm font-semibold rounded-xl transition-all duration-300 flex items-center justify-center gap-2 ${activeTab === 'admin'
                   ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
                   : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-              }`}
+                }`}
             >
               <Palette className="h-4 w-4" />
               Admin Review
@@ -2047,11 +2007,10 @@ function ContentUpload() {
                 else setSelectedVersionIndex(0);
                 setSelectedMediaIndex(0);
               }}
-              className={`flex-1 py-3 text-sm font-semibold rounded-xl transition-all duration-300 flex items-center justify-center gap-2 ${
-                activeTab === 'customer'
+              className={`flex-1 py-3 text-sm font-semibold rounded-xl transition-all duration-300 flex items-center justify-center gap-2 ${activeTab === 'customer'
                   ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
                   : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-              }`}
+                }`}
             >
               <User className="h-4 w-4" />
               Customer Review
@@ -2059,7 +2018,7 @@ function ContentUpload() {
           </div>
         )}
         {/* Assignment Details moved to right column */}
-        {/* Admin Uploaded Banner — shown when admin already sent content to customer */}
+        {/* Admin Uploaded Banner — shown when admin already sent content to customer */}
         {adminUploadedForThis && (
           <div className="bg-blue-50 border border-blue-200 rounded-xl shadow-sm px-5 py-4 mb-6 flex flex-col sm:flex-row sm:items-start gap-3">
             <div className="p-2 bg-blue-100 rounded-lg flex-shrink-0">
@@ -2078,7 +2037,7 @@ function ContentUpload() {
           </div>
         )}
 
-        {/* Admin Approval Banner — shown when the latest version is approved */}
+        {/* Admin Approval Banner — shown when the latest version is approved */}
         {activeTab === 'admin' && (() => {
           const latestApproved = [...previousVersions]
             .reverse()
@@ -2109,7 +2068,7 @@ function ContentUpload() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column - Upload Section */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Version History Accordion — ContentDetails style */}
+            {/* Version History Accordion — ContentDetails style */}
             <div className="space-y-4">
               {/* Accordion trigger */}
               <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden w-full p-5 hover:bg-gray-50 transition-colors duration-200">
@@ -2166,124 +2125,129 @@ function ContentUpload() {
                   className="hidden"
                 />
 
-                {previousSubmissionLoaded && previousVersions.length === 0 && (
-                  <>
-                    <div className="flex flex-col sm:flex-row items-center justify-start gap-3 mb-4">
-                      <button
-                        type="button"
-                        onClick={onButtonClick}
-                        className="inline-flex items-center px-4 py-2 text-sm font-medium bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors shadow-sm"
-                      >
-                        <Image className="h-4 w-4 mr-2" />
-                        Create first version
-                      </button>
-                      <button
-                        type="button"
-                        onClick={onThumbnailButtonClick}
-                        className="inline-flex items-center px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
-                      >
-                        <Image className="h-4 w-4 mr-2" />
-                        Add thumbnail
-                      </button>
-                    </div>
-
-                    {thumbnailFileObj && (
-                      <div className="mt-3 p-3 bg-indigo-50/80 border border-indigo-100 rounded-xl flex items-center justify-between shadow-sm">
-                        <div className="flex items-center gap-3">
-                          <img src={thumbnailFileObj.preview} alt="Thumbnail preview" className="w-12 h-12 object-cover rounded-lg border border-indigo-200" />
-                          <div className="min-w-0">
-                            <p className="text-xs font-semibold text-indigo-900 truncate">{thumbnailFileObj.name}</p>
-                            <p className="text-[10px] text-indigo-600">{formatFileSize(thumbnailFileObj.size)}</p>
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setThumbnailFileObj(null)}
-                          className="p-1 rounded-full text-indigo-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      </div>
-                    )}
-
-                    {/* ── WhatsApp-style compact thumbnail strip for initial upload (No versions yet) ── */}
-                    {uploadedFiles.length > 0 && (
-                      <div className="mt-3 flex flex-wrap items-center gap-2">
-                        {uploadedFiles.map((file) => (
-                          <div
-                            key={file.id}
-                            className="relative group w-16 h-16 rounded-lg overflow-hidden bg-gray-100 ring-1 ring-gray-200 hover:ring-purple-400 transition-all cursor-pointer flex-shrink-0"
-                            onClick={() => handleReplaceClick(file.id)}
-                            title={`${file.name} — click to replace`}
-                          >
-                            {/* Thumbnail preview */}
-                            {file.type === 'image' ? (
-                              <img
-                                src={file.preview}
-                                alt={file.name}
-                                className="w-full h-full object-cover"
-                              />
-                            ) : (
-                              <div className="relative w-full h-full">
-                                <video
-                                  src={file.preview}
-                                  className="w-full h-full object-cover"
-                                  muted
-                                />
-                                <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                                  <Play className="h-4 w-4 text-white" />
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Top-left badge: green check (existing) or purple NEW */}
-                            <div className={`absolute top-0.5 left-0.5 flex items-center justify-center rounded text-[8px] font-bold leading-none z-10 ${
-                              file.isExisting
-                                ? 'w-3.5 h-3.5 bg-emerald-500 text-white'
-                                : 'px-1 py-0.5 bg-purple-600 text-white'
-                            }`}>
-                              {file.isExisting ? <Check className="h-2.5 w-2.5" /> : 'NEW'}
-                            </div>
-
-                            {/* Spinner overlay when uploading */}
-                            {file.uploading && (
-                              <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-20">
-                                <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
-                              </div>
-                            )}
-
-                            {/* Error overlay */}
-                            {file.error && (
-                              <div className="absolute inset-0 bg-red-500/60 flex items-center justify-center z-20">
-                                <X className="h-4 w-4 text-white" />
-                              </div>
-                            )}
-
-                            {/* Hover remove button (top-right) */}
-                            <button
-                              type="button"
-                              onClick={(e) => { e.stopPropagation(); removeFile(file.id); }}
-                              className="absolute top-0 right-0 w-4 h-4 bg-red-500 hover:bg-red-600 text-white rounded-bl-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-30"
-                              title="Remove"
-                            >
-                              <X className="h-2.5 w-2.5" />
-                            </button>
-                          </div>
-                        ))}
-
-                        {/* "+" add-media tile */}
+                {previousSubmissionLoaded && previousVersions.length === 0 && (() => {
+                  const isThumbnailAllowed = ['reel', 'video'].includes((assignment?.postType || '').toLowerCase());
+                  return (
+                    <>
+                      <div className="flex flex-col sm:flex-row items-center justify-start gap-3 mb-4">
                         <button
                           type="button"
                           onClick={onButtonClick}
-                          className="w-16 h-16 rounded-lg border-2 border-dashed border-gray-300 hover:border-purple-400 hover:bg-purple-50 flex items-center justify-center transition-all flex-shrink-0"
-                          title="Add media"
+                          className="inline-flex items-center px-4 py-2 text-sm font-medium bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors shadow-sm"
                         >
-                          <Plus className="h-6 w-6 text-gray-400 group-hover:text-purple-500" />
+                          <Image className="h-4 w-4 mr-2" />
+                          Create first version
                         </button>
+                        {isThumbnailAllowed && (
+                          <button
+                            type="button"
+                            onClick={onThumbnailButtonClick}
+                            className="inline-flex items-center px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
+                          >
+                            <Image className="h-4 w-4 mr-2" />
+                            Add thumbnail
+                          </button>
+                        )}
                       </div>
-                    )}
-                  </>
-                )}
+
+                      {isThumbnailAllowed && thumbnailFileObj && (
+                        <div className="mt-3 p-3 bg-indigo-50/80 border border-indigo-100 rounded-xl flex items-center justify-between shadow-sm">
+                          <div className="flex items-center gap-3">
+                            <img src={thumbnailFileObj.preview} alt="Thumbnail preview" className="w-12 h-12 object-cover rounded-lg border border-indigo-200" />
+                            <div className="min-w-0">
+                              <p className="text-xs font-semibold text-indigo-900 truncate">{thumbnailFileObj.name}</p>
+                              <p className="text-[10px] text-indigo-600">{formatFileSize(thumbnailFileObj.size)}</p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setThumbnailFileObj(null)}
+                            className="p-1 rounded-full text-indigo-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Ã¢â€â‚¬Ã¢â€â‚¬ WhatsApp-style compact thumbnail strip for initial upload (No versions yet) Ã¢â€â‚¬Ã¢â€â‚¬ */}
+                      {uploadedFiles.length > 0 && (
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          {uploadedFiles.map((file) => (
+                            <div
+                              key={file.id}
+                              className="relative group w-16 h-16 rounded-lg overflow-hidden bg-gray-100 ring-1 ring-gray-200 hover:ring-purple-400 transition-all cursor-pointer flex-shrink-0"
+                              onClick={() => handleReplaceClick(file.id)}
+                              title={`${file.name} — click to replace`}
+                            >
+                              {/* Thumbnail preview */}
+                              {file.type === 'image' ? (
+                                <img
+                                  src={file.preview}
+                                  alt={file.name}
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <div className="relative w-full h-full">
+                                  <video
+                                    src={file.preview}
+                                    className="w-full h-full object-cover"
+                                    muted
+                                  />
+                                  <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                                    <Play className="h-4 w-4 text-white" />
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Top-left badge: green check (existing) or purple NEW */}
+                              <div className={`absolute top-0.5 left-0.5 flex items-center justify-center rounded text-[8px] font-bold leading-none z-10 ${file.isExisting
+                                  ? 'w-3.5 h-3.5 bg-emerald-500 text-white'
+                                  : 'px-1 py-0.5 bg-purple-600 text-white'
+                                }`}>
+                                {file.isExisting ? <Check className="h-2.5 w-2.5" /> : 'NEW'}
+                              </div>
+
+                              {/* Spinner overlay when uploading */}
+                              {file.uploading && (
+                                <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-20">
+                                  <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
+                                </div>
+                              )}
+
+                              {/* Error overlay */}
+                              {file.error && (
+                                <div className="absolute inset-0 bg-red-500/60 flex items-center justify-center z-20">
+                                  <X className="h-4 w-4 text-white" />
+                                </div>
+                              )}
+
+                              {/* Hover remove button (top-right) */}
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); removeFile(file.id); }}
+                                className="absolute top-0 right-0 w-4 h-4 bg-red-500 hover:bg-red-600 text-white rounded-bl-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-30"
+                                title="Remove"
+                              >
+                                <X className="h-2.5 w-2.5" />
+                              </button>
+                            </div>
+                          ))}
+
+                          {/* "+" add-media tile */}
+                          <button
+                            type="button"
+                            onClick={onButtonClick}
+                            className="w-16 h-16 rounded-lg border-2 border-dashed border-gray-300 hover:border-purple-400 hover:bg-purple-50 flex items-center justify-center transition-all flex-shrink-0"
+                            title="Add media"
+                          >
+                            <Plus className="h-6 w-6 text-gray-400 group-hover:text-purple-500" />
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+
 
                 {/* Validation notice */}
                 {validationNotice && (
@@ -2311,7 +2275,7 @@ function ContentUpload() {
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-                      {/* ── Left 2/3: Version display ── */}
+                      {/* Ã¢â€â‚¬Ã¢â€â‚¬ Left 2/3: Version display Ã¢â€â‚¬Ã¢â€â‚¬ */}
                       <div className="xl:col-span-2">
                         <div className="bg-gray-50 rounded-2xl border border-gray-200 overflow-hidden">
                           {/* Version display header */}
@@ -2325,28 +2289,35 @@ function ContentUpload() {
                                   <h3 className="text-base font-semibold text-gray-900">
                                     Version {previousVersions[selectedVersionIndex]?.flowVersionNumber || previousVersions[selectedVersionIndex]?.versionNumber}
                                   </h3>
-                                  <p className="text-xs text-gray-500">of {previousVersions.length} total versions</p>
+                                  <p className="text-xs text-gray-500">of {allPreviousVersions.length} total versions</p>
                                 </div>
                               </div>
                               <div className="flex flex-col gap-2 items-end max-w-xs">
-                                {/* Tab-specific Review pills */}
+                                {/* Version pills — sequential, no admin/customer label */}
                                 <div className="flex items-center gap-1.5 flex-wrap justify-end">
-                                  <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
-                                    {activeTab === 'admin' ? 'Admin Review' : 'Customer Review'}
-                                  </span>
-                                  {previousVersions.map((v, i) => (
-                                    <button
-                                      key={v.id || i}
-                                      onClick={() => handleVersionSelect(i)}
-                                      className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all ${
-                                        selectedVersionIndex === i
-                                          ? activeTab === 'admin' ? 'bg-purple-600 text-white shadow-sm' : 'bg-amber-500 text-white shadow-sm'
-                                          : 'bg-gray-100 text-gray-600 hover:bg-purple-100 hover:text-purple-700'
-                                      }`}
-                                    >
-                                      V{v.flowVersionNumber || v.versionNumber}
-                                    </button>
-                                  ))}
+                                  {allPreviousVersions.map((v, i) => {
+                                    const seqNum = i + 1;
+                                    const stage = v.submissionStage === 'customer' ? 'customer' : 'admin';
+                                    const isSelected = selectedVersionId === v.id && activeTab === stage;
+                                    return (
+                                      <button
+                                        key={v.id || i}
+                                        onClick={() => {
+                                          setActiveTab(stage);
+                                          const stageList = stage === 'admin' ? adminVersions : customerVersions;
+                                          const stageIdx = stageList.findIndex(sv => sv.id === v.id);
+                                          setSelectedVersionIndex(stageIdx >= 0 ? stageIdx : 0);
+                                          setSelectedMediaIndex(0);
+                                        }}
+                                        className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all ${isSelected
+                                            ? 'bg-blue-700 text-white shadow-sm'
+                                            : 'bg-gray-100 text-gray-600 hover:bg-blue-100 hover:text-blue-700'
+                                          }`}
+                                      >
+                                        V{seqNum}
+                                      </button>
+                                    );
+                                  })}
                                 </div>
                               </div>
                             </div>
@@ -2357,304 +2328,413 @@ function ContentUpload() {
                               <div className="space-y-5">
                                 {/* Media */}
                                 <div>
+                                  {(() => {
+                                    const version = previousVersions[selectedVersionIndex];
+                                    const mediaItems = version?.media || [];
+                                    const thumbUrl = version?.thumbnailUrl || null;
 
-                                  {previousVersions[selectedVersionIndex].media?.length > 0 ? (
-                                    <div>
-                                      {previousVersions[selectedVersionIndex].media.length > 1 && (
-                                        <div className="flex items-center justify-between mb-3 px-1">
-                                          <span className="text-sm font-medium text-gray-600">
-                                            Media {selectedMediaIndex + 1} of {previousVersions[selectedVersionIndex].media.length}
-                                          </span>
-                                          <div className="flex gap-2">
-                                            <button
-                                              onClick={() => handleVersionMediaChange('prev')}
-                                              disabled={selectedMediaIndex === 0}
-                                              className="p-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                                            >
-                                              <ChevronLeft className="h-4 w-4 text-gray-600" />
-                                            </button>
-                                            <button
-                                              onClick={() => handleVersionMediaChange('next')}
-                                              disabled={selectedMediaIndex === previousVersions[selectedVersionIndex].media.length - 1}
-                                              className="p-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                                            >
-                                              <ChevronRight className="h-4 w-4 text-gray-600" />
-                                            </button>
+                                    const isLatestVersion = allPreviousVersions.length > 0 && version?.id === allPreviousVersions[allPreviousVersions.length - 1]?.id;
+                                    const revisionStatuses = ['revision_requested', 'changes_requested', 'changes_requested_admin', 'changes_requested_customer_approved_admin'];
+                                    const isRevisionRequested = allPreviousVersions.length > 0 && revisionStatuses.includes(allPreviousVersions[allPreviousVersions.length - 1]?.status);
+                                    const isEditable = isLatestVersion && isRevisionRequested;
+
+                                    // Read-only slides: version media + thumbnail slide if present
+                                    const readOnlySlides = thumbUrl
+                                      ? [...mediaItems, { url: thumbUrl, type: 'image', isThumbnailSlide: true }]
+                                      : mediaItems;
+
+                                    // Editable slides: uploadedFiles (draft/revision media) + current active thumbnail slide
+                                    const currentThumbUrl = thumbnailFileRemoved
+                                      ? null
+                                      : (thumbnailFileObj
+                                        ? (thumbnailFileObj.preview || thumbnailFileObj.publicUrl)
+                                        : (version?.thumbnailUrl || null));
+
+                                    const editableSlides = currentThumbUrl
+                                      ? [
+                                        ...uploadedFiles.map(file => ({
+                                          url: file.preview || file.publicUrl,
+                                          type: file.type,
+                                          id: file.id,
+                                          fileObj: file,
+                                          isDraft: true
+                                        })),
+                                        {
+                                          url: currentThumbUrl,
+                                          type: 'image',
+                                          isThumbnailSlide: true,
+                                          isDraft: true,
+                                          fileObj: thumbnailFileObj
+                                        }
+                                      ]
+                                      : uploadedFiles.map(file => ({
+                                        url: file.preview || file.publicUrl,
+                                        type: file.type,
+                                        id: file.id,
+                                        fileObj: file,
+                                        isDraft: true
+                                      }));
+
+                                    const slides = isEditable ? editableSlides : readOnlySlides;
+                                    const totalSlides = slides.length;
+                                    const safeMediaIndex = Math.min(selectedMediaIndex, Math.max(0, totalSlides - 1));
+                                    const currentSlide = slides[safeMediaIndex];
+                                    const isThumbnailSlide = currentSlide?.isThumbnailSlide === true;
+
+                                    if (totalSlides === 0) {
+                                      return (
+                                        <div className="h-64 bg-gray-200 rounded-xl flex items-center justify-center">
+                                          <div className="text-center">
+                                            <Image className="h-12 w-12 text-gray-400 mx-auto mb-2" />
+                                            <p className="text-gray-500">No media available</p>
                                           </div>
                                         </div>
-                                      )}
+                                      );
+                                    }
 
-                                      {/* Current media with comment markers */}
-                                      <div className="flex justify-center">
-                                        <div className="relative inline-block">
-                                          {previousVersions[selectedVersionIndex].media[selectedMediaIndex]?.url &&
-                                           typeof previousVersions[selectedVersionIndex].media[selectedMediaIndex].url === 'string' ? (
-                                            previousVersions[selectedVersionIndex].media[selectedMediaIndex].type === 'image' ? (
-                                              <img
-                                                ref={versionImgRef}
-                                                src={previousVersions[selectedVersionIndex].media[selectedMediaIndex].url}
-                                                alt={`Version ${previousVersions[selectedVersionIndex].versionNumber} - Media ${selectedMediaIndex + 1}`}
-                                                className="max-w-full h-auto max-h-96 rounded-xl shadow-lg border border-gray-200"
-                                                onLoad={handleVersionImgLoad}
-                                                onError={(e) => { e.target.style.display = 'none'; }}
-                                              />
-                                            ) : (
-                                              <video
-                                                ref={videoRef}
-                                                src={previousVersions[selectedVersionIndex].media[selectedMediaIndex].url}
-                                                poster={previousVersions[selectedVersionIndex].thumbnailUrl || undefined}
-                                                controls
-                                                className="max-w-full h-auto max-h-96 rounded-xl shadow-lg border border-gray-200"
-                                              />
-                                            )
-                                          ) : (
-                                            <div className="w-80 h-64 bg-gray-200 rounded-xl flex items-center justify-center">
-                                              <div className="text-center">
-                                                <Image className="h-12 w-12 text-gray-400 mx-auto mb-2" />
-                                                <p className="text-gray-500">Media unavailable</p>
-                                              </div>
-                                            </div>
-                                          )}
-
-                                          {/* Comment markers */}
-                                          {commentsForCurrentMedia.map((comment, index) => {
-                                            const commentX = comment.x || comment.position?.x || 0;
-                                            const commentY = comment.y || comment.position?.y || 0;
-                                            const pctX = commentX <= 1 ? commentX * 100 : commentX;
-                                            const pctY = commentY <= 1 ? commentY * 100 : commentY;
-                                            let boxLeft = 40;
-                                            let boxRight = 'auto';
-                                            if (pctX > 50) { boxLeft = 'auto'; boxRight = 40; }
-                                            return (
-                                              <div
-                                                key={comment.id}
-                                                style={{
-                                                  position: 'absolute',
-                                                  top: `${pctY}%`, left: `${pctX}%`,
-                                                  transform: 'translate(-50%, -50%)',
-                                                  width: 24, height: 24,
-                                                  background: comment.done ? '#10b981' : '#ef4444',
-                                                  color: '#fff', borderRadius: '50%',
-                                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                  fontWeight: 'bold', fontSize: '11px',
-                                                  boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
-                                                  cursor: 'pointer', zIndex: 10, border: '2px solid #fff',
+                                    return (
+                                      <div>
+                                        {totalSlides > 1 && (
+                                          <div className="flex items-center justify-between mb-3 px-1">
+                                            <span className="text-xs text-gray-600">
+                                              {safeMediaIndex + 1} / {totalSlides}
+                                              {isThumbnailSlide && (
+                                                <span className="ml-1.5 text-indigo-500 font-semibold">(Thumbnail)</span>
+                                              )}
+                                            </span>
+                                            <div className="flex gap-2">
+                                              <button
+                                                onClick={() => {
+                                                  if (selectedMediaIndex > 0) setSelectedMediaIndex(selectedMediaIndex - 1);
                                                 }}
-                                                onMouseEnter={() => setHoveredVersionComment(comment.id)}
-                                                onMouseLeave={() => setHoveredVersionComment(null)}
-                                                onClick={(e) => { e.stopPropagation(); handleVersionCommentClick(comment.id); }}
+                                                disabled={safeMediaIndex === 0}
+                                                className="p-1.5 rounded-lg bg-blue-50 border border-gray-200 hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                               >
-                                                {index + 1}
-                                                {(activeVersionComment === comment.id || hoveredVersionComment === comment.id) && (
-                                                  <div
-                                                    style={{
-                                                      position: 'absolute',
-                                                      left: boxLeft, right: boxRight,
-                                                      top: '50%', transform: 'translateY(-50%)',
-                                                      background: '#fff', border: '1px solid #3b82f6',
-                                                      borderRadius: '8px', padding: '12px',
-                                                      minWidth: '200px', maxWidth: '280px',
-                                                      zIndex: 20, boxShadow: '0 4px 20px rgba(59,130,246,0.15)',
-                                                    }}
-                                                    onClick={(e) => e.stopPropagation()}
-                                                  >
-                                                    <div className="mb-2">
-                                                      <p className="font-medium text-gray-900 text-sm leading-relaxed break-words">
-                                                        {comment.message || comment.comment}
-                                                        {comment.done && <span className="text-green-600 ml-2 text-xs">✓ Done</span>}
-                                                      </p>
-                                                      <p className="text-xs text-gray-500 mt-1">
-                                                        {comment.timestamp ? new Date(comment.timestamp).toLocaleString() : ''}
-                                                      </p>
-                                                    </div>
-                                                    {(() => {
-                                                      const replies = comment.replies || (comment.reply ? [{
-                                                        id: 'legacy-creator-reply',
-                                                        authorRole: 'creator',
-                                                        authorName: comment.reply.creatorName || 'Creator',
-                                                        message: comment.reply.text,
-                                                        timestamp: comment.reply.timestamp
-                                                      }] : []);
-                                                      return replies.map((rep, rIdx) => (
-                                                        <div key={rep.id || rIdx} className="mt-2 p-2 bg-indigo-50 border border-indigo-200 rounded-lg">
-                                                          <p className="text-[10px] font-bold text-indigo-700 mb-0.5">
-                                                            Reply by {rep.authorRole === 'admin' ? 'Admin' : rep.authorRole === 'creator' ? 'Creator' : 'Customer'}
-                                                          </p>
-                                                          <p className="text-xs text-gray-800 break-words">{rep.message || rep.text}</p>
-                                                        </div>
-                                                      ));
-                                                    })()}
-                                                    <button
-                                                      onClick={() => handleVersionToggleDone(comment.id)}
-                                                      className={`w-full px-3 py-1.5 text-xs rounded-lg font-medium transition-all flex items-center justify-center mt-2 ${
-                                                        comment.done
-                                                          ? 'bg-gray-200 hover:bg-gray-300 text-gray-700'
-                                                          : 'bg-green-600 hover:bg-green-700 text-white'
-                                                      }`}
-                                                    >
-                                                      <CheckCircle className="h-3 w-3 mr-1" />
-                                                      {comment.done ? 'Undo Done' : 'Mark as Done'}
-                                                    </button>
-                                                  </div>
-                                                )}
-                                              </div>
-                                            );
-                                          })}
-                                        </div>
-                                      </div>
-
-
-                                    </div>
-                                  ) : (
-                                    <div className="h-64 bg-gray-200 rounded-xl flex items-center justify-center">
-                                      <div className="text-center">
-                                        <Image className="h-12 w-12 text-gray-400 mx-auto mb-2" />
-                                        <p className="text-gray-500">No media available</p>
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-
-                                {/* ── WhatsApp-style uploaded-files thumbnail strip (Moved Below) ── */}
-                                {uploadedFiles.length > 0 && (
-                                  <div className="flex flex-wrap justify-center items-center gap-2 mt-4 bg-gray-50 p-3 rounded-xl border border-gray-100">
-                                    {uploadedFiles.map((file, idx) => (
-                                      <div
-                                        key={file.id}
-                                        className={`relative group w-16 h-16 rounded-lg overflow-hidden bg-white hover:ring-purple-400 transition-all cursor-pointer flex-shrink-0 ${
-                                          idx === selectedMediaIndex ? 'ring-2 ring-purple-500 shadow-md' : 'ring-1 ring-gray-200'
-                                        }`}
-                                        onClick={() => setSelectedMediaIndex(idx)}
-                                        title={`${file.name} — click to view`}
-                                      >
-                                        {/* Thumbnail preview */}
-                                        {file.type === 'image' ? (
-                                          <img
-                                            src={file.preview}
-                                            alt={file.name}
-                                            className="w-full h-full object-cover"
-                                          />
-                                        ) : (
-                                          <div className="relative w-full h-full">
-                                            <video
-                                              src={file.preview}
-                                              className="w-full h-full object-cover"
-                                              muted
-                                            />
-                                            <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                                              <Play className="h-4 w-4 text-white" />
+                                                <ChevronLeft className="h-3.5 w-3.5 text-blue-600" />
+                                              </button>
+                                              <button
+                                                onClick={() => {
+                                                  if (selectedMediaIndex < totalSlides - 1) setSelectedMediaIndex(selectedMediaIndex + 1);
+                                                }}
+                                                disabled={safeMediaIndex === totalSlides - 1}
+                                                className="p-1.5 rounded-lg bg-blue-50 border border-gray-200 hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                              >
+                                                <ChevronRight className="h-3.5 w-3.5 text-blue-600" />
+                                              </button>
                                             </div>
                                           </div>
                                         )}
 
-                                        {/* Top-left badge: green check (existing), blue REPLACE, or purple NEW */}
-                                        <div className={`absolute top-0.5 left-0.5 flex items-center justify-center rounded text-[8px] font-bold leading-none z-10 ${
-                                          file.isExisting
-                                            ? 'w-3.5 h-3.5 bg-emerald-500 text-white'
-                                            : file.isReplaced
-                                              ? 'px-1 py-0.5 bg-blue-500 text-white'
-                                              : 'px-1 py-0.5 bg-purple-600 text-white'
-                                        }`}>
-                                          {file.isExisting ? <Check className="h-2.5 w-2.5" /> : file.isReplaced ? 'REPLACE' : 'NEW'}
+                                        <div className="flex items-center justify-between mb-2">
+                                          <p className="text-[10px] text-gray-400">
+                                            {isThumbnailSlide
+                                              ? 'Video thumbnail'
+                                              : isEditable
+                                                ? 'Draft media preview'
+                                                : `${commentsForCurrentMedia.length} comment${commentsForCurrentMedia.length !== 1 ? 's' : ''} on this media`}
+                                          </p>
                                         </div>
 
-                                        {/* Spinner overlay when uploading */}
-                                        {file.uploading && (
-                                          <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-20">
-                                            <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
+                                        {/* Current slide */}
+                                        <div className="flex justify-center">
+                                          <div className="relative inline-block">
+                                            {isThumbnailSlide ? (
+                                              /* Thumbnail slide */
+                                              <div className="relative">
+                                                <img
+                                                  src={currentThumbUrl}
+                                                  alt="Video Thumbnail"
+                                                  className="max-w-full h-auto max-h-[50vh] sm:max-h-[60vh] lg:max-h-[70vh] rounded-lg shadow border border-indigo-200 object-contain"
+                                                />
+                                                <span className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-indigo-600/80 text-white text-[10px] font-semibold px-2.5 py-1 rounded-full backdrop-blur-sm whitespace-nowrap">
+                                                  Thumbnail
+                                                </span>
+                                              </div>
+                                            ) : currentSlide?.url && typeof currentSlide.url === 'string' ? (
+                                              currentSlide.type === 'image' ? (
+                                                <img
+                                                  ref={versionImgRef}
+                                                  src={currentSlide.url}
+                                                  alt={`Version ${version.versionNumber} - Media ${safeMediaIndex + 1}`}
+                                                  className="max-w-full h-auto max-h-[50vh] sm:max-h-[60vh] lg:max-h-[70vh] rounded-lg shadow border border-gray-200 object-contain"
+                                                  onLoad={handleVersionImgLoad}
+                                                  onError={(e) => { e.target.style.display = 'none'; }}
+                                                />
+                                              ) : (
+                                                <video
+                                                  ref={videoRef}
+                                                  src={currentSlide.url}
+                                                  controls
+                                                  className="max-w-full h-auto max-h-[50vh] sm:max-h-[60vh] lg:max-h-[70vh] rounded-lg shadow border border-gray-200 object-contain"
+                                                />
+                                              )
+                                            ) : (
+                                              <div className="w-80 h-64 bg-gray-200 rounded-xl flex items-center justify-center">
+                                                <div className="text-center">
+                                                  <Image className="h-12 w-12 text-gray-400 mx-auto mb-2" />
+                                                  <p className="text-gray-500">Media unavailable</p>
+                                                </div>
+                                              </div>
+                                            )}
+
+                                            {/* Comment markers */}
+                                            {commentsForCurrentMedia.map((comment, index) => {
+                                              const commentX = comment.x || comment.position?.x || 0;
+                                              const commentY = comment.y || comment.position?.y || 0;
+                                              const pctX = commentX <= 1 ? commentX * 100 : commentX;
+                                              const pctY = commentY <= 1 ? commentY * 100 : commentY;
+                                              let boxLeft = 40;
+                                              let boxRight = 'auto';
+                                              if (pctX > 50) { boxLeft = 'auto'; boxRight = 40; }
+                                              return (
+                                                <div
+                                                  key={comment.id}
+                                                  style={{
+                                                    position: 'absolute',
+                                                    top: `${pctY}%`, left: `${pctX}%`,
+                                                    transform: 'translate(-50%, -50%)',
+                                                    width: 24, height: 24,
+                                                    background: comment.done ? '#10b981' : '#ef4444',
+                                                    color: '#fff', borderRadius: '50%',
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                    fontWeight: 'bold', fontSize: '11px',
+                                                    boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                                                    cursor: 'pointer', zIndex: 10, border: '2px solid #fff',
+                                                  }}
+                                                  onMouseEnter={() => setHoveredVersionComment(comment.id)}
+                                                  onMouseLeave={() => setHoveredVersionComment(null)}
+                                                  onClick={(e) => { e.stopPropagation(); handleVersionCommentClick(comment.id); }}
+                                                >
+                                                  {index + 1}
+                                                  {(activeVersionComment === comment.id || hoveredVersionComment === comment.id) && (
+                                                    <div
+                                                      style={{
+                                                        position: 'absolute',
+                                                        left: boxLeft, right: boxRight,
+                                                        top: '50%', transform: 'translateY(-50%)',
+                                                        background: '#fff', border: '1px solid #3b82f6',
+                                                        borderRadius: '8px', padding: '12px',
+                                                        minWidth: '200px', maxWidth: '280px',
+                                                        zIndex: 20, boxShadow: '0 4px 20px rgba(59,130,246,0.15)',
+                                                      }}
+                                                      onClick={(e) => e.stopPropagation()}
+                                                    >
+                                                      <div className="mb-2">
+                                                        <p className="font-medium text-gray-900 text-sm leading-relaxed break-words">
+                                                          {comment.message || comment.comment}
+                                                          {comment.done && <span className="text-green-600 ml-2 text-xs">✓ Done</span>}
+                                                        </p>
+                                                        <p className="text-xs text-gray-500 mt-1">
+                                                          {comment.timestamp ? new Date(comment.timestamp).toLocaleString() : ''}
+                                                        </p>
+                                                      </div>
+                                                      {(() => {
+                                                        const replies = comment.replies || (comment.reply ? [{
+                                                          id: 'legacy-creator-reply',
+                                                          authorRole: 'creator',
+                                                          authorName: comment.reply.creatorName || 'Creator',
+                                                          message: comment.reply.text,
+                                                          timestamp: comment.reply.timestamp
+                                                        }] : []);
+                                                        return replies.map((rep, rIdx) => (
+                                                          <div key={rep.id || rIdx} className="mt-2 p-2 bg-indigo-50 border border-indigo-200 rounded-lg">
+                                                            <p className="text-[10px] font-bold text-indigo-700 mb-0.5">
+                                                              Reply by {rep.authorRole === 'admin' ? 'Admin' : rep.authorRole === 'creator' ? 'Creator' : 'Customer'}
+                                                            </p>
+                                                            <p className="text-xs text-gray-800 break-words">{rep.message || rep.text}</p>
+                                                          </div>
+                                                        ));
+                                                      })()}
+                                                      <button
+                                                        onClick={() => handleVersionToggleDone(comment.id)}
+                                                        className={`w-full px-3 py-1.5 text-xs rounded-lg font-medium transition-all flex items-center justify-center mt-2 ${comment.done
+                                                            ? 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+                                                            : 'bg-green-600 hover:bg-green-700 text-white'
+                                                          }`}
+                                                      >
+                                                        <CheckCircle className="h-3 w-3 mr-1" />
+                                                        {comment.done ? 'Undo Done' : 'Mark as Done'}
+                                                      </button>
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+
+                                        {/* -- Media Preview Strip -- */}
+                                        {totalSlides > 0 && (
+                                          <div className="flex flex-wrap justify-center items-center gap-2 mt-4 bg-gray-50 p-3 rounded-xl border border-gray-100">
+                                            {slides.map((slide, idx) => {
+                                              const isSelected = idx === safeMediaIndex;
+                                              const isDraftFile = slide.isDraft;
+                                              const file = slide.fileObj; // fileObj exists if uploadedFiles file OR newly chosen thumbnailObj
+
+                                              return (
+                                                <div
+                                                  key={isDraftFile && file ? file.id : (slide.id || idx)}
+                                                  className={`relative group w-16 h-16 rounded-lg overflow-hidden bg-white hover:ring-purple-400 transition-all cursor-pointer flex-shrink-0 ${isSelected ? 'ring-2 ring-purple-500 shadow-md' : 'ring-1 ring-gray-200'
+                                                    }`}
+                                                  onClick={() => setSelectedMediaIndex(idx)}
+                                                  title={slide.isThumbnailSlide ? 'Thumbnail — click to view' : isDraftFile ? `${file?.name} — click to view` : `Slide ${idx + 1} — click to view`}
+                                                >
+                                                  {/* Thumbnail preview */}
+                                                  {slide.isThumbnailSlide ? (
+                                                    <div className="relative w-full h-full">
+                                                      <img
+                                                        src={slide.url}
+                                                        alt="Thumbnail"
+                                                        className="w-full h-full object-cover"
+                                                      />
+                                                      <div className="absolute inset-x-0 bottom-0 bg-indigo-600/80 text-white text-[8px] font-bold text-center py-0.5 whitespace-nowrap">
+                                                        THUMB
+                                                      </div>
+                                                    </div>
+                                                  ) : slide.type === 'image' ? (
+                                                    <img
+                                                      src={slide.url}
+                                                      alt="Preview"
+                                                      className="w-full h-full object-cover"
+                                                    />
+                                                  ) : (
+                                                    <div className="relative w-full h-full">
+                                                      <video
+                                                        src={slide.url}
+                                                        className="w-full h-full object-cover"
+                                                        muted
+                                                      />
+                                                      <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                                                        <Play className="h-4 w-4 text-white" />
+                                                      </div>
+                                                    </div>
+                                                  )}
+
+                                                  {/* EDITABLE BUTTONS/OVERLAYS (only when isEditable is true) */}
+                                                  {isEditable && (
+                                                    <>
+                                                      {/* Top-left status badge */}
+                                                      {!slide.isThumbnailSlide && file && (
+                                                        <div className={`absolute top-0.5 left-0.5 flex items-center justify-center rounded text-[8px] font-bold leading-none z-10 ${file.isExisting
+                                                            ? 'w-3.5 h-3.5 bg-emerald-500 text-white'
+                                                            : file.isReplaced
+                                                              ? 'px-1 py-0.5 bg-blue-500 text-white'
+                                                              : 'px-1 py-0.5 bg-purple-600 text-white'
+                                                          }`}>
+                                                          {file.isExisting ? <Check className="h-2.5 w-2.5" /> : file.isReplaced ? 'REPLACE' : 'NEW'}
+                                                        </div>
+                                                      )}
+
+                                                      {/* Uploading indicator */}
+                                                      {file?.uploading && (
+                                                        <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-20">
+                                                          <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
+                                                        </div>
+                                                      )}
+
+                                                      {/* Error indicator */}
+                                                      {file?.error && (
+                                                        <div className="absolute inset-0 bg-red-500/60 flex items-center justify-center z-20">
+                                                          <X className="h-4 w-4 text-white" />
+                                                        </div>
+                                                      )}
+
+                                                      {/* Replace button (bottom-right) */}
+                                                      <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                          e.stopPropagation();
+                                                          if (slide.isThumbnailSlide) {
+                                                            onThumbnailButtonClick();
+                                                          } else {
+                                                            handleReplaceClick(file.id);
+                                                          }
+                                                        }}
+                                                        className="absolute bottom-0 right-0 w-6 h-6 bg-blue-500 hover:bg-blue-600 text-white rounded-tl-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-30 shadow-sm"
+                                                        title={slide.isThumbnailSlide ? 'Replace Thumbnail' : 'Replace Media'}
+                                                      >
+                                                        <Edit3 className="h-3 w-3" />
+                                                      </button>
+
+                                                      {/* Remove button (top-right) */}
+                                                      <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                          e.stopPropagation();
+                                                          if (slide.isThumbnailSlide) {
+                                                            if (thumbnailFileObj) {
+                                                              setThumbnailFileObj(null);
+                                                            } else {
+                                                              setThumbnailFileRemoved(true);
+                                                            }
+                                                          } else {
+                                                            removeFile(file.id);
+                                                          }
+                                                        }}
+                                                        className="absolute top-0 right-0 w-4 h-4 bg-red-500 hover:bg-red-600 text-white rounded-bl-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-30"
+                                                        title="Remove"
+                                                      >
+                                                        <X className="h-2.5 w-2.5" />
+                                                      </button>
+                                                    </>
+                                                  )}
+                                                </div>
+                                              );
+                                            })}
+
+                                            {/* "+" add-media tile (only in edit/upload mode when isEditable is true) */}
+                                            {isEditable && (
+                                              <button
+                                                type="button"
+                                                onClick={onButtonClick}
+                                                className="w-16 h-16 rounded-lg border-2 border-dashed border-gray-300 hover:border-purple-400 hover:bg-purple-50 flex items-center justify-center transition-all flex-shrink-0 bg-white"
+                                                title="Add media"
+                                              >
+                                                <Plus className="h-6 w-6 text-gray-400" />
+                                              </button>
+                                            )}
+
+                                            {/* Submit button (only if there are new files added or replaced, in edit mode) */}
+                                            {isEditable && (uploadedFiles.some(f => !f.isExisting) || thumbnailFileObj !== null || thumbnailFileRemoved) && (
+                                              <button
+                                                type="button"
+                                                onClick={handleSubmit}
+                                                disabled={uploadedFiles.some(f => f.uploading) || submitting}
+                                                className="w-12 h-12 rounded-full bg-green-500 hover:bg-green-600 disabled:bg-green-300 text-white flex items-center justify-center transition-all shadow-md group ml-2 flex-shrink-0"
+                                                title="Send to Admin"
+                                              >
+                                                {submitting ? (
+                                                  <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
+                                                ) : (
+                                                  <Send className="h-5 w-5 transform group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
+                                                )}
+                                              </button>
+                                            )}
                                           </div>
                                         )}
-
-                                        {/* Error overlay */}
-                                        {file.error && (
-                                          <div className="absolute inset-0 bg-red-500/60 flex items-center justify-center z-20">
-                                            <X className="h-4 w-4 text-white" />
-                                          </div>
-                                        )}
-
-                                        {/* Hover replace button (bottom-right) */}
-                                        <button
-                                          type="button"
-                                          onClick={(e) => { e.stopPropagation(); handleReplaceClick(file.id); }}
-                                          className="absolute bottom-0 right-0 w-6 h-6 bg-blue-500 hover:bg-blue-600 text-white rounded-tl-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-30 shadow-sm"
-                                          title="Replace Media"
-                                        >
-                                          <Edit3 className="h-3 w-3" />
-                                        </button>
-
-                                        {/* Hover remove button (top-right) */}
-                                        <button
-                                          type="button"
-                                          onClick={(e) => { e.stopPropagation(); removeFile(file.id); }}
-                                          className="absolute top-0 right-0 w-4 h-4 bg-red-500 hover:bg-red-600 text-white rounded-bl-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-30"
-                                          title="Remove"
-                                        >
-                                          <X className="h-2.5 w-2.5" />
-                                        </button>
                                       </div>
-                                    ))}
-
-                                    {/* "+" add-media tile */}
-                                    <button
-                                      type="button"
-                                      onClick={onButtonClick}
-                                      className="w-16 h-16 rounded-lg border-2 border-dashed border-gray-300 hover:border-purple-400 hover:bg-purple-50 flex items-center justify-center transition-all flex-shrink-0 bg-white"
-                                      title="Add media"
-                                    >
-                                      <Plus className="h-6 w-6 text-gray-400" />
-                                    </button>
-
-                                    {/* Send button (appears if any new files are added or replaced) */}
-                                    {uploadedFiles.some(f => !f.isExisting) && (
-                                      <button
-                                        type="button"
-                                        onClick={handleSubmit}
-                                        disabled={uploadedFiles.some(f => f.uploading) || submitting}
-                                        className="w-12 h-12 rounded-full bg-green-500 hover:bg-green-600 disabled:bg-green-300 text-white flex items-center justify-center transition-all shadow-md group ml-2 flex-shrink-0"
-                                        title="Send to Admin"
-                                      >
-                                        {submitting ? (
-                                          <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
-                                        ) : (
-                                          <Send className="h-5 w-5 transform group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
-                                        )}
-                                      </button>
-                                    )}
-                                  </div>
-                                )}
-
-                                <div className="space-y-4 mt-4">
-                                  {previousVersions[selectedVersionIndex].thumbnailUrl && (
-                                    <div>
-                                      <label className="block text-sm font-medium text-gray-700 mb-2">Video Thumbnail</label>
-                                      <div className="bg-white rounded-lg p-2 border border-gray-200 inline-block">
-                                        <img
-                                          src={previousVersions[selectedVersionIndex].thumbnailUrl}
-                                          alt="Video thumbnail"
-                                          className="w-24 h-24 object-cover rounded border"
-                                        />
-                                      </div>
-                                    </div>
-                                  )}
+                                    );
+                                  })()}
                                 </div>
+
                                 <div className="flex items-center justify-between text-sm text-gray-500">
-                                    <span>Created: {formatVersionDateLong(previousVersions[selectedVersionIndex].createdAt)}</span>
-                                    <div className="flex items-center gap-2 flex-wrap justify-end">
-                                      {(previousVersions[selectedVersionIndex].status === 'approved' ||
-                                        previousVersions[selectedVersionIndex].status === 'approved_by_admin') && (
+                                  <span>Created: {formatVersionDateLong(previousVersions[selectedVersionIndex].createdAt)}</span>
+                                  <div className="flex items-center gap-2 flex-wrap justify-end">
+                                    {(previousVersions[selectedVersionIndex].status === 'approved' ||
+                                      previousVersions[selectedVersionIndex].status === 'approved_by_admin') && (
                                         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-200">
                                           <ShieldCheck className="h-3 w-3" />
                                           Approved by Admin
                                         </span>
                                       )}
-                                      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${getVersionStatusColor(previousVersions[selectedVersionIndex].status)}`}>
-                                        {(previousVersions[selectedVersionIndex].status || '').replace(/_/g, ' ').toUpperCase()}
-                                      </span>
-                                    </div>
+                                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${getVersionStatusColor(previousVersions[selectedVersionIndex].status)}`}>
+                                      {(previousVersions[selectedVersionIndex].status || '').replace(/_/g, ' ').toUpperCase()}
+                                    </span>
                                   </div>
-                                  {(previousVersions[selectedVersionIndex].status === 'approved' ||
-                                    previousVersions[selectedVersionIndex].status === 'approved_by_admin') &&
-                                    previousVersions[selectedVersionIndex].approvalNotes && (
+                                </div>
+                                {(previousVersions[selectedVersionIndex].status === 'approved' ||
+                                  previousVersions[selectedVersionIndex].status === 'approved_by_admin') &&
+                                  previousVersions[selectedVersionIndex].approvalNotes && (
                                     <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg flex items-start gap-2">
                                       <ShieldCheck className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" />
                                       <div>
@@ -2669,119 +2749,8 @@ function ContentUpload() {
                         </div>
                       </div>
 
-                      {/* ── Right 1/3: Version History list + Comments ── */}
+                      {/* Ã¢â€â‚¬Ã¢â€â‚¬ Right 1/3: Comments Ã¢â€â‚¬Ã¢â€â‚¬ */}
                       <div className="space-y-5">
-                        {/* Version History panel */}
-                        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-                          <div className="px-5 py-4 border-b border-gray-100 bg-gray-50">
-                            <div className="flex items-center gap-3">
-                              <div className="p-2 bg-emerald-100 rounded-lg">
-                                <FileText className="h-4 w-4 text-emerald-600" />
-                              </div>
-                              <h3 className="text-base font-semibold text-gray-900">Version History</h3>
-                            </div>
-                          </div>
-                          <div className="max-h-80 overflow-y-auto">
-                            <div className="divide-y divide-gray-100">
-                              {/* Admin Review Section */}
-                              <div>
-                                <div className="px-5 pt-3 pb-2 text-xs font-bold uppercase tracking-wider text-purple-600 bg-purple-50/60 sticky top-0 z-[5]">
-                                  Admin Review Versions
-                                </div>
-                                {adminVersions.length === 0 ? (
-                                  <div className="px-5 py-3 text-xs text-gray-400 italic">No admin versions</div>
-                                ) : (
-                                  adminVersions.map((version, idx) => {
-                                    const { date, time } = formatVersionDate(version.createdAt);
-                                    const isSelected = activeTab === 'admin' && selectedVersionIndex === idx;
-                                    return (
-                                      <button
-                                        key={version.id || idx}
-                                        onClick={() => {
-                                          setActiveTab('admin');
-                                          setSelectedVersionIndex(idx);
-                                          setSelectedMediaIndex(0);
-                                        }}
-                                        className={`w-full text-left px-5 py-3 flex flex-col border-l-4 transition-all duration-200 hover:bg-gray-50 ${
-                                          isSelected
-                                            ? 'bg-purple-50 border-l-purple-500'
-                                            : 'bg-white border-l-transparent'
-                                        }`}
-                                      >
-                                        <div className="flex items-center justify-between">
-                                          <span className="font-medium text-gray-900 text-sm">{date}, {time}</span>
-                                        </div>
-                                        <div className="flex items-center mt-1.5 text-xs text-gray-500 gap-3">
-                                          <span className="flex items-center">
-                                            <span className={`h-1.5 w-1.5 rounded-full mr-1.5 ${
-                                              isSelected ? 'bg-purple-500' : 'bg-gray-300'
-                                            }`} />
-                                            V{version.flowVersionNumber}
-                                          </span>
-                                          {version.media?.length > 0 && (
-                                            <span className="flex items-center">
-                                              <Image className="h-3 w-3 mr-1" />
-                                              {version.media.length}
-                                            </span>
-                                          )}
-                                        </div>
-                                      </button>
-                                    );
-                                  })
-                                )}
-                              </div>
-
-                              {/* Customer Review Section */}
-                              <div>
-                                <div className="px-5 pt-3 pb-2 text-xs font-bold uppercase tracking-wider text-amber-600 bg-amber-50/60 sticky top-0 z-[5]">
-                                  Customer Review Versions
-                                </div>
-                                {customerVersions.length === 0 ? (
-                                  <div className="px-5 py-3 text-xs text-gray-400 italic">No customer versions</div>
-                                ) : (
-                                  customerVersions.map((version, idx) => {
-                                    const { date, time } = formatVersionDate(version.createdAt);
-                                    const isSelected = activeTab === 'customer' && selectedVersionIndex === idx;
-                                    return (
-                                      <button
-                                        key={version.id || idx}
-                                        onClick={() => {
-                                          setActiveTab('customer');
-                                          setSelectedVersionIndex(idx);
-                                          setSelectedMediaIndex(0);
-                                        }}
-                                        className={`w-full text-left px-5 py-3 flex flex-col border-l-4 transition-all duration-200 hover:bg-gray-50 ${
-                                          isSelected
-                                            ? 'bg-amber-50 border-l-amber-500'
-                                            : 'bg-white border-l-transparent'
-                                        }`}
-                                      >
-                                        <div className="flex items-center justify-between">
-                                          <span className="font-medium text-gray-900 text-sm">{date}, {time}</span>
-                                        </div>
-                                        <div className="flex items-center mt-1.5 text-xs text-gray-500 gap-3">
-                                          <span className="flex items-center">
-                                            <span className={`h-1.5 w-1.5 rounded-full mr-1.5 ${
-                                              isSelected ? 'bg-amber-500' : 'bg-gray-300'
-                                            }`} />
-                                            V{version.flowVersionNumber}
-                                          </span>
-                                          {version.media?.length > 0 && (
-                                            <span className="flex items-center">
-                                              <Image className="h-3 w-3 mr-1" />
-                                              {version.media.length}
-                                            </span>
-                                          )}
-                                        </div>
-                                      </button>
-                                    );
-                                  })
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-
                         {/* Comments panel */}
                         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
                           <div className="px-5 py-4 border-b border-gray-100 bg-gray-50">
@@ -2816,14 +2785,13 @@ function ContentUpload() {
                                 {commentsForCurrentMedia.map((comment, idx) => (
                                   <div
                                     key={comment.id || idx}
-                                    className={`flex flex-col gap-2 transition-all duration-200 ${
-                                      activeVersionComment === comment.id
+                                    className={`flex flex-col gap-2 transition-all duration-200 ${activeVersionComment === comment.id
                                         ? 'bg-purple-50/50 px-1 py-2 rounded-lg'
                                         : 'py-2 hover:bg-gray-50/50 px-1 rounded-lg'
-                                    }`}
+                                      }`}
                                   >
                                     {/* The initial comment bubble (Left aligned) */}
-                                    <div 
+                                    <div
                                       className="flex items-start gap-2 max-w-[90%] self-start cursor-pointer group"
                                       onClick={() => handleVersionCommentClick(comment.id)}
                                     >
@@ -2834,12 +2802,12 @@ function ContentUpload() {
                                         <p className="text-[13px] text-gray-800 break-words leading-snug">
                                           {comment.message || comment.comment}
                                         </p>
-                                        
+
                                         <div className="flex items-center justify-end gap-2 mt-1.5 pt-1.5 border-t border-gray-100">
                                           <span className="text-[9px] text-gray-400">
-                                            {comment.timestamp ? new Date(comment.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}
+                                            {comment.timestamp ? new Date(comment.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                                           </span>
-                                          
+
                                           {comment.done ? (
                                             <button
                                               onClick={(e) => { e.stopPropagation(); handleVersionToggleDone(comment.id); }}
@@ -2855,7 +2823,7 @@ function ContentUpload() {
                                               <CheckCircle className="h-3 w-3" /> Mark
                                             </button>
                                           )}
-                                          
+
                                           <button
                                             onClick={(e) => {
                                               e.stopPropagation();
@@ -2886,25 +2854,24 @@ function ContentUpload() {
                                         message: comment.reply.text,
                                         timestamp: comment.reply.timestamp
                                       }] : []);
-                                      
+
                                       return replies.map((rep, rIdx) => {
                                         const isCreator = rep.authorRole === 'creator';
                                         return (
-                                          <div 
-                                            key={rep.id || rIdx} 
+                                          <div
+                                            key={rep.id || rIdx}
                                             className={`flex items-start gap-2 max-w-[90%] group ${isCreator ? 'self-end flex-row-reverse' : 'self-start'}`}
                                           >
                                             <div className="w-5 h-5 flex-shrink-0 flex items-center justify-center rounded-full bg-gray-100 border border-gray-200 text-[9px] font-bold text-gray-500 mt-1 shadow-sm">
                                               {isCreator ? 'C' : (rep.authorRole === 'admin' ? 'A' : 'U')}
                                             </div>
-                                            
-                                            <div className={`px-3 py-2 shadow-sm flex flex-col relative ${
-                                              isCreator 
-                                                ? 'bg-[#E7FFDB] border border-[#d3f5c0] rounded-2xl rounded-tr-sm' 
+
+                                            <div className={`px-3 py-2 shadow-sm flex flex-col relative ${isCreator
+                                                ? 'bg-[#E7FFDB] border border-[#d3f5c0] rounded-2xl rounded-tr-sm'
                                                 : 'bg-white border border-gray-200 rounded-2xl rounded-tl-sm'
-                                            }`}>
+                                              }`}>
                                               <p className="text-[13px] text-gray-800 break-words leading-snug">{rep.message || rep.text}</p>
-                                              
+
                                               <div className="flex items-center justify-end gap-3 mt-1">
                                                 <button
                                                   onClick={(e) => {
@@ -2924,9 +2891,9 @@ function ContentUpload() {
                                                   <MessageSquare className="h-2.5 w-2.5" /> Reply
                                                 </button>
                                                 <span className="text-[9px] text-gray-500">
-                                                  {rep.timestamp ? new Date(rep.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}
+                                                  {rep.timestamp ? new Date(rep.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                                                 </span>
-                                                
+
                                                 {isCreator && (
                                                   <button
                                                     onClick={(e) => {
@@ -2955,7 +2922,7 @@ function ContentUpload() {
                                       >
                                         <div className="flex items-center gap-2 mb-1.5">
                                           <p className="text-[10px] text-indigo-500 font-medium">
-                                            {editingReplyId ? 'Editing reply…' : 'New reply…'}
+                                            {editingReplyId ? 'Editing reply...' : 'New reply...'}
                                           </p>
                                         </div>
                                         <textarea
@@ -3028,20 +2995,19 @@ function ContentUpload() {
                   </div>
                   <div className="flex items-center gap-1 flex-wrap sm:justify-end">
                     {(Array.isArray(assignment.platform) ? assignment.platform : [assignment.platform]).filter(Boolean).map((p, pi) => (
-                      <span key={pi} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-xs font-medium ${
-                        p.toLowerCase() === 'facebook'  ? 'bg-blue-100 text-blue-700 border-blue-200' :
-                        p.toLowerCase() === 'instagram' ? 'bg-pink-100 text-pink-700 border-pink-200' :
-                        p.toLowerCase() === 'youtube'   ? 'bg-red-100 text-red-700 border-red-200' :
-                        p.toLowerCase() === 'linkedin'  ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                        p.toLowerCase() === 'twitter'   ? 'bg-sky-100 text-sky-700 border-sky-200' :
-                        'bg-gray-100 text-gray-700 border-gray-200'
-                      }`}>
-                        {p.toLowerCase() === 'facebook'  ? <Facebook  className="h-3 w-3" /> :
-                         p.toLowerCase() === 'instagram' ? <Instagram className="h-3 w-3" /> :
-                         p.toLowerCase() === 'linkedin'  ? <Linkedin  className="h-3 w-3" /> :
-                         p.toLowerCase() === 'youtube'   ? <Youtube   className="h-3 w-3" /> :
-                         p.toLowerCase() === 'twitter'   ? <Twitter   className="h-3 w-3" /> :
-                         <Globe className="h-3 w-3" />}
+                      <span key={pi} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-xs font-medium ${p.toLowerCase() === 'facebook' ? 'bg-blue-100 text-blue-700 border-blue-200' :
+                          p.toLowerCase() === 'instagram' ? 'bg-pink-100 text-pink-700 border-pink-200' :
+                            p.toLowerCase() === 'youtube' ? 'bg-red-100 text-red-700 border-red-200' :
+                              p.toLowerCase() === 'linkedin' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                                p.toLowerCase() === 'twitter' ? 'bg-sky-100 text-sky-700 border-sky-200' :
+                                  'bg-gray-100 text-gray-700 border-gray-200'
+                        }`}>
+                        {p.toLowerCase() === 'facebook' ? <Facebook className="h-3 w-3" /> :
+                          p.toLowerCase() === 'instagram' ? <Instagram className="h-3 w-3" /> :
+                            p.toLowerCase() === 'linkedin' ? <Linkedin className="h-3 w-3" /> :
+                              p.toLowerCase() === 'youtube' ? <Youtube className="h-3 w-3" /> :
+                                p.toLowerCase() === 'twitter' ? <Twitter className="h-3 w-3" /> :
+                                  <Globe className="h-3 w-3" />}
                         {p.charAt(0).toUpperCase() + p.slice(1)}
                       </span>
                     ))}
@@ -3062,7 +3028,7 @@ function ContentUpload() {
                 <MessageSquare className="h-5 w-5 mr-2 text-purple-600" />
                 Content Details
               </h2>
-              
+
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -3073,7 +3039,7 @@ function ContentUpload() {
                     onChange={(e) => setCaption(e.target.value)}
                     rows={3}
                     className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    placeholder="Draft caption for the post (admin will review before it goes to customer)…"
+                    placeholder="Draft caption for the post (admin will review before it goes to customer)..."
                   />
                 </div>
 
@@ -3100,26 +3066,25 @@ function ContentUpload() {
                     onChange={(e) => setNotes(e.target.value)}
                     rows={2}
                     className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    placeholder="Any specific instructions or context for the admin reviewing this content…"
+                    placeholder="Any specific instructions or context for the admin reviewing this content..."
                   />
                 </div>
               </div>
             </div>
 
-            {/* Notify Admin section moved to top of right column above — removed from here */}
+            {/* Notify Admin section moved to top of right column above — removed from here */}
 
-            {/* Send to Customer — only visible when admin has approved latest version */}
+            {/* Send to Customer — only visible when admin has approved latest version */}
             {(() => {
               const latestApproved = [...previousVersions].reverse().find(v => v.status === 'approved');
               if (!latestApproved) return null;
               return (
-                <div className={`rounded-lg shadow-sm p-5 border-2 ${
-                  sentToCustomer ? 'bg-green-50 border-green-200' : 'bg-orange-50 border-orange-200'
-                }`}>
+                <div className={`rounded-lg shadow-sm p-5 border-2 ${sentToCustomer ? 'bg-green-50 border-green-200' : 'bg-orange-50 border-orange-200'
+                  }`}>
                   <div className="flex items-center gap-2 mb-2">
                     <ShieldCheck className={`h-5 w-5 ${sentToCustomer ? 'text-green-600' : 'text-orange-600'}`} />
                     <h3 className={`font-semibold text-sm ${sentToCustomer ? 'text-green-800' : 'text-orange-800'}`}>
-                      {sentToCustomer ? 'Admin Directly Sent to Customer' : 'Admin Approved — Ready to Send'}
+                      {sentToCustomer ? 'Admin Directly Sent to Customer' : 'Admin Approved — Ready to Send'}
                     </h3>
                   </div>
                   {sentToCustomer ? (
@@ -3140,7 +3105,7 @@ function ContentUpload() {
                       {sendingToCustomer ? (
                         <>
                           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
-                          Sending…
+                          Sending...
                         </>
                       ) : (
                         <>
@@ -3238,7 +3203,7 @@ function ContentUpload() {
 
       {/* Media Preview Modal */}
       {selectedMedia && (
-        <div 
+        <div
           className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4"
           onClick={() => setSelectedMedia(null)}
         >
@@ -3250,7 +3215,7 @@ function ContentUpload() {
             >
               <X className="h-8 w-8" />
             </button>
-            
+
             {/* Media Content */}
             <div className="bg-white rounded-lg overflow-hidden shadow-2xl">
               {selectedMedia.type === 'image' ? (
@@ -3267,7 +3232,7 @@ function ContentUpload() {
                   className="max-w-full max-h-[85vh] w-auto h-auto"
                 />
               )}
-              
+
               {/* Media Info */}
               <div className="p-4 bg-gray-50 border-t">
                 <div className="flex items-center justify-between">
@@ -3275,11 +3240,10 @@ function ContentUpload() {
                     <p className="font-medium text-gray-900">{selectedMedia.name}</p>
                     <p className="text-sm text-gray-500">{formatFileSize(selectedMedia.size)}</p>
                   </div>
-                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                    selectedMedia.type === 'image' 
-                      ? 'bg-green-100 text-green-800' 
+                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${selectedMedia.type === 'image'
+                      ? 'bg-green-100 text-green-800'
                       : 'bg-blue-100 text-blue-800'
-                  }`}>
+                    }`}>
                     {selectedMedia.type.toUpperCase()}
                   </span>
                 </div>

@@ -542,13 +542,74 @@ function SchedulePostModal({
   const [loadingLibrary, setLoadingLibrary] = useState(false);
   const [mediaFilter, setMediaFilter] = useState('all'); // 'all', 'images', 'videos'
 
+  const getMappedPostType = useCallback((rawType) => {
+    const t = String(rawType || '').toLowerCase();
+    if (t === 'story') return 'story';
+    if (t === 'reel') return 'reel';
+    // "post" and "carousel" use the feed pipeline in scheduler
+    if (t === 'post' || t === 'carousel') return 'feed';
+    return 'feed';
+  }, []);
+
+  const itemPlatforms = useMemo(() => {
+    const normalize = (val) => {
+      if (!val) return [];
+      if (Array.isArray(val)) return val;
+      return String(val).split(/[,/|]/g);
+    };
+
+    const raw = normalize(selectedContent?.platform);
+    return new Set(
+      raw
+        .map(p => String(p || '').trim().toLowerCase())
+        .filter(Boolean)
+    );
+  }, [selectedContent]);
+
+  const isItemPlatform = useCallback((platform) => {
+    return itemPlatforms.has(String(platform || '').toLowerCase());
+  }, [itemPlatforms]);
+
+  const allowedPostTypes = useMemo(() => {
+    const configured = String(selectedContent?.postType || selectedContent?.post_type || '').toLowerCase();
+    if (!configured) return new Set(['feed', 'story', 'reel']);
+    return new Set([getMappedPostType(configured)]);
+  }, [selectedContent, getMappedPostType]);
+
+  const isCustomerApproved = useMemo(() => {
+    const approvedStatuses = ['approved_customer', 'approved_both', 'published'];
+    const topLevelStatus = (selectedContent?.status || '').toLowerCase();
+
+    if (selectedContent?.approved_by_customer === true || approvedStatuses.includes(topLevelStatus)) {
+      return true;
+    }
+
+    const versions = Array.isArray(selectedContent?.versions) ? selectedContent.versions : [];
+    if (versions.length === 0) return false;
+
+    const latestVersion = versions[versions.length - 1] || {};
+    const latestStatus = (latestVersion.status || '').toLowerCase();
+
+    return latestVersion.approved_by_customer === true || approvedStatuses.includes(latestStatus);
+  }, [selectedContent]);
+
+  const selectedPostMedia = useMemo(() => {
+    return (scheduleFormData.selectedImages || []).filter(item => item?.url && !item?.isThumbnail);
+  }, [scheduleFormData.selectedImages]);
+
+  const isFeedCarouselSelection = useMemo(() => {
+    return scheduleFormData.postType === 'feed' &&
+      !scheduleFormData.platforms.includes('youtube') &&
+      selectedPostMedia.length > 1;
+  }, [scheduleFormData.postType, scheduleFormData.platforms, selectedPostMedia.length]);
+
   useEffect(() => {
     if (selectedContent) {
       const latestVersion = selectedContent.versions[selectedContent.versions.length - 1];
       
       // Get all media from the latest version
       const availableMedia = latestVersion?.media?.filter(media => 
-        media.url && typeof media.url === 'string'
+        media.url && typeof media.url === 'string' && !media.isThumbnail
       ) || [];
       
       // Extract caption without hashtags
@@ -566,13 +627,27 @@ function SchedulePostModal({
         scheduledDate: '',
         scheduledTime: '',
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        postType: 'feed',
+        postType: getMappedPostType(selectedContent?.postType || selectedContent?.post_type),
         reelThumbnailUrl: latestVersion?.thumbnailUrl || null,
         facebookThumbnailUrl: latestVersion?.thumbnailUrl || null,
         linkedinThumbnailUrl: latestVersion?.thumbnailUrl || null
       });
     }
-  }, [selectedContent]); // Only reset form when content changes, not on every parent render
+  }, [selectedContent, getMappedPostType]); // Only reset form when content changes, not on every parent render
+
+  useEffect(() => {
+    setScheduleFormData(prev => ({
+      ...prev,
+      platforms: prev.platforms.filter(p => itemPlatforms.has(String(p || '').toLowerCase())),
+    }));
+  }, [itemPlatforms]);
+
+  useEffect(() => {
+    if (!allowedPostTypes.has(scheduleFormData.postType)) {
+      const fallback = allowedPostTypes.values().next().value || 'feed';
+      setScheduleFormData(prev => ({ ...prev, postType: fallback }));
+    }
+  }, [allowedPostTypes, scheduleFormData.postType]);
 
   // Sync local accounts separately so it never triggers a form reset
   useEffect(() => {
@@ -1035,14 +1110,14 @@ function SchedulePostModal({
           alert(`Please select a ${platform} page`);
           return false;
         }
-        if (platform === 'instagram' && scheduleFormData.selectedImages.length === 0) {
+        if (platform === 'instagram' && selectedPostMedia.length === 0) {
           alert('Instagram requires at least one image');
           return false;
         }
         
         // Facebook Stories validation
         if (platform === 'facebook' && scheduleFormData.postType === 'story') {
-          if (scheduleFormData.selectedImages.length === 0) {
+          if (selectedPostMedia.length === 0) {
             alert('Facebook Stories require at least one image or video');
             return false;
           }
@@ -1051,7 +1126,7 @@ function SchedulePostModal({
             return false;
           }
           // Add format validation for Stories
-          const firstImage = scheduleFormData.selectedImages[0];
+          const firstImage = selectedPostMedia[0];
           if (firstImage && firstImage.url) {
             const isVideo = isVideoUrl(firstImage.url);
             if (!isVideo) {
@@ -1076,7 +1151,7 @@ function SchedulePostModal({
           alert('Please select a YouTube channel');
           return false;
         }
-        if (scheduleFormData.selectedImages.length === 0) {
+        if (selectedPostMedia.length === 0) {
           alert('Please upload a video for YouTube post');
           return false;
         }
@@ -1084,13 +1159,13 @@ function SchedulePostModal({
     }
 
     // YouTube restriction for multiple images
-    if (scheduleFormData.platforms.includes('youtube') && scheduleFormData.selectedImages.length > 1) {
+    if (scheduleFormData.platforms.includes('youtube') && selectedPostMedia.length > 1) {
       alert('YouTube only supports single video posts');
       return false;
     }
 
     // LinkedIn supports both text and images
-    if (scheduleFormData.platforms.includes('linkedin') && !scheduleFormData.caption && scheduleFormData.selectedImages.length === 0) {
+    if (scheduleFormData.platforms.includes('linkedin') && !scheduleFormData.caption && selectedPostMedia.length === 0) {
       alert('LinkedIn requires either text content or images');
       return false;
     }
@@ -1132,8 +1207,8 @@ function SchedulePostModal({
         accountId: selectedAccount._id,
         platformUserId: selectedAccount.platformUserId,
         accessToken: selectedAccount.accessToken,
-        imageUrls: scheduleFormData.selectedImages.map(item => item.url),
-        isCarousel: scheduleFormData.selectedImages.length > 1 && platform !== 'youtube',
+        imageUrls: selectedPostMedia.map(item => item.url),
+        isCarousel: scheduleFormData.postType === 'feed' && selectedPostMedia.length > 1 && platform !== 'youtube',
         timezone: scheduleFormData.timezone,
         calendar_id: selectedContent.calendar_id || selectedContent.calendarId || '',
         calendar_name: selectedContent.calendar_name || selectedContent.calendarName || '',
@@ -1166,7 +1241,7 @@ function SchedulePostModal({
         }
 
         Object.assign(postData, {
-          imageUrl: scheduleFormData.selectedImages[0]?.url || '',
+          imageUrl: selectedPostMedia[0]?.url || '',
           pageId: settings.pageId,
           pageName: selectedPage.name,
           pageAccessToken: selectedPage.accessToken,
@@ -1176,8 +1251,8 @@ function SchedulePostModal({
           thumbnailUrl: platform === 'facebook' ? (scheduleFormData.facebookThumbnailUrl || null) : null,
         });
         
-        // Mark as carousel if multiple images
-        if (scheduleFormData.selectedImages.length > 1) {
+        // Mark as carousel only for feed posts with multiple media
+        if (postData.isCarousel) {
           postData.useCarouselService = true;
         }
         
@@ -1194,7 +1269,7 @@ function SchedulePostModal({
         }
 
         Object.assign(postData, {
-          videoUrl: scheduleFormData.selectedImages[0]?.url || '',
+          videoUrl: selectedPostMedia[0]?.url || '',
           channelId: settings.channelId,
           channelName: selectedChannel.name,
           youtubeAccessToken: selectedAccount.accessToken
@@ -1256,6 +1331,10 @@ function SchedulePostModal({
   };
 
   const handleSchedulePost = async () => {
+    if (!isCustomerApproved) {
+      alert('This content can be scheduled only after customer approval.');
+      return;
+    }
     if (!validatePostData(true)) return;
 
     // Prevent duplicate submissions
@@ -1366,6 +1445,10 @@ function SchedulePostModal({
   };
 
   const handlePostNow = async () => {
+    if (!isCustomerApproved) {
+      alert('This content can be posted only after customer approval.');
+      return;
+    }
     if (!validatePostData(false)) return;
 
     // LAYER 1: Ref-based lock (fastest)
@@ -1660,30 +1743,33 @@ function SchedulePostModal({
                 <label className={`flex flex-col sm:flex-row items-start sm:items-center p-2 sm:p-3 border-2 rounded-lg transition-all ${
                   scheduleFormData.platforms.includes('facebook') 
                     ? 'border-blue-500 bg-blue-50 shadow-sm cursor-pointer' 
-                    : hasAccountsForPlatform(selectedContent?.customerId, 'facebook')
+                    : isItemPlatform('facebook') && hasAccountsForPlatform(selectedContent?.customerId, 'facebook')
                     ? 'border-gray-200 hover:border-blue-400 hover:bg-blue-50/50 cursor-pointer'
                     : 'border-gray-200 bg-gray-50/50 cursor-not-allowed opacity-60'
-                }`} title={!isPlatformEnabled(selectedContent?.customerId, 'facebook') ? 'Platform disabled by admin' : ''}>
+                }`} title={!isItemPlatform('facebook') ? 'Not selected while creating this item' : (!isPlatformEnabled(selectedContent?.customerId, 'facebook') ? 'Platform disabled by admin' : '')}>
                   <input
                     type="checkbox"
                     name="platforms"
                     value="facebook"
                     checked={scheduleFormData.platforms.includes('facebook')}
-                    onChange={() => hasAccountsForPlatform(selectedContent?.customerId, 'facebook') && handlePlatformToggle('facebook')}
-                    disabled={!hasAccountsForPlatform(selectedContent?.customerId, 'facebook')}
+                    onChange={() => isItemPlatform('facebook') && hasAccountsForPlatform(selectedContent?.customerId, 'facebook') && isPlatformEnabled(selectedContent?.customerId, 'facebook') && handlePlatformToggle('facebook')}
+                    disabled={!isItemPlatform('facebook') || !hasAccountsForPlatform(selectedContent?.customerId, 'facebook') || !isPlatformEnabled(selectedContent?.customerId, 'facebook')}
                     className="sr-only"
                   />
                   <div className="flex items-center w-full">
                     <Facebook className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 mr-2 flex-shrink-0" />
                     <div className="flex-1 min-w-0">
                       <span className="font-medium text-gray-900 text-xs sm:text-sm">Facebook</span>
-                      {!isPlatformEnabled(selectedContent?.customerId, 'facebook') && (
+                      {!isItemPlatform('facebook') && (
+                        <div className="text-[10px] text-gray-500">Not selected in item</div>
+                      )}
+                      {isItemPlatform('facebook') && !isPlatformEnabled(selectedContent?.customerId, 'facebook') && (
                         <div className="text-[10px] text-red-600">Disabled by admin</div>
                       )}
-                      {isPlatformEnabled(selectedContent?.customerId, 'facebook') && !hasAccountsForPlatform(selectedContent?.customerId, 'facebook') && (
+                      {isItemPlatform('facebook') && isPlatformEnabled(selectedContent?.customerId, 'facebook') && !hasAccountsForPlatform(selectedContent?.customerId, 'facebook') && (
                         <div className="text-[10px] text-orange-600">Not connected</div>
                       )}
-                      {hasAccountsForPlatform(selectedContent?.customerId, 'facebook') && (
+                      {isItemPlatform('facebook') && hasAccountsForPlatform(selectedContent?.customerId, 'facebook') && (
                         <div className="flex items-center">
                           <span className="text-[10px] text-green-700 font-medium flex items-center">
                             <Check className="h-3 w-3 text-green-600 mr-0.5" />Connected
@@ -1696,7 +1782,7 @@ function SchedulePostModal({
                     )}
                   </div>
                   <div className="flex items-center gap-1 mt-1 sm:mt-0">
-                    {!hasAccountsForPlatform(selectedContent?.customerId, 'facebook') ? (
+                    {!isItemPlatform('facebook') ? null : !hasAccountsForPlatform(selectedContent?.customerId, 'facebook') ? (
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); showIntegration('facebook', selectedContent?.customerId, getCustomerName(selectedContent?.customerId)); }}
@@ -1730,30 +1816,33 @@ function SchedulePostModal({
                 <label className={`flex flex-col sm:flex-row items-start sm:items-center p-2 sm:p-3 border-2 rounded-lg transition-all ${
                   scheduleFormData.platforms.includes('instagram') 
                     ? 'border-pink-500 bg-pink-50 shadow-sm cursor-pointer' 
-                    : getAvailableAccountsForPlatform(selectedContent?.customerId, 'instagram').length > 0 && isPlatformEnabled(selectedContent?.customerId, 'instagram')
+                    : isItemPlatform('instagram') && getAvailableAccountsForPlatform(selectedContent?.customerId, 'instagram').length > 0 && isPlatformEnabled(selectedContent?.customerId, 'instagram')
                     ? 'border-gray-200 hover:border-pink-400 hover:bg-pink-50/50 cursor-pointer'
                     : 'border-gray-200 bg-gray-50/50 cursor-not-allowed opacity-60'
-                }`} title={!isPlatformEnabled(selectedContent?.customerId, 'instagram') ? 'Platform disabled by admin' : ''}>
+                }`} title={!isItemPlatform('instagram') ? 'Not selected while creating this item' : (!isPlatformEnabled(selectedContent?.customerId, 'instagram') ? 'Platform disabled by admin' : '')}>
                   <input
                     type="checkbox"
                     name="platforms"
                     value="instagram"
                     checked={scheduleFormData.platforms.includes('instagram')}
-                    onChange={() => getAvailableAccountsForPlatform(selectedContent?.customerId, 'instagram').length > 0 && isPlatformEnabled(selectedContent?.customerId, 'instagram') && handlePlatformToggle('instagram')}
-                    disabled={getAvailableAccountsForPlatform(selectedContent?.customerId, 'instagram').length === 0 || !isPlatformEnabled(selectedContent?.customerId, 'instagram')}
+                    onChange={() => isItemPlatform('instagram') && getAvailableAccountsForPlatform(selectedContent?.customerId, 'instagram').length > 0 && isPlatformEnabled(selectedContent?.customerId, 'instagram') && handlePlatformToggle('instagram')}
+                    disabled={!isItemPlatform('instagram') || getAvailableAccountsForPlatform(selectedContent?.customerId, 'instagram').length === 0 || !isPlatformEnabled(selectedContent?.customerId, 'instagram')}
                     className="sr-only"
                   />
                   <div className="flex items-center w-full">
                     <Instagram className="h-4 w-4 sm:h-5 sm:w-5 text-pink-600 mr-2 flex-shrink-0" />
                     <div className="flex-1 min-w-0">
                       <span className="font-medium text-gray-900 text-xs sm:text-sm">Instagram</span>
-                      {!isPlatformEnabled(selectedContent?.customerId, 'instagram') && (
+                      {!isItemPlatform('instagram') && (
+                        <div className="text-[10px] text-gray-500">Not selected in item</div>
+                      )}
+                      {isItemPlatform('instagram') && !isPlatformEnabled(selectedContent?.customerId, 'instagram') && (
                         <div className="text-[10px] text-red-600">Disabled by admin</div>
                       )}
-                      {isPlatformEnabled(selectedContent?.customerId, 'instagram') && getAvailableAccountsForPlatform(selectedContent?.customerId, 'instagram').length === 0 && (
+                      {isItemPlatform('instagram') && isPlatformEnabled(selectedContent?.customerId, 'instagram') && getAvailableAccountsForPlatform(selectedContent?.customerId, 'instagram').length === 0 && (
                         <div className="text-[10px] text-orange-600">Not connected</div>
                       )}
-                      {getAvailableAccountsForPlatform(selectedContent?.customerId, 'instagram').length > 0 && isPlatformEnabled(selectedContent?.customerId, 'instagram') && (
+                      {isItemPlatform('instagram') && getAvailableAccountsForPlatform(selectedContent?.customerId, 'instagram').length > 0 && isPlatformEnabled(selectedContent?.customerId, 'instagram') && (
                         <div className="flex items-center">
                           <span className="text-[10px] text-green-700 font-medium flex items-center">
                             <Check className="h-3 w-3 text-green-600 mr-0.5" />Connected
@@ -1766,7 +1855,7 @@ function SchedulePostModal({
                     )}
                   </div>
                   <div className="flex items-center gap-1 mt-1 sm:mt-0">
-                    {getAvailableAccountsForPlatform(selectedContent?.customerId, 'instagram').length === 0 ? (
+                    {!isItemPlatform('instagram') ? null : getAvailableAccountsForPlatform(selectedContent?.customerId, 'instagram').length === 0 ? (
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); showIntegration('instagram', selectedContent?.customerId, getCustomerName(selectedContent?.customerId)); }}
@@ -1800,30 +1889,33 @@ function SchedulePostModal({
                 <label className={`flex flex-col sm:flex-row items-start sm:items-center p-2 sm:p-3 border-2 rounded-lg transition-all ${
                   scheduleFormData.platforms.includes('youtube') 
                     ? 'border-red-500 bg-red-50 shadow-sm cursor-pointer' 
-                    : hasAccountsForPlatform(selectedContent?.customerId, 'youtube')
+                    : isItemPlatform('youtube') && hasAccountsForPlatform(selectedContent?.customerId, 'youtube')
                     ? 'border-gray-200 hover:border-red-400 hover:bg-red-50/50 cursor-pointer'
                     : 'border-gray-200 bg-gray-50/50 cursor-not-allowed opacity-60'
-                }`} title={!isPlatformEnabled(selectedContent?.customerId, 'youtube') ? 'Platform disabled by admin' : ''}>
+                }`} title={!isItemPlatform('youtube') ? 'Not selected while creating this item' : (!isPlatformEnabled(selectedContent?.customerId, 'youtube') ? 'Platform disabled by admin' : '')}>
                   <input
                     type="checkbox"
                     name="platforms"
                     value="youtube"
                     checked={scheduleFormData.platforms.includes('youtube')}
-                    onChange={() => hasAccountsForPlatform(selectedContent?.customerId, 'youtube') && handlePlatformToggle('youtube')}
-                    disabled={!hasAccountsForPlatform(selectedContent?.customerId, 'youtube')}
+                    onChange={() => isItemPlatform('youtube') && hasAccountsForPlatform(selectedContent?.customerId, 'youtube') && isPlatformEnabled(selectedContent?.customerId, 'youtube') && handlePlatformToggle('youtube')}
+                    disabled={!isItemPlatform('youtube') || !hasAccountsForPlatform(selectedContent?.customerId, 'youtube') || !isPlatformEnabled(selectedContent?.customerId, 'youtube')}
                     className="sr-only"
                   />
                   <div className="flex items-center w-full">
                     <Youtube className="h-4 w-4 sm:h-5 sm:w-5 text-red-600 mr-2 flex-shrink-0" />
                     <div className="flex-1 min-w-0">
                       <span className="font-medium text-gray-900 text-xs sm:text-sm">YouTube</span>
-                      {!isPlatformEnabled(selectedContent?.customerId, 'youtube') && (
+                      {!isItemPlatform('youtube') && (
+                        <div className="text-[10px] text-gray-500">Not selected in item</div>
+                      )}
+                      {isItemPlatform('youtube') && !isPlatformEnabled(selectedContent?.customerId, 'youtube') && (
                         <div className="text-[10px] text-red-600">Disabled by admin</div>
                       )}
-                      {isPlatformEnabled(selectedContent?.customerId, 'youtube') && !hasAccountsForPlatform(selectedContent?.customerId, 'youtube') && (
+                      {isItemPlatform('youtube') && isPlatformEnabled(selectedContent?.customerId, 'youtube') && !hasAccountsForPlatform(selectedContent?.customerId, 'youtube') && (
                         <div className="text-[10px] text-orange-600">Not available</div>
                       )}
-                      {hasAccountsForPlatform(selectedContent?.customerId, 'youtube') && (
+                      {isItemPlatform('youtube') && hasAccountsForPlatform(selectedContent?.customerId, 'youtube') && (
                         <div className="flex items-center">
                           <span className="text-[10px] text-green-700 font-medium flex items-center">
                             <Check className="h-3 w-3 text-green-600 mr-0.5" />Connected
@@ -1836,7 +1928,7 @@ function SchedulePostModal({
                     )}
                   </div>
                   <div className="flex items-center gap-1 mt-1 sm:mt-0">
-                    {!hasAccountsForPlatform(selectedContent?.customerId, 'youtube') ? (
+                    {!isItemPlatform('youtube') ? null : !hasAccountsForPlatform(selectedContent?.customerId, 'youtube') ? (
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); showIntegration('youtube', selectedContent?.customerId, getCustomerName(selectedContent?.customerId)); }}
@@ -1870,30 +1962,33 @@ function SchedulePostModal({
                 <label className={`flex flex-col sm:flex-row items-start sm:items-center p-2 sm:p-3 border-2 rounded-lg transition-all ${
                   scheduleFormData.platforms.includes('linkedin') 
                     ? 'border-blue-500 bg-blue-50 shadow-sm cursor-pointer' 
-                    : hasAccountsForPlatform(selectedContent?.customerId, 'linkedin')
+                    : isItemPlatform('linkedin') && hasAccountsForPlatform(selectedContent?.customerId, 'linkedin')
                     ? 'border-gray-200 hover:border-blue-400 hover:bg-blue-50/50 cursor-pointer'
                     : 'border-gray-200 bg-gray-50/50 cursor-not-allowed opacity-60'
-                }`} title={!isPlatformEnabled(selectedContent?.customerId, 'linkedin') ? 'Platform disabled by admin' : ''}>
+                }`} title={!isItemPlatform('linkedin') ? 'Not selected while creating this item' : (!isPlatformEnabled(selectedContent?.customerId, 'linkedin') ? 'Platform disabled by admin' : '')}>
                   <input
                     type="checkbox"
                     name="platforms"
                     value="linkedin"
                     checked={scheduleFormData.platforms.includes('linkedin')}
-                    onChange={() => hasAccountsForPlatform(selectedContent?.customerId, 'linkedin') && handlePlatformToggle('linkedin')}
-                    disabled={!hasAccountsForPlatform(selectedContent?.customerId, 'linkedin')}
+                    onChange={() => isItemPlatform('linkedin') && hasAccountsForPlatform(selectedContent?.customerId, 'linkedin') && isPlatformEnabled(selectedContent?.customerId, 'linkedin') && handlePlatformToggle('linkedin')}
+                    disabled={!isItemPlatform('linkedin') || !hasAccountsForPlatform(selectedContent?.customerId, 'linkedin') || !isPlatformEnabled(selectedContent?.customerId, 'linkedin')}
                     className="sr-only"
                   />
                   <div className="flex items-center w-full">
                     <Linkedin className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 mr-2 flex-shrink-0" />
                     <div className="flex-1 min-w-0">
                       <span className="font-medium text-gray-900 text-xs sm:text-sm">LinkedIn</span>
-                      {!isPlatformEnabled(selectedContent?.customerId, 'linkedin') && (
+                      {!isItemPlatform('linkedin') && (
+                        <div className="text-[10px] text-gray-500">Not selected in item</div>
+                      )}
+                      {isItemPlatform('linkedin') && !isPlatformEnabled(selectedContent?.customerId, 'linkedin') && (
                         <div className="text-[10px] text-red-600">Disabled by admin</div>
                       )}
-                      {isPlatformEnabled(selectedContent?.customerId, 'linkedin') && !hasAccountsForPlatform(selectedContent?.customerId, 'linkedin') && (
+                      {isItemPlatform('linkedin') && isPlatformEnabled(selectedContent?.customerId, 'linkedin') && !hasAccountsForPlatform(selectedContent?.customerId, 'linkedin') && (
                         <div className="text-[10px] text-orange-600">Not connected</div>
                       )}
-                      {hasAccountsForPlatform(selectedContent?.customerId, 'linkedin') && (
+                      {isItemPlatform('linkedin') && hasAccountsForPlatform(selectedContent?.customerId, 'linkedin') && (
                         <div className="flex items-center">
                           <span className="text-[10px] text-green-700 font-medium flex items-center">
                             <Check className="h-3 w-3 text-green-600 mr-0.5" />Connected
@@ -1906,7 +2001,7 @@ function SchedulePostModal({
                     )}
                   </div>
                   <div className="flex items-center gap-1 mt-1 sm:mt-0">
-                    {!hasAccountsForPlatform(selectedContent?.customerId, 'linkedin') ? (
+                    {!isItemPlatform('linkedin') ? null : !hasAccountsForPlatform(selectedContent?.customerId, 'linkedin') ? (
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); showIntegration('linkedin', selectedContent?.customerId, getCustomerName(selectedContent?.customerId)); }}
@@ -2288,11 +2383,11 @@ function SchedulePostModal({
                       })}
                     </div>
                     
-                    {scheduleFormData.selectedImages.length > 0 && (
+                    {selectedPostMedia.length > 0 && (
                       <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded-lg">
                         <span className="text-xs font-medium text-blue-800">
-                          {scheduleFormData.selectedImages.length} selected
-                          {scheduleFormData.selectedImages.length > 1 && !scheduleFormData.platforms.includes('youtube') && ' (Carousel)'}
+                          {selectedPostMedia.length} selected
+                          {isFeedCarouselSelection && ' (Carousel)'}
                         </span>
                       </div>
                     )}
@@ -2314,7 +2409,7 @@ function SchedulePostModal({
                     <div className="flex items-center justify-between mb-1.5">
                       <h4 className="text-xs font-medium text-gray-700 flex items-center">
                         <MoveVertical className="h-3 w-3 mr-1" />
-                        Carousel (Drag to reorder)
+                        {isFeedCarouselSelection ? 'Carousel (Drag to reorder)' : 'Selected Media'}
                       </h4>
                       <span className="text-[10px] text-gray-500">
                         {scheduleFormData.selectedImages.length}/{scheduleFormData.platforms.includes('youtube') ? '1' : '10'}
@@ -2362,270 +2457,87 @@ function SchedulePostModal({
                   </div>
                 )}
 
-                {/* Additional Media Upload - Compact */}
-                <div className="border border-dashed border-gray-300 rounded-lg p-3 text-center hover:border-blue-400 transition-all">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept={scheduleFormData.platforms.includes('youtube') ? "video/*" : "image/*,video/*"}
-                    multiple={!scheduleFormData.platforms.includes('youtube')}
-                    onChange={(e) => {
-                      const files = e.target.files;
-                      if (files && files.length > 0) {
-                        if (files.length === 1) {
-                          handleImageUpload(files[0]);
-                        } else {
-                          handleMultipleFileUpload(files);
-                        }
-                      }
-                    }}
-                    className="hidden"
-                  />
-                  {uploadingCarousel ? (
-                    <div className="flex flex-col items-center">
-                      <Loader2 className="h-5 w-5 text-blue-600 animate-spin mb-1" />
-                      <span className="text-xs text-gray-600">Uploading...</span>
+                {/* Post type selector - Compact */}
+                <div className="border border-dashed border-gray-300 rounded-lg p-3 text-center">
+                  {(scheduleFormData.platforms.includes('instagram') || scheduleFormData.platforms.includes('facebook')) && (
+                    <div className="flex items-center justify-center gap-3 mb-1 flex-wrap">
+                      {allowedPostTypes.has('feed') && (
+                        <label className="text-xs flex items-center gap-1">
+                          <input
+                            type="radio"
+                            name="postType"
+                            value="feed"
+                            checked={scheduleFormData.postType === 'feed'}
+                            onChange={() => setScheduleFormData(prev => ({ ...prev, postType: 'feed' }))}
+                            className="form-radio h-3 w-3"
+                          />
+                          Feed
+                        </label>
+                      )}
+                      {allowedPostTypes.has('story') && (scheduleFormData.platforms.includes('instagram') || scheduleFormData.platforms.includes('facebook')) && (
+                        <label className="text-xs flex items-center gap-1">
+                          <input
+                            type="radio"
+                            name="postType"
+                            value="story"
+                            checked={scheduleFormData.postType === 'story'}
+                            onChange={() => setScheduleFormData(prev => ({ ...prev, postType: 'story' }))}
+                            className="form-radio h-3 w-3"
+                          />
+                          Story
+                        </label>
+                      )}
+                      {allowedPostTypes.has('reel') && (scheduleFormData.platforms.includes('instagram') || scheduleFormData.platforms.includes('facebook')) && (
+                        <label className="text-xs flex items-center gap-1">
+                          <input
+                            type="radio"
+                            name="postType"
+                            value="reel"
+                            checked={scheduleFormData.postType === 'reel'}
+                            onChange={() => setScheduleFormData(prev => ({ ...prev, postType: 'reel' }))}
+                            className="form-radio h-3 w-3"
+                          />
+                          Reel
+                        </label>
+                      )}
                     </div>
-                  ) : (
-                    <>
-                      {/* Post type selector for Instagram and Facebook - Compact */}
-                      {(scheduleFormData.platforms.includes('instagram') || scheduleFormData.platforms.includes('facebook')) && (
-                        <div className="flex items-center justify-center gap-3 mb-2 flex-wrap">
-                          <label className="text-xs flex items-center gap-1">
-                            <input
-                              type="radio"
-                              name="postType"
-                              value="feed"
-                              checked={scheduleFormData.postType === 'feed'}
-                              onChange={() => setScheduleFormData(prev => ({ ...prev, postType: 'feed' }))}
-                              className="form-radio h-3 w-3"
-                            />
-                            Feed
-                          </label>
-                          {scheduleFormData.platforms.includes('instagram') && (
-                            <>
-                              <label className="text-xs flex items-center gap-1">
-                                <input
-                                  type="radio"
-                                  name="postType"
-                                  value="story"
-                                  checked={scheduleFormData.postType === 'story'}
-                                  onChange={() => setScheduleFormData(prev => ({ ...prev, postType: 'story' }))}
-                                  className="form-radio h-3 w-3"
-                                />
-                                Story
-                              </label>
-                              <label className="text-xs flex items-center gap-1">
-                                <input
-                                  type="radio"
-                                  name="postType"
-                                  value="reel"
-                                  checked={scheduleFormData.postType === 'reel'}
-                                  onChange={() => setScheduleFormData(prev => ({ ...prev, postType: 'reel' }))}
-                                  className="form-radio h-3 w-3"
-                                />
-                                Reel
-                              </label>
-                            </>
-                          )}
-                          {scheduleFormData.platforms.includes('facebook') && (
-                            <label className="text-xs flex items-center gap-1">
-                              <input
-                                type="radio"
-                                name="postType"
-                                value="story"
-                                checked={scheduleFormData.postType === 'story'}
-                                onChange={() => setScheduleFormData(prev => ({ ...prev, postType: 'story' }))}
-                                className="form-radio h-3 w-3"
-                              />
-                              FB Story
-                            </label>
-                          )}
-                        </div>
-                      )}
+                  )}
 
-                      {/* Reel Thumbnail Upload */}
-                      {scheduleFormData.postType === 'reel' && scheduleFormData.platforms.includes('instagram') && (
-                        <div className="mb-3 p-2 bg-purple-50 border border-purple-200 rounded-lg text-left">
-                          <input
-                            ref={thumbnailFileInputRef}
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => e.target.files?.[0] && handleThumbnailUpload(e.target.files[0], 'reelThumbnailUrl')}
-                            className="hidden"
+                  {(scheduleFormData.reelThumbnailUrl || scheduleFormData.facebookThumbnailUrl || scheduleFormData.linkedinThumbnailUrl) && (
+                    <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2 text-left">
+                      {scheduleFormData.postType === 'reel' && scheduleFormData.reelThumbnailUrl && (
+                        <div className="p-2 rounded-lg border border-purple-200 bg-purple-50">
+                          <p className="text-[10px] font-semibold text-purple-800 mb-1">Reel Thumbnail</p>
+                          <img
+                            src={scheduleFormData.reelThumbnailUrl}
+                            alt="Reel thumbnail"
+                            className="w-10 h-14 object-cover rounded border border-purple-300"
                           />
-                          <p className="text-[10px] font-semibold text-purple-800 mb-1.5 flex items-center gap-1">
-                            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                            Reel Cover Thumbnail (Optional)
-                          </p>
-                          {scheduleFormData.reelThumbnailUrl ? (
-                            <div className="flex items-center gap-2">
-                              <img
-                                src={scheduleFormData.reelThumbnailUrl}
-                                alt="Reel thumbnail"
-                                className="w-10 h-14 object-cover rounded border border-purple-300"
-                              />
-                              <div className="flex flex-col gap-1">
-                                <span className="text-[10px] text-green-700 font-medium flex items-center gap-0.5">
-                                  <Check className="h-3 w-3" /> Thumbnail set
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => setScheduleFormData(prev => ({ ...prev, reelThumbnailUrl: null }))}
-                                  className="text-[10px] text-red-500 hover:text-red-700"
-                                >
-                                  Remove
-                                </button>
-                              </div>
-                            </div>
-                          ) : uploadingThumbnail ? (
-                            <div className="flex items-center gap-1.5">
-                              <Loader2 className="h-3.5 w-3.5 text-purple-600 animate-spin" />
-                              <span className="text-[10px] text-purple-700">Uploading thumbnail...</span>
-                            </div>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => thumbnailFileInputRef.current?.click()}
-                              className="text-[10px] text-purple-700 hover:text-purple-900 font-medium flex items-center gap-1 border border-purple-300 rounded px-2 py-1 hover:bg-purple-100"
-                            >
-                              <Upload className="h-3 w-3" />
-                              Upload thumbnail (JPEG, max 8MB, 9:16 recommended)
-                            </button>
-                          )}
                         </div>
                       )}
 
-                      {/* Facebook Video Thumbnail Upload */}
-                      {scheduleFormData.platforms.includes('facebook') && scheduleFormData.selectedImages.some(m => isVideoUrl(m.url)) && (
-                        <div className="mb-3 p-2 bg-blue-50 border border-blue-200 rounded-lg text-left">
-                          <input
-                            ref={facebookThumbnailFileInputRef}
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => e.target.files?.[0] && handleThumbnailUpload(e.target.files[0], 'facebookThumbnailUrl')}
-                            className="hidden"
+                      {scheduleFormData.platforms.includes('facebook') && selectedPostMedia.some(m => isVideoUrl(m.url)) && scheduleFormData.facebookThumbnailUrl && (
+                        <div className="p-2 rounded-lg border border-blue-200 bg-blue-50">
+                          <p className="text-[10px] font-semibold text-blue-800 mb-1">Facebook Video Thumbnail</p>
+                          <img
+                            src={scheduleFormData.facebookThumbnailUrl}
+                            alt="Facebook thumbnail"
+                            className="w-10 h-14 object-cover rounded border border-blue-300"
                           />
-                          <p className="text-[10px] font-semibold text-blue-800 mb-1.5 flex items-center gap-1">
-                            <Facebook className="h-3 w-3" />
-                            Facebook Video Thumbnail (Optional)
-                          </p>
-                          {scheduleFormData.facebookThumbnailUrl ? (
-                            <div className="flex items-center gap-2">
-                              <img
-                                src={scheduleFormData.facebookThumbnailUrl}
-                                alt="Facebook thumbnail"
-                                className="w-10 h-14 object-cover rounded border border-blue-300"
-                              />
-                              <div className="flex flex-col gap-1">
-                                <span className="text-[10px] text-green-700 font-medium flex items-center gap-0.5">
-                                  <Check className="h-3 w-3" /> Thumbnail set
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => setScheduleFormData(prev => ({ ...prev, facebookThumbnailUrl: null }))}
-                                  className="text-[10px] text-red-500 hover:text-red-700"
-                                >
-                                  Remove
-                                </button>
-                              </div>
-                            </div>
-                          ) : uploadingThumbnail ? (
-                            <div className="flex items-center gap-1.5">
-                              <Loader2 className="h-3.5 w-3.5 text-blue-600 animate-spin" />
-                              <span className="text-[10px] text-blue-700">Uploading thumbnail...</span>
-                            </div>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => facebookThumbnailFileInputRef.current?.click()}
-                              className="text-[10px] text-blue-700 hover:text-blue-900 font-medium flex items-center gap-1 border border-blue-300 rounded px-2 py-1 hover:bg-blue-100"
-                            >
-                              <Upload className="h-3 w-3" />
-                              Upload thumbnail (JPEG, max 8MB)
-                            </button>
-                          )}
                         </div>
                       )}
 
-                      {/* LinkedIn Video Thumbnail Upload */}
-                      {scheduleFormData.platforms.includes('linkedin') && scheduleFormData.selectedImages.some(m => isVideoUrl(m.url)) && (
-                        <div className="mb-3 p-2 bg-sky-50 border border-sky-200 rounded-lg text-left">
-                          <input
-                            ref={linkedinThumbnailFileInputRef}
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => e.target.files?.[0] && handleThumbnailUpload(e.target.files[0], 'linkedinThumbnailUrl')}
-                            className="hidden"
+                      {scheduleFormData.platforms.includes('linkedin') && selectedPostMedia.some(m => isVideoUrl(m.url)) && scheduleFormData.linkedinThumbnailUrl && (
+                        <div className="p-2 rounded-lg border border-sky-200 bg-sky-50">
+                          <p className="text-[10px] font-semibold text-sky-800 mb-1">LinkedIn Video Thumbnail</p>
+                          <img
+                            src={scheduleFormData.linkedinThumbnailUrl}
+                            alt="LinkedIn thumbnail"
+                            className="w-10 h-14 object-cover rounded border border-sky-300"
                           />
-                          <p className="text-[10px] font-semibold text-sky-800 mb-1.5 flex items-center gap-1">
-                            <Linkedin className="h-3 w-3" />
-                            LinkedIn Video Thumbnail (Optional)
-                          </p>
-                          {scheduleFormData.linkedinThumbnailUrl ? (
-                            <div className="flex items-center gap-2">
-                              <img
-                                src={scheduleFormData.linkedinThumbnailUrl}
-                                alt="LinkedIn thumbnail"
-                                className="w-10 h-14 object-cover rounded border border-sky-300"
-                              />
-                              <div className="flex flex-col gap-1">
-                                <span className="text-[10px] text-green-700 font-medium flex items-center gap-0.5">
-                                  <Check className="h-3 w-3" /> Thumbnail set
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => setScheduleFormData(prev => ({ ...prev, linkedinThumbnailUrl: null }))}
-                                  className="text-[10px] text-red-500 hover:text-red-700"
-                                >
-                                  Remove
-                                </button>
-                              </div>
-                            </div>
-                          ) : uploadingThumbnail ? (
-                            <div className="flex items-center gap-1.5">
-                              <Loader2 className="h-3.5 w-3.5 text-sky-600 animate-spin" />
-                              <span className="text-[10px] text-sky-700">Uploading thumbnail...</span>
-                            </div>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => linkedinThumbnailFileInputRef.current?.click()}
-                              className="text-[10px] text-sky-700 hover:text-sky-900 font-medium flex items-center gap-1 border border-sky-300 rounded px-2 py-1 hover:bg-sky-100"
-                            >
-                              <Upload className="h-3 w-3" />
-                              Upload thumbnail (JPEG, max 8MB)
-                            </button>
-                          )}
                         </div>
                       )}
-
-                      <Upload className="h-5 w-5 mx-auto mb-1 text-gray-400" />
-                      <div className="flex items-center justify-center gap-3">
-                        <button
-                          type="button"
-                          onClick={() => fileInputRef.current?.click()}
-                          className="text-blue-600 hover:text-blue-800 font-medium text-xs"
-                        >
-                          {scheduleFormData.platforms.includes('youtube') ? 'Upload Video' : 'Upload Files'}
-                        </button>
-                        <span className="text-gray-400">|</span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowMediaLibrary(true);
-                            fetchLibraryImages();
-                          }}
-                          className="text-green-600 hover:text-green-800 font-medium text-xs flex items-center gap-1"
-                        >
-                          <Image className="h-3 w-3" />
-                          Library
-                        </button>
-                      </div>
-                      <p className="text-[10px] text-gray-500 mt-1">
-                        {scheduleFormData.platforms.includes('youtube') ? 'Max 100MB' : '2-10 items, Max 100MB each'}
-                      </p>
-                    </>
+                    </div>
                   )}
                 </div>
               </div>
@@ -2658,10 +2570,15 @@ function SchedulePostModal({
 
             {/* Action Buttons - Mobile Optimized */}
             <div className="flex flex-col gap-2 pt-3 border-t border-gray-200 sticky bottom-0 bg-white pb-1">
+              {!isCustomerApproved && (
+                <div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  This content is pending customer approval. Posting is disabled until the customer approves it.
+                </div>
+              )}
               <div className="flex gap-2">
                 <button
                   onClick={handlePostNow}
-                  disabled={isPostingNow || submitting || scheduleFormData.platforms.length === 0}
+                  disabled={isPostingNow || submitting || scheduleFormData.platforms.length === 0 || !isCustomerApproved}
                   className="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 text-white py-2.5 px-3 rounded-lg font-medium hover:from-green-600 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-1.5 text-sm"
                 >
                   {isPostingNow ? (
@@ -2682,7 +2599,7 @@ function SchedulePostModal({
                 </button>
                 <button
                   onClick={handleSchedulePost}
-                  disabled={submitting || isPostingNow || scheduleFormData.platforms.length === 0}
+                  disabled={submitting || isPostingNow || scheduleFormData.platforms.length === 0 || !isCustomerApproved}
                   className="flex-1 bg-gradient-to-r from-blue-600 to-cyan-600 text-white py-2.5 px-3 rounded-lg font-medium hover:from-blue-700 hover:to-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-1.5 text-sm"
                 >
                   {submitting ? (

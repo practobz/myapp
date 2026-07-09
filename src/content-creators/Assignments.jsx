@@ -784,14 +784,31 @@ function Assignments() {
 
   const isVideoUrl = (url) => /\.(mp4|mov|webm|avi|mkv)(\?|$)/i.test(url || '');
 
-  // Helper: get thumbnail URL from the latest submission for an assignment
+  // Helper: get thumbnail URL from the latest submission for an assignment.
+  // Prefers explicit thumbnailUrl; falls back to first media item.
   const getSubmissionThumbnail = (assignment) => {
     const sub = getLatestSubmission(assignment);
     if (!sub) return null;
     const images = sub.images || sub.media || [];
     if (!Array.isArray(images) || images.length === 0) return null;
+    const normalizedPostType = String(assignment?.postType || sub.postType || '').toLowerCase();
+
+    if (normalizedPostType === 'reel' || normalizedPostType === 'video') {
+      const firstVideo = images.find(item => {
+        const url = typeof item === 'string' ? item : (item?.url || item?.publicUrl || '');
+        return isVideoUrl(url);
+      });
+      if (firstVideo) {
+        const url = typeof firstVideo === 'string' ? firstVideo : (firstVideo?.url || firstVideo?.publicUrl || '');
+        return url ? { url, isThumbnail: false } : null;
+      }
+    }
+
+    if (sub.thumbnailUrl) return { url: sub.thumbnailUrl, isThumbnail: true };
+
     const first = images[0];
-    return typeof first === 'string' ? first : (first?.url || first?.publicUrl || '');
+    const url = typeof first === 'string' ? first : (first?.url || first?.publicUrl || '');
+    return url ? { url, isThumbnail: false } : null;
   };
 
   // Precomputed Sets for reliable submission-based filtering.
@@ -1276,14 +1293,15 @@ function Assignments() {
                                       {/* Submission thumbnail */}
                                       {(() => {
                                         const thumb = getSubmissionThumbnail(assignment);
-                                        const isVid = isVideoUrl(thumb);
+                                        const thumbUrl = thumb?.url || '';
+                                        const isVid = isVideoUrl(thumbUrl) && !thumb?.isThumbnail;
                                         return (
                                           <div className="flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden border border-gray-200 bg-gray-100 relative">
-                                            {thumb ? (
+                                            {thumbUrl ? (
                                               isVid ? (
                                                 <div className="w-full h-full bg-black relative">
                                                   <video
-                                                    src={thumb}
+                                                    src={thumbUrl}
                                                     muted
                                                     playsInline
                                                     preload="metadata"
@@ -1294,7 +1312,7 @@ function Assignments() {
                                                   </div>
                                                 </div>
                                               ) : (
-                                                <img src={thumb} alt="" className="w-full h-full object-cover" />
+                                                <img src={thumbUrl} alt="" className="w-full h-full object-cover" />
                                               )
                                             ) : (
                                               <div className="w-full h-full flex items-center justify-center">

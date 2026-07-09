@@ -28,6 +28,44 @@ const normalizeMedia = (media) => {
   }).filter(Boolean);
 };
 
+const toDisplayName = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw) return 'Unknown';
+
+  // If backend gives email, convert local-part to a readable name.
+  const source = raw.includes('@') ? raw.split('@')[0] : raw;
+  return source
+    .replace(/[._-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .split(' ')
+    .filter(Boolean)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+};
+
+const parsePlatformPills = (platformValue) => {
+  if (!platformValue) return [];
+  if (Array.isArray(platformValue)) {
+    return [...new Set(platformValue.flatMap(parsePlatformPills))];
+  }
+
+  const value = String(platformValue).trim();
+  if (!value) return [];
+
+  const matches = value.match(/facebook|instagram|youtube|linkedin|twitter|x|tiktok|pinterest/gi);
+  if (matches && matches.length > 0) {
+    return [...new Set(matches.map(m => m.toLowerCase()))];
+  }
+
+  return [...new Set(
+    value
+      .split(/[\s,|/]+/)
+      .map(v => v.trim().toLowerCase())
+      .filter(Boolean)
+  )];
+};
+
 const isVisibleToCustomerSubmission = (submission) => {
   if (!submission) return false;
   const stage = submission.submission_stage || submission.submissionStage || '';
@@ -109,7 +147,7 @@ const processSubmissionsData = (submissions, user, targetItemId, filterStatus) =
 
     contentData.push({
       id: assignmentId,
-      title: baseItem.caption || 'Untitled Post',
+      title: baseItem.item_name || baseItem.title || baseItem.caption || 'Untitled Post',
       description: baseItem.notes || '',
       createdBy: baseItem.created_by || 'Unknown',
       createdAt: baseItem.created_at || '',
@@ -1095,8 +1133,8 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
           (item.item_id && ci.id === item.item_id) ||
           (item.item_name && (ci.title === item.item_name || ci.description === item.item_name))
         );
-        if (calItem && calItem.assignedTo) {
-          return calItem.assignedTo;
+        if (calItem) {
+          return calItem.assignedToName || calItem.creatorName || calItem.assignedTo || item.createdBy || 'Unknown';
         }
       }
     }
@@ -1371,6 +1409,8 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
   if (selectedContent) {
     const currentVersion = selectedContent.versions[selectedVersionIndex];
     const currentMedia = currentVersion?.media?.[selectedMediaIndex];
+    const creatorDisplayName = toDisplayName(getAssignedCreator(selectedContent));
+    const selectedPlatforms = parsePlatformPills(selectedContent.platform);
 
     return (
       <div
@@ -1400,9 +1440,19 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
                 </span>
               </h2>
               <div className="flex items-center gap-2 text-xs text-gray-500 mt-0.5 flex-wrap">
-                <span className="truncate">Creator: {getAssignedCreator(selectedContent)}</span>
-                <span>•</span>
-                <span className="capitalize">{selectedContent.platform}</span>
+                <span className="truncate">Creator: {creatorDisplayName}</span>
+                {selectedPlatforms.length > 0 && (
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {selectedPlatforms.map((platform) => (
+                      <span
+                        key={platform}
+                        className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200"
+                      >
+                        {platform.charAt(0).toUpperCase() + platform.slice(1)}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
             <button
@@ -1783,89 +1833,160 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
                   </div>
                 </div>
 
-                <div className="max-h-64 overflow-y-auto p-2.5 space-y-2 flex-1">
+                <div className="max-h-72 overflow-y-auto px-1.5 py-3 flex-1">
                   {commentsForCurrentMedia.length === 0 ? (
                     <div className="text-center py-6">
-                      <div className="bg-gray-50 rounded-full w-8 h-8 flex items-center justify-center mx-auto mb-1.5">
-                        <MessageSquare className="h-4 w-4 text-gray-400" />
+                      <div className="bg-gray-50 rounded-full w-10 h-10 flex items-center justify-center mx-auto mb-2">
+                        <MessageSquare className="h-5 w-5 text-gray-400" />
                       </div>
-                      <p className="text-gray-500 text-xs font-medium">No comments yet</p>
-                      <p className="text-[10px] text-gray-400 mt-0.5">Click on the media to place a comment pin</p>
+                      <p className="text-gray-500 text-xs">No comments yet</p>
+                      <p className="text-[10px] text-gray-400 mt-0.5">Click anywhere on the media to pin a comment</p>
                     </div>
                   ) : (
-                    commentsForCurrentMedia.map((comment, idx) => {
-                      const isAdminComment = comment.authorRole === 'admin' || comment.author === 'Admin';
-                      const isInternal = isAdminComment || comment.reviewType === 'internal';
-                      const isDone = comment.done || comment.status === 'completed';
-                      const isActive = activeComment === comment.id;
-                      const isReplying = replyingTo === comment.id;
-                      return (
-                        <div
-                          key={comment.id || idx}
-                          className={`rounded-lg border transition-colors overflow-hidden cursor-pointer ${isActive
-                              ? isAdminComment ? 'bg-purple-50 border-purple-200' : 'bg-blue-50 border-blue-200'
-                              : isAdminComment ? 'bg-white border-purple-100 hover:bg-purple-50/40' : 'bg-gray-50 border-gray-200 hover:bg-blue-50/40'
+                    <div className="space-y-2">
+                      {commentsForCurrentMedia.map((comment, idx) => {
+                        const isAdminComment = comment.authorRole === 'admin' || comment.reviewType === 'internal';
+                        const isOutgoing = isAdminComment;
+                        const isActive = activeComment === comment.id;
+                        const isReplying = replyingTo === comment.id;
+                        const isDone = comment.done || comment.status === 'completed';
+
+                        return (
+                          <div
+                            key={comment.id || idx}
+                            className={`flex flex-col gap-2 transition-all duration-200 ${
+                              isActive
+                                ? 'bg-purple-50/50 px-1 py-2 rounded-lg'
+                                : 'py-2 hover:bg-gray-50/50 px-1 rounded-lg'
                             }`}
-                          onClick={() => handleCommentListClick(comment.id)}
-                        >
-                          <div className="p-2 flex items-start gap-2">
-                            <span className={`font-bold rounded-full w-5 h-5 flex items-center justify-center text-[10px] flex-shrink-0 border ${isAdminComment ? 'text-purple-700 bg-purple-100 border-purple-200' : 'text-blue-700 bg-blue-100 border-blue-200'
-                              }`}>{idx + 1}</span>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-1 mb-0.5 flex-wrap">
-                                <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold ${isAdminComment ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
-                                  }`}>
-                                  {isAdminComment ? <UserCog className="h-2 w-2" /> : <User className="h-2 w-2" />}
-                                  {isAdminComment ? 'Admin' : 'Customer'}
-                                </span>
-                                {(comment.authorEmail || comment.authorName || comment.author) && (
-                                  <span className="text-[9px] text-gray-400 truncate max-w-[90px]">
-                                    {comment.authorEmail || comment.authorName || comment.author}
+                          >
+                            <div
+                              className={`flex items-start gap-2 max-w-[90%] cursor-pointer group ${isOutgoing ? 'self-end flex-row-reverse' : 'self-start'}`}
+                              onClick={() => {
+                                const next = isActive ? null : comment.id;
+                                setActiveComment(next);
+                                if (next) {
+                                  const c = commentsForCurrentMedia.find(x => x.id === next);
+                                  if (c && c.videoTimestamp != null && videoRef.current) {
+                                    videoRef.current.currentTime = c.videoTimestamp;
+                                    videoRef.current.pause();
+                                    videoPausedAtRef.current = c.videoTimestamp;
+                                    videoRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                                  }
+                                }
+                              }}
+                            >
+                              <span className={`font-bold text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] flex-shrink-0 mt-1 shadow-sm ${isOutgoing ? 'bg-purple-500' : 'bg-blue-500'}`}>
+                                {idx + 1}
+                              </span>
+                              <div className={`shadow-sm px-3 py-2 flex flex-col relative ${
+                                isOutgoing
+                                  ? 'bg-[#E7FFDB] border border-[#d3f5c0] rounded-2xl rounded-tr-sm'
+                                  : 'bg-white border border-gray-200 rounded-2xl rounded-tl-sm'
+                              } ${isActive ? 'ring-1 ring-purple-300' : ''}`}>
+                                <div className="flex items-center gap-1 mb-0.5 flex-wrap">
+                                  <span className={`text-[9px] font-bold ${isOutgoing ? 'text-green-700' : 'text-blue-700'}`}>
+                                    {isOutgoing ? 'Internal' : 'External'}
                                   </span>
-                                )}
-                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ml-auto ${isInternal ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
-                                  }`}>
-                                  {isInternal ? 'Internal' : 'External'}
-                                </span>
-                              </div>
-                              <p className={`text-xs font-medium break-words ${comment.discarded ? 'text-gray-400 line-through' : 'text-gray-955'}`}>
-                                {comment.message || comment.comment}
-                                {isDone && <span className="ml-1.5 text-green-600 text-[10px]">✓</span>}
-                                {comment.discarded && <span className="ml-1.5 text-orange-600 text-[10px] font-bold">(Discarded)</span>}
-                              </p>
-                              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                                <span className="text-[9px] text-gray-400">
-                                  {comment.timestamp ? formatDate(comment.timestamp) : ''}
-                                </span>
-                                {comment.videoTimestamp != null && (
-                                  <button
-                                    title="Jump to this moment in the video"
-                                    className="inline-flex items-center gap-1 bg-orange-500 text-white px-2 py-0.5 rounded-full text-[9px] font-bold hover:bg-orange-600 active:scale-95 transition-all shadow-sm"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      if (videoRef.current) {
-                                        videoRef.current.currentTime = comment.videoTimestamp;
-                                        videoRef.current.pause();
-                                        videoPausedAtRef.current = comment.videoTimestamp;
-                                        videoRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                                      }
-                                    }}
-                                  >
-                                    <span className="relative flex h-1.5 w-1.5">
-                                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
-                                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-white" />
-                                    </span>
-                                    ⏱ {formatVideoTime(comment.videoTimestamp)}
-                                  </button>
-                                )}
+                                  {(comment.authorEmail || comment.authorName || comment.author) && (
+                                    <span className="text-[9px] text-gray-500 truncate max-w-[110px]">• {toDisplayName(comment.authorName || comment.authorEmail || comment.author)}</span>
+                                  )}
+                                </div>
+
+                                <p className={`text-[13px] break-words leading-snug ${comment.discarded ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
+                                  {comment.message || comment.comment}
+                                  {isDone && <span className="ml-1.5 text-green-600 text-[10px]">✓</span>}
+                                </p>
+
+                                <div className="flex items-center justify-end gap-2 mt-1.5 pt-1.5 border-t border-black/5">
+                                  <span className="text-[9px] text-gray-500/80">
+                                    {comment.timestamp ? new Date(comment.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                                  </span>
+
+                                  {!isAdminComment && (
+                                    !isDone ? (
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); handleMarkDone(comment.id); }}
+                                        className="flex items-center gap-0.5 text-[10px] text-gray-400 hover:text-emerald-600 transition-colors font-medium ml-1"
+                                      >
+                                        <CheckCircle className="h-3 w-3" /> Mark
+                                      </button>
+                                    ) : (
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); handleMarkDone(comment.id); }}
+                                        className="flex items-center gap-0.5 text-[10px] text-emerald-600 hover:text-emerald-700 transition-colors font-medium ml-1"
+                                      >
+                                        <CheckCircle className="h-3 w-3" /> Done
+                                      </button>
+                                    )
+                                  )}
+
+                                  {!isAdminComment && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (replyingTo === comment.id) {
+                                          handleCancelReply();
+                                        } else {
+                                          handleStartReply(comment.id);
+                                        }
+                                      }}
+                                      className="flex items-center gap-0.5 text-[10px] text-indigo-500 hover:text-indigo-700 transition-colors font-medium ml-1"
+                                    >
+                                      <MessageSquare className="h-3 w-3" /> Reply
+                                    </button>
+                                  )}
+
+                                  {!isAdminComment && (
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); handleEditComment(comment.id); }}
+                                      className="flex items-center gap-0.5 text-[10px] text-blue-500 hover:text-blue-700 transition-colors font-medium ml-1"
+                                    >
+                                      <Edit3 className="h-3 w-3" /> Edit
+                                    </button>
+                                  )}
+
+                                  {!isAdminComment && (
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); handleRepositionStart(comment.id); }}
+                                      className="flex items-center gap-0.5 text-[10px] text-purple-500 hover:text-purple-700 transition-colors font-medium ml-1"
+                                    >
+                                      <Move className="h-3 w-3" /> Move
+                                    </button>
+                                  )}
+
+                                  {!isAdminComment && (
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); handleDeleteComment(comment.id); }}
+                                      className="flex items-center gap-0.5 text-[10px] text-red-400 hover:text-red-600 transition-colors font-medium ml-1"
+                                    >
+                                      <Trash2 className="h-3 w-3" />
+                                    </button>
+                                  )}
+
+                                  {comment.videoTimestamp != null && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (videoRef.current) {
+                                          videoRef.current.currentTime = comment.videoTimestamp;
+                                          videoRef.current.pause();
+                                          videoPausedAtRef.current = comment.videoTimestamp;
+                                          videoRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                                        }
+                                        setActiveComment(comment.id);
+                                      }}
+                                      className="flex items-center gap-0.5 text-[9px] text-white bg-orange-500 hover:bg-orange-600 px-1.5 py-0.5 rounded-full transition-colors ml-1 font-bold shadow-sm"
+                                    >
+                                      ⏱ {formatVideoTime(comment.videoTimestamp)}
+                                    </button>
+                                  )}
+                                </div>
                               </div>
                             </div>
-                          </div>
 
-                          {/* Threaded Discussion replies */}
-                          <div className="mx-2 mb-2 pl-4 border-l-2 border-indigo-100 space-y-1.5">
                             {(() => {
-                              const rawReplies = comment.replies || (comment.adminReply ? [{
+                              const replies = comment.replies || (comment.adminReply ? [{
                                 id: 'legacy-reply',
                                 authorRole: 'admin',
                                 authorName: comment.adminReply.adminName || 'Admin',
@@ -1873,116 +1994,101 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
                                 message: comment.adminReply.text,
                                 timestamp: comment.adminReply.timestamp
                               }] : []);
-                              
-                              const replies = [];
-                              let hasCreatorReply = false;
-                              for (const rep of rawReplies) {
-                                if (rep.authorRole === 'creator') {
-                                  hasCreatorReply = true;
-                                } else if (rep.authorRole === 'customer') {
-                                  replies.push(rep);
-                                } else if (rep.authorRole === 'admin') {
-                                  if (!hasCreatorReply) {
-                                    replies.push(rep);
-                                  }
-                                } else {
-                                  replies.push(rep); // fallback
-                                }
-                              }
 
                               return replies.map((rep, rIdx) => {
+                                const isRepOutgoing = rep.authorRole === 'admin';
                                 return (
-                                  <div key={rep.id || rIdx} className={`p-1.5 rounded text-[10px] border ${rep.authorRole === 'admin' ? 'bg-purple-50/50 border-purple-100' : rep.authorRole === 'creator' ? 'bg-green-50/50 border-green-100' : 'bg-blue-50/50 border-blue-100'}`}>
-                                    <div className="flex items-center gap-1 mb-0.5 flex-wrap">
-                                      <span className={`font-semibold ${rep.authorRole === 'admin' ? 'text-purple-750 font-bold' : rep.authorRole === 'creator' ? 'text-green-750 font-bold' : 'text-blue-750 font-bold'}`}>
-                                        {rep.authorRole === 'admin' ? 'Admin' : rep.authorRole === 'creator' ? 'Creator' : 'Customer'}
-                                      </span>
-                                      <span className="text-[8px] text-gray-400 ml-auto">
-                                        {rep.timestamp ? new Date(rep.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
-                                      </span>
+                                  <div
+                                    key={rep.id || rIdx}
+                                    className={`flex items-start gap-2 max-w-[90%] group ${isRepOutgoing ? 'self-end flex-row-reverse' : 'self-start'}`}
+                                  >
+                                    <div className="w-5 h-5 flex-shrink-0 flex items-center justify-center rounded-full bg-gray-100 border border-gray-200 text-[9px] font-bold text-gray-500 mt-1 shadow-sm">
+                                      {isRepOutgoing ? 'A' : (rep.authorRole === 'creator' ? 'C' : 'U')}
                                     </div>
-                                    <p className="text-[10px] text-gray-700 break-words font-medium">{rep.message || rep.text}</p>
+
+                                    <div className={`px-3 py-2 shadow-sm flex flex-col relative ${
+                                      isRepOutgoing
+                                        ? 'bg-[#E7FFDB] border border-[#d3f5c0] rounded-2xl rounded-tr-sm'
+                                        : 'bg-white border border-gray-200 rounded-2xl rounded-tl-sm'
+                                    }`}>
+                                      {(rep.authorName || rep.authorEmail) && !isRepOutgoing && (
+                                        <span className="text-[9px] font-medium text-gray-500 mb-0.5">{toDisplayName(rep.authorName || rep.authorEmail)}</span>
+                                      )}
+                                      <p className="text-[13px] text-gray-800 break-words leading-snug">{rep.message || rep.text}</p>
+
+                                      <div className="flex items-center justify-end gap-3 mt-1">
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (replyingTo === comment.id) {
+                                              handleCancelReply();
+                                            } else {
+                                              handleStartReply(comment.id);
+                                            }
+                                          }}
+                                          className="flex items-center gap-0.5 text-[9px] text-indigo-500 hover:text-indigo-700 transition-colors font-medium"
+                                        >
+                                          <MessageSquare className="h-2.5 w-2.5" /> Reply
+                                        </button>
+                                        <span className="text-[9px] text-gray-500/80">
+                                          {rep.timestamp ? new Date(rep.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                                        </span>
+                                      </div>
+                                    </div>
                                   </div>
                                 );
                               });
                             })()}
-                          </div>
 
-                          {/* Inline reply textarea for Customer */}
-                          {isReplying && isActive && (
-                            <div className="mx-2 mb-2" onClick={(e) => e.stopPropagation()}>
-                              <textarea
-                                autoFocus
-                                className="w-full rounded-lg border border-blue-200 bg-blue-50 text-xs text-gray-900 placeholder-gray-400 p-2 resize-none focus:outline-none focus:ring-2 focus:ring-blue-300"
-                                rows={2}
-                                placeholder="Type reply to Admin… (Ctrl+Enter to send)"
-                                value={replyText}
-                                onChange={(e) => setReplyText(e.target.value)}
-                                onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleReplySubmit(comment.id); }}
+                            {isReplying && isActive && (
+                              <div
+                                className="mt-1 flex flex-col self-end max-w-[90%] w-full bg-white p-2.5 rounded-2xl shadow-sm border border-indigo-100"
                                 onClick={(e) => e.stopPropagation()}
-                              />
-                              <div className="flex gap-1.5 mt-1">
-                                <button
-                                  className="flex-1 py-1 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-semibold disabled:opacity-50"
-                                  disabled={savingReply}
-                                  onClick={(e) => { e.stopPropagation(); handleReplySubmit(comment.id); }}
-                                >
-                                  {savingReply ? 'Sending…' : 'Send Reply'}
-                                </button>
-                                <button
-                                  className="flex-1 py-1 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-600 text-[10px] font-semibold"
-                                  onClick={(e) => { e.stopPropagation(); handleCancelReply(); }}
-                                >Cancel</button>
+                              >
+                                <div className="flex items-center gap-2 mb-1.5">
+                                  <p className="text-[10px] text-indigo-500 font-medium">
+                                    New reply…
+                                  </p>
+                                </div>
+                                <textarea
+                                  value={replyText}
+                                  onChange={(e) => setReplyText(e.target.value)}
+                                  placeholder="Type a message..."
+                                  rows={2}
+                                  autoFocus
+                                  className="w-full text-xs focus:outline-none resize-none bg-transparent placeholder-gray-400"
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && !e.shiftKey) {
+                                      e.preventDefault();
+                                      if (replyText.trim() && !savingReply) {
+                                        handleReplySubmit(comment.id);
+                                      }
+                                    }
+                                  }}
+                                />
+                                <div className="flex items-center justify-end gap-2 mt-2">
+                                  <button
+                                    onClick={() => handleCancelReply()}
+                                    className="text-[10px] text-gray-500 hover:text-gray-700 font-medium px-2 py-1"
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    onClick={() => handleReplySubmit(comment.id)}
+                                    disabled={savingReply || !replyText.trim()}
+                                    className="flex items-center justify-center w-7 h-7 bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white rounded-full transition-colors shadow-sm"
+                                  >
+                                    {savingReply
+                                      ? <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent" />
+                                      : <Send className="h-3 w-3 ml-0.5" />}
+                                  </button>
+                                </div>
                               </div>
-                            </div>
-                          )}
-
-                          {/* Action buttons (when active) */}
-                          {isActive && (
-                            <div className="flex items-center gap-1 px-2 pb-2" onClick={(e) => e.stopPropagation()}>
-                              {!isAdminComment && !comment.done && (
-                                <button
-                                  className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] bg-green-50 text-green-700 border border-green-200 rounded-md hover:bg-green-100 transition-colors"
-                                  onClick={(e) => { e.stopPropagation(); handleMarkDone(comment.id); }}
-                                >
-                                  Done
-                                </button>
-                              )}
-                              {!isAdminComment && (
-                                <>
-                                  <button
-                                    className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] bg-purple-50 text-purple-700 border border-purple-200 rounded-md font-medium hover:bg-purple-100 transition-colors"
-                                    onClick={(e) => { e.stopPropagation(); handleStartReply(comment.id); }}
-                                  >
-                                    Reply
-                                  </button>
-                                  <button
-                                    className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] bg-blue-50 text-blue-700 border border-blue-200 rounded-md hover:bg-blue-105 transition-colors"
-                                    onClick={(e) => { e.stopPropagation(); handleEditComment(comment.id); }}
-                                  >
-                                    Edit
-                                  </button>
-                                  <button
-                                    className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] bg-purple-50 text-purple-750 border border-purple-200 rounded-md hover:bg-purple-100 transition-colors"
-                                    onClick={(e) => { e.stopPropagation(); handleRepositionStart(comment.id); }}
-                                  >
-                                    Move
-                                  </button>
-                                </>
-                              )}
-                              {!isAdminComment && (
-                                <button
-                                  className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] bg-red-50 text-red-500 border border-red-200 rounded-md hover:bg-red-100 transition-colors ml-auto"
-                                  onClick={(e) => { e.stopPropagation(); handleDeleteComment(comment.id); }}
-                                >
-                                  Delete
-                                </button>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   )}
                 </div>
               </div>
@@ -2061,7 +2167,7 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
                     </span>
                     {(comment.authorEmail || comment.authorName) && (
                       <span className="text-[9px] text-gray-400 truncate max-w-[100px]">
-                        {comment.authorEmail || comment.authorName}
+                        {toDisplayName(comment.authorName || comment.authorEmail)}
                       </span>
                     )}
                     <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ml-auto ${(isAdminComment || comment.reviewType === 'internal') ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'

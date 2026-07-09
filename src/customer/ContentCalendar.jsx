@@ -2091,13 +2091,15 @@ function ContentCalendar({
                               >
                                 <Trash2 className="h-4 w-4" />
                               </button>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); onUploadItem && onUploadItem(item.calendarId, item.calendarItemIndex); }}
-                                className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
-                                title="Upload"
-                              >
-                                <Upload className="h-4 w-4" />
-                              </button>
+                              {!isAdmin && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); onUploadItem && onUploadItem(item.calendarId, item.calendarItemIndex); }}
+                                  className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
+                                  title="Upload"
+                                >
+                                  <Upload className="h-4 w-4" />
+                                </button>
+                              )}
                             </div>
                           </div>
                           {isExpanded && (
@@ -2284,13 +2286,15 @@ function ContentCalendar({
                                     >
                                       <Trash2 className="h-3.5 w-3.5" />
                                     </button>
-                                    <button
-                                      className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors touch-manipulation"
-                                      onClick={(e) => { e.stopPropagation(); onUploadItem && onUploadItem(item.calendarId, item.calendarItemIndex); }}
-                                      title="Upload"
-                                    >
-                                      <Upload className="h-3.5 w-3.5" />
-                                    </button>
+                                    {!isAdmin && (
+                                      <button
+                                        className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors touch-manipulation"
+                                        onClick={(e) => { e.stopPropagation(); onUploadItem && onUploadItem(item.calendarId, item.calendarItemIndex); }}
+                                        title="Upload"
+                                      >
+                                        <Upload className="h-3.5 w-3.5" />
+                                      </button>
+                                    )}
                                   </div>
                                   {/* Creator badge below action icons */}
                                   {item.creator && (

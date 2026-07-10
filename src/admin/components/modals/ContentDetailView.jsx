@@ -427,9 +427,8 @@ function ContentDetailView({
   const [undoingAdmin, setUndoingAdmin] = useState(false);
   const [finalizingFeedback, setFinalizingFeedback] = useState(false);
 
-  const hasPendingAdminCommentsToSend = useMemo(() => {
+  const hasPendingCommentsToSend = useMemo(() => {
     return commentsForVersion.some(c =>
-      (c.authorRole === 'admin' || c.reviewType === 'internal') &&
       !c.finalized &&
       !c.discarded &&
       !c.isNew &&
@@ -440,7 +439,7 @@ function ContentDetailView({
   const handleFinalizeFeedback = useCallback(async (option) => {
     const vId = selectedContent?.versions?.[selectedVersionIndex]?.id;
     if (!vId) return;
-    if (!hasPendingAdminCommentsToSend) return;
+    if (!hasPendingCommentsToSend) return;
     setFinalizingFeedback(true);
     const targetStatus = option === 'direct' ? 'changes_requested_customer_approved_admin' : 'revision_requested';
     try {
@@ -471,7 +470,7 @@ function ContentDetailView({
     } finally {
       setFinalizingFeedback(false);
     }
-  }, [selectedContent, selectedVersionIndex, onRefresh, hasPendingAdminCommentsToSend]);
+  }, [selectedContent, selectedVersionIndex, onRefresh, hasPendingCommentsToSend]);
 
   const handleApproveAdmin = useCallback(async () => {
     const vId = selectedContent?.versions?.[selectedVersionIndex]?.id;
@@ -690,6 +689,11 @@ function ContentDetailView({
 
   const currentVersion = useMemo(() =>
     selectedContent?.versions?.[selectedVersionIndex],
+    [selectedContent, selectedVersionIndex]
+  );
+
+  const isOutdatedVersion = useMemo(() =>
+    selectedVersionIndex < ((selectedContent?.versions?.length || 0) - 1),
     [selectedContent, selectedVersionIndex]
   );
 
@@ -1362,7 +1366,7 @@ function ContentDetailView({
 
                 {/* Internal Review Actions */}
                 <div className="space-y-1.5 pt-1">
-                  {currentVersion?.status === 'customer_feedback_pending_admin' || hasPendingAdminCommentsToSend ? (
+                  {currentVersion?.status === 'customer_feedback_pending_admin' || hasPendingCommentsToSend ? (
                     <div className="space-y-2">
                       {currentVersion?.status === 'customer_feedback_pending_admin' && (
                         <div className="text-xs font-semibold text-purple-900 bg-purple-50 p-2.5 rounded-lg border border-purple-250 flex items-start gap-1">
@@ -1373,19 +1377,20 @@ function ContentDetailView({
 
                       <button
                         onClick={() => handleFinalizeFeedback('finalized')}
-                        disabled={finalizingFeedback || !hasPendingAdminCommentsToSend}
+                        disabled={finalizingFeedback || !hasPendingCommentsToSend}
                         className="w-full py-2 bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-lg text-xs font-semibold hover:from-orange-600 hover:to-red-600 shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
                       >
                         {finalizingFeedback ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
                         Send to Creator (Request Revisions)
                       </button>
-                      {!hasPendingAdminCommentsToSend && (
-                        <p className="text-[11px] text-gray-500">No pending admin comments to send.</p>
+                      {!hasPendingCommentsToSend && (
+                        <p className="text-[11px] text-gray-500">No pending comments to send.</p>
                       )}
                       <button
                         onClick={handleApproveAdmin}
-                        disabled={approvingAdmin}
-                        className="w-full py-2 bg-gradient-to-r from-emerald-600 to-green-600 text-white rounded-lg text-xs font-semibold hover:from-emerald-700 hover:to-green-700 shadow-sm transition-all disabled:opacity-50 flex items-center justify-center gap-1.5"
+                        disabled={approvingAdmin || isOutdatedVersion}
+                        title={isOutdatedVersion ? "Cannot approve an outdated version" : ""}
+                        className="w-full py-2 bg-gradient-to-r from-emerald-600 to-green-600 text-white rounded-lg text-xs font-semibold hover:from-emerald-700 hover:to-green-700 shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
                       >
                         {approvingAdmin ? (
                           <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Approving...</>
@@ -1397,8 +1402,9 @@ function ContentDetailView({
                   ) : !(currentVersion?.approved_by_admin || currentVersion?.status === 'approved' || currentVersion?.status === 'approved_both' || currentVersion?.status === 'pending_customer_review') ? (
                     <button
                       onClick={handleApproveAdmin}
-                      disabled={approvingAdmin}
-                      className="w-full py-2 bg-gradient-to-r from-emerald-600 to-green-600 text-white rounded-lg text-xs font-semibold hover:from-emerald-700 hover:to-green-700 shadow-sm transition-all disabled:opacity-50 flex items-center justify-center gap-1.5"
+                      disabled={approvingAdmin || isOutdatedVersion}
+                      title={isOutdatedVersion ? "Cannot approve an outdated version" : ""}
+                      className="w-full py-2 bg-gradient-to-r from-emerald-600 to-green-600 text-white rounded-lg text-xs font-semibold hover:from-emerald-700 hover:to-green-700 shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
                     >
                       {approvingAdmin ? (
                         <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Approving...</>

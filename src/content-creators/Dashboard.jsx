@@ -256,8 +256,10 @@ function Dashboard() {
       // Track every assignment that has any submission
       keys.forEach(k => anySubmissionKeys.add(k));
       
-      const isCustomerApproved = s.approved_by_customer === true || s.status === 'approved_customer' || s.status === 'approved_both';
-      const isAdminApproved = s.approved_by_admin === true || s.status === 'approved_admin' || s.status === 'approved_both' || (s.status === 'approved' && !s.approved_by_customer) || stage === 'customer';
+      const isCustomerApproved = (s.approved_by_customer === true || s.status === 'approved_customer' || s.status === 'approved_both') &&
+        !['under_review', 'sent_to_creator', 'revision_requested', 'rejected', 'customer_feedback_pending_admin', 'pending_customer_review', 'changes_requested_admin', 'changes_requested_customer_approved_admin'].includes(s.status);
+      const isAdminApproved = (s.approved_by_admin === true || s.status === 'approved_admin' || s.status === 'approved_both' || (s.status === 'approved' && !s.approved_by_customer) || stage === 'customer') &&
+        !['revision_requested', 'rejected', 'customer_feedback_pending_admin', 'changes_requested_admin', 'changes_requested_customer_approved_admin'].includes(s.status);
 
       if (isAdminApproved) {
         keys.forEach(k => adminApprovedKeys.add(k));
@@ -265,7 +267,7 @@ function Dashboard() {
       if (isCustomerApproved) {
         keys.forEach(k => customerApprovedKeys.add(k));
       }
-      if (stage === 'customer' && Array.isArray(s.comments) && s.comments.length > 0) {
+      if (stage === 'customer' && Array.isArray(s.comments) && s.comments.some(c => c.finalized === true && !c.discarded)) {
         keys.forEach(k => reviewKeys.add(k));
       }
     });

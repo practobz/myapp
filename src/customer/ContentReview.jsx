@@ -927,7 +927,8 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
           body: JSON.stringify({
             status: 'sent_to_creator',
             sentToCreatorAt: new Date().toISOString(),
-            approvalNotes: 'Feedback sent to creator by customer'
+            approvalNotes: 'Feedback sent to creator by customer',
+            approved_by_customer: false
           })
         }
       );
@@ -968,7 +969,8 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             status: 'under_review',
-            approvalNotes: 'Approval reverted by customer'
+            approvalNotes: 'Approval reverted by customer',
+            approved_by_customer: false
           })
         }
       );
@@ -1111,7 +1113,8 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             versionId: selectedContent.versions[selectedVersionIndex]?.id,
-            status: 'customer_feedback_pending_admin'
+            status: 'customer_feedback_pending_admin',
+            approved_by_customer: false
           })
         });
         await fetchContentSubmissions();

@@ -91,8 +91,7 @@ function CustomerFeedback({ isTab = false }) {
 
             const hasComments =
               Array.isArray(sub.comments) && sub.comments.some(c => {
-                const isAdmin = c.reviewType === 'internal' || c.authorRole === 'admin' || c.author === 'Admin';
-                return (isAdmin || c.finalized) && !c.discarded;
+                return c.finalized === true && !c.discarded;
               });
 
             return (byThisCreator || assignedToCreator) && hasComments;
@@ -223,8 +222,7 @@ function CustomerFeedback({ isTab = false }) {
       <div className="space-y-4">
         {feedbackItems.map(sub => {
           const visibleComments = (sub.comments || []).filter(c => {
-            const isAdmin = c.reviewType === 'internal' || c.authorRole === 'admin' || c.author === 'Admin';
-            return (isAdmin || c.finalized) && !c.discarded;
+            return c.finalized === true && !c.discarded;
           });
           const totalComments = visibleComments.length;
           const commentsByMedia = visibleComments.reduce((acc, c) => {
@@ -443,8 +441,7 @@ function CustomerFeedback({ isTab = false }) {
                   <div className="divide-y divide-gray-100">
                     {calendar.items.map(sub => {
                       const visibleComments = (sub.comments || []).filter(c => {
-                        const isAdmin = c.reviewType === 'internal' || c.authorRole === 'admin' || c.author === 'Admin';
-                        return (isAdmin || c.finalized) && !c.discarded;
+                        return c.finalized === true && !c.discarded;
                       });
                       const totalComments = visibleComments.length;
                       const commentsByMedia = visibleComments.reduce((acc, c) => {
@@ -842,9 +839,9 @@ function Assignments() {
       keys.forEach(k => anySubmissionKeys.add(k));
 
       const isCustomerApproved = (s.approved_by_customer === true || s.status === 'approved_customer' || s.status === 'approved_both') &&
-        s.status !== 'under_review' && s.status !== 'sent_to_creator' && s.status !== 'revision_requested' && s.status !== 'rejected';
+        !['under_review', 'sent_to_creator', 'revision_requested', 'rejected', 'customer_feedback_pending_admin', 'pending_customer_review', 'changes_requested_admin', 'changes_requested_customer_approved_admin'].includes(s.status);
       const isAdminApproved = (s.approved_by_admin === true || s.status === 'approved_admin' || s.status === 'approved_both' || (s.status === 'approved' && !s.approved_by_customer) || stage === 'customer') &&
-        s.status !== 'revision_requested' && s.status !== 'rejected';
+        !['revision_requested', 'rejected', 'customer_feedback_pending_admin', 'changes_requested_admin', 'changes_requested_customer_approved_admin'].includes(s.status);
 
       if (isAdminApproved) {
         keys.forEach(k => adminApprovedKeys.add(k));
@@ -872,7 +869,7 @@ function Assignments() {
     const sub = getLatestSubmission(assignmentId);
     if (!sub) return null;
     const isCustApproved = (sub.approved_by_customer === true || sub.status === 'approved_customer' || sub.status === 'approved_both') &&
-      sub.status !== 'under_review' && sub.status !== 'sent_to_creator' && sub.status !== 'revision_requested' && sub.status !== 'rejected';
+      !['under_review', 'sent_to_creator', 'revision_requested', 'rejected', 'customer_feedback_pending_admin', 'pending_customer_review', 'changes_requested_admin', 'changes_requested_customer_approved_admin'].includes(sub.status);
     if (isCustApproved) {
       return { label: 'Customer Approved', color: 'bg-emerald-100 text-emerald-700 border-emerald-200', icon: <CheckCircle className="h-3 w-3" />, canReupload: false, revisionNotes: '' };
     }

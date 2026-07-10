@@ -221,7 +221,7 @@ function ContentUpload() {
       const subId = sub.assignment_id || sub.assignmentId;
       return subId && String(subId) === String(a.id);
     });
-    const isCustomerApproved = subs.some(s => s.approved_by_customer === true || s.status === 'approved_customer' || s.status === 'approved_both');
+    const isCustomerApproved = subs.some(s => (s.approved_by_customer === true || s.status === 'approved_customer' || s.status === 'approved_both') && !['under_review', 'sent_to_creator', 'revision_requested', 'rejected', 'customer_feedback_pending_admin', 'pending_customer_review', 'changes_requested_admin', 'changes_requested_customer_approved_admin'].includes(s.status));
     if (isCustomerApproved) return 'approved';
     return 'pending';
   };
@@ -251,8 +251,8 @@ function ContentUpload() {
       return subId && String(subId) === String(a.id);
     });
 
-    const isCustomerApproved = subs.some(s => s.approved_by_customer === true || s.status === 'approved_customer' || s.status === 'approved_both') || a.status === 'approved';
-    const isAdminApproved = subs.some(s => s.approved_by_admin === true || s.status === 'approved_admin' || s.status === 'approved_both' || (s.status === 'approved' && !s.approved_by_customer) || (s.submission_stage || s.submissionStage || '') === 'customer');
+    const isCustomerApproved = subs.some(s => (s.approved_by_customer === true || s.status === 'approved_customer' || s.status === 'approved_both') && !['under_review', 'sent_to_creator', 'revision_requested', 'rejected', 'customer_feedback_pending_admin', 'pending_customer_review', 'changes_requested_admin', 'changes_requested_customer_approved_admin'].includes(s.status)) || a.status === 'approved';
+    const isAdminApproved = subs.some(s => (s.approved_by_admin === true || s.status === 'approved_admin' || s.status === 'approved_both' || (s.status === 'approved' && !s.approved_by_customer) || (s.submission_stage || s.submissionStage || '') === 'customer') && !['revision_requested', 'rejected', 'customer_feedback_pending_admin', 'changes_requested_admin', 'changes_requested_customer_approved_admin'].includes(s.status));
 
     if (isCustomerApproved && isAdminApproved) {
       return {
@@ -760,12 +760,12 @@ function ContentUpload() {
         const isAdminComment = c.reviewType === 'internal' || c.authorRole === 'admin' || c.author === 'Admin';
 
         if (!isAdmin) {
-          // Creator sees all customer comments and finalized admin comments
+          // Creator only sees finalized comments
           if (c.discarded) return false;
-          return isAdminComment ? c.finalized === true : true;
+          return c.finalized === true;
         }
 
-        return activeTab === 'admin' ? (isAdminComment && !c.discarded) : (!isAdminComment && c.finalized && !c.discarded);
+        return activeTab === 'admin' ? (isAdminComment && !c.discarded) : (!isAdminComment && !c.discarded);
       });
       setCommentsForVersion(filteredComments);
     } else {
@@ -1403,9 +1403,16 @@ function ContentUpload() {
 
     // CRITICAL: Ensure we have valid customer information before proceeding
     if (!finalCustomerId || !finalCustomerName || finalCustomerName === 'Unknown Customer') {
-      console.error('Ã¢ÂÅ’ CRITICAL: Cannot proceed without valid customer information!');
+      console.error('Ã¢Â Å’ CRITICAL: Cannot proceed without valid customer information!');
       alert(`Missing customer information. Please contact support.\n\nDetails:\n- Customer ID: ${finalCustomerId || 'Missing'}\n- Customer Name: ${finalCustomerName || 'Missing'}\n- Assignment ID: ${assignment.id}`);
       return;
+    }
+
+    // Inherit thumbnail from previous version if not modified/removed
+    let previousThumbnailUrl = null;
+    if (allPreviousVersions && allPreviousVersions.length > 0) {
+      const latestPrev = allPreviousVersions[allPreviousVersions.length - 1];
+      previousThumbnailUrl = latestPrev.thumbnailUrl || null;
     }
 
     setSubmitting(true);
@@ -1416,12 +1423,14 @@ function ContentUpload() {
       // Upload thumbnail if present and not uploaded yet
       if (thumbnailFileObj) {
         if (!thumbnailFileObj.uploaded) {
-          console.log(`Ã°Å¸â€œÂ¤ Uploading thumbnail file: ${thumbnailFileObj.name}`);
+          console.log(`Uploading thumbnail file: ${thumbnailFileObj.name}`);
           const thumbRes = await uploadThumbnailToGCS(thumbnailFileObj);
           uploadedThumbnailUrl = thumbRes.url;
         } else {
           uploadedThumbnailUrl = thumbnailFileObj.publicUrl;
         }
+      } else if (!thumbnailFileRemoved && previousThumbnailUrl) {
+        uploadedThumbnailUrl = previousThumbnailUrl;
       }
 
       // Upload new files and keep existing ones, preserving exact carousel order

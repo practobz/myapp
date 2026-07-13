@@ -1998,6 +1998,7 @@ function ContentCalendar({
                     subStatus !== 'pending_customer_review' && 
                     subStatus !== 'approved_customer' && 
                     subStatus !== 'approved_both' && 
+                    latestSubmission.approved_by_customer !== true &&
                     subStatus !== 'published' && 
                     subStatus !== 'scheduled' && 
                     subStatus !== 'customer_feedback_pending_admin' && 
@@ -2009,6 +2010,7 @@ function ContentCalendar({
                     subStatus !== 'pending_customer_review' &&
                     subStatus !== 'approved_customer' &&
                     subStatus !== 'approved_both' &&
+                    latestSubmission.approved_by_customer !== true &&
                     subStatus !== 'published' &&
                     subStatus !== 'scheduled' &&
                     subStatus !== 'customer_feedback_pending_admin' &&
@@ -2041,6 +2043,7 @@ function ContentCalendar({
                     (latestCustomerSub.status === 'pending_customer_review' || (latestCustomerSub.submission_stage || latestCustomerSub.submissionStage) === 'customer') &&
                     latestCustomerSub.status !== 'approved_customer' &&
                     latestCustomerSub.status !== 'approved_both' &&
+                    latestCustomerSub.approved_by_customer !== true &&
                     latestCustomerSub.status !== 'published' &&
                     latestCustomerSub.status !== 'scheduled' &&
                     latestCustomerSub.status !== 'customer_feedback_pending_admin' &&

@@ -1984,6 +1984,88 @@ function ContentCalendar({
                   const publishedLinks = getItemPublishedLinks(item);
                   const displayStatus = getDisplayStatus(item);
 
+                  const latestSubmission = getLatestSubmission(item);
+                  const unresolvedCustomerCommentsCount = latestSubmission?.comments?.filter(c => {
+                    const isCustomerComment = c.reviewType === 'external' || c.authorRole === 'customer' || (c.authorRole !== 'admin' && c.reviewType !== 'internal');
+                    return isCustomerComment && !c.done && c.status !== 'completed' && !c.discarded && !c.finalized;
+                  }).length || 0;
+
+                  const subStage = latestSubmission ? (latestSubmission.submission_stage || latestSubmission.submissionStage || '') : '';
+                  const subStatus = latestSubmission ? latestSubmission.status || '' : '';
+                  const needsCustomerReviewAsk = latestSubmission &&
+                    latestSubmission.approved_by_admin && 
+                    subStage !== 'customer' && 
+                    subStatus !== 'pending_customer_review' && 
+                    subStatus !== 'approved_customer' && 
+                    subStatus !== 'approved_both' && 
+                    subStatus !== 'published' && 
+                    subStatus !== 'scheduled' && 
+                    subStatus !== 'customer_feedback_pending_admin' && 
+                    subStatus !== 'changes_requested_customer_approved_admin';
+
+                  const isNewCreatorVersion = latestSubmission &&
+                    !latestSubmission.approved_by_admin &&
+                    subStage !== 'customer' &&
+                    subStatus !== 'pending_customer_review' &&
+                    subStatus !== 'approved_customer' &&
+                    subStatus !== 'approved_both' &&
+                    subStatus !== 'published' &&
+                    subStatus !== 'scheduled' &&
+                    subStatus !== 'customer_feedback_pending_admin' &&
+                    subStatus !== 'changes_requested_customer_approved_admin';
+
+                  const hasNewAdminReply = latestSubmission?.comments?.some(c => {
+                    const replies = c.replies || (c.adminReply ? [{
+                      authorRole: 'admin',
+                      message: c.adminReply.text
+                    }] : []);
+                    if (replies.length > 0) {
+                      const lastReply = replies[replies.length - 1];
+                      return lastReply.authorRole === 'customer' || lastReply.authorRole === 'creator';
+                    }
+                    return false;
+                  });
+
+                  const adminNotificationText = unresolvedCustomerCommentsCount > 0
+                    ? `${unresolvedCustomerCommentsCount} comment${unresolvedCustomerCommentsCount !== 1 ? 's' : ''} to review`
+                    : hasNewAdminReply
+                      ? "New reply"
+                      : needsCustomerReviewAsk
+                        ? "Ask customer to review"
+                        : isNewCreatorVersion
+                          ? "New version uploaded"
+                          : null;
+
+                  const latestCustomerSub = getLatestCustomerSubmission(item);
+                  const isCustomerNewVersion = latestCustomerSub && 
+                    (latestCustomerSub.status === 'pending_customer_review' || (latestCustomerSub.submission_stage || latestCustomerSub.submissionStage) === 'customer') &&
+                    latestCustomerSub.status !== 'approved_customer' &&
+                    latestCustomerSub.status !== 'approved_both' &&
+                    latestCustomerSub.status !== 'published' &&
+                    latestCustomerSub.status !== 'scheduled' &&
+                    latestCustomerSub.status !== 'customer_feedback_pending_admin' &&
+                    latestCustomerSub.status !== 'changes_requested_customer_approved_admin';
+
+                  const hasNewCustomerReply = latestSubmission?.comments?.some(c => {
+                    const isExternal = c.reviewType === 'external' || c.authorRole === 'customer' || (c.authorRole !== 'admin' && c.reviewType !== 'internal');
+                    if (!isExternal) return false;
+                    const replies = c.replies || (c.adminReply ? [{
+                      authorRole: 'admin',
+                      message: c.adminReply.text
+                    }] : []);
+                    if (replies.length > 0) {
+                      const lastReply = replies[replies.length - 1];
+                      return lastReply.authorRole === 'admin' || lastReply.authorRole === 'creator';
+                    }
+                    return false;
+                  });
+
+                  const customerNotificationText = isCustomerNewVersion
+                    ? "New version to review"
+                    : hasNewCustomerReply
+                      ? "New reply"
+                      : null;
+
                   return viewMode === 'grid' ? (
                     isAdmin ? (
                       <div
@@ -2013,8 +2095,8 @@ function ContentCalendar({
                             ) : (
                               <div className="w-full h-full flex items-center justify-center"><Image className="h-10 w-10 text-gray-300" /></div>
                             )}
-                            <div className="absolute top-3 left-3">
-                              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold shadow-sm ${displayStatus === 'published' ? 'bg-emerald-500 text-white' :
+                            <div className="absolute top-3 left-3 right-3 flex justify-between items-center pointer-events-none z-10">
+                              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold shadow-sm pointer-events-auto ${displayStatus === 'published' ? 'bg-emerald-500 text-white' :
                                 displayStatus === 'customer_approved' ? 'bg-emerald-600 text-white' :
                                 displayStatus === 'under_review' ? 'bg-amber-500 text-white' :
                                   displayStatus === 'scheduled' ? 'bg-blue-500 text-white' : 'bg-gray-600 text-white'
@@ -2022,6 +2104,12 @@ function ContentCalendar({
                                 {(displayStatus === 'published' || displayStatus === 'customer_approved') && <CheckCircle className="h-3 w-3" />}
                                 {getStatusLabel(displayStatus)}
                               </span>
+                              {adminNotificationText && (
+                                <span className="inline-flex items-center gap-1 bg-red-600 text-white px-2.5 py-1 rounded-full text-[10px] font-bold shadow-md animate-pulse pointer-events-auto">
+                                  <AlertCircle className="h-3 w-3 text-white animate-bounce" />
+                                  {adminNotificationText}
+                                </span>
+                              )}
                             </div>
                           </div>
                           <div className="p-4 pb-0">
@@ -2137,8 +2225,8 @@ function ContentCalendar({
                           ) : (
                             <div className="w-full h-full flex items-center justify-center"><Image className="h-10 w-10 text-gray-300" /></div>
                           )}
-                          <div className="absolute top-3 left-3">
-                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold shadow-sm ${displayStatus === 'published' ? 'bg-emerald-500 text-white' :
+                          <div className="absolute top-3 left-3 right-3 flex justify-between items-center pointer-events-none z-10">
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold shadow-sm pointer-events-auto ${displayStatus === 'published' ? 'bg-emerald-500 text-white' :
                               displayStatus === 'customer_approved' ? 'bg-emerald-600 text-white' :
                               displayStatus === 'under_review' ? 'bg-amber-500 text-white' :
                                 displayStatus === 'scheduled' ? 'bg-blue-500 text-white' : 'bg-gray-600 text-white'
@@ -2146,6 +2234,12 @@ function ContentCalendar({
                               {(displayStatus === 'published' || displayStatus === 'customer_approved') && <CheckCircle className="h-3 w-3" />}
                               {getStatusLabel(displayStatus)}
                             </span>
+                            {customerNotificationText && (
+                              <span className="inline-flex items-center gap-1 bg-red-600 text-white px-2.5 py-1 rounded-full text-[10px] font-bold shadow-md animate-pulse pointer-events-auto">
+                                <AlertCircle className="h-3 w-3 text-white animate-bounce" />
+                                {customerNotificationText}
+                              </span>
+                            )}
                           </div>
                         </div>
                         <div className="p-4">
@@ -2242,6 +2336,12 @@ function ContentCalendar({
                                     {displayStatus === 'under_review' && <Eye className="h-3 w-3" />}
                                     {getStatusLabel(displayStatus)}
                                   </span>
+                                  {adminNotificationText && (
+                                    <span className="inline-flex items-center gap-1 bg-red-600 text-white px-2.5 py-0.5 rounded-full text-[10px] font-bold shadow-sm animate-pulse ml-2">
+                                      <AlertCircle className="h-3 w-3 text-white animate-bounce" />
+                                      {adminNotificationText}
+                                    </span>
+                                  )}
                                   <span className="text-sm text-gray-500 flex items-center gap-1.5">
                                     <CalendarIcon className="h-3.5 w-3.5" />
                                     {format(new Date(item.date), 'MMM dd, yyyy')}
@@ -2429,6 +2529,12 @@ function ContentCalendar({
                                     {displayStatus === 'under_review' && <Eye className="h-3 w-3" />}
                                     {getStatusLabel(displayStatus)}
                                   </span>
+                                  {customerNotificationText && (
+                                    <span className="inline-flex items-center gap-1 bg-red-600 text-white px-2.5 py-0.5 rounded-full text-[10px] font-bold shadow-sm animate-pulse ml-2">
+                                      <AlertCircle className="h-3 w-3 text-white animate-bounce" />
+                                      {customerNotificationText}
+                                    </span>
+                                  )}
                                   <span className="text-sm text-gray-500 flex items-center gap-1.5">
                                     <CalendarIcon className="h-3.5 w-3.5" />
                                     {format(new Date(item.date), 'MMM dd, yyyy')}

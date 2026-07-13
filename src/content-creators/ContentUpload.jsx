@@ -102,6 +102,18 @@ function ContentUpload() {
   const previousVersions = useMemo(() => {
     return activeTab === 'admin' ? adminVersions : customerVersions;
   }, [activeTab, adminVersions, customerVersions]);
+
+  const isRevisionRequested = useMemo(() => {
+    if (allPreviousVersions.length === 0) return false;
+    const latestVersion = allPreviousVersions[allPreviousVersions.length - 1];
+    const revisionStatuses = ['revision_requested', 'changes_requested', 'changes_requested_admin', 'changes_requested_customer_approved_admin'];
+    return revisionStatuses.includes(latestVersion?.status);
+  }, [allPreviousVersions]);
+
+  const hasModifiedMedia = useMemo(() => {
+    return uploadedFiles.some(f => !f.isExisting) || thumbnailFileObj !== null || thumbnailFileRemoved;
+  }, [uploadedFiles, thumbnailFileObj, thumbnailFileRemoved]);
+
   const [versionsAccordionOpen, setVersionsAccordionOpen] = useState(true);
   const [selectedVersionIndex, setSelectedVersionIndex] = useState(0);
   const selectedVersionId = previousVersions[selectedVersionIndex]?.id || null;
@@ -109,6 +121,19 @@ function ContentUpload() {
   const [validationNotice, setValidationNotice] = useState('');
   const [commentsForVersion, setCommentsForVersion] = useState([]);
   const [commentsForCurrentMedia, setCommentsForCurrentMedia] = useState([]);
+
+  const otherSlidesWithComments = useMemo(() => {
+    const unresolvedComments = commentsForVersion.filter(c => {
+      return !c.done && c.status !== 'completed' && !c.discarded && !c.finalized;
+    });
+    const otherSlides = unresolvedComments
+      .filter(c => {
+        const idx = Number(c.mediaIndex !== undefined ? c.mediaIndex : 0);
+        return idx !== selectedMediaIndex;
+      })
+      .map(c => Number(c.mediaIndex !== undefined ? c.mediaIndex : 0) + 1);
+    return [...new Set(otherSlides)].sort((a, b) => a - b);
+  }, [commentsForVersion, selectedMediaIndex]);
   const [activeVersionComment, setActiveVersionComment] = useState(null);
   const [hoveredVersionComment, setHoveredVersionComment] = useState(null);
   const [versionImgDimensions, setVersionImgDimensions] = useState(null);
@@ -2081,11 +2106,11 @@ function ContentUpload() {
             <div className="space-y-4">
               {/* Accordion trigger */}
               <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden w-full p-5 hover:bg-gray-50 transition-colors duration-200">
-                <div className={`flex items-center justify-between gap-3 ${(previousSubmissionLoaded && previousVersions.length === 0 || validationNotice) ? 'mb-4' : ''}`}>
+                <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${((previousSubmissionLoaded && previousVersions.length === 0 && (thumbnailFileObj || uploadedFiles.length > 0)) || validationNotice) ? 'mb-4' : ''}`}>
                   <button
                     type="button"
                     onClick={() => setVersionsAccordionOpen(!versionsAccordionOpen)}
-                    className="flex items-center gap-3 text-left"
+                    className="flex items-center gap-3 text-left focus:outline-none"
                   >
                     <div className="p-2 bg-green-100 rounded-lg flex-shrink-0">
                       <History className="h-5 w-5 text-green-600" />
@@ -2098,10 +2123,38 @@ function ContentUpload() {
                     </div>
                   </button>
 
+                  <div className="flex items-center gap-3 flex-wrap sm:flex-nowrap justify-start sm:justify-end flex-grow mr-2">
+                    {previousSubmissionLoaded && previousVersions.length === 0 && (() => {
+                      const isThumbnailAllowed = ['reel', 'video'].includes((assignment?.postType || '').toLowerCase());
+                      return (
+                        <>
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); onButtonClick(); }}
+                            className="inline-flex items-center px-4 py-2 text-sm font-medium bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
+                          >
+                            <Image className="h-4 w-4 mr-2" />
+                            Create first version
+                          </button>
+                          {isThumbnailAllowed && (
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); onThumbnailButtonClick(); }}
+                              className="inline-flex items-center px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                            >
+                              <Image className="h-4 w-4 mr-2" />
+                              Add thumbnail
+                            </button>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
+
                   <button
                     type="button"
                     onClick={() => setVersionsAccordionOpen(!versionsAccordionOpen)}
-                    className="p-1 rounded hover:bg-gray-100"
+                    className="p-1 rounded hover:bg-gray-100 focus:outline-none"
                     aria-label="Toggle version history"
                   >
                     {versionsAccordionOpen
@@ -2138,26 +2191,6 @@ function ContentUpload() {
                   const isThumbnailAllowed = ['reel', 'video'].includes((assignment?.postType || '').toLowerCase());
                   return (
                     <>
-                      <div className="flex flex-col sm:flex-row items-center justify-start gap-3 mb-4">
-                        <button
-                          type="button"
-                          onClick={onButtonClick}
-                          className="inline-flex items-center px-4 py-2 text-sm font-medium bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors shadow-sm"
-                        >
-                          <Image className="h-4 w-4 mr-2" />
-                          Create first version
-                        </button>
-                        {isThumbnailAllowed && (
-                          <button
-                            type="button"
-                            onClick={onThumbnailButtonClick}
-                            className="inline-flex items-center px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
-                          >
-                            <Image className="h-4 w-4 mr-2" />
-                            Add thumbnail
-                          </button>
-                        )}
-                      </div>
 
                       {isThumbnailAllowed && thumbnailFileObj && (
                         <div className="mt-3 p-3 bg-indigo-50/80 border border-indigo-100 rounded-xl flex items-center justify-between shadow-sm">
@@ -2433,6 +2466,30 @@ function ContentUpload() {
                                             </div>
                                           </div>
                                         )}
+
+                                         {otherSlidesWithComments.length > 0 && (
+                                           <div className="mb-3 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-700 font-medium flex items-center flex-wrap gap-1.5">
+                                             <AlertCircle className="h-3.5 w-3.5 text-amber-600 flex-shrink-0 mt-0.5 animate-bounce" />
+                                             <span>Comments found on:</span>
+                                             <div className="flex items-center gap-1">
+                                               {otherSlidesWithComments.map(slideNum => {
+                                                 const isThumb = slides[slideNum - 1]?.isThumbnailSlide === true;
+                                                 const label = isThumb ? 'Thumbnail' : `Slide ${slideNum}`;
+                                                 return (
+                                                   <button
+                                                     key={slideNum}
+                                                     type="button"
+                                                     onClick={() => setSelectedMediaIndex(slideNum - 1)}
+                                                     className="px-1.5 py-0.5 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded text-[10px] font-bold text-amber-800 transition-colors cursor-pointer focus:outline-none focus:ring-1 focus:ring-amber-500"
+                                                     title={`Go to ${isThumb ? 'thumbnail' : `slide ${slideNum}`}`}
+                                                   >
+                                                     {label}
+                                                   </button>
+                                                 );
+                                               })}
+                                             </div>
+                                           </div>
+                                         )}
 
                                         <div className="flex items-center justify-between mb-2">
                                           <p className="text-[10px] text-gray-400">
@@ -3145,9 +3202,18 @@ function ContentUpload() {
                     No assigned admins. Submission will be reviewed by System Admins.
                   </p>
                 )}
+                {isRevisionRequested && !hasModifiedMedia && (
+                  <div className="text-xs text-red-700 bg-red-50 p-2.5 rounded-lg border border-red-200 font-medium flex items-start gap-2 mb-4 text-left">
+                    <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5 animate-bounce" />
+                    <span>
+                      <strong>Revisions Required:</strong> Please replace the requested media with a new version (or add new media) before submitting.
+                    </span>
+                  </div>
+                )}
                 <button
                   onClick={handleSubmit}
-                  disabled={submitting || uploadedFiles.length === 0 || uploadedFiles.some(f => f.uploading)}
+                  disabled={submitting || uploadedFiles.length === 0 || uploadedFiles.some(f => f.uploading) || (isRevisionRequested && !hasModifiedMedia)}
+                  title={isRevisionRequested && !hasModifiedMedia ? "Please replace or add a new media version first" : ""}
                   className="w-full inline-flex items-center justify-center px-6 py-3 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
                 >
                   {submitting ? (

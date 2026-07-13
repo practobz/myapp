@@ -248,6 +248,26 @@ function CustomerFeedback({ isTab = false }) {
                         <MessageSquare className="h-3 w-3" />
                         {totalComments} comment{totalComments !== 1 ? 's' : ''}
                       </span>
+                      {(() => {
+                        const hasNewReply = visibleComments.some(c => {
+                          const replies = c.replies || (c.adminReply ? [{
+                            authorRole: 'admin',
+                            message: c.adminReply.text
+                          }] : []);
+                          if (replies.length > 0) {
+                            const lastReply = replies[replies.length - 1];
+                            return lastReply.authorRole === 'admin' || lastReply.authorRole === 'customer';
+                          }
+                          return false;
+                        });
+                        if (!hasNewReply) return null;
+                        return (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700 border border-red-200 animate-pulse">
+                            <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-ping"></span>
+                            <span>New Reply</span>
+                          </span>
+                        );
+                      })()}
                     </div>
                     <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 mt-1">
                       {sub.platform && (
@@ -1361,6 +1381,30 @@ function Assignments() {
                                                 <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${subStatusInfo.color}`}>
                                                   {subStatusInfo.icon}
                                                   <span>{subStatusInfo.label}</span>
+                                                </span>
+                                              );
+                                            })()}
+                                            {(() => {
+                                              const sub = getLatestSubmission(assignment.id);
+                                              if (!sub) return null;
+                                              const hasNewCreatorReply = Array.isArray(sub.comments) && sub.comments.some(c => {
+                                                const isVisibleToCreator = c.reviewType === 'external' || c.finalized === true;
+                                                if (!isVisibleToCreator) return false;
+                                                const replies = c.replies || (c.adminReply ? [{
+                                                  authorRole: 'admin',
+                                                  message: c.adminReply.text
+                                                }] : []);
+                                                if (replies.length > 0) {
+                                                  const lastReply = replies[replies.length - 1];
+                                                  return lastReply.authorRole === 'admin' || lastReply.authorRole === 'customer';
+                                                }
+                                                return false;
+                                              });
+                                              if (!hasNewCreatorReply) return null;
+                                              return (
+                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700 border border-red-200 animate-pulse">
+                                                  <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-ping"></span>
+                                                  <span>New Reply</span>
                                                 </span>
                                               );
                                             })()}

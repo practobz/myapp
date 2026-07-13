@@ -1809,6 +1809,27 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
                             {version.comments?.length > 0 && (
                               <span className="flex items-center"><MessageSquare className="h-2.5 w-2.5 mr-0.5" />{version.comments.length}</span>
                             )}
+                            {(() => {
+                              const hasNewReply = (version.comments || []).some(c => {
+                                const isExternal = c.reviewType === 'external' || c.authorRole === 'customer' || (c.authorRole !== 'admin' && c.reviewType !== 'internal');
+                                if (!isExternal) return false;
+                                const replies = c.replies || (c.adminReply ? [{
+                                  authorRole: 'admin',
+                                  message: c.adminReply.text
+                                }] : []);
+                                if (replies.length > 0) {
+                                  const lastReply = replies[replies.length - 1];
+                                  return lastReply.authorRole === 'admin' || lastReply.authorRole === 'creator';
+                                }
+                                return false;
+                              });
+                              if (!hasNewReply) return null;
+                              return (
+                                <span className="inline-flex items-center gap-0.5 ml-1 px-1 py-0.2 bg-red-100 text-red-700 rounded text-[8px] font-extrabold animate-pulse shrink-0">
+                                  <span>New Reply</span>
+                                </span>
+                              );
+                            })()}
                           </div>
                         </button>
                       </div>
@@ -1894,6 +1915,24 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
                                   {(comment.authorEmail || comment.authorName || comment.author) && (
                                     <span className="text-[9px] text-gray-500 truncate max-w-[110px]">• {toDisplayName(comment.authorName || comment.authorEmail || comment.author)}</span>
                                   )}
+                                  {(() => {
+                                    const replies = comment.replies || (comment.adminReply ? [{
+                                      authorRole: 'admin',
+                                      message: comment.adminReply.text
+                                    }] : []);
+                                    if (replies.length > 0) {
+                                      const lastReply = replies[replies.length - 1];
+                                      const isNewReply = lastReply.authorRole === 'admin' || lastReply.authorRole === 'creator';
+                                      if (isNewReply) {
+                                        return (
+                                          <span className="inline-flex items-center gap-0.5 ml-1 px-1 py-0.2 bg-red-100 text-red-700 rounded text-[8px] font-extrabold animate-pulse">
+                                            <span>New Reply</span>
+                                          </span>
+                                        );
+                                      }
+                                    }
+                                    return null;
+                                  })()}
                                 </div>
 
                                 <p className={`text-[13px] break-words leading-snug ${comment.discarded ? 'text-gray-400 line-through' : 'text-gray-800'}`}>

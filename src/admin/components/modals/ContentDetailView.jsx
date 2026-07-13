@@ -436,6 +436,13 @@ function ContentDetailView({
     );
   }, [commentsForVersion]);
 
+  const hasUnresolvedComments = useMemo(() => {
+    return commentsForVersion.some(c => {
+      return !c.done && c.status !== 'completed' && !c.discarded;
+    });
+  }, [commentsForVersion]);
+
+
   const handleFinalizeFeedback = useCallback(async (option) => {
     const vId = selectedContent?.versions?.[selectedVersionIndex]?.id;
     if (!vId) return;
@@ -553,6 +560,7 @@ function ContentDetailView({
         if (selectedContent?.versions?.[selectedVersionIndex]) {
           selectedContent.versions[selectedVersionIndex].approved_by_admin = false;
           selectedContent.versions[selectedVersionIndex].status = 'submitted';
+          selectedContent.versions[selectedVersionIndex].submission_stage = 'admin_review';
         }
         setTick(t => t + 1);
         onRefresh?.();
@@ -692,6 +700,11 @@ function ContentDetailView({
     [selectedContent, selectedVersionIndex]
   );
 
+  const isRevisionPending = useMemo(() => {
+    const status = currentVersion?.status || '';
+    return status === 'revision_requested' || status === 'changes_requested' || status === 'changes_requested_admin';
+  }, [currentVersion]);
+
   const isOutdatedVersion = useMemo(() =>
     selectedVersionIndex < ((selectedContent?.versions?.length || 0) - 1),
     [selectedContent, selectedVersionIndex]
@@ -714,6 +727,38 @@ function ContentDetailView({
     const versions = selectedContent?.versions || [];
     return versions.some(version => (version.submission_stage || version.submissionStage || 'internal') !== 'customer');
   }, [selectedContent]);
+
+  const handleDeleteCarouselMedia = useCallback(async (mediaIdx) => {
+    if (!window.confirm("Are you sure you want to remove this media item from the carousel?")) return;
+    const vId = currentVersion?.id;
+    if (!vId) return;
+
+    try {
+      const response = await fetch(`${API_URL}/api/content-submissions/${encodeURIComponent(vId)}/media/${mediaIdx}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete media item');
+      }
+
+      if (onRefresh) {
+        await onRefresh();
+      }
+      
+      setSelectedMediaIndex(prev => {
+        const newLength = (currentVersion?.media?.length || 1) - 1;
+        if (prev >= newLength) {
+          return Math.max(0, newLength - 1);
+        }
+        return prev;
+      });
+    } catch (err) {
+      console.error(err);
+      alert(err.message || 'Failed to remove media item');
+    }
+  }, [currentVersion, onRefresh]);
 
   const currentMedia = useMemo(() =>
     currentVersion?.media?.[selectedMediaIndex],
@@ -1163,7 +1208,7 @@ function ContentDetailView({
                       {currentVersion.media.length > 1 && (
                         <div className="flex items-center justify-between">
                           <span className="text-xs text-gray-600">{selectedMediaIndex + 1} / {currentVersion.media.length}</span>
-                          <div className="flex gap-1">
+                          <div className="flex gap-1.5 items-center">
                             <button onClick={() => selectedMediaIndex > 0 && setSelectedMediaIndex(selectedMediaIndex - 1)}
                               disabled={selectedMediaIndex === 0}
                               className="p-1.5 rounded-lg bg-blue-50 border border-gray-200 hover:bg-white disabled:opacity-50 transition-colors">
@@ -1174,6 +1219,15 @@ function ContentDetailView({
                               className="p-1.5 rounded-lg bg-blue-50 border border-gray-200 hover:bg-white disabled:opacity-50 transition-colors">
                               <ChevronRight className="h-3.5 w-3.5 text-blue-600" />
                             </button>
+                            {!(currentVersion?.approved_by_customer === true || currentVersion?.status === 'published' || currentVersion?.status === 'scheduled') && (
+                              <button
+                                onClick={() => handleDeleteCarouselMedia(selectedMediaIndex)}
+                                className="p-1.5 ml-1.5 rounded-lg bg-red-50 border border-red-200 hover:bg-red-100 transition-colors"
+                                title="Remove this item from carousel"
+                              >
+                                <Trash2 className="h-3.5 w-3.5 text-red-600" />
+                              </button>
+                            )}
                           </div>
                         </div>
                       )}
@@ -1388,8 +1442,8 @@ function ContentDetailView({
                       )}
                       <button
                         onClick={handleApproveAdmin}
-                        disabled={approvingAdmin || isOutdatedVersion}
-                        title={isOutdatedVersion ? "Cannot approve an outdated version" : ""}
+                        disabled={approvingAdmin || isOutdatedVersion || hasUnresolvedComments || isRevisionPending}
+                        title={isOutdatedVersion ? "Cannot approve an outdated version" : hasUnresolvedComments ? "Cannot approve with unresolved comments" : isRevisionPending ? "Cannot approve a version with pending revision request" : ""}
                         className="w-full py-2 bg-gradient-to-r from-emerald-600 to-green-600 text-white rounded-lg text-xs font-semibold hover:from-emerald-700 hover:to-green-700 shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
                       >
                         {approvingAdmin ? (
@@ -1402,8 +1456,8 @@ function ContentDetailView({
                   ) : !(currentVersion?.approved_by_admin || currentVersion?.status === 'approved' || currentVersion?.status === 'approved_both' || currentVersion?.status === 'pending_customer_review') ? (
                     <button
                       onClick={handleApproveAdmin}
-                      disabled={approvingAdmin || isOutdatedVersion}
-                      title={isOutdatedVersion ? "Cannot approve an outdated version" : ""}
+                      disabled={approvingAdmin || isOutdatedVersion || hasUnresolvedComments || isRevisionPending}
+                      title={isOutdatedVersion ? "Cannot approve an outdated version" : hasUnresolvedComments ? "Cannot approve with unresolved comments" : isRevisionPending ? "Cannot approve a version with pending revision request" : ""}
                       className="w-full py-2 bg-gradient-to-r from-emerald-600 to-green-600 text-white rounded-lg text-xs font-semibold hover:from-emerald-700 hover:to-green-700 shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
                     >
                       {approvingAdmin ? (
@@ -1427,13 +1481,20 @@ function ContentDetailView({
                           )}
                         </button>
                       ) : (
-                        <div className="text-[11px] text-blue-700 bg-blue-50 p-2 rounded-lg border border-blue-150 font-medium flex items-center gap-1.5">
-                          <CheckCircle className="h-3.5 w-3.5 text-blue-600 flex-shrink-0" />
-                          This version is currently sent to customer for external review.
-                        </div>
+                        (currentVersion?.approved_by_customer === true || currentVersion?.status === 'approved_customer' || currentVersion?.status === 'approved_both' || currentVersion?.status === 'published' || currentVersion?.status === 'scheduled') ? (
+                          <div className="text-[11px] text-emerald-700 bg-emerald-50 p-2 rounded-lg border border-emerald-150 font-medium flex items-center gap-1.5">
+                            <CheckCircle className="h-3.5 w-3.5 text-emerald-600 flex-shrink-0" />
+                            This version has been approved by the customer.
+                          </div>
+                        ) : (
+                          <div className="text-[11px] text-blue-700 bg-blue-50 p-2 rounded-lg border border-blue-150 font-medium flex items-center gap-1.5">
+                            <CheckCircle className="h-3.5 w-3.5 text-blue-600 flex-shrink-0" />
+                            This version is currently sent to customer for external review.
+                          </div>
+                        )
                       )}
 
-                      {(currentVersion?.submission_stage !== 'customer' && currentVersion?.status !== 'pending_customer_review') && (
+                      {(currentVersion?.approved_by_customer !== true && currentVersion?.status !== 'published' && currentVersion?.status !== 'scheduled') && (
                         <button
                           onClick={handleUndoAdminApproval}
                           disabled={undoingAdmin}

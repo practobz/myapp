@@ -506,7 +506,16 @@ const ItemTimeline = ({ item, itemStatus, scheduledPosts = [], submissions = [] 
     }
 
     // Sent to Customer Step
-    if (s.submission_stage === 'customer') {
+    const isRevisionPending = s.status === 'revision_requested' || s.status === 'sent_to_creator' || s.status === 'changes_requested';
+    if (isRevisionPending) {
+      versionSteps.push({
+        key: `v${idx + 1}_sent_creator`,
+        label: `Revision Requested`,
+        done: true,
+        date: fmtDate(s.updatedAt || s.created_at || s.createdAt),
+        tone: 'purple',
+      });
+    } else if (s.submission_stage === 'customer') {
       versionSteps.push({
         key: `v${idx + 1}_sent_customer`,
         label: `Sent to Customer`,
@@ -1043,6 +1052,16 @@ function CustomerDetailsView() {
       setAllSubmissions([]);
     }
   };
+
+  // Auto refresh calendar in background when ContentDetailView popup is closed
+  const prevSelectedContentDetailRef = useRef(null);
+  useEffect(() => {
+    if (prevSelectedContentDetailRef.current && !selectedContentDetail) {
+      fetchSubmissions();
+      fetchCalendars();
+    }
+    prevSelectedContentDetailRef.current = selectedContentDetail;
+  }, [selectedContentDetail]);
 
   // ── QR Codes helpers ──────────────────────────────────────────────────────
   // Countdown timer for QR expiry

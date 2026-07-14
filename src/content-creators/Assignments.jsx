@@ -26,6 +26,56 @@ function getCreatorEmail() {
   return email;
 }
 
+const getCommentReplies = (comment) => {
+  if (Array.isArray(comment?.replies)) return comment.replies;
+  if (comment?.adminReply?.text) {
+    return [{
+      id: 'legacy-reply',
+      authorRole: 'admin',
+      authorEmail: comment.adminReply.adminEmail || '',
+      message: comment.adminReply.text,
+      timestamp: comment.adminReply.timestamp,
+    }];
+  }
+  return [];
+};
+
+const getThreadRoles = (comment) => {
+  const roles = new Set();
+  const baseRole = String(comment?.authorRole || '').toLowerCase();
+  if (baseRole) {
+    roles.add(baseRole);
+  } else if (comment?.reviewType === 'external') {
+    roles.add('customer');
+  } else if (comment?.reviewType === 'internal') {
+    roles.add('admin');
+  }
+
+  getCommentReplies(comment).forEach((reply) => {
+    const role = String(reply?.authorRole || '').toLowerCase();
+    if (role) roles.add(role);
+  });
+
+  return roles;
+};
+
+const isCreatorVisibleComment = (comment) => {
+  const roles = getThreadRoles(comment);
+  const isAdminCustomerOnly = roles.has('admin') && roles.has('customer') && !roles.has('creator');
+  return !isAdminCustomerOnly;
+};
+
+const hasAdminCustomerReplyActivity = (comments) => {
+  return (comments || []).some((comment) => {
+    const replies = comment.replies || [];
+    if (replies.length > 0) {
+      const lastReply = replies[replies.length - 1];
+      return (lastReply.authorRole === 'admin' || lastReply.authorRole === 'customer') && !lastReply.readByCreator;
+    }
+    return false;
+  });
+};
+
 function CustomerFeedback({ isTab = false }) {
   const navigate = useNavigate();
   const creatorEmail = getCreatorEmail();
@@ -222,7 +272,7 @@ function CustomerFeedback({ isTab = false }) {
       <div className="space-y-4">
         {feedbackItems.map(sub => {
           const visibleComments = (sub.comments || []).filter(c => {
-            return c.finalized === true && !c.discarded;
+            return c.finalized === true && !c.discarded && isCreatorVisibleComment(c);
           });
           const totalComments = visibleComments.length;
           const commentsByMedia = visibleComments.reduce((acc, c) => {
@@ -249,17 +299,7 @@ function CustomerFeedback({ isTab = false }) {
                         {totalComments} comment{totalComments !== 1 ? 's' : ''}
                       </span>
                       {(() => {
-                        const hasNewReply = visibleComments.some(c => {
-                          const replies = c.replies || (c.adminReply ? [{
-                            authorRole: 'admin',
-                            message: c.adminReply.text
-                          }] : []);
-                          if (replies.length > 0) {
-                            const lastReply = replies[replies.length - 1];
-                            return lastReply.authorRole === 'admin' || lastReply.authorRole === 'customer';
-                          }
-                          return false;
-                        });
+                        const hasNewReply = hasAdminCustomerReplyActivity((sub.comments || []).filter(c => c.finalized === true && !c.discarded));
                         if (!hasNewReply) return null;
                         return (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700 border border-red-200 animate-pulse">
@@ -461,7 +501,7 @@ function CustomerFeedback({ isTab = false }) {
                   <div className="divide-y divide-gray-100">
                     {calendar.items.map(sub => {
                       const visibleComments = (sub.comments || []).filter(c => {
-                        return c.finalized === true && !c.discarded;
+                        return c.finalized === true && !c.discarded && isCreatorVisibleComment(c);
                       });
                       const totalComments = visibleComments.length;
                       const commentsByMedia = visibleComments.reduce((acc, c) => {
@@ -1387,19 +1427,10 @@ function Assignments() {
                                             {(() => {
                                               const sub = getLatestSubmission(assignment.id);
                                               if (!sub) return null;
-                                              const hasNewCreatorReply = Array.isArray(sub.comments) && sub.comments.some(c => {
-                                                const isVisibleToCreator = c.reviewType === 'external' || c.finalized === true;
-                                                if (!isVisibleToCreator) return false;
-                                                const replies = c.replies || (c.adminReply ? [{
-                                                  authorRole: 'admin',
-                                                  message: c.adminReply.text
-                                                }] : []);
-                                                if (replies.length > 0) {
-                                                  const lastReply = replies[replies.length - 1];
-                                                  return lastReply.authorRole === 'admin' || lastReply.authorRole === 'customer';
-                                                }
-                                                return false;
-                                              });
+                                              const commentPool = Array.isArray(sub.comments)
+                                                ? sub.comments.filter(c => (c.finalized === true || c.reviewType === 'external') && !c.discarded)
+                                                : [];
+                                              const hasNewCreatorReply = hasAdminCustomerReplyActivity(commentPool);
                                               if (!hasNewCreatorReply) return null;
                                               return (
                                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700 border border-red-200 animate-pulse">

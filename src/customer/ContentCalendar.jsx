@@ -492,7 +492,16 @@ const ItemTimeline = ({ item, itemStatus, scheduledPosts = [], submissions = [],
       }
 
       // Sent to Customer Step
-      if (s.submission_stage === 'customer') {
+      const isRevisionPending = s.status === 'revision_requested' || s.status === 'sent_to_creator' || s.status === 'changes_requested';
+      if (isRevisionPending) {
+        versionSteps.push({
+          key: `v${idx + 1}_sent_creator`,
+          label: `Revision Requested`,
+          done: true,
+          date: fmtDate(s.updatedAt || s.created_at || s.createdAt),
+          tone: 'purple',
+        });
+      } else if (s.submission_stage === 'customer') {
         versionSteps.push({
           key: `v${idx + 1}_sent_customer`,
           label: `Sent to Customer`,
@@ -2004,6 +2013,11 @@ function ContentCalendar({
                     subStatus !== 'customer_feedback_pending_admin' && 
                     subStatus !== 'changes_requested_customer_approved_admin';
 
+                  const isRevisionRequested =
+                    subStatus === 'revision_requested' ||
+                    subStatus === 'sent_to_creator' ||
+                    subStatus === 'changes_requested_customer_approved_admin';
+
                   const isNewCreatorVersion = latestSubmission &&
                     !latestSubmission.approved_by_admin &&
                     subStage !== 'customer' &&
@@ -2014,7 +2028,15 @@ function ContentCalendar({
                     subStatus !== 'published' &&
                     subStatus !== 'scheduled' &&
                     subStatus !== 'customer_feedback_pending_admin' &&
-                    subStatus !== 'changes_requested_customer_approved_admin';
+                    subStatus !== 'changes_requested_customer_approved_admin' &&
+                    subStatus !== 'revision_requested' &&
+                    subStatus !== 'sent_to_creator';
+
+                  const itemSubs = submissions.filter(s => 
+                    isSubmissionForItem(s, item, item.calendarId) && 
+                    (isAdmin ? true : isVisibleToCustomerSubmission(s))
+                  );
+                  const isFirstVersion = itemSubs.length <= 1;
 
                   const hasNewAdminReply = latestSubmission?.comments?.some(c => {
                     const replies = c.replies || (c.adminReply ? [{
@@ -2023,7 +2045,7 @@ function ContentCalendar({
                     }] : []);
                     if (replies.length > 0) {
                       const lastReply = replies[replies.length - 1];
-                      return lastReply.authorRole === 'customer' || lastReply.authorRole === 'creator';
+                      return (lastReply.authorRole === 'customer' || lastReply.authorRole === 'creator') && !lastReply.readByAdmin;
                     }
                     return false;
                   });
@@ -2035,7 +2057,7 @@ function ContentCalendar({
                       : needsCustomerReviewAsk
                         ? "Ask customer to review"
                         : isNewCreatorVersion
-                          ? "New version uploaded"
+                          ? (isFirstVersion ? "New content uploaded" : "New version uploaded")
                           : null;
 
                   const latestCustomerSub = getLatestCustomerSubmission(item);
@@ -2047,7 +2069,12 @@ function ContentCalendar({
                     latestCustomerSub.status !== 'published' &&
                     latestCustomerSub.status !== 'scheduled' &&
                     latestCustomerSub.status !== 'customer_feedback_pending_admin' &&
-                    latestCustomerSub.status !== 'changes_requested_customer_approved_admin';
+                    latestCustomerSub.status !== 'changes_requested_customer_approved_admin' &&
+                    latestCustomerSub.status !== 'changes_requested' &&
+                    latestCustomerSub.status !== 'changes_requested_admin' &&
+                    latestCustomerSub.status !== 'revision_requested' &&
+                    latestCustomerSub.status !== 'sent_to_creator' &&
+                    latestCustomerSub.status !== 'rejected';
 
                   const hasNewCustomerReply = latestSubmission?.comments?.some(c => {
                     const isExternal = c.reviewType === 'external' || c.authorRole === 'customer' || (c.authorRole !== 'admin' && c.reviewType !== 'internal');
@@ -2058,13 +2085,13 @@ function ContentCalendar({
                     }] : []);
                     if (replies.length > 0) {
                       const lastReply = replies[replies.length - 1];
-                      return lastReply.authorRole === 'admin' || lastReply.authorRole === 'creator';
+                      return (lastReply.authorRole === 'admin' || lastReply.authorRole === 'creator') && !lastReply.readByCustomer;
                     }
                     return false;
                   });
 
                   const customerNotificationText = isCustomerNewVersion
-                    ? "New version to review"
+                    ? (isFirstVersion ? "New content uploaded" : "New version to review")
                     : hasNewCustomerReply
                       ? "New reply"
                       : null;

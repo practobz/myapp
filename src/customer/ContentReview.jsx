@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { MessageSquare, CheckCircle, Edit3, Trash2, Move, ChevronLeft, ChevronRight, Image, Video, AlertCircle, ThumbsUp, Calendar, ChevronDown, ChevronUp, Send, RotateCcw, Search, FileText, Bell, UserCog, User, X, Play, Edit } from 'lucide-react';
+import { MessageSquare, CheckCircle, Edit3, Trash2, Move, ChevronLeft, ChevronRight, Image, Video, AlertCircle, ThumbsUp, Calendar, ChevronDown, ChevronUp, Send, RotateCcw, Search, FileText, Bell, UserCog, User, X, Play, Edit, CheckCheck } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 // Helper functions declared outside ContentReview to avoid closures/state duplication issues
@@ -64,6 +64,66 @@ const parsePlatformPills = (platformValue) => {
       .map(v => v.trim().toLowerCase())
       .filter(Boolean)
   )];
+};
+
+const getCommentReplies = (comment) => {
+  if (Array.isArray(comment?.replies)) return comment.replies;
+  if (comment?.adminReply?.text) {
+    return [{
+      id: 'legacy-reply',
+      authorRole: 'admin',
+      authorName: comment.adminReply.adminName || 'Admin',
+      authorEmail: comment.adminReply.adminEmail || '',
+      message: comment.adminReply.text,
+      timestamp: comment.adminReply.timestamp,
+    }];
+  }
+  return [];
+};
+
+const getCommentThreadRoles = (comment) => {
+  const roles = new Set();
+  const baseRole = String(comment?.authorRole || '').toLowerCase();
+  if (baseRole) {
+    roles.add(baseRole);
+  } else if (comment?.reviewType === 'external') {
+    roles.add('customer');
+  } else if (comment?.reviewType === 'internal') {
+    roles.add('admin');
+  }
+
+  getCommentReplies(comment).forEach((reply) => {
+    const role = String(reply?.authorRole || '').toLowerCase();
+    if (role) roles.add(role);
+  });
+
+  return roles;
+};
+
+const isCommentVisibleToCustomer = (comment) => {
+  const roles = getCommentThreadRoles(comment);
+  const hasAdminCreatorOnly = roles.has('admin') && roles.has('creator') && !roles.has('customer');
+  return !hasAdminCreatorOnly;
+};
+
+const getCustomerVisibleReplies = (comment) => {
+  const rawReplies = getCommentReplies(comment);
+  const visibleReplies = [];
+  let hasCreatorReply = false;
+
+  for (const rep of rawReplies) {
+    const role = String(rep?.authorRole || '').toLowerCase();
+    if (role === 'creator') {
+      hasCreatorReply = true;
+      continue;
+    }
+    if (role === 'admin' && hasCreatorReply) {
+      continue;
+    }
+    visibleReplies.push(rep);
+  }
+
+  return visibleReplies;
 };
 
 const isVisibleToCustomerSubmission = (submission) => {
@@ -311,6 +371,8 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
   const touchFiredRef = useRef(false);
   const videoPausedAtRef = useRef(null); // stores currentTime when video is paused for commenting
   const [imageDimensions, setImageDimensions] = useState({ contentW: 0, contentH: 0, offsetX: 0, offsetY: 0 });
+  const prevContentIdRef = useRef(null);
+  const prevVersionNumberRef = useRef(null);
 
   useEffect(() => {
     if (customerId || customerEmail) {
@@ -343,11 +405,52 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
       );
 
       setComments(uniqueComments);
+
+      // Auto mark unread replies as read for customer
+      let hasUpdates = false;
+      uniqueComments.forEach(comment => {
+        let commentUpdated = false;
+        const updatedReplies = (comment.replies || []).map(rep => {
+          const isIncoming = rep.authorRole !== 'customer';
+          if (isIncoming && !rep.readByCustomer) {
+            commentUpdated = true;
+            return { ...rep, readByCustomer: true };
+          }
+          return rep;
+        });
+
+        if (commentUpdated) {
+          hasUpdates = true;
+          fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(selectedContent.id)}/comments/${comment.id}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              replies: updatedReplies,
+            })
+          }).catch(err => console.error('Auto mark read failed:', err));
+        }
+      });
+      if (hasUpdates) {
+        setTimeout(() => {
+          fetchContentSubmissions();
+        }, 1000);
+      }
+
+      const currentId = selectedContent.id;
+      const currentVersionNumber = version.versionNumber;
+      if (prevContentIdRef.current !== currentId || prevVersionNumberRef.current !== currentVersionNumber) {
+        setSelectedMediaIndex(0); // Reset media index only when version or content actually changes
+        prevContentIdRef.current = currentId;
+        prevVersionNumberRef.current = currentVersionNumber;
+      }
     } else {
       setComments([]);
+      prevContentIdRef.current = null;
+      prevVersionNumberRef.current = null;
     }
     setActiveComment(null);
-    setSelectedMediaIndex(0); // Reset media index when version changes
   }, [selectedContent, selectedVersionIndex]);
 
   // Reset video comment mode and loading state when media, version, or content changes
@@ -364,7 +467,7 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
     const filteredComments = comments.filter(comment => {
       // If comment has mediaIndex, use it; otherwise assume it's for media index 0 (backward compatibility)
       const commentMediaIndex = comment.mediaIndex !== undefined ? comment.mediaIndex : 0;
-      return commentMediaIndex === selectedMediaIndex;
+      return commentMediaIndex === selectedMediaIndex && isCommentVisibleToCustomer(comment);
     });
     setCommentsForCurrentMedia(filteredComments);
   }, [comments, selectedMediaIndex]);
@@ -1126,6 +1229,38 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
     }
   };
 
+  const handleMarkReplyRead = async (commentId, replyId) => {
+    const targetComment = comments.find(c => c.id === commentId);
+    if (!targetComment) return;
+
+    const updatedReplies = (targetComment.replies || []).map(rep => {
+      if (rep.id === replyId) {
+        return { ...rep, readByCustomer: true };
+      }
+      return rep;
+    });
+
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(selectedContent.id)}/comments/${commentId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          replies: updatedReplies,
+        })
+      });
+
+      if (response.ok) {
+        setComments(comments.map((c) => (c.id === commentId ? { ...c, replies: updatedReplies } : c)));
+        setCommentsForCurrentMedia(commentsForCurrentMedia.map((c) => (c.id === commentId ? { ...c, replies: updatedReplies } : c)));
+        await fetchContentSubmissions();
+      }
+    } catch (error) {
+      console.error('Error marking reply read:', error);
+    }
+  };
+
   const getAssignedCreator = (item) => {
     if (calendars && calendars.length > 0 && item.calendar_id) {
       const calendar = calendars.find(cal =>
@@ -1819,7 +1954,7 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
                                 }] : []);
                                 if (replies.length > 0) {
                                   const lastReply = replies[replies.length - 1];
-                                  return lastReply.authorRole === 'admin' || lastReply.authorRole === 'creator';
+                                  return (lastReply.authorRole === 'admin' || lastReply.authorRole === 'creator') && !lastReply.readByCustomer;
                                 }
                                 return false;
                               });
@@ -1922,7 +2057,7 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
                                     }] : []);
                                     if (replies.length > 0) {
                                       const lastReply = replies[replies.length - 1];
-                                      const isNewReply = lastReply.authorRole === 'admin' || lastReply.authorRole === 'creator';
+                                      const isNewReply = (lastReply.authorRole === 'admin' || lastReply.authorRole === 'creator') && !lastReply.readByCustomer;
                                       if (isNewReply) {
                                         return (
                                           <span className="inline-flex items-center gap-0.5 ml-1 px-1 py-0.2 bg-red-100 text-red-700 rounded text-[8px] font-extrabold animate-pulse">
@@ -2028,14 +2163,7 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
                             </div>
 
                             {(() => {
-                              const replies = comment.replies || (comment.adminReply ? [{
-                                id: 'legacy-reply',
-                                authorRole: 'admin',
-                                authorName: comment.adminReply.adminName || 'Admin',
-                                authorEmail: comment.adminReply.adminEmail || '',
-                                message: comment.adminReply.text,
-                                timestamp: comment.adminReply.timestamp
-                              }] : []);
+                              const replies = getCustomerVisibleReplies(comment);
 
                               return replies.map((rep, rIdx) => {
                                 const isRepOutgoing = rep.authorRole === 'admin';
@@ -2072,6 +2200,23 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
                                         >
                                           <MessageSquare className="h-2.5 w-2.5" /> Reply
                                         </button>
+                                        {rep.authorRole !== 'customer' && !rep.readByCustomer && (
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleMarkReplyRead(comment.id, rep.id);
+                                            }}
+                                            className="flex items-center gap-0.5 text-[9px] text-gray-500 hover:text-blue-500 transition-colors font-medium border border-gray-200 rounded px-1.5 py-0.5 bg-gray-50 hover:bg-blue-50"
+                                            title="Mark as Read"
+                                          >
+                                            <CheckCheck className="h-2.5 w-2.5 text-gray-400" /> Mark Read
+                                          </button>
+                                        )}
+                                        {rep.authorRole !== 'customer' && rep.readByCustomer && (
+                                          <span className="flex items-center text-[9px] text-blue-500 font-medium gap-0.5" title="Read">
+                                            <CheckCheck className="h-2.5 w-2.5 text-blue-500" /> Read
+                                          </span>
+                                        )}
                                         <span className="text-[9px] text-gray-500/80">
                                           {rep.timestamp ? new Date(rep.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                                         </span>
@@ -2225,30 +2370,7 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
                   {/* Threaded replies */}
                   <div className="mt-1.5 max-h-32 overflow-y-auto pl-2 border-l border-gray-200 space-y-1">
                     {(() => {
-                      const rawReplies = comment.replies || (comment.adminReply ? [{
-                        id: 'legacy-reply',
-                        authorRole: 'admin',
-                        authorName: comment.adminReply.adminName || 'Admin',
-                        authorEmail: comment.adminReply.adminEmail || '',
-                        message: comment.adminReply.text,
-                        timestamp: comment.adminReply.timestamp
-                      }] : []);
-                      
-                      const replies = [];
-                      let hasCreatorReply = false;
-                      for (const rep of rawReplies) {
-                        if (rep.authorRole === 'creator') {
-                          hasCreatorReply = true;
-                        } else if (rep.authorRole === 'customer') {
-                          replies.push(rep);
-                        } else if (rep.authorRole === 'admin') {
-                          if (!hasCreatorReply) {
-                            replies.push(rep);
-                          }
-                        } else {
-                          replies.push(rep); // fallback
-                        }
-                      }
+                      const replies = getCustomerVisibleReplies(comment);
 
                       return replies.map((rep, rIdx) => {
                         return (

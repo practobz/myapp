@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams, useLocation } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
-import { ArrowLeft, Upload, Image, X, Check, CheckCircle, FileText, Calendar, Clock, Palette, Send, MapPin, Tag, MessageSquare, Play, Video, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, User, ShieldCheck, AlertCircle, History, Search, Globe, Plus, Edit3 } from 'lucide-react';
+import { ArrowLeft, Upload, Image, X, Check, CheckCircle, FileText, Calendar, Clock, Palette, Send, MapPin, Tag, MessageSquare, Play, Video, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, User, ShieldCheck, AlertCircle, History, Search, Globe, Plus, Edit3, Trash2, CheckCheck } from 'lucide-react';
 import { Facebook, Instagram, Linkedin, Youtube, Twitter } from 'lucide-react';
 import ContentCreatorLayout from './Layout';
 import { validateMediaForPlatforms, validateThumbnail, hasMixedContent, hasMultipleVideos, validateMediaSelectionForPostType } from './mediaValidation';
@@ -166,6 +166,25 @@ function ContentUpload() {
   }, [adminsList, assignment]);
 
   const creatorEmail = getCreatorEmail();
+  const currentUser = useMemo(() => {
+    try {
+      const raw = localStorage.getItem('user');
+      const parsed = raw ? JSON.parse(raw) : null;
+      return {
+        email: String(parsed?.email || '').toLowerCase(),
+        name: String(parsed?.name || '').toLowerCase(),
+      };
+    } catch {
+      return { email: '', name: '' };
+    }
+  }, []);
+  const currentUserEmail = currentUser.email || creatorEmail;
+  const normalizedPostType = useMemo(() => (assignment?.postType || '').toLowerCase(), [assignment?.postType]);
+  const isSingleMediaPostType = useMemo(() => ['post', 'reel', 'video'].includes(normalizedPostType), [normalizedPostType]);
+  const canAddMoreMedia = useMemo(
+    () => !isSingleMediaPostType || uploadedFiles.length < 1,
+    [isSingleMediaPostType, uploadedFiles.length]
+  );
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -793,11 +812,45 @@ function ContentUpload() {
         return activeTab === 'admin' ? (isAdminComment && !c.discarded) : (!isAdminComment && !c.discarded);
       });
       setCommentsForVersion(filteredComments);
+
+      // Auto mark unread replies as read for creator / admin
+      if (assignment) {
+        filteredComments.forEach(comment => {
+          let commentUpdated = false;
+          const updatedReplies = (comment.replies || []).map(rep => {
+            if (isAdmin) {
+              const isIncoming = rep.authorRole === 'customer' || rep.authorRole === 'creator';
+              if (isIncoming && !rep.readByAdmin) {
+                commentUpdated = true;
+                return { ...rep, readByAdmin: true };
+              }
+            } else {
+              const isIncoming = rep.authorRole === 'admin' || rep.authorRole === 'customer';
+              if (isIncoming && !rep.readByCreator) {
+                commentUpdated = true;
+                return { ...rep, readByCreator: true };
+              }
+            }
+            return rep;
+          });
+
+          if (commentUpdated) {
+            fetch(
+              `${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(assignment.id)}/comments/${comment.id}`,
+              {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ replies: updatedReplies }),
+              }
+            ).catch(err => console.error('Auto mark read failed:', err));
+          }
+        });
+      }
     } else {
       setCommentsForVersion([]);
     }
     setActiveVersionComment(null);
-  }, [previousVersions, selectedVersionIndex, activeTab]);
+  }, [previousVersions, selectedVersionIndex, activeTab, isAdmin, assignment]);
 
   useEffect(() => {
     const filtered = commentsForVersion.filter(c => {
@@ -875,12 +928,16 @@ function ContentUpload() {
     if (!replyText.trim() || !assignment) return;
     const comment = commentsForCurrentMedia.find(c => c.id === commentId);
     if (!comment) return;
+    if (isAdmin && !canReplyToEntry(comment)) {
+      alert('You cannot reply to your own admin comment.');
+      return;
+    }
     setReplySubmitting(true);
     const newReply = {
       id: uuidv4(),
-      authorRole: 'creator',
-      authorName: 'Creator',
-      authorEmail: creatorEmail || '',
+      authorRole: isAdmin ? 'admin' : 'creator',
+      authorName: isAdmin ? (currentUser.name || 'Admin') : 'Creator',
+      authorEmail: currentUserEmail || '',
       message: replyText.trim(),
       timestamp: new Date().toISOString(),
     };
@@ -911,7 +968,7 @@ function ContentUpload() {
     const replyPayload = {
       reply: {
         text: replyText.trim(),
-        creatorEmail: creatorEmail,
+        creatorEmail: currentUserEmail,
         timestamp: new Date().toISOString(),
       },
       replies: updatedReplies,
@@ -931,6 +988,139 @@ function ContentUpload() {
       console.error('Failed to save reply:', err);
     } finally {
       setReplySubmitting(false);
+    }
+  };
+
+  const handleMarkReplyRead = async (commentId, replyId) => {
+    const comment = commentsForVersion.find(c => c.id === commentId);
+    if (!comment || !assignment) return;
+
+    const updatedReplies = (comment.replies || []).map(rep => {
+      if (rep.id === replyId) {
+        return { ...rep, readByCreator: true };
+      }
+      return rep;
+    });
+
+    const replyPayload = {
+      replies: updatedReplies,
+    };
+    try {
+      await fetch(
+        `${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(assignment.id)}/comments/${commentId}`,
+        { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(replyPayload) }
+      );
+      const updated = { ...comment, ...replyPayload };
+      setCommentsForVersion(commentsForVersion.map(c => c.id === commentId ? updated : c));
+      setCommentsForCurrentMedia(commentsForCurrentMedia.map(c => c.id === commentId ? updated : c));
+    } catch (err) {
+      console.error('Failed to mark reply read:', err);
+    }
+  };
+
+  const isCreatorOwnedEntry = (entry) => {
+    if (!entry) return false;
+    const role = String(entry.authorRole || '').toLowerCase();
+    const entryEmail = String(entry.authorEmail || entry.creatorEmail || '').toLowerCase();
+    if (role === 'creator') return true;
+    return Boolean(creatorEmail && entryEmail && entryEmail === creatorEmail);
+  };
+
+  const isCurrentAdminOwnEntry = (entry) => {
+    if (!entry || !isAdmin) return false;
+    const role = String(entry.authorRole || '').toLowerCase();
+    if (role !== 'admin') return false;
+
+    const entryEmail = String(entry.authorEmail || entry.creatorEmail || '').toLowerCase();
+    if (entryEmail && currentUserEmail) return entryEmail === currentUserEmail;
+
+    const entryName = String(entry.authorName || '').toLowerCase();
+    if (entryName && currentUser.name) return entryName === currentUser.name;
+
+    return false;
+  };
+
+  const canReplyToEntry = (entry) => {
+    if (!entry) return false;
+    if (!isAdmin && entry.reviewType === 'external') return false;
+    if (!isAdmin) return true;
+    return !isCurrentAdminOwnEntry(entry);
+  };
+
+  const handleVersionCommentDelete = async (commentId) => {
+    if (!assignment || !commentId) return;
+    if (!window.confirm('Delete this comment? This action cannot be undone.')) return;
+
+    try {
+      const res = await fetch(
+        `${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(assignment.id)}/comments/${commentId}`,
+        { method: 'DELETE' }
+      );
+      if (!res.ok) throw new Error('Failed to delete comment');
+
+      setCommentsForVersion(prev => prev.filter(c => c.id !== commentId));
+      setCommentsForCurrentMedia(prev => prev.filter(c => c.id !== commentId));
+
+      if (activeVersionComment === commentId) {
+        setActiveVersionComment(null);
+      }
+      if (replyingToComment === commentId) {
+        setReplyingToComment(null);
+        setEditingReplyId(null);
+        setReplyText('');
+      }
+    } catch (err) {
+      console.error('Failed to delete comment:', err);
+      alert('Failed to delete comment. Please try again.');
+    }
+  };
+
+  const handleVersionReplyDelete = async (commentId, replyId) => {
+    if (!assignment || !commentId || !replyId) return;
+    if (!window.confirm('Delete this reply? This action cannot be undone.')) return;
+
+    const parentComment = commentsForCurrentMedia.find(c => c.id === commentId);
+    if (!parentComment) return;
+
+    const existingReplies = parentComment.replies || (parentComment.reply ? [{
+      id: 'legacy-creator-reply',
+      authorRole: 'creator',
+      authorName: parentComment.reply.creatorName || 'Creator',
+      authorEmail: parentComment.reply.creatorEmail || '',
+      message: parentComment.reply.text,
+      timestamp: parentComment.reply.timestamp
+    }] : []);
+
+    const updatedReplies = existingReplies.filter(r => r.id !== replyId);
+    const latestCreatorReply = [...updatedReplies].reverse().find(r => String(r.authorRole || '').toLowerCase() === 'creator');
+
+    const updatePayload = {
+      replies: updatedReplies,
+      reply: latestCreatorReply ? {
+        text: latestCreatorReply.message || latestCreatorReply.text || '',
+        creatorEmail: latestCreatorReply.authorEmail || creatorEmail || '',
+        timestamp: latestCreatorReply.timestamp || new Date().toISOString(),
+      } : null,
+    };
+
+    try {
+      const res = await fetch(
+        `${process.env.REACT_APP_API_URL}/api/content-submissions/${encodeURIComponent(assignment.id)}/comments/${commentId}`,
+        { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updatePayload) }
+      );
+      if (!res.ok) throw new Error('Failed to delete reply');
+
+      const nextComment = { ...parentComment, ...updatePayload };
+      setCommentsForVersion(prev => prev.map(c => c.id === commentId ? nextComment : c));
+      setCommentsForCurrentMedia(prev => prev.map(c => c.id === commentId ? nextComment : c));
+
+      if (editingReplyId === replyId) {
+        setEditingReplyId(null);
+        setReplyText('');
+      }
+    } catch (err) {
+      console.error('Failed to delete reply:', err);
+      alert('Failed to delete reply. Please try again.');
     }
   };
 
@@ -1582,6 +1772,7 @@ function ContentUpload() {
   };
 
   const onButtonClick = () => {
+    if (!canAddMoreMedia) return;
     fileInputRef.current?.click();
   };
 
@@ -2131,7 +2322,9 @@ function ContentUpload() {
                           <button
                             type="button"
                             onClick={(e) => { e.stopPropagation(); onButtonClick(); }}
-                            className="inline-flex items-center px-4 py-2 text-sm font-medium bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
+                            disabled={!canAddMoreMedia}
+                            title={canAddMoreMedia ? 'Add media' : 'Only 1 media is allowed for this post type'}
+                            className="inline-flex items-center px-4 py-2 text-sm font-medium bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             <Image className="h-4 w-4 mr-2" />
                             Create first version
@@ -2276,14 +2469,16 @@ function ContentUpload() {
                           ))}
 
                           {/* "+" add-media tile */}
-                          <button
-                            type="button"
-                            onClick={onButtonClick}
-                            className="w-16 h-16 rounded-lg border-2 border-dashed border-gray-300 hover:border-purple-400 hover:bg-purple-50 flex items-center justify-center transition-all flex-shrink-0"
-                            title="Add media"
-                          >
-                            <Plus className="h-6 w-6 text-gray-400 group-hover:text-purple-500" />
-                          </button>
+                          {canAddMoreMedia && (
+                            <button
+                              type="button"
+                              onClick={onButtonClick}
+                              className="w-16 h-16 rounded-lg border-2 border-dashed border-gray-300 hover:border-purple-400 hover:bg-purple-50 flex items-center justify-center transition-all flex-shrink-0"
+                              title="Add media"
+                            >
+                              <Plus className="h-6 w-6 text-gray-400 group-hover:text-purple-500" />
+                            </button>
+                          )}
                         </div>
                       )}
                     </>
@@ -2749,7 +2944,7 @@ function ContentUpload() {
                                             })}
 
                                             {/* "+" add-media tile (only in edit/upload mode when isEditable is true) */}
-                                            {isEditable && (
+                                            {isEditable && canAddMoreMedia && (
                                               <button
                                                 type="button"
                                                 onClick={onButtonClick}
@@ -2865,6 +3060,14 @@ function ContentUpload() {
                                         {idx + 1}
                                       </span>
                                       <div className={`shadow-sm rounded-2xl rounded-tl-sm px-3 py-2 flex flex-col relative ${activeVersionComment === comment.id ? 'bg-purple-100 border border-purple-200' : 'bg-white border border-gray-200'}`}>
+                                        <div className="flex items-center gap-1 mb-0.5">
+                                          <span className="text-[9px] font-bold text-blue-700">
+                                            {comment.authorRole === 'admin' ? 'Admin' : (comment.authorRole === 'customer' || comment.reviewType === 'external' ? 'Customer' : 'Creator')}
+                                          </span>
+                                          {comment.authorEmail && (
+                                            <span className="text-[9px] text-gray-500 truncate max-w-[110px]">• {comment.authorEmail}</span>
+                                          )}
+                                        </div>
                                         <p className="text-[13px] text-gray-800 break-words leading-snug">
                                           {comment.message || comment.comment}
                                         </p>
@@ -2890,36 +3093,50 @@ function ContentUpload() {
                                             </button>
                                           )}
 
-                                          <button
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              if (replyingToComment === comment.id && !editingReplyId) {
-                                                setReplyingToComment(null);
-                                                setEditingReplyId(null);
-                                                setReplyText('');
-                                              } else {
-                                                setReplyingToComment(comment.id);
-                                                setEditingReplyId(null);
-                                                setReplyText('');
-                                              }
-                                            }}
-                                            className="flex items-center gap-0.5 text-[10px] text-indigo-500 hover:text-indigo-700 transition-colors font-medium ml-1"
-                                          >
-                                            <MessageSquare className="h-3 w-3" /> Reply
-                                          </button>
+                                          {canReplyToEntry(comment) && (
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (replyingToComment === comment.id) {
+                                                  setReplyingToComment(null);
+                                                  setReplyText('');
+                                                  setEditingReplyId(null);
+                                                } else {
+                                                  setReplyingToComment(comment.id);
+                                                  setReplyText('');
+                                                  setEditingReplyId(null);
+                                                }
+                                              }}
+                                              className="flex items-center gap-0.5 text-[10px] text-indigo-500 hover:text-indigo-700 transition-colors font-medium ml-1"
+                                            >
+                                              <MessageSquare className="h-3 w-3" /> Reply
+                                            </button>
+                                          )}
+                                          {isCreatorOwnedEntry(comment) && (
+                                            <button
+                                              onClick={(e) => { e.stopPropagation(); handleVersionCommentDelete(comment.id); }}
+                                              className="flex items-center gap-0.5 text-[10px] text-red-500 hover:text-red-700 transition-colors font-medium ml-1"
+                                            >
+                                              <Trash2 className="h-3 w-3" /> Delete
+                                            </button>
+                                          )}
                                         </div>
                                       </div>
                                     </div>
 
                                     {/* Existing replies */}
                                     {(() => {
-                                      const replies = comment.replies || (comment.reply ? [{
+                                      let replies = comment.replies || (comment.reply ? [{
                                         id: 'legacy-creator-reply',
                                         authorRole: 'creator',
                                         authorName: comment.reply.creatorName || 'Creator',
                                         message: comment.reply.text,
                                         timestamp: comment.reply.timestamp
                                       }] : []);
+
+                                      if (!isAdmin && comment.reviewType === 'external') {
+                                        replies = [];
+                                      }
 
                                       return replies.map((rep, rIdx) => {
                                         const isCreator = rep.authorRole === 'creator';
@@ -2939,23 +3156,42 @@ function ContentUpload() {
                                               <p className="text-[13px] text-gray-800 break-words leading-snug">{rep.message || rep.text}</p>
 
                                               <div className="flex items-center justify-end gap-3 mt-1">
-                                                <button
-                                                  onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    if (replyingToComment === comment.id) {
-                                                      setReplyingToComment(null);
-                                                      setReplyText('');
-                                                      setEditingReplyId(null);
-                                                    } else {
-                                                      setReplyingToComment(comment.id);
-                                                      setReplyText('');
-                                                      setEditingReplyId(null);
-                                                    }
-                                                  }}
-                                                  className="flex items-center gap-0.5 text-[9px] text-indigo-500 hover:text-indigo-700 transition-colors font-medium"
-                                                >
-                                                  <MessageSquare className="h-2.5 w-2.5" /> Reply
-                                                </button>
+                                                {canReplyToEntry(rep) && (
+                                                  <button
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      if (replyingToComment === comment.id) {
+                                                        setReplyingToComment(null);
+                                                        setReplyText('');
+                                                        setEditingReplyId(null);
+                                                      } else {
+                                                        setReplyingToComment(comment.id);
+                                                        setReplyText('');
+                                                        setEditingReplyId(null);
+                                                      }
+                                                    }}
+                                                    className="flex items-center gap-0.5 text-[9px] text-indigo-500 hover:text-indigo-700 transition-colors font-medium"
+                                                  >
+                                                    <MessageSquare className="h-2.5 w-2.5" /> Reply
+                                                  </button>
+                                                )}
+                                                {rep.authorRole !== 'creator' && !rep.readByCreator && (
+                                                  <button
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      handleMarkReplyRead(comment.id, rep.id);
+                                                    }}
+                                                    className="flex items-center gap-0.5 text-[9px] text-gray-500 hover:text-blue-500 transition-colors font-medium border border-gray-200 rounded px-1.5 py-0.5 bg-gray-50 hover:bg-blue-50"
+                                                    title="Mark as Read"
+                                                  >
+                                                    <CheckCheck className="h-2.5 w-2.5 text-gray-400" /> Mark Read
+                                                  </button>
+                                                )}
+                                                {rep.authorRole !== 'creator' && rep.readByCreator && (
+                                                  <span className="flex items-center text-[9px] text-blue-500 font-medium gap-0.5" title="Read">
+                                                    <CheckCheck className="h-2.5 w-2.5 text-blue-500" /> Read
+                                                  </span>
+                                                )}
                                                 <span className="text-[9px] text-gray-500">
                                                   {rep.timestamp ? new Date(rep.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                                                 </span>
@@ -2971,6 +3207,17 @@ function ContentUpload() {
                                                     className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] text-emerald-700 hover:text-emerald-900 font-semibold"
                                                   >
                                                     Edit
+                                                  </button>
+                                                )}
+                                                {isCreatorOwnedEntry(rep) && (
+                                                  <button
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      handleVersionReplyDelete(comment.id, rep.id || '');
+                                                    }}
+                                                    className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] text-red-600 hover:text-red-800 font-semibold"
+                                                  >
+                                                    Delete
                                                   </button>
                                                 )}
                                               </div>

@@ -5,7 +5,7 @@ import {
   Send, Image, MessageSquare, ChevronLeft, ChevronRight,
   Trash2, Check, X, CornerDownRight, UserCog, User, MessageCircle,
   Clock, CheckCircle, XCircle, Loader2, Facebook, Instagram, Video, RotateCcw,
-  Edit3, Move, AlertCircle, Upload
+  Edit3, Move, AlertCircle, Upload, CheckCheck
 } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_API_URL;
@@ -103,6 +103,7 @@ const CommentMarker = memo(({
   adminUser,
 }) => {
   const isAdmin = comment.authorRole === 'admin';
+  const isInternal = isAdmin || comment.reviewType === 'internal';
   const dotBg = comment.discarded ? '#94a3b8' : (isAdmin ? '#7c3aed' : (comment.done ? '#10b981' : '#ef4444'));
   const dotBorder = isAdmin ? '#a78bfa' : '#fff';
   const isReplying = replyingTo === comment.id;
@@ -128,6 +129,7 @@ const CommentMarker = memo(({
 
   return (
     <div
+      data-cdv-marker="true"
       style={{
         position: 'absolute',
         top: pinTop,
@@ -257,16 +259,13 @@ const CommentMarker = memo(({
                   <CornerDownRight className="h-2.5 w-2.5" />Reply
                 </button>
               )}
-              {!comment.done && (
-                <button className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] bg-green-50 text-green-700 rounded-md hover:bg-green-100"
-                  onClick={(e) => { e.stopPropagation(); onMarkDone(comment.id); }}>
-                  <Check className="h-2.5 w-2.5" />Done
+
+              {!isInternal && (
+                <button className={`flex items-center gap-0.5 px-2 py-0.5 text-[10px] rounded-md font-semibold ${comment.discarded ? 'bg-orange-100 text-orange-700' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'}`}
+                  onClick={(e) => { e.stopPropagation(); onToggleDiscard(comment.id); }}>
+                  <XCircle className="h-2.5 w-2.5" />{comment.discarded ? 'Discarded' : 'Discard'}
                 </button>
               )}
-              <button className={`flex items-center gap-0.5 px-2 py-0.5 text-[10px] rounded-md font-semibold ${comment.discarded ? 'bg-orange-100 text-orange-700' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'}`}
-                onClick={(e) => { e.stopPropagation(); onToggleDiscard(comment.id); }}>
-                <XCircle className="h-2.5 w-2.5" />{comment.discarded ? 'Discarded' : 'Discard'}
-              </button>
               {isAdmin && (
                 <button className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] bg-red-50 text-red-500 rounded-md hover:bg-red-100 ml-auto"
                   onClick={(e) => { e.stopPropagation(); onDelete(comment.id); }}>
@@ -414,6 +413,22 @@ function ContentDetailView({
   const [addingComment, setAddingComment] = useState(false);
   const videoRef = useRef(null);
   const videoPausedAtRef = useRef(null);
+  const prevAdminContentIdRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (!activeComment) return;
+      const isInsideMarker = e.target.closest('[data-cdv-marker]');
+      const isInsideSidebarComment = e.target.closest('[data-cdv-sidebar-comment]');
+      if (!isInsideMarker && !isInsideSidebarComment) {
+        setActiveComment(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [activeComment]);
 
   // ── Reply state ──────────────────────────────────────────────────────────
   const [replyingTo, setReplyingTo] = useState(null);
@@ -446,7 +461,8 @@ function ContentDetailView({
   const handleFinalizeFeedback = useCallback(async (option) => {
     const vId = selectedContent?.versions?.[selectedVersionIndex]?.id;
     if (!vId) return;
-    if (!hasPendingCommentsToSend) return;
+    const isCustomerFeedbackPending = selectedContent?.versions?.[selectedVersionIndex]?.status === 'customer_feedback_pending_admin';
+    if (!hasPendingCommentsToSend && !isCustomerFeedbackPending) return;
     setFinalizingFeedback(true);
     const targetStatus = option === 'direct' ? 'changes_requested_customer_approved_admin' : 'revision_requested';
     try {
@@ -477,7 +493,7 @@ function ContentDetailView({
     } finally {
       setFinalizingFeedback(false);
     }
-  }, [selectedContent, selectedVersionIndex, onRefresh, hasPendingCommentsToSend]);
+  }, [selectedContent, selectedVersionIndex, onRefresh, hasPendingCommentsToSend, API_URL]);
 
   const handleApproveAdmin = useCallback(async () => {
     const vId = selectedContent?.versions?.[selectedVersionIndex]?.id;
@@ -669,7 +685,12 @@ function ContentDetailView({
   useEffect(() => {
     if (selectedContent?.versions?.length) {
       setSelectedVersionIndex(selectedContent.versions.length - 1);
-      setSelectedMediaIndex(0);
+      
+      const currentId = selectedContent.id;
+      if (prevAdminContentIdRef.current !== currentId) {
+        setSelectedMediaIndex(0);
+        prevAdminContentIdRef.current = currentId;
+      }
       setAddingComment(false);
     }
   }, [selectedContent]);
@@ -685,6 +706,29 @@ function ContentDetailView({
     }));
     const unique = normalized.filter((c, i, arr) => i === arr.findIndex(x => x.id === c.id));
     setCommentsForVersion(unique);
+
+    // Auto mark unread replies as read for admin
+    if (selectedContent?.id) {
+      unique.forEach(comment => {
+        let commentUpdated = false;
+        const updatedReplies = (comment.replies || []).map(rep => {
+          const isIncoming = rep.authorRole === 'customer' || rep.authorRole === 'creator';
+          if (isIncoming && !rep.readByAdmin) {
+            commentUpdated = true;
+            return { ...rep, readByAdmin: true };
+          }
+          return rep;
+        });
+
+        if (commentUpdated) {
+          fetch(`${API_URL}/api/content-submissions/${encodeURIComponent(selectedContent.id)}/comments/${comment.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ replies: updatedReplies }),
+          }).catch(err => console.error('Auto mark read failed:', err));
+        }
+      });
+    }
   }, [selectedContent, selectedVersionIndex]);
 
   useEffect(() => {
@@ -722,6 +766,8 @@ function ContentDetailView({
     const latestStatus = (latestVersion.status || '').toLowerCase();
     return latestVersion.approved_by_customer === true || approvedStatuses.includes(latestStatus);
   }, [selectedContent]);
+
+  const isCommentingLocked = isCustomerApprovedForPosting;
 
   const hasInternalReviewHistory = useMemo(() => {
     const versions = selectedContent?.versions || [];
@@ -799,6 +845,7 @@ function ContentDetailView({
 
   // ── Image click → place new marker or reposition ───────────────────────
   const handleImageClick = useCallback(async (e) => {
+    if (isCommentingLocked) return;
     e.preventDefault();
     e.stopPropagation();
     const repositioning = commentsForCurrentMedia.find(c => c.repositioning);
@@ -847,7 +894,7 @@ function ContentDetailView({
     };
     setCommentsForVersion(prev => [...prev, newComment]);
     setActiveComment(newComment.id);
-  }, [commentsForCurrentMedia, adminUser, currentVersion, selectedMediaIndex, currentMedia, isVideoUrl]);
+  }, [commentsForCurrentMedia, adminUser, currentVersion, selectedMediaIndex, currentMedia, isVideoUrl, isCommentingLocked]);
 
   const handleCommentChange = useCallback((id, text) => {
     patchCommentLocally(id, { comment: text });
@@ -964,12 +1011,37 @@ function ContentDetailView({
     } catch (err) { console.error('Error deleting comment:', err); }
   }, [selectedContent, selectedVersionIndex, removeCommentLocally, onRefresh]);
 
+  const isSameAdminAuthor = useCallback((entry) => {
+    if (!entry) return false;
+
+    const entryEmail = String(entry.authorEmail || entry.adminEmail || '').toLowerCase();
+    const adminEmail = String(adminUser?.email || '').toLowerCase();
+    if (entryEmail && adminEmail) return entryEmail === adminEmail;
+
+    const entryName = String(entry.authorName || '').toLowerCase();
+    const adminName = String(adminUser?.name || '').toLowerCase();
+    if (entryName && adminName) return entryName === adminName;
+
+    return false;
+  }, [adminUser]);
+
+  const canAdminReplyToEntry = useCallback((entry) => {
+    if (!entry) return false;
+    const role = String(entry.authorRole || '').toLowerCase();
+    if (role !== 'admin') return true;
+    return !isSameAdminAuthor(entry);
+  }, [isSameAdminAuthor]);
+
   // ── Admin reply ──────────────────────────────────────────────────────────
   const handleStartReply = useCallback((commentId) => {
+    const targetComment = commentsForCurrentMedia.find(c => c.id === commentId);
+    if (!targetComment) {
+      return;
+    }
     setReplyingTo(commentId);
     setReplyText('');
     setActiveComment(commentId);
-  }, []);
+  }, [commentsForCurrentMedia]);
 
   const handleCancelReply = useCallback(() => {
     setReplyingTo(null);
@@ -983,6 +1055,14 @@ function ContentDetailView({
     if (!targetComment) {
       setSavingReply(false);
       return;
+    }
+    if (!canAdminReplyToEntry(targetComment)) {
+      const hasOtherReplies = (targetComment.replies || []).some(r => r.authorRole !== 'admin');
+      if (!hasOtherReplies) {
+        setSavingReply(false);
+        alert('You cannot reply to your own admin comment.');
+        return;
+      }
     }
     const newReply = {
       id: uuidv4(),
@@ -1017,7 +1097,32 @@ function ContentDetailView({
     } finally {
       setSavingReply(false);
     }
-  }, [replyText, adminUser, selectedContent, commentsForVersion, patchCommentLocally, onRefresh]);
+  }, [replyText, adminUser, selectedContent, commentsForVersion, patchCommentLocally, onRefresh, canAdminReplyToEntry]);
+
+  const handleMarkReplyRead = useCallback(async (commentId, replyId) => {
+    const targetComment = commentsForVersion.find(c => c.id === commentId);
+    if (!targetComment) return;
+
+    const updatedReplies = (targetComment.replies || []).map(rep => {
+      if (rep.id === replyId) {
+        return { ...rep, readByAdmin: true };
+      }
+      return rep;
+    });
+
+    patchCommentLocally(commentId, { replies: updatedReplies });
+
+    try {
+      await fetch(`${API_URL}/api/content-submissions/${encodeURIComponent(selectedContent.id)}/comments/${commentId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ replies: updatedReplies }),
+      });
+      onRefresh?.();
+    } catch (err) {
+      console.error('Error marking reply read:', err);
+    }
+  }, [commentsForVersion, selectedContent, patchCommentLocally, onRefresh]);
 
   if (!selectedContent) return null;
 
@@ -1237,6 +1342,9 @@ function ContentDetailView({
                         <p className="text-[10px] text-gray-400">
                           {commentsForCurrentMedia.length} comment{commentsForCurrentMedia.length !== 1 ? 's' : ''} on this media
                         </p>
+                        {isCommentingLocked && (
+                          <span className="text-[10px] text-amber-600 font-medium">Commenting locked after customer approval</span>
+                        )}
                       </div>
 
                       {/* Media + markers */}
@@ -1249,9 +1357,9 @@ function ContentDetailView({
                                 data-cdv-media
                                 src={currentMedia.url}
                                 controls
-                                className="max-w-full h-auto max-h-[50vh] sm:max-h-[60vh] lg:max-h-[70vh] rounded-lg shadow border border-gray-200 object-contain transition-all cursor-crosshair hover:ring-2 hover:ring-purple-400 hover:ring-offset-1"
+                                className={`max-w-full h-auto max-h-[50vh] sm:max-h-[60vh] lg:max-h-[70vh] rounded-lg shadow border border-gray-200 object-contain transition-all ${isCommentingLocked ? 'cursor-default' : 'cursor-crosshair hover:ring-2 hover:ring-purple-400 hover:ring-offset-1'}`}
                                 loading="lazy"
-                                onClick={handleImageClick}
+                                onClick={!isCommentingLocked ? handleImageClick : undefined}
                               />
                             ) : (
                               <img
@@ -1259,10 +1367,10 @@ function ContentDetailView({
                                 ref={imgRef}
                                 src={currentMedia.url}
                                 alt={`V${currentVersion.versionNumber} M${selectedMediaIndex + 1}`}
-                                className="max-w-full h-auto max-h-[50vh] sm:max-h-[60vh] lg:max-h-[70vh] rounded-lg shadow border border-gray-200 object-contain transition-all cursor-crosshair hover:ring-2 hover:ring-purple-400 hover:ring-offset-1"
+                                className={`max-w-full h-auto max-h-[50vh] sm:max-h-[60vh] lg:max-h-[70vh] rounded-lg shadow border border-gray-200 object-contain transition-all ${isCommentingLocked ? 'cursor-default' : 'cursor-crosshair hover:ring-2 hover:ring-purple-400 hover:ring-offset-1'}`}
                                 loading="lazy"
                                 onLoad={handleImgLoad}
-                                onClick={handleImageClick}
+                                onClick={!isCommentingLocked ? handleImageClick : undefined}
                               />
                             )
                           ) : (
@@ -1431,13 +1539,13 @@ function ContentDetailView({
 
                       <button
                         onClick={() => handleFinalizeFeedback('finalized')}
-                        disabled={finalizingFeedback || !hasPendingCommentsToSend}
+                        disabled={finalizingFeedback || (!hasPendingCommentsToSend && currentVersion?.status !== 'customer_feedback_pending_admin')}
                         className="w-full py-2 bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-lg text-xs font-semibold hover:from-orange-600 hover:to-red-600 shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
                       >
                         {finalizingFeedback ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
                         Send to Creator (Request Revisions)
                       </button>
-                      {!hasPendingCommentsToSend && (
+                      {!hasPendingCommentsToSend && currentVersion?.status !== 'customer_feedback_pending_admin' && (
                         <p className="text-[11px] text-gray-500">No pending comments to send.</p>
                       )}
                       <button
@@ -1481,7 +1589,12 @@ function ContentDetailView({
                           )}
                         </button>
                       ) : (
-                        (currentVersion?.approved_by_customer === true || currentVersion?.status === 'approved_customer' || currentVersion?.status === 'approved_both' || currentVersion?.status === 'published' || currentVersion?.status === 'scheduled') ? (
+                        (currentVersion?.status === 'revision_requested' || currentVersion?.status === 'sent_to_creator' || currentVersion?.status === 'changes_requested') ? (
+                          <div className="text-[11px] text-purple-700 bg-purple-50 p-2 rounded-lg border border-purple-150 font-medium flex items-center gap-1.5">
+                            <Clock className="h-3.5 w-3.5 text-purple-600 flex-shrink-0" />
+                            Revision requested. Waiting for creator to upload a new version.
+                          </div>
+                        ) : (currentVersion?.approved_by_customer === true || currentVersion?.status === 'approved_customer' || currentVersion?.status === 'approved_both' || currentVersion?.status === 'published' || currentVersion?.status === 'scheduled') ? (
                           <div className="text-[11px] text-emerald-700 bg-emerald-50 p-2 rounded-lg border border-emerald-150 font-medium flex items-center gap-1.5">
                             <CheckCircle className="h-3.5 w-3.5 text-emerald-600 flex-shrink-0" />
                             This version has been approved by the customer.
@@ -1543,7 +1656,9 @@ function ContentDetailView({
                     <MessageSquare className="h-5 w-5 text-gray-400" />
                   </div>
                   <p className="text-gray-500 text-xs">No comments yet</p>
-                  <p className="text-[10px] text-gray-400 mt-0.5">Click anywhere on the media to pin a comment</p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">
+                    {isCommentingLocked ? 'Commenting is disabled after customer approval' : 'Click anywhere on the media to pin a comment'}
+                  </p>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -1555,6 +1670,7 @@ function ContentDetailView({
                     return (
                       <div
                         key={comment.id || idx}
+                        data-cdv-sidebar-comment="true"
                         className={`flex flex-col gap-2 transition-all duration-200 ${
                           isActive
                             ? 'bg-purple-50/50 px-1 py-2 rounded-lg'
@@ -1593,6 +1709,7 @@ function ContentDetailView({
                               {comment.authorEmail && (
                                 <span className="text-[9px] text-gray-500 truncate max-w-[110px]">• {comment.authorEmail}</span>
                               )}
+
                             </div>
                             
                             <p className={`text-[13px] break-words leading-snug ${comment.discarded ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
@@ -1604,42 +1721,32 @@ function ContentDetailView({
                                 {comment.timestamp ? new Date(comment.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}
                               </span>
                               
-                              {comment.done ? (
+
+                              
+                              {!isAdminComment && (
                                 <button
-                                  onClick={(e) => { e.stopPropagation(); handleMarkDone(comment.id); }}
-                                  className="flex items-center gap-0.5 text-[10px] text-emerald-600 hover:text-emerald-700 transition-colors font-medium ml-1"
+                                  onClick={(e) => { e.stopPropagation(); handleToggleDiscard(comment.id); }}
+                                  className={`flex items-center gap-0.5 text-[10px] font-medium ml-1 transition-colors ${comment.discarded ? 'text-orange-600' : 'text-gray-400 hover:text-orange-500'}`}
                                 >
-                                  <CheckCircle className="h-3 w-3" /> Done
-                                </button>
-                              ) : (
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); handleMarkDone(comment.id); }}
-                                  className="flex items-center gap-0.5 text-[10px] text-gray-400 hover:text-emerald-600 transition-colors font-medium ml-1"
-                                >
-                                  <CheckCircle className="h-3 w-3" /> Mark
+                                  <XCircle className="h-3 w-3" />{comment.discarded ? 'Discarded' : 'Discard'}
                                 </button>
                               )}
                               
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleToggleDiscard(comment.id); }}
-                                className={`flex items-center gap-0.5 text-[10px] font-medium ml-1 transition-colors ${comment.discarded ? 'text-orange-600' : 'text-gray-400 hover:text-orange-500'}`}
-                              >
-                                <XCircle className="h-3 w-3" />{comment.discarded ? 'Discarded' : 'Discard'}
-                              </button>
-                              
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (replyingTo === comment.id) {
-                                    handleCancelReply();
-                                  } else {
-                                    handleStartReply(comment.id);
-                                  }
-                                }}
-                                className="flex items-center gap-0.5 text-[10px] text-indigo-500 hover:text-indigo-700 transition-colors font-medium ml-1"
-                              >
-                                <MessageSquare className="h-3 w-3" /> Reply
-                              </button>
+                              {canAdminReplyToEntry(comment) && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (replyingTo === comment.id) {
+                                      handleCancelReply();
+                                    } else {
+                                      handleStartReply(comment.id);
+                                    }
+                                  }}
+                                  className="flex items-center gap-0.5 text-[10px] text-indigo-500 hover:text-indigo-700 transition-colors font-medium ml-1"
+                                >
+                                  <MessageSquare className="h-3 w-3" /> Reply
+                                </button>
+                              )}
                               
                               {isAdminComment && (
                                 <button
@@ -1704,19 +1811,38 @@ function ContentDetailView({
                                   <p className="text-[13px] text-gray-800 break-words leading-snug">{rep.message || rep.text}</p>
                                   
                                   <div className="flex items-center justify-end gap-3 mt-1">
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (replyingTo === comment.id) {
-                                          handleCancelReply();
-                                        } else {
-                                          handleStartReply(comment.id);
-                                        }
-                                      }}
-                                      className="flex items-center gap-0.5 text-[9px] text-indigo-500 hover:text-indigo-700 transition-colors font-medium"
-                                    >
-                                      <MessageSquare className="h-2.5 w-2.5" /> Reply
-                                    </button>
+                                    {canAdminReplyToEntry(rep) && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (replyingTo === comment.id) {
+                                            handleCancelReply();
+                                          } else {
+                                            handleStartReply(comment.id);
+                                          }
+                                        }}
+                                        className="flex items-center gap-0.5 text-[9px] text-indigo-500 hover:text-indigo-700 transition-colors font-medium"
+                                      >
+                                        <MessageSquare className="h-2.5 w-2.5" /> Reply
+                                      </button>
+                                    )}
+                                    {!isRepOutgoing && !rep.readByAdmin && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleMarkReplyRead(comment.id, rep.id);
+                                        }}
+                                        className="flex items-center gap-0.5 text-[9px] text-gray-500 hover:text-blue-500 transition-colors font-medium border border-gray-200 rounded px-1.5 py-0.5 bg-gray-50 hover:bg-blue-50"
+                                        title="Mark as Read"
+                                      >
+                                        <CheckCheck className="h-2.5 w-2.5 text-gray-400" /> Mark Read
+                                      </button>
+                                    )}
+                                    {!isRepOutgoing && rep.readByAdmin && (
+                                      <span className="flex items-center text-[9px] text-blue-500 font-medium gap-0.5" title="Read">
+                                        <CheckCheck className="h-2.5 w-2.5 text-blue-500" /> Read
+                                      </span>
+                                    )}
                                     <span className="text-[9px] text-gray-500/80">
                                       {rep.timestamp ? new Date(rep.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}
                                     </span>

@@ -1186,7 +1186,7 @@ function ContentCalendar({
                                item.published === true ||
                                (item.reviewedAt && sortedSubmissions.length === 0);
 
-    if (isCustomerApproved && item.status === 'under_review') {
+    if (isCustomerApproved) {
       return 'customer_approved';
     }
     return item.status;
@@ -1220,6 +1220,7 @@ function ContentCalendar({
     if (item.published === true) return 'published';
     if (isItemPublished(item, calendarId)) return 'published';
     if (isItemScheduled(item, calendarId)) return 'scheduled';
+    if (getDisplayStatus(item) === 'customer_approved') return 'customer_approved';
     if (hasContentSubmitted(item, calendarId)) return 'under_review';
     return item.status || 'pending';
   };
@@ -1364,6 +1365,7 @@ function ContentCalendar({
     return {
       total: allItems.length,
       published: allItems.filter(i => i.status === 'published').length,
+      yetToBePublished: allItems.filter(i => i.status === 'customer_approved').length,
       underReview: allItems.filter(i => i.status === 'under_review').length,
       scheduled: allItems.filter(i => i.status === 'scheduled').length,
       pending: allItems.filter(i => !i.status || i.status === 'pending').length,
@@ -1905,6 +1907,7 @@ function ContentCalendar({
                 {[
                   { key: 'all', label: 'All', count: stats.total, color: '' },
                   { key: 'published', label: 'Published', count: stats.published, color: 'emerald' },
+                  { key: 'customer_approved', label: 'Yet to be Published', count: stats.yetToBePublished, color: 'emerald' },
                   { key: 'under_review', label: 'Under Review', count: stats.underReview, color: 'amber' },
                   { key: 'scheduled', label: 'Scheduled', count: stats.scheduled, color: 'blue' },
                   { key: 'pending', label: 'Pending', count: stats.pending, color: 'gray' },
@@ -1996,7 +1999,7 @@ function ContentCalendar({
                   const latestSubmission = getLatestSubmission(item);
                   const unresolvedCustomerCommentsCount = latestSubmission?.comments?.filter(c => {
                     const isCustomerComment = c.reviewType === 'external' || c.authorRole === 'customer' || (c.authorRole !== 'admin' && c.reviewType !== 'internal');
-                    return isCustomerComment && !c.done && c.status !== 'completed' && !c.discarded && !c.finalized;
+                    return isCustomerComment && !c.done && c.status !== 'completed' && !c.discarded && !c.finalized && !c.readByAdmin;
                   }).length || 0;
 
                   const subStage = latestSubmission ? (latestSubmission.submission_stage || latestSubmission.submissionStage || '') : '';
@@ -2050,10 +2053,10 @@ function ContentCalendar({
                     return false;
                   });
 
-                  const adminNotificationText = unresolvedCustomerCommentsCount > 0
-                    ? `${unresolvedCustomerCommentsCount} comment${unresolvedCustomerCommentsCount !== 1 ? 's' : ''} to review`
-                    : hasNewAdminReply
-                      ? "New reply"
+                  const adminNotificationText = hasNewAdminReply
+                    ? "New reply"
+                    : unresolvedCustomerCommentsCount > 0
+                      ? `${unresolvedCustomerCommentsCount} comment${unresolvedCustomerCommentsCount !== 1 ? 's' : ''} to review`
                       : needsCustomerReviewAsk
                         ? "Ask customer to review"
                         : isNewCreatorVersion

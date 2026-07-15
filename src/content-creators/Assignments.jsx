@@ -70,7 +70,17 @@ const hasAdminCustomerReplyActivity = (comments) => {
     const replies = comment.replies || [];
     if (replies.length > 0) {
       const lastReply = replies[replies.length - 1];
-      return (lastReply.authorRole === 'admin' || lastReply.authorRole === 'customer') && !lastReply.readByCreator;
+      
+      let precedingAuthorRole = '';
+      if (replies.length > 1) {
+        precedingAuthorRole = replies[replies.length - 2].authorRole;
+      } else {
+        precedingAuthorRole = comment.authorRole || (comment.reviewType === 'external' ? 'customer' : 'admin');
+      }
+
+      return (lastReply.authorRole === 'admin' || lastReply.authorRole === 'customer') && 
+             !lastReply.readByCreator && 
+             precedingAuthorRole === 'creator';
     }
     return false;
   });

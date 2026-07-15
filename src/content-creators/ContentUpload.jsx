@@ -928,10 +928,6 @@ function ContentUpload() {
     if (!replyText.trim() || !assignment) return;
     const comment = commentsForCurrentMedia.find(c => c.id === commentId);
     if (!comment) return;
-    if (isAdmin && !canReplyToEntry(comment)) {
-      alert('You cannot reply to your own admin comment.');
-      return;
-    }
     setReplySubmitting(true);
     const newReply = {
       id: uuidv4(),
@@ -1042,9 +1038,17 @@ function ContentUpload() {
 
   const canReplyToEntry = (entry) => {
     if (!entry) return false;
-    if (!isAdmin && entry.reviewType === 'external') return false;
-    if (!isAdmin) return true;
-    return !isCurrentAdminOwnEntry(entry);
+    return true;
+  };
+
+  const isOwnReply = (rep) => {
+    if (!rep) return false;
+    const role = rep.authorRole;
+    if (isAdmin) {
+      return role === 'admin';
+    } else {
+      return role === 'creator';
+    }
   };
 
   const handleVersionCommentDelete = async (commentId) => {
@@ -3046,25 +3050,29 @@ function ContentUpload() {
                                 {commentsForCurrentMedia.map((comment, idx) => (
                                   <div
                                     key={comment.id || idx}
-                                    className={`flex flex-col gap-2 transition-all duration-200 ${activeVersionComment === comment.id
-                                        ? 'bg-purple-50/50 px-1 py-2 rounded-lg'
-                                        : 'py-2 hover:bg-gray-50/50 px-1 rounded-lg'
+                                    className={`flex flex-col gap-2 p-3 rounded-xl border transition-all duration-200 ${activeVersionComment === comment.id
+                                        ? 'bg-purple-50/20 border-purple-200 shadow-sm'
+                                        : 'bg-slate-50/10 border-slate-100 hover:bg-slate-50/30 hover:border-slate-200'
                                       }`}
                                   >
                                     {/* The initial comment bubble (Left aligned) */}
                                     <div
-                                      className="flex items-start gap-2 max-w-[90%] self-start cursor-pointer group"
+                                      className={`flex items-start gap-2 max-w-[90%] cursor-pointer group ${isCreatorOwnedEntry(comment) ? 'self-end flex-row-reverse' : 'self-start'}`}
                                       onClick={() => handleVersionCommentClick(comment.id)}
                                     >
                                       <span className="font-bold text-white bg-purple-500 rounded-full w-5 h-5 flex items-center justify-center text-[10px] flex-shrink-0 mt-1 shadow-sm">
                                         {idx + 1}
                                       </span>
-                                      <div className={`shadow-sm rounded-2xl rounded-tl-sm px-3 py-2 flex flex-col relative ${activeVersionComment === comment.id ? 'bg-purple-100 border border-purple-200' : 'bg-white border border-gray-200'}`}>
+                                      <div className={`shadow-sm px-3 py-2 flex flex-col relative ${
+                                        isCreatorOwnedEntry(comment)
+                                          ? 'bg-[#E7FFDB] border border-[#d3f5c0] rounded-2xl rounded-tr-sm'
+                                          : (activeVersionComment === comment.id ? 'bg-purple-100 border border-purple-200 rounded-2xl rounded-tl-sm' : 'bg-white border border-gray-200 rounded-2xl rounded-tl-sm')
+                                      }`}>
                                         <div className="flex items-center gap-1 mb-0.5">
                                           <span className="text-[9px] font-bold text-blue-700">
-                                            {comment.authorRole === 'admin' ? 'Admin' : (comment.authorRole === 'customer' || comment.reviewType === 'external' ? 'Customer' : 'Creator')}
+                                            {comment.authorRole === 'admin' ? 'Admin' : (comment.authorRole === 'customer' || comment.reviewType === 'external' ? (assignment?.customerName || assignment?.customer_name || comment.authorName || (comment.authorEmail ? comment.authorEmail.split('@')[0] : 'Customer')) : 'Creator')}
                                           </span>
-                                          {comment.authorEmail && (
+                                          {comment.authorEmail && !(comment.authorRole === 'customer' || comment.reviewType === 'external') && (
                                             <span className="text-[9px] text-gray-500 truncate max-w-[110px]">• {comment.authorEmail}</span>
                                           )}
                                         </div>
@@ -3134,9 +3142,7 @@ function ContentUpload() {
                                         timestamp: comment.reply.timestamp
                                       }] : []);
 
-                                      if (!isAdmin && comment.reviewType === 'external') {
-                                        replies = [];
-                                      }
+
 
                                       return replies.map((rep, rIdx) => {
                                         const isCreator = rep.authorRole === 'creator';
@@ -3146,17 +3152,32 @@ function ContentUpload() {
                                             className={`flex items-start gap-2 max-w-[90%] group ${isCreator ? 'self-end flex-row-reverse' : 'self-start'}`}
                                           >
                                             <div className="w-5 h-5 flex-shrink-0 flex items-center justify-center rounded-full bg-gray-100 border border-gray-200 text-[9px] font-bold text-gray-500 mt-1 shadow-sm">
-                                              {isCreator ? 'C' : (rep.authorRole === 'admin' ? 'A' : 'U')}
+                                              {(() => {
+                                                let name = '';
+                                                if (rep.authorRole === 'admin') {
+                                                  name = rep.authorName || (rep.authorEmail ? rep.authorEmail.split('@')[0] : '') || 'Admin';
+                                                } else if (rep.authorRole === 'creator') {
+                                                  name = rep.authorName || (rep.authorEmail ? rep.authorEmail.split('@')[0] : '') || 'Creator';
+                                                } else {
+                                                  name = rep.authorName || (rep.authorEmail ? rep.authorEmail.split('@')[0] : '') || assignment?.customerName || assignment?.customer_name || 'Customer';
+                                                }
+                                                return name.trim().charAt(0).toUpperCase() || 'U';
+                                              })()}
                                             </div>
 
                                             <div className={`px-3 py-2 shadow-sm flex flex-col relative ${isCreator
                                                 ? 'bg-[#E7FFDB] border border-[#d3f5c0] rounded-2xl rounded-tr-sm'
                                                 : 'bg-white border border-gray-200 rounded-2xl rounded-tl-sm'
                                               }`}>
+                                              {/* WhatsApp style reply quote */}
+                                              <div className="mb-1.5 text-[10px] bg-black/5 px-2 py-1 rounded border-l-2 border-indigo-500/50 flex flex-col pointer-events-none select-none max-w-[200px] sm:max-w-[300px]">
+                                                <span className="font-semibold text-indigo-600 truncate text-[9px]">{comment.authorRole === 'admin' ? 'Admin' : (comment.authorRole === 'customer' || comment.reviewType === 'external' ? (assignment?.customerName || assignment?.customer_name || comment.authorName || (comment.authorEmail ? comment.authorEmail.split('@')[0] : 'Customer')) : 'Creator')}</span>
+                                                <span className="truncate text-gray-655 italic text-[11px] leading-tight">"{comment.message || comment.comment}"</span>
+                                              </div>
                                               <p className="text-[13px] text-gray-800 break-words leading-snug">{rep.message || rep.text}</p>
 
                                               <div className="flex items-center justify-end gap-3 mt-1">
-                                                {canReplyToEntry(rep) && (
+                                                {canReplyToEntry(rep) && !isOwnReply(rep) && (
                                                   <button
                                                     onClick={(e) => {
                                                       e.stopPropagation();

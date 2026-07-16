@@ -180,7 +180,7 @@ function ContentUpload() {
   }, []);
   const currentUserEmail = currentUser.email || creatorEmail;
   const normalizedPostType = useMemo(() => (assignment?.postType || '').toLowerCase(), [assignment?.postType]);
-  const isSingleMediaPostType = useMemo(() => ['post', 'reel', 'video'].includes(normalizedPostType), [normalizedPostType]);
+  const isSingleMediaPostType = useMemo(() => ['post', 'story', 'reel', 'video'].includes(normalizedPostType), [normalizedPostType]);
   const canAddMoreMedia = useMemo(
     () => !isSingleMediaPostType || uploadedFiles.length < 1,
     [isSingleMediaPostType, uploadedFiles.length]

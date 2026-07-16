@@ -44,7 +44,7 @@ const SocialIntegrations = ({ platform, customer, onConnectionSuccess, onClose, 
       window.fbAsyncInit = function() {
         window.FB.init({
           appId: FACEBOOK_APP_ID, // updated variable
-          cookie: true,
+          cookie: false, // Disable session cookie sharing to prevent browser FB session bleeding into customer accounts
           xfbml: true,
           version: 'v18.0'
         });

@@ -433,15 +433,6 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
   useEffect(() => {
     if (window.FB) {
       setFbSdkLoaded(true);
-      // Check existing login status
-      window.FB.getLoginStatus(response => {
-        if (response.status === 'connected') {
-          setUserAccessToken(response.authResponse.accessToken);
-          if (connectedAccounts.length === 0) {
-            loadAvailableAccounts(response.authResponse.accessToken);
-          }
-        }
-      });
     } else {
       loadFacebookSDK();
     }
@@ -526,15 +517,6 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
   useEffect(() => {
     if (window.FB) {
       setFbSdkLoaded(true);
-      // Check existing login status
-      window.FB.getLoginStatus(response => {
-        if (response.status === 'connected') {
-          setUserAccessToken(response.authResponse.accessToken);
-          if (connectedAccounts.length === 0) {
-            loadAvailableAccounts(response.authResponse.accessToken);
-          }
-        }
-      });
     } else {
       loadFacebookSDK();
     }
@@ -566,7 +548,7 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
     window.fbAsyncInit = function() {
       window.FB.init({
         appId: FACEBOOK_APP_ID,
-        cookie: true,
+        cookie: false, // Disable session cookie sharing to prevent browser FB session bleeding into customer accounts
         xfbml: false,
         version: 'v18.0'
       });
@@ -575,15 +557,6 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
       const checkReady = () => {
         if (isFacebookApiReady()) {
           setFbSdkLoaded(true);
-          
-          window.FB.getLoginStatus(response => {
-            if (response.status === 'connected') {
-              setUserAccessToken(response.authResponse.accessToken);
-              if (connectedAccounts.length === 0) {
-                loadAvailableAccounts(response.authResponse.accessToken);
-              }
-            }
-          });
         } else {
           setTimeout(checkReady, 100);
         }
@@ -719,6 +692,16 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
 
       window.FB.getLoginStatus((response) => {
         if (response.status === 'connected') {
+          const fbUserId = response.authResponse.userID;
+          const expectedFbUserId = activeAccount?.facebookUserId || activeAccount?.userId || 
+                                   connectedAccounts?.[0]?.facebookUserId || connectedAccounts?.[0]?.userId;
+          
+          if (expectedFbUserId && fbUserId !== expectedFbUserId) {
+            console.warn(`⚠️ Facebook session user ID mismatch (got ${fbUserId}, expected ${expectedFbUserId}). Rejecting auto-refresh to prevent personal account bleeding.`);
+            resolve(false);
+            return;
+          }
+
           // Update token in our storage
           const newToken = response.authResponse.accessToken;
           const userId = response.authResponse.userID;

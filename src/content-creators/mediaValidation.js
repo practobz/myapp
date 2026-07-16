@@ -224,12 +224,18 @@ export function validateMediaSelectionForPostType(files, postType) {
   const mediaTypes = (files || []).map(getMediaType).filter(Boolean);
   const videoCount = mediaTypes.filter(type => type === 'video').length;
 
-  if (normalizedPostType === 'post' || normalizedPostType === 'story') {
+  if (normalizedPostType === 'post') {
     if (mediaTypes.length > 1) {
-      return `Only 1 image is allowed for a ${normalizedPostType}.`;
+      return `Only 1 image is allowed for a post.`;
     }
     if (videoCount > 0) {
-      return `Videos are not allowed for a ${normalizedPostType}.`;
+      return `Videos are not allowed for a post.`;
+    }
+  }
+
+  if (normalizedPostType === 'story') {
+    if (mediaTypes.length > 1) {
+      return `Only 1 image or video is allowed for a story.`;
     }
   }
 

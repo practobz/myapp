@@ -453,7 +453,8 @@ function ContentDetailView({
 
   const hasUnresolvedComments = useMemo(() => {
     return commentsForVersion.some(c => {
-      return !c.done && c.status !== 'completed' && !c.discarded;
+      const isExternal = c.reviewType === 'external' || c.authorRole === 'customer' || (c.authorRole !== 'admin' && c.reviewType !== 'internal');
+      return isExternal && !c.done && c.status !== 'completed' && !c.discarded;
     });
   }, [commentsForVersion]);
 
@@ -1369,7 +1370,7 @@ function ContentDetailView({
                               className="p-1.5 rounded-lg bg-blue-50 border border-gray-200 hover:bg-white disabled:opacity-50 transition-colors">
                               <ChevronRight className="h-3.5 w-3.5 text-blue-600" />
                             </button>
-                            {!(currentVersion?.approved_by_customer === true || currentVersion?.status === 'published' || currentVersion?.status === 'scheduled') && (
+                            {!(currentVersion?.status === 'published' || currentVersion?.status === 'scheduled') && (
                               <button
                                 onClick={() => handleDeleteCarouselMedia(selectedMediaIndex)}
                                 className="p-1.5 ml-1.5 rounded-lg bg-red-50 border border-red-200 hover:bg-red-100 transition-colors"

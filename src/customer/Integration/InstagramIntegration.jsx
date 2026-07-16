@@ -8,6 +8,7 @@ import { getUserData, setUserData, removeUserData, migrateToUserSpecificStorage 
 
 // Your Facebook App ID (Instagram uses Facebook's Graph API)
 const FACEBOOK_APP_ID = process.env.REACT_APP_FACEBOOK_APP_ID;
+
 // Time period options for historical data
 const TIME_PERIOD_OPTIONS = [
   { value: 7, label: 'Last 7 days' },
@@ -169,12 +170,12 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
               
               return {
                 id: acc.platformUserId,
-                pageId: acc.facebookPageId,
-                pageName: acc.name,
+                pageId: acc.facebookPageId || acc.pages?.[0]?.id,
+                pageName: acc.pages?.[0]?.name || acc.name,
                 profile: {
-                  username: acc.instagramData?.username || acc.username,
-                  profile_picture_url: acc.profilePicture,
-                  followers_count: acc.instagramData?.followersCount,
+                  username: acc.instagramData?.username || acc.username || acc.pages?.[0]?.instagramBusinessAccount?.username,
+                  profile_picture_url: acc.profilePicture || acc.pages?.[0]?.instagramBusinessAccount?.profile_picture_url,
+                  followers_count: acc.instagramData?.followersCount || acc.pages?.[0]?.fanCount,
                   media_count: acc.instagramData?.mediaCount,
                   biography: acc.instagramData?.biography,
                   website: acc.instagramData?.website
@@ -388,8 +389,23 @@ function InstagramIntegration({ onData, onConnectionStatusChange }) {
       });
       
       if (instagramAccounts && Array.isArray(instagramAccounts) && instagramAccounts.length > 0) {
-        console.log('✅ Setting Instagram accounts from storage:', instagramAccounts);
-        setConnectedAccounts(instagramAccounts);
+        const mappedAccounts = instagramAccounts.map(acc => {
+          const pageName = acc.pages?.[0]?.name || acc.pageName || acc.name;
+          const username = acc.instagramData?.username || acc.username || acc.profile?.username || acc.pages?.[0]?.instagramBusinessAccount?.username;
+          const followersCount = acc.instagramData?.followersCount || acc.profile?.followers_count || acc.pages?.[0]?.fanCount;
+          
+          return {
+            ...acc,
+            pageName: pageName,
+            profile: {
+              ...acc.profile,
+              username: username,
+              followers_count: followersCount
+            }
+          };
+        });
+        console.log('✅ Setting Instagram accounts from storage:', mappedAccounts);
+        setConnectedAccounts(mappedAccounts);
         setIsSignedIn(true); // Set signed in state
         
         if (savedActiveId && instagramAccounts.some(acc => acc.id === savedActiveId)) {

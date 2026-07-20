@@ -1390,91 +1390,36 @@ function ContentUpload() {
 
       let publicUrl;
 
-      // Use streaming upload (proxied via backend) for large files (>=10MB).
-      // Direct browserÃ¢â€ â€™GCS signed URL uploads require bucket-level CORS config.
-      // Streaming through the backend avoids that requirement entirely.
-      if (fileSizeMB >= 10) {
-        console.log(`Ã°Å¸â€œÂ¤ Using signed-URL upload for large file: ${fileObj.name} (${fileSizeMB.toFixed(2)} MB)`);
+      // Use pre-signed GCS URL upload for all files (prevents FileReader errors on mobile)
+      console.log(`📦 Using signed-URL upload for file: ${fileObj.name} (${fileSizeMB.toFixed(2)} MB)`);
 
-        // Step 1: Get a signed URL from the backend
-        const signedUrlResponse = await fetch(`${process.env.REACT_APP_API_URL}/api/gcs/signed-url`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ filename: fileObj.name, contentType: fileObj.file.type }),
-        });
+      // Step 1: Get a signed URL from the backend
+      const signedUrlResponse = await fetch(`${process.env.REACT_APP_API_URL}/api/gcs/signed-url`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: fileObj.name, contentType: fileObj.file.type }),
+      });
 
-        if (!signedUrlResponse.ok) {
-          const errorData = await signedUrlResponse.json().catch(() => ({}));
-          throw new Error(`Failed to get signed URL: ${errorData.error || signedUrlResponse.statusText}`);
-        }
-
-        const { signedUrl, publicUrl: signedPublicUrl } = await signedUrlResponse.json();
-
-        // Step 2: PUT the file directly to GCS using the signed URL
-        const gcsUploadResponse = await fetch(signedUrl, {
-          method: 'PUT',
-          headers: { 'Content-Type': fileObj.file.type },
-          body: fileObj.file,
-        });
-
-        if (!gcsUploadResponse.ok) {
-          throw new Error(`GCS upload failed: ${gcsUploadResponse.statusText}`);
-        }
-
-        publicUrl = signedPublicUrl;
-        console.log(`Ã¢Å“â€¦ Successfully uploaded ${fileObj.name} via signed URL`);
-
-      } else {
-        // Use base64 upload for small files (<10MB)
-        console.log(`Ã°Å¸â€œÂ¤ Using base64 upload for small file: ${fileObj.name} (${fileSizeMB.toFixed(2)} MB)`);
-
-        const base64Data = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => {
-            const result = reader.result;
-            if (!result || typeof result !== 'string') {
-              reject(new Error('Failed to read file as base64'));
-              return;
-            }
-            const base64 = result.split(',')[1];
-            if (!base64 || base64.length === 0) {
-              reject(new Error('Base64 conversion resulted in empty data'));
-              return;
-            }
-            resolve(base64);
-          };
-          reader.onerror = () => reject(new Error('FileReader error'));
-          reader.readAsDataURL(fileObj.file);
-        });
-
-        const payload = {
-          filename: fileObj.name,
-          contentType: fileObj.file.type,
-          base64Data: base64Data
-        };
-
-        if (!payload.filename || !payload.contentType || !payload.base64Data) {
-          throw new Error(`Invalid payload: missing ${!payload.filename ? 'filename' : !payload.contentType ? 'contentType' : 'base64Data'}`);
-        }
-
-        const uploadResponse = await fetch(`${process.env.REACT_APP_API_URL}/api/gcs/upload-base64`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(payload),
-        });
-
-        if (!uploadResponse.ok) {
-          const errorData = await uploadResponse.json();
-          throw new Error(`Upload failed: ${errorData.error || uploadResponse.statusText}`);
-        }
-
-        const responseData = await uploadResponse.json();
-        publicUrl = responseData.publicUrl;
-
-        console.log(`Ã¢Å“â€¦ Successfully uploaded ${fileObj.name} via base64`);
+      if (!signedUrlResponse.ok) {
+        const errorData = await signedUrlResponse.json().catch(() => ({}));
+        throw new Error(`Failed to get signed URL: ${errorData.error || signedUrlResponse.statusText}`);
       }
+
+      const { signedUrl, publicUrl: signedPublicUrl } = await signedUrlResponse.json();
+
+      // Step 2: PUT the file directly to GCS using the signed URL
+      const gcsUploadResponse = await fetch(signedUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': fileObj.file.type },
+        body: fileObj.file,
+      });
+
+      if (!gcsUploadResponse.ok) {
+        throw new Error(`GCS upload failed: ${gcsUploadResponse.statusText}`);
+      }
+
+      publicUrl = signedPublicUrl;
+      console.log(`✅ Successfully uploaded ${fileObj.name} via signed URL`);
 
       if (!publicUrl) {
         throw new Error('No public URL returned from upload');
@@ -1523,43 +1468,23 @@ function ContentUpload() {
       let publicUrl;
       const fileSizeMB = fileObj.file.size / (1024 * 1024);
 
-      if (fileSizeMB >= 10) {
-        const signedUrlResponse = await fetch(`${process.env.REACT_APP_API_URL}/api/gcs/signed-url`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ filename: fileObj.name, contentType: fileObj.file.type }),
-        });
-        if (!signedUrlResponse.ok) throw new Error('Failed to get signed URL');
-        const { signedUrl, publicUrl: signedPublicUrl } = await signedUrlResponse.json();
+      console.log(`📦 Using signed-URL upload for thumbnail: ${fileObj.name} (${fileSizeMB.toFixed(2)} MB)`);
 
-        const gcsUploadResponse = await fetch(signedUrl, {
-          method: 'PUT',
-          headers: { 'Content-Type': fileObj.file.type },
-          body: fileObj.file,
-        });
-        if (!gcsUploadResponse.ok) throw new Error('GCS upload failed');
-        publicUrl = signedPublicUrl;
-      } else {
-        const base64Data = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result.split(',')[1]);
-          reader.onerror = () => reject(new Error('FileReader error'));
-          reader.readAsDataURL(fileObj.file);
-        });
+      const signedUrlResponse = await fetch(`${process.env.REACT_APP_API_URL}/api/gcs/signed-url`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: fileObj.name, contentType: fileObj.file.type }),
+      });
+      if (!signedUrlResponse.ok) throw new Error('Failed to get signed URL');
+      const { signedUrl, publicUrl: signedPublicUrl } = await signedUrlResponse.json();
 
-        const uploadResponse = await fetch(`${process.env.REACT_APP_API_URL}/api/gcs/upload-base64`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            filename: fileObj.name,
-            contentType: fileObj.file.type,
-            base64Data
-          }),
-        });
-        if (!uploadResponse.ok) throw new Error('Upload failed');
-        const responseData = await uploadResponse.json();
-        publicUrl = responseData.publicUrl;
-      }
+      const gcsUploadResponse = await fetch(signedUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': fileObj.file.type },
+        body: fileObj.file,
+      });
+      if (!gcsUploadResponse.ok) throw new Error('GCS upload failed');
+      publicUrl = signedPublicUrl;
 
       setThumbnailFileObj(prev => prev ? { ...prev, uploading: false, uploaded: true, publicUrl } : null);
       return { url: publicUrl };
@@ -2209,9 +2134,9 @@ function ContentUpload() {
       homePath={isAdmin ? '/admin/dashboard' : '/content-creator'}
     >
       <div>
-        {/* Ã¢â€â‚¬Ã¢â€â‚¬ Tabs Selector Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */}
+        {/* ── Tabs Selector ── */}
         {!isAdmin && reviewTabMode === 'both' && (
-          <div className="flex border-b border-gray-200 bg-white rounded-2xl p-1.5 shadow-sm border border-gray-200/50 mb-6">
+          <div className="flex border-b border-gray-200 bg-white sm:rounded-2xl p-1.5 sm:shadow-sm sm:border sm:border-gray-200/50 mb-4 sm:mb-6">
             <button
               onClick={() => {
                 setActiveTab('admin');
@@ -2246,10 +2171,10 @@ function ContentUpload() {
             </button>
           </div>
         )}
-        {/* Assignment Details moved to right column */}
-        {/* Admin Uploaded Banner — shown when admin already sent content to customer */}
+
+        {/* Admin Uploaded Banner — shown when admin already sent content to customer */}
         {adminUploadedForThis && (
-          <div className="bg-blue-50 border border-blue-200 rounded-xl shadow-sm px-5 py-4 mb-6 flex flex-col sm:flex-row sm:items-start gap-3">
+          <div className="bg-blue-50 border border-blue-200 sm:rounded-xl shadow-sm px-4 py-3 sm:px-5 sm:py-4 mb-4 sm:mb-6 flex flex-col sm:flex-row sm:items-start gap-3">
             <div className="p-2 bg-blue-100 rounded-lg flex-shrink-0">
               <ShieldCheck className="h-5 w-5 text-blue-600" />
             </div>
@@ -2266,14 +2191,14 @@ function ContentUpload() {
           </div>
         )}
 
-        {/* Admin Approval Banner — shown when the latest version is approved */}
+        {/* Admin Approval Banner — shown when the latest version is approved */}
         {activeTab === 'admin' && (() => {
           const latestApproved = [...previousVersions]
             .reverse()
             .find(v => v.status === 'approved' || v.status === 'approved_by_admin');
           if (!latestApproved) return null;
           return (
-            <div className="bg-green-50 border border-green-200 rounded-xl shadow-sm px-5 py-4 mb-6 flex flex-col sm:flex-row sm:items-start gap-3">
+            <div className="bg-green-50 border border-green-200 sm:rounded-xl shadow-sm px-4 py-3 sm:px-5 sm:py-4 mb-4 sm:mb-6 flex flex-col sm:flex-row sm:items-start gap-3">
               <div className="p-2 bg-green-100 rounded-lg flex-shrink-0">
                 <ShieldCheck className="h-5 w-5 text-green-600" />
               </div>
@@ -2294,119 +2219,125 @@ function ContentUpload() {
         })()}
 
         {/* Main Grid Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
           {/* Left Column - Upload Section */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Version History Accordion — ContentDetails style */}
-            <div className="space-y-4">
+          <div className="lg:col-span-2 space-y-4 sm:space-y-6">
+            {/* Version History Accordion —  ContentDetails style */}
+            <div className="space-y-2 sm:space-y-4">
               {/* Accordion trigger */}
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden w-full p-5 hover:bg-gray-50 transition-colors duration-200">
-                <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${((previousSubmissionLoaded && previousVersions.length === 0 && (thumbnailFileObj || uploadedFiles.length > 0)) || validationNotice) ? 'mb-4' : ''}`}>
-                  <button
-                    type="button"
-                    onClick={() => setVersionsAccordionOpen(!versionsAccordionOpen)}
-                    className="flex items-center gap-3 text-left focus:outline-none"
-                  >
-                    <div className="p-2 bg-green-100 rounded-lg flex-shrink-0">
-                      <History className="h-5 w-5 text-green-600" />
-                    </div>
-                    <div>
-                      <h2 className="text-lg font-bold text-gray-900">Version History</h2>
-                      <p className="text-sm text-gray-500">
-                        {previousVersions.length} {previousVersions.length === 1 ? 'version' : 'versions'} submitted
-                      </p>
-                    </div>
-                  </button>
+              <div className="bg-white sm:rounded-2xl sm:shadow-sm sm:border sm:border-gray-200 overflow-hidden w-full p-3.5 sm:p-5 hover:bg-gray-50 transition-colors duration-200">
+                <div className="flex flex-col gap-3">
+                  {/* Top Row: Title + Icon (left) and Chevron (right) */}
+                  <div className="flex items-center justify-between w-full">
+                    <button
+                      type="button"
+                      onClick={() => setVersionsAccordionOpen(!versionsAccordionOpen)}
+                      className="flex items-center gap-3 text-left focus:outline-none min-w-0 flex-1"
+                    >
+                      <div className="p-2 bg-green-100 rounded-lg flex-shrink-0">
+                        <History className="h-5 w-5 text-green-600" />
+                      </div>
+                      <div className="min-w-0">
+                        <h2 className="text-base sm:text-lg font-bold text-gray-900 truncate">Version History</h2>
+                        <p className="text-xs sm:text-sm text-gray-500">
+                          {previousVersions.length} {previousVersions.length === 1 ? 'version' : 'versions'} submitted
+                        </p>
+                      </div>
+                    </button>
 
-                  <div className="flex items-center gap-3 flex-wrap sm:flex-nowrap justify-start sm:justify-end flex-grow mr-2">
-                    {previousSubmissionLoaded && previousVersions.length === 0 && (() => {
-                      const isThumbnailAllowed = ['reel', 'video'].includes((assignment?.postType || '').toLowerCase());
-                      return (
-                        <>
-                          <button
-                            type="button"
-                            onClick={(e) => { e.stopPropagation(); onButtonClick(); }}
-                            disabled={!canAddMoreMedia}
-                            title={canAddMoreMedia ? 'Add media' : 'Only 1 media is allowed for this post type'}
-                            className="inline-flex items-center px-4 py-2 text-sm font-medium bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <Image className="h-4 w-4 mr-2" />
-                            Create first version
-                          </button>
-                          {isThumbnailAllowed && (
-                            <button
-                              type="button"
-                              onClick={(e) => { e.stopPropagation(); onThumbnailButtonClick(); }}
-                              className="inline-flex items-center px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-                            >
-                              <Image className="h-4 w-4 mr-2" />
-                              Add thumbnail
-                            </button>
-                          )}
-                        </>
-                      );
-                    })()}
+                    <button
+                      type="button"
+                      onClick={() => setVersionsAccordionOpen(!versionsAccordionOpen)}
+                      className="p-1.5 rounded hover:bg-gray-100 focus:outline-none flex-shrink-0 ml-2"
+                      aria-label="Toggle version history"
+                    >
+                      {versionsAccordionOpen
+                        ? <ChevronUp className="h-5 w-5 text-gray-400" />
+                        : <ChevronDown className="h-5 w-5 text-gray-400" />}
+                    </button>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => setVersionsAccordionOpen(!versionsAccordionOpen)}
-                    className="p-1 rounded hover:bg-gray-100 focus:outline-none"
-                    aria-label="Toggle version history"
-                  >
-                    {versionsAccordionOpen
-                      ? <ChevronUp className="h-5 w-5 text-gray-400 flex-shrink-0" />
-                      : <ChevronDown className="h-5 w-5 text-gray-400 flex-shrink-0" />}
-                  </button>
+                  {/* Bottom Row: Optional action buttons (only visible when previousVersions.length === 0) */}
+                  {previousSubmissionLoaded && previousVersions.length === 0 && (
+                    <div className="flex items-center gap-3 flex-wrap sm:flex-nowrap justify-start sm:justify-end flex-grow mr-2 mt-1">
+                      {(() => {
+                        const isThumbnailAllowed = ['reel', 'video'].includes((assignment?.postType || '').toLowerCase());
+                        return (
+                          <>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); onButtonClick(); }}
+                              disabled={!canAddMoreMedia}
+                              title={canAddMoreMedia ? 'Add media' : 'Only 1 media is allowed for this post type'}
+                              className="inline-flex items-center px-4 py-2 text-sm font-medium bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              <Image className="h-4 w-4 mr-2" />
+                              Create first version
+                            </button>
+                            {isThumbnailAllowed && (
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); onThumbnailButtonClick(); }}
+                                className="inline-flex items-center px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                              >
+                                <Image className="h-4 w-4 mr-2" />
+                                Add thumbnail
+                              </button>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  )}
                 </div>
 
-                {/* Hidden inputs always rendered in DOM */}
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  accept="image/*,video/*"
-                  onChange={handleChange}
-                  className="hidden"
-                />
-                <input
-                  ref={thumbnailInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleThumbnailChange}
-                  className="hidden"
-                />
-                <input
-                  ref={replaceFileInputRef}
-                  type="file"
-                  accept="image/*,video/*"
-                  onChange={handleReplaceChange}
-                  className="hidden"
-                />
+              {/* Hidden inputs always rendered in DOM */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept="image/*,video/*"
+                onChange={handleChange}
+                className="hidden"
+              />
+              <input
+                ref={thumbnailInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleThumbnailChange}
+                className="hidden"
+              />
+              <input
+                ref={replaceFileInputRef}
+                type="file"
+                accept="image/*,video/*"
+                onChange={handleReplaceChange}
+                className="hidden"
+              />
 
-                {previousSubmissionLoaded && previousVersions.length === 0 && (() => {
-                  const isThumbnailAllowed = ['reel', 'video'].includes((assignment?.postType || '').toLowerCase());
-                  return (
-                    <>
+              {previousSubmissionLoaded && previousVersions.length === 0 && (() => {
+                const isThumbnailAllowed = ['reel', 'video'].includes((assignment?.postType || '').toLowerCase());
+                return (
+                  <>
 
-                      {isThumbnailAllowed && thumbnailFileObj && (
-                        <div className="mt-3 p-3 bg-indigo-50/80 border border-indigo-100 rounded-xl flex items-center justify-between shadow-sm">
-                          <div className="flex items-center gap-3">
-                            <img src={thumbnailFileObj.preview} alt="Thumbnail preview" className="w-12 h-12 object-cover rounded-lg border border-indigo-200" />
-                            <div className="min-w-0">
-                              <p className="text-xs font-semibold text-indigo-900 truncate">{thumbnailFileObj.name}</p>
-                              <p className="text-[10px] text-indigo-600">{formatFileSize(thumbnailFileObj.size)}</p>
-                            </div>
+                    {isThumbnailAllowed && thumbnailFileObj && (
+                      <div className="mt-3 p-3 bg-indigo-50/80 border border-indigo-100 rounded-xl flex items-center justify-between shadow-sm">
+                        <div className="flex items-center gap-3">
+                          <img src={thumbnailFileObj.preview} alt="Thumbnail preview" className="w-12 h-12 object-cover rounded-lg border border-indigo-200" />
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold text-indigo-900 truncate">{thumbnailFileObj.name}</p>
+                            <p className="text-[10px] text-indigo-600">{formatFileSize(thumbnailFileObj.size)}</p>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => setThumbnailFileObj(null)}
-                            className="p-1 rounded-full text-indigo-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-                          >
-                            <X className="h-4 w-4" />
-                          </button>
                         </div>
-                      )}
+                        <button
+                          type="button"
+                          onClick={() => setThumbnailFileObj(null)}
+                          className="p-1 rounded-full text-indigo-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    )}
 
                       {/* Ã¢â€â‚¬Ã¢â€â‚¬ WhatsApp-style compact thumbnail strip for initial upload (No versions yet) Ã¢â€â‚¬Ã¢â€â‚¬ */}
                       {uploadedFiles.length > 0 && (
@@ -2515,12 +2446,12 @@ function ContentUpload() {
                       <p className="text-sm text-gray-400 mt-1">Upload your first version using the form above</p>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-                      {/* Ã¢â€â‚¬Ã¢â€â‚¬ Left 2/3: Version display Ã¢â€â‚¬Ã¢â€â‚¬ */}
+                    <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 xl:gap-6">
+                      {/* ── Left 2/3: Version display ── */}
                       <div className="xl:col-span-2">
-                        <div className="bg-gray-50 rounded-2xl border border-gray-200 overflow-hidden">
+                        <div className="bg-gray-50 sm:rounded-2xl sm:border sm:border-gray-200 overflow-hidden">
                           {/* Version display header */}
-                          <div className="px-5 py-4 border-b border-gray-100 bg-white">
+                          <div className="px-3.5 py-3 border-b border-gray-100 bg-white">
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-3">
                                 <div className="p-2 bg-purple-100 rounded-lg">
@@ -2564,9 +2495,9 @@ function ContentUpload() {
                             </div>
                           </div>
 
-                          <div className="p-5">
+                          <div className="p-3 sm:p-5">
                             {previousVersions[selectedVersionIndex] && (
-                              <div className="space-y-5">
+                              <div className="space-y-4 sm:space-y-5">
                                 {/* Media */}
                                 <div>
                                   {(() => {
@@ -2830,7 +2761,7 @@ function ContentUpload() {
 
                                         {/* -- Media Preview Strip -- */}
                                         {totalSlides > 0 && (
-                                          <div className="flex flex-wrap justify-center items-center gap-2 mt-4 bg-gray-50 p-3 rounded-xl border border-gray-100">
+                                          <div className="flex flex-wrap justify-center items-center gap-2 mt-4 bg-gray-50/50 p-2 sm:p-3 rounded-xl border border-gray-100">
                                             {slides.map((slide, idx) => {
                                               const isSelected = idx === safeMediaIndex;
                                               const isDraftFile = slide.isDraft;
@@ -2982,9 +2913,9 @@ function ContentUpload() {
                                   })()}
                                 </div>
 
-                                <div className="flex items-center justify-between text-sm text-gray-500">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between text-sm text-gray-500 gap-2">
                                   <span>Created: {formatVersionDateLong(previousVersions[selectedVersionIndex].createdAt)}</span>
-                                  <div className="flex items-center gap-2 flex-wrap justify-end">
+                                  <div className="flex items-center gap-2 flex-wrap justify-start sm:justify-end">
                                     {(previousVersions[selectedVersionIndex].status === 'approved' ||
                                       previousVersions[selectedVersionIndex].status === 'approved_by_admin') && (
                                         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-200">
@@ -3015,10 +2946,10 @@ function ContentUpload() {
                       </div>
 
                       {/* Ã¢â€â‚¬Ã¢â€â‚¬ Right 1/3: Comments Ã¢â€â‚¬Ã¢â€â‚¬ */}
-                      <div className="space-y-5">
+                      <div className="space-y-4 sm:space-y-5">
                         {/* Comments panel */}
-                        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-                          <div className="px-5 py-4 border-b border-gray-100 bg-gray-50">
+                        <div className="bg-white sm:rounded-2xl sm:shadow-sm sm:border sm:border-gray-200 overflow-hidden">
+                          <div className="px-3.5 py-3 border-b border-gray-100 bg-gray-50">
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-3">
                                 <div className="p-2 bg-purple-100 rounded-lg">
@@ -3311,9 +3242,9 @@ function ContentUpload() {
           </div>
 
           {/* Right Column - Content Details & Assignment Info */}
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             {/* Assignment Details (Moved here) */}
-            <div className="bg-white rounded-lg shadow-sm p-4">
+            <div className="bg-white sm:rounded-lg sm:shadow-sm p-3.5 sm:p-4 border-b sm:border-0 border-gray-200">
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                 <div>
                   <h1 className="text-lg font-bold text-gray-900">{assignment.title}</h1>
@@ -3357,8 +3288,8 @@ function ContentUpload() {
             </div>
 
             {/* Content Details Form */}
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <h2 className="text-lg font-semibold mb-4 flex items-center">
+            <div className="bg-white sm:rounded-lg sm:shadow-sm p-4 sm:p-6 border-b sm:border-0 border-gray-200">
+              <h2 className="text-base sm:text-lg font-semibold mb-4 flex items-center">
                 <MessageSquare className="h-5 w-5 mr-2 text-purple-600" />
                 Content Details
               </h2>
@@ -3454,22 +3385,8 @@ function ContentUpload() {
             })()}
 
             {/* Submit Button */}
-            <div className="bg-white rounded-lg shadow-sm p-6">
+            <div className="bg-white sm:rounded-lg sm:shadow-sm p-4 sm:p-6 border-b sm:border-0 border-gray-200">
               <div className="text-center">
-                <h3 className="font-semibold text-gray-900 mb-1">
-                  Submit for Admin Review
-                </h3>
-                {displayAdminsList.length > 0 ? (
-                  <p className="text-sm text-gray-600 mb-4">
-                    Will be sent to <span className="font-medium text-purple-700">{displayAdminsList.map(a => a.name).join(', ')}</span> for review.
-                    Content only reaches the customer after admin approval.
-                  </p>
-                ) : (
-                  <p className="text-sm text-gray-600 mb-4 flex items-center justify-center gap-1">
-                    <AlertCircle className="h-4 w-4 text-amber-500 flex-shrink-0" />
-                    No assigned admins. Submission will be reviewed by System Admins.
-                  </p>
-                )}
                 {isRevisionRequested && !hasModifiedMedia && (
                   <div className="text-xs text-red-700 bg-red-50 p-2.5 rounded-lg border border-red-200 font-medium flex items-start gap-2 mb-4 text-left">
                     <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5 animate-bounce" />

@@ -1219,6 +1219,15 @@ function Assignments() {
       fullWidthContent={true}
     >
       <div className="space-y-5">
+        <style>{`
+          .no-scrollbar::-webkit-scrollbar {
+            display: none;
+          }
+          .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+          }
+        `}</style>
         {selectedCustomer && (
           <div className="bg-gradient-to-r from-purple-600 via-purple-500 to-indigo-600 rounded-xl shadow p-2.5 text-white mb-3 flex items-center">
             <div className="flex items-center gap-2.5 min-w-0">
@@ -1245,7 +1254,7 @@ function Assignments() {
         {/* Filter Tabs + Search */}
         <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-sm p-4 border border-gray-200/50">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-nowrap overflow-x-auto pb-2 sm:pb-0 -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap gap-2 no-scrollbar">
               {[
                 { key: 'all', label: 'All', count: stats.total },
                 { key: 'pending', label: 'Pending', count: stats.pending },
@@ -1257,7 +1266,7 @@ function Assignments() {
                 <button
                   key={opt.key}
                   onClick={() => setSelectedFilter(opt.key)}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${selectedFilter === opt.key
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all shrink-0 ${selectedFilter === opt.key
                       ? 'bg-purple-600 text-white shadow-sm'
                       : opt.key === 'review_updates'
                         ? 'bg-gray-100 text-gray-600 hover:bg-rose-100 hover:text-rose-700'
@@ -1350,173 +1359,179 @@ function Assignments() {
                             {/* Assignment rows under this calendar */}
                             {isCalExpanded && (
                               <div className="divide-y-2 divide-gray-200">
-                                {calGroup.assignments.map((assignment, idx) => (
-                                  <div
-                                    key={assignment.id || assignment._id || idx}
-                                    onClick={() => handleAssignmentClick(assignment)}
-                                    className="px-4 py-5 hover:bg-purple-50/50 cursor-pointer transition-colors"
-                                  >
-                                    <div className="flex gap-3 items-start">
-                                      {/* Submission thumbnail */}
-                                      {(() => {
-                                        const thumb = getSubmissionThumbnail(assignment);
-                                        const thumbUrl = thumb?.url || '';
-                                        const isVid = isVideoUrl(thumbUrl) && !thumb?.isThumbnail;
-                                        return (
-                                          <div className="flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden border border-gray-200 bg-gray-100 relative">
-                                            {thumbUrl ? (
-                                              isVid ? (
-                                                <div className="w-full h-full bg-black relative">
-                                                  <video
-                                                    src={thumbUrl}
-                                                    muted
-                                                    playsInline
-                                                    preload="metadata"
-                                                    className="w-full h-full object-cover"
-                                                  />
-                                                  <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                                                    <Play className="h-4 w-4 text-white" />
-                                                  </div>
-                                                </div>
-                                              ) : (
-                                                <img src={thumbUrl} alt="" className="w-full h-full object-cover" />
-                                              )
-                                            ) : (
-                                              <div className="w-full h-full flex items-center justify-center">
-                                                <Image className="h-5 w-5 text-gray-300" />
-                                              </div>
-                                            )}
-                                          </div>
-                                        );
-                                      })()}
-                                      {/* Assignment details */}
-                                      <div className="flex-1 min-w-0">
-                                        {/* Line 1: Item label + title */}
-                                        <div className="flex items-center justify-between gap-2 mb-1.5">
-                                          <div className="flex items-center gap-1.5 min-w-0">
-                                            <span className="text-xs font-semibold text-gray-400 uppercase shrink-0">Item:</span>
-                                            <span className="text-sm font-semibold text-gray-800 truncate">{assignment.title}</span>
-                                          </div>
-                                          <div className="flex flex-col items-end gap-1.5 shrink-0">
-                                            {/* Main Badge */}
-                                            {(() => {
-                                              const statusInfo = getItemApprovalStatus(assignment);
-                                              
-                                              // Check if sub status will be rendered
-                                              const subStatusInfo = getFilterStatus(assignment) !== 'published' ? getSubmissionStatusInfo(assignment.id) : null;
-                                              const willShowSubStatus = subStatusInfo && 
-                                                subStatusInfo.label !== 'Approved by Admin' && 
-                                                subStatusInfo.label !== 'Customer Approved' && 
-                                                subStatusInfo.label !== 'Both Approved';
+                                 {calGroup.assignments.map((assignment, idx) => (
+                                   <div
+                                     key={assignment.id || assignment._id || idx}
+                                     onClick={() => handleAssignmentClick(assignment)}
+                                     className="p-4 sm:p-5 hover:bg-purple-50/50 cursor-pointer transition-colors"
+                                   >
+                                     <div className="flex gap-3 sm:gap-4 items-start">
+                                       {/* Submission thumbnail */}
+                                       {(() => {
+                                         const thumb = getSubmissionThumbnail(assignment);
+                                         const thumbUrl = thumb?.url || '';
+                                         const isVid = isVideoUrl(thumbUrl) && !thumb?.isThumbnail;
+                                         return (
+                                           <div className="flex-shrink-0 w-16 h-16 rounded-xl overflow-hidden border border-gray-200 bg-gray-100 relative shadow-sm">
+                                             {thumbUrl ? (
+                                               isVid ? (
+                                                 <div className="w-full h-full bg-black relative">
+                                                   <video
+                                                     src={thumbUrl}
+                                                     muted
+                                                     playsInline
+                                                     preload="metadata"
+                                                     className="w-full h-full object-cover"
+                                                   />
+                                                   <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                                                     <Play className="h-4 w-4 text-white" />
+                                                   </div>
+                                                 </div>
+                                               ) : (
+                                                 <img src={thumbUrl} alt="" className="w-full h-full object-cover" />
+                                               )
+                                             ) : (
+                                               <div className="w-full h-full flex items-center justify-center">
+                                                 <Image className="h-5 w-5 text-gray-300" />
+                                               </div>
+                                             )}
+                                           </div>
+                                         );
+                                       })()}
+                                       {/* Assignment details */}
+                                       <div className="flex-1 min-w-0 flex flex-col gap-2">
+                                         {/* Line 1: Item label + title + badges */}
+                                         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-1.5 sm:gap-2">
+                                           <div className="flex items-center gap-1.5 min-w-0">
+                                             <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider shrink-0">Item:</span>
+                                             <span className="text-sm sm:text-base font-bold text-gray-800 truncate">{assignment.title}</span>
+                                           </div>
+                                           <div className="flex flex-row sm:flex-col items-center sm:items-end gap-1.5 flex-wrap sm:flex-nowrap">
+                                             {/* Main Badge */}
+                                             {(() => {
+                                               const statusInfo = getItemApprovalStatus(assignment);
+                                               
+                                               // Check if sub status will be rendered
+                                               const subStatusInfo = getFilterStatus(assignment) !== 'published' ? getSubmissionStatusInfo(assignment.id) : null;
+                                               const willShowSubStatus = subStatusInfo && 
+                                                 subStatusInfo.label !== 'Approved by Admin' && 
+                                                 subStatusInfo.label !== 'Customer Approved' && 
+                                                 subStatusInfo.label !== 'Both Approved';
 
-                                              // If main is Pending and we have a specific sub-status, hide Pending
-                                              if (statusInfo.label === 'Pending' && willShowSubStatus) {
-                                                return null;
-                                              }
+                                               // If main is Pending and we have a specific sub-status, hide Pending
+                                               if (statusInfo.label === 'Pending' && willShowSubStatus) {
+                                                 return null;
+                                               }
 
-                                              return (
-                                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${statusInfo.color}`}>
-                                                  {statusInfo.icon}
-                                                  <span>{statusInfo.label}</span>
-                                                </span>
-                                              );
-                                            })()}
-                                            {/* Sub Submission Status Badge */}
-                                            {(() => {
-                                              if (getFilterStatus(assignment) === 'published') return null;
-                                              const subStatusInfo = getSubmissionStatusInfo(assignment.id);
-                                              if (!subStatusInfo) return null;
-                                              if (subStatusInfo.label === 'Approved by Admin' || subStatusInfo.label === 'Customer Approved' || subStatusInfo.label === 'Both Approved') return null;
-                                              return (
-                                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${subStatusInfo.color}`}>
-                                                  {subStatusInfo.icon}
-                                                  <span>{subStatusInfo.label}</span>
-                                                </span>
-                                              );
-                                            })()}
-                                            {(() => {
-                                              const sub = getLatestSubmission(assignment.id);
-                                              if (!sub) return null;
-                                              const commentPool = Array.isArray(sub.comments)
-                                                ? sub.comments.filter(c => (c.finalized === true || c.reviewType === 'external') && !c.discarded)
-                                                : [];
-                                              const hasNewCreatorReply = hasAdminCustomerReplyActivity(commentPool);
-                                              if (!hasNewCreatorReply) return null;
-                                              return (
-                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700 border border-red-200 animate-pulse">
-                                                  <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-ping"></span>
-                                                  <span>New Reply</span>
-                                                </span>
-                                              );
-                                            })()}
-                                          </div>
-                                        </div>
-                                        {/* Line 2: Platform, Due Date, Priority */}
-                                        <div className="flex items-center gap-4 flex-wrap">
-                                          <div className="flex items-center gap-1 flex-wrap">
-                                            {parsePlatforms(assignment.platform || assignment.type).map((p, i) => (
-                                              <span key={i} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-xs font-medium ${platformColor(p)}`}>
-                                                <PlatformIcon platform={p} className="h-3 w-3 flex-shrink-0" />
-                                                {p.charAt(0).toUpperCase() + p.slice(1)}
-                                              </span>
-                                            ))}
-                                          </div>
-                                          {assignment.postType && (
-                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-100 capitalize">
-                                              <FileText className="h-3 w-3" />
-                                              Type: {assignment.postType}
-                                            </span>
-                                          )}
-                                          <div className="flex items-center gap-1">
-                                            <span className="text-xs font-semibold text-gray-400 uppercase">Due:</span>
-                                            <span className="text-xs text-gray-600">{assignment.dueDate ? format(new Date(assignment.dueDate), 'MMM dd, yyyy') : 'N/A'}</span>
-                                          </div>
-                                          <div className="flex items-center gap-1">
-                                            <span className="text-xs font-semibold text-gray-400 uppercase">Priority:</span>
-                                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${getPriorityColor(assignment.priority)}`}>
-                                              {(assignment.priority || 'Medium').charAt(0).toUpperCase() + (assignment.priority || 'Medium').slice(1).toLowerCase()}
-                                            </span>
-                                          </div>
-                                        </div>
-                                        {/* Line 3: Submission Review Status Notes/Actions */}
-                                        {(() => {
-                                          if (getFilterStatus(assignment) === 'published') return null;
-                                          const statusInfo = getSubmissionStatusInfo(assignment.id);
-                                          if (!statusInfo) return null;
-                                          const isApproved = statusInfo.label === 'Approved by Admin';
-                                          const hasBottomContent = isApproved || statusInfo.canReupload || statusInfo.revisionNotes;
-                                          if (!hasBottomContent) return null;
-                                          return (
-                                            <div
-                                              className={`flex items-center gap-2 mt-2 pt-2 border-t flex-wrap ${isApproved ? 'border-orange-200 bg-orange-50 -mx-4 px-4 pb-2 rounded-b-xl' : 'border-gray-100'}`}
-                                              onClick={e => e.stopPropagation()}
-                                            >
-                                              {isApproved && (
-                                                <CheckCircle className="h-4 w-4 text-orange-600 flex-shrink-0" />
-                                              )}
-                                              {isApproved && (
-                                                <span className="text-xs text-orange-700 font-medium">Your content was approved by admin!</span>
-                                              )}
-                                              {statusInfo.canReupload && (
-                                                <button
-                                                  onClick={(e) => { e.stopPropagation(); handleStartWork(assignment); }}
-                                                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-orange-600 text-white hover:bg-orange-700 transition-colors"
-                                                >
-                                                  Re-upload
-                                                </button>
-                                              )}
-                                              {statusInfo.revisionNotes && (
-                                                <span className="text-xs text-orange-600 italic truncate max-w-xs" title={statusInfo.revisionNotes}>
-                                                  "{statusInfo.revisionNotes}"
-                                                </span>
-                                              )}
-                                            </div>
-                                          );
-                                        })()}
-                                      </div>{/* end assignment details */}
-                                    </div>{/* end flex gap-3 */}
-                                  </div>
-                                ))}
+                                               return (
+                                                 <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-semibold border ${statusInfo.color}`}>
+                                                   {statusInfo.icon}
+                                                   <span>{statusInfo.label}</span>
+                                                 </span>
+                                               );
+                                             })()}
+                                             {/* Sub Submission Status Badge */}
+                                             {(() => {
+                                               if (getFilterStatus(assignment) === 'published') return null;
+                                               const subStatusInfo = getSubmissionStatusInfo(assignment.id);
+                                               if (!subStatusInfo) return null;
+                                               if (subStatusInfo.label === 'Approved by Admin' || subStatusInfo.label === 'Customer Approved' || subStatusInfo.label === 'Both Approved') return null;
+                                               return (
+                                                 <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${subStatusInfo.color}`}>
+                                                   {subStatusInfo.icon}
+                                                   <span>{subStatusInfo.label}</span>
+                                                 </span>
+                                               );
+                                             })()}
+                                             {(() => {
+                                               const sub = getLatestSubmission(assignment.id);
+                                               if (!sub) return null;
+                                               const commentPool = Array.isArray(sub.comments)
+                                                 ? sub.comments.filter(c => (c.finalized === true || c.reviewType === 'external') && !c.discarded)
+                                                 : [];
+                                               const hasNewCreatorReply = hasAdminCustomerReplyActivity(commentPool);
+                                               if (!hasNewCreatorReply) return null;
+                                               return (
+                                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700 border border-red-200 animate-pulse">
+                                                   <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-ping"></span>
+                                                   <span>New Reply</span>
+                                                 </span>
+                                               );
+                                             })()}
+                                           </div>
+                                         </div>
+                                         {/* Line 2: Platform and Type */}
+                                         <div className="flex flex-wrap items-center gap-1.5">
+                                           {parsePlatforms(assignment.platform || assignment.type).map((p, i) => (
+                                             <span 
+                                               key={i} 
+                                               className={`inline-flex items-center justify-center w-6 h-6 rounded-full border shadow-sm ${platformColor(p)}`}
+                                               title={p.charAt(0).toUpperCase() + p.slice(1)}
+                                             >
+                                               <PlatformIcon platform={p} className="h-3.5 w-3.5 flex-shrink-0" />
+                                             </span>
+                                           ))}
+                                           {assignment.postType && (
+                                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 capitalize">
+                                               <FileText className="h-3 w-3" />
+                                               Type: {assignment.postType}
+                                             </span>
+                                           )}
+                                         </div>
+                                         {/* Line 3: Timeline & Priority */}
+                                         <div className="flex items-center gap-2.5 text-xs text-gray-500 mt-0.5 flex-nowrap whitespace-nowrap overflow-hidden">
+                                           <div className="flex items-center gap-1 flex-shrink-0">
+                                             <Calendar className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
+                                             <span className="font-semibold text-gray-400 uppercase tracking-wider text-[10px]">Due:</span>
+                                             <span className="text-gray-700 font-medium text-[11px]">{assignment.dueDate ? format(new Date(assignment.dueDate), 'MMM dd, yyyy') : 'N/A'}</span>
+                                           </div>
+                                           <span className="text-gray-300 flex-shrink-0">|</span>
+                                           <div className="flex items-center gap-1 flex-shrink-0">
+                                             <span className="font-semibold text-gray-400 uppercase tracking-wider text-[10px]">Priority:</span>
+                                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border flex-shrink-0 leading-none ${getPriorityColor(assignment.priority)}`}>
+                                               {(assignment.priority || 'Medium').toUpperCase()}
+                                             </span>
+                                           </div>
+                                         </div>
+                                         {/* Line 4: Submission Review Status Notes/Actions */}
+                                         {(() => {
+                                           if (getFilterStatus(assignment) === 'published') return null;
+                                           const statusInfo = getSubmissionStatusInfo(assignment.id);
+                                           if (!statusInfo) return null;
+                                           const isApproved = statusInfo.label === 'Approved by Admin';
+                                           const hasBottomContent = isApproved || statusInfo.canReupload || statusInfo.revisionNotes;
+                                           if (!hasBottomContent) return null;
+                                           return (
+                                             <div
+                                               className={`flex items-center gap-2 mt-1 pt-2 border-t flex-wrap ${isApproved ? 'border-orange-200 bg-orange-50/50 -mx-4 px-4 pb-2 rounded-b-xl' : 'border-gray-100'}`}
+                                               onClick={e => e.stopPropagation()}
+                                             >
+                                               {isApproved && (
+                                                 <CheckCircle className="h-4 w-4 text-orange-600 flex-shrink-0" />
+                                               )}
+                                               {isApproved && (
+                                                 <span className="text-xs text-orange-700 font-medium">Your content was approved by admin!</span>
+                                               )}
+                                               {statusInfo.canReupload && (
+                                                 <button
+                                                   onClick={(e) => { e.stopPropagation(); handleStartWork(assignment); }}
+                                                   className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-orange-600 text-white hover:bg-orange-700 transition-colors shadow-sm"
+                                                 >
+                                                   Re-upload
+                                                 </button>
+                                               )}
+                                               {statusInfo.revisionNotes && (
+                                                 <span className="text-xs text-orange-600 italic bg-orange-50 border border-orange-100 px-2 py-0.5 rounded-lg max-w-full" title={statusInfo.revisionNotes}>
+                                                   "{statusInfo.revisionNotes}"
+                                                 </span>
+                                               )}
+                                             </div>
+                                           );
+                                         })()}
+                                       </div>{/* end assignment details */}
+                                     </div>{/* end flex gap-3 */}
+                                   </div>
+                                 ))}
                               </div>
                             )}
                           </div>

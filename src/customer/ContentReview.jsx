@@ -101,6 +101,9 @@ const getCommentThreadRoles = (comment) => {
 };
 
 const isCommentVisibleToCustomer = (comment) => {
+  if (comment?.reviewType === 'internal' || comment?.authorRole === 'admin') {
+    return false;
+  }
   const roles = getCommentThreadRoles(comment);
   const hasAdminCreatorOnly = roles.has('admin') && roles.has('creator') && !roles.has('customer');
   return !hasAdminCreatorOnly;
@@ -108,22 +111,7 @@ const isCommentVisibleToCustomer = (comment) => {
 
 const getCustomerVisibleReplies = (comment) => {
   const rawReplies = getCommentReplies(comment);
-  const visibleReplies = [];
-  let hasCreatorReply = false;
-
-  for (const rep of rawReplies) {
-    const role = String(rep?.authorRole || '').toLowerCase();
-    if (role === 'creator') {
-      hasCreatorReply = true;
-      continue;
-    }
-    if (role === 'admin' && hasCreatorReply) {
-      continue;
-    }
-    visibleReplies.push(rep);
-  }
-
-  return visibleReplies;
+  return rawReplies.filter(rep => String(rep?.authorRole || '').toLowerCase() !== 'creator');
 };
 
 const isVisibleToCustomerSubmission = (submission) => {
@@ -1908,7 +1896,7 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
                   <div className="flex gap-2 w-full max-w-md justify-center">
                     <button
                       onClick={handleApproveContent}
-                      disabled={approvingContent}
+                      disabled={approvingContent || (currentVersion && ['revision_requested', 'changes_requested', 'changes_requested_admin', 'sent_to_creator', 'customer_feedback_pending_admin', 'changes_requested_customer_approved_admin'].includes((currentVersion.status || '').toLowerCase()))}
                       className="flex-1 max-w-[200px] inline-flex items-center justify-center px-4 py-2 bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white rounded-xl font-bold text-xs shadow-md transition-all disabled:opacity-50"
                     >
                       {approvingContent ? 'Approving...' : 'Approve Content'}
@@ -1970,20 +1958,23 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
                             {version.media?.length > 0 && (
                               <span className="flex items-center"><Image className="h-2.5 w-2.5 mr-0.5" />{version.media.length}</span>
                             )}
-                            {version.comments?.length > 0 && (
-                              <span className="flex items-center"><MessageSquare className="h-2.5 w-2.5 mr-0.5" />{version.comments.length}</span>
+                            {version.comments?.filter(isCommentVisibleToCustomer).length > 0 && (
+                              <span className="flex items-center"><MessageSquare className="h-2.5 w-2.5 mr-0.5" />{version.comments.filter(isCommentVisibleToCustomer).length}</span>
                             )}
                             {(() => {
                               const hasNewReply = (version.comments || []).some(c => {
+                                const hasCreatorReply = (c.replies || []).some(r => String(r.authorRole || '').toLowerCase() === 'creator');
+                                if (hasCreatorReply) return false;
                                 const isExternal = c.reviewType === 'external' || c.authorRole === 'customer' || (c.authorRole !== 'admin' && c.reviewType !== 'internal');
                                 if (!isExternal) return false;
                                 const replies = c.replies || (c.adminReply ? [{
                                   authorRole: 'admin',
                                   message: c.adminReply.text
                                 }] : []);
-                                if (replies.length > 0) {
-                                  const lastReply = replies[replies.length - 1];
-                                  return (lastReply.authorRole === 'admin' || lastReply.authorRole === 'creator') && !lastReply.readByCustomer;
+                                const customerVisibleReplies = replies.filter(r => String(r.authorRole || '').toLowerCase() !== 'creator');
+                                if (customerVisibleReplies.length > 0) {
+                                  const lastReply = customerVisibleReplies[customerVisibleReplies.length - 1];
+                                  return lastReply.authorRole === 'admin' && !lastReply.readByCustomer;
                                 }
                                 return false;
                               });
@@ -2084,9 +2075,12 @@ function ContentReview({ itemId: propItemId, onClose: propOnClose, initialSubmis
                                       authorRole: 'admin',
                                       message: comment.adminReply.text
                                     }] : []);
-                                    if (replies.length > 0) {
-                                      const lastReply = replies[replies.length - 1];
-                                      const isNewReply = (lastReply.authorRole === 'admin' || lastReply.authorRole === 'creator') && !lastReply.readByCustomer;
+                                    const hasCreatorReply = replies.some(r => String(r.authorRole || '').toLowerCase() === 'creator');
+                                    if (hasCreatorReply) return null;
+                                    const customerVisibleReplies = replies.filter(r => String(r.authorRole || '').toLowerCase() !== 'creator');
+                                    if (customerVisibleReplies.length > 0) {
+                                      const lastReply = customerVisibleReplies[customerVisibleReplies.length - 1];
+                                      const isNewReply = lastReply.authorRole === 'admin' && !lastReply.readByCustomer;
                                       if (isNewReply) {
                                         return (
                                           <span className="inline-flex items-center gap-0.5 ml-1 px-1 py-0.2 bg-red-100 text-red-700 rounded text-[8px] font-extrabold animate-pulse">

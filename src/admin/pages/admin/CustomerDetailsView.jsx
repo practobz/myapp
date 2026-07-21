@@ -80,12 +80,23 @@ const SocialBadge = memo(({ platform }) => {
     cls: 'bg-gray-400',
     title: platform,
   };
+
+  const getIcon = () => {
+    switch (key) {
+      case 'facebook': return <Facebook className="h-3.5 w-3.5 text-white" />;
+      case 'instagram': return <Instagram className="h-3.5 w-3.5 text-white" />;
+      case 'linkedin': return <Linkedin className="h-3.5 w-3.5 text-white" />;
+      case 'youtube': return <Youtube className="h-3.5 w-3.5 text-white" />;
+      default: return <span className="text-[10px] font-bold">{meta.abbr}</span>;
+    }
+  };
+
   return (
     <span
       title={meta.title}
-      className={`inline-flex items-center justify-center w-6 h-6 rounded text-white text-[10px] font-bold flex-shrink-0 ${meta.cls}`}
+      className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-white flex-shrink-0 ${meta.cls}`}
     >
-      {meta.abbr}
+      {getIcon()}
     </span>
   );
 });
@@ -151,6 +162,28 @@ const getPortfolioStatusLabel = (status) => {
     case 'customer_feedback_pending_admin': return 'Customer Feedback Pending Admin Review';
     case 'changes_requested_customer_approved_admin': return 'Changes Requested by Customer (Approved by Admin)';
     default: return (status || '').replace(/_/g, ' ');
+  }
+};
+
+const getPortfolioStatusDotColor = (status) => {
+  switch (status) {
+    case 'published': return 'bg-blue-500';
+    case 'approved_admin_and_customer': return 'bg-teal-500';
+    case 'approved_admin_under_customer_review': return 'bg-orange-500';
+    case 'under_admin_review': return 'bg-yellow-500';
+    case 'under_review': return 'bg-yellow-500';
+    case 'approved_admin': return 'bg-orange-500';
+    case 'approved_customer': return 'bg-green-500';
+    case 'approved_both': return 'bg-teal-500';
+    case 'approved': return 'bg-green-500';
+    case 'revision_requested': return 'bg-orange-500';
+    case 'changes_requested': return 'bg-orange-500';
+    case 'rejected': return 'bg-red-500';
+    case 'pending_customer_review': return 'bg-cyan-500';
+    case 'changes_requested_admin': return 'bg-orange-500';
+    case 'customer_feedback_pending_admin': return 'bg-purple-500';
+    case 'changes_requested_customer_approved_admin': return 'bg-rose-500';
+    default: return 'bg-gray-400';
   }
 };
 
@@ -559,7 +592,7 @@ const ItemTimeline = ({ item, itemStatus, scheduledPosts = [], submissions = [] 
     { key: 'due', label: 'Due', done: hasReachedDate(item.date), date: fmtDate(item.date), tone: 'orange' },
     ...versionSteps,
     { key: 'reviewed', label: 'Approved by Customer', done: isCustomerApproved, date: customerApprovedDate, tone: 'blue' },
-    { key: 'published', label: 'Published', done: hasReachedDate(publishedAt), date: fmtDate(publishedAt), tone: 'green' },
+    { key: 'published', label: 'Published', done: isCustomerApproved && hasReachedDate(publishedAt), date: fmtDate(publishedAt), tone: 'green' },
   ];
 
   const toneClasses = {
@@ -2393,13 +2426,15 @@ function CustomerDetailsView() {
               </span>
             </div>
             <div className="ml-2 sm:ml-3 min-w-0 flex-1">
-              <h2 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">{customer.name || 'Customer'}</h2>
-              <p className="text-base text-gray-500 truncate">{customer.email}</p>
-              {socialPlatforms.length > 0 && (
-                <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                  {socialPlatforms.map(p => <SocialBadge key={p} platform={p} />)}
-                </div>
-              )}
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">{customer.name || 'Customer'}</h2>
+                {socialPlatforms.length > 0 && (
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {socialPlatforms.map(p => <SocialBadge key={p} platform={p} />)}
+                  </div>
+                )}
+              </div>
+              <p className="text-base text-gray-500 truncate mt-0.5">{customer.email}</p>
             </div>
           </div>
           {/* Tab Navigation */}
@@ -2440,45 +2475,45 @@ function CustomerDetailsView() {
             <div className="px-3 sm:px-4 py-3 border-b border-gray-100">
               <div className="flex flex-col xl:flex-row xl:items-center gap-3">
                 <div className="flex-shrink-0">
-                  <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Content Calendars</h2>
-                  <p className="text-base text-gray-500 mt-0.5">Manage content schedule and items</p>
+                  <h2 className="text-base sm:text-lg font-bold text-gray-900">Content Calendars</h2>
+                  <p className="text-[11px] sm:text-xs text-gray-500 mt-0.5">Manage schedule & items</p>
                 </div>
 
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 xl:ml-auto overflow-hidden">
                   {/* Stats Inline */}
                   {calendars.length > 0 && (
-                    <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0">
-                      <div className="flex items-center gap-1.5 px-2 py-1 bg-gray-50 rounded-md border border-gray-200 whitespace-nowrap">
-                        <span className="text-sm font-bold text-gray-700">{overallStats.totalCalendars}</span>
-                        <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">Calendars</span>
+                    <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide pb-1 sm:pb-0">
+                      <div className="flex items-center gap-1 px-1.5 py-0.5 bg-gray-50 rounded border border-gray-250 whitespace-nowrap text-xs">
+                        <span className="font-bold text-gray-700">{overallStats.totalCalendars}</span>
+                        <span className="text-[9px] font-semibold text-gray-500 uppercase tracking-wide">Calendars</span>
                       </div>
-                      <div className="flex items-center gap-1.5 px-2 py-1 bg-blue-50 rounded-md border border-blue-200 whitespace-nowrap">
-                        <span className="text-sm font-bold text-blue-700">{overallStats.totalItems}</span>
-                        <span className="text-[10px] font-medium text-blue-600 uppercase tracking-wide">Items</span>
+                      <div className="flex items-center gap-1 px-1.5 py-0.5 bg-blue-50 rounded border border-blue-200 whitespace-nowrap text-xs">
+                        <span className="font-bold text-blue-700">{overallStats.totalItems}</span>
+                        <span className="text-[9px] font-semibold text-blue-600 uppercase tracking-wide">Items</span>
                       </div>
-                      <div className="flex items-center gap-1.5 px-2 py-1 bg-emerald-50 rounded-md border border-emerald-200 whitespace-nowrap">
-                        <span className="text-sm font-bold text-emerald-700">{overallStats.publishedItems}</span>
-                        <span className="text-[10px] font-medium text-emerald-600 uppercase tracking-wide">Published</span>
+                      <div className="flex items-center gap-1 px-1.5 py-0.5 bg-emerald-50 rounded border border-emerald-200 whitespace-nowrap text-xs">
+                        <span className="font-bold text-emerald-700">{overallStats.publishedItems}</span>
+                        <span className="text-[9px] font-semibold text-emerald-600 uppercase tracking-wide">Published</span>
                       </div>
-                      <div className="flex items-center gap-1.5 px-2 py-1 bg-amber-50 rounded-md border border-amber-200 whitespace-nowrap">
-                        <span className="text-sm font-bold text-amber-700">{overallStats.pendingItems}</span>
-                        <span className="text-[10px] font-medium text-amber-600 uppercase tracking-wide">Pending</span>
+                      <div className="flex items-center gap-1 px-1.5 py-0.5 bg-amber-50 rounded border border-amber-200 whitespace-nowrap text-xs">
+                        <span className="font-bold text-amber-700">{overallStats.pendingItems}</span>
+                        <span className="text-[9px] font-semibold text-amber-600 uppercase tracking-wide">Pending</span>
                       </div>
-                      <div className="flex items-center gap-1.5 px-2 py-1 bg-indigo-50 rounded-md border border-indigo-200 whitespace-nowrap">
-                        <span className="text-sm font-bold text-indigo-700">{overallStats.adminReviewCount}</span>
-                        <span className="text-[10px] font-medium text-indigo-600 uppercase tracking-wide">Admin Review</span>
+                      <div className="flex items-center gap-1 px-1.5 py-0.5 bg-indigo-50 rounded border border-indigo-200 whitespace-nowrap text-xs">
+                        <span className="font-bold text-indigo-700">{overallStats.adminReviewCount}</span>
+                        <span className="text-[9px] font-semibold text-indigo-600 uppercase tracking-wide">Admin</span>
                       </div>
-                      <div className="flex items-center gap-1.5 px-2 py-1 bg-pink-50 rounded-md border border-pink-200 whitespace-nowrap">
-                        <span className="text-sm font-bold text-pink-700">{overallStats.customerReviewCount}</span>
-                        <span className="text-[10px] font-medium text-pink-600 uppercase tracking-wide">Customer Review</span>
+                      <div className="flex items-center gap-1 px-1.5 py-0.5 bg-pink-50 rounded border border-pink-200 whitespace-nowrap text-xs">
+                        <span className="font-bold text-pink-700">{overallStats.customerReviewCount}</span>
+                        <span className="text-[9px] font-semibold text-pink-600 uppercase tracking-wide">Customer</span>
                       </div>
-                      <div className="flex items-center gap-1.5 px-2 py-1 bg-orange-50 rounded-md border border-orange-200 whitespace-nowrap">
-                        <span className="text-sm font-bold text-orange-700">{overallStats.upcomingDue}</span>
-                        <span className="text-[10px] font-medium text-orange-600 uppercase tracking-wide">Upcoming</span>
+                      <div className="flex items-center gap-1 px-1.5 py-0.5 bg-orange-50 rounded border border-orange-200 whitespace-nowrap text-xs">
+                        <span className="font-bold text-orange-700">{overallStats.upcomingDue}</span>
+                        <span className="text-[9px] font-semibold text-orange-600 uppercase tracking-wide">Upcoming</span>
                       </div>
-                      <div className="flex items-center gap-1.5 px-2 py-1 bg-red-50 rounded-md border border-red-200 whitespace-nowrap">
-                        <span className="text-sm font-bold text-red-700">{overallStats.overdue}</span>
-                        <span className="text-[10px] font-medium text-red-600 uppercase tracking-wide">Overdue</span>
+                      <div className="flex items-center gap-1 px-1.5 py-0.5 bg-red-50 rounded border border-red-200 whitespace-nowrap text-xs">
+                        <span className="font-bold text-red-700">{overallStats.overdue}</span>
+                        <span className="text-[9px] font-semibold text-red-600 uppercase tracking-wide">Overdue</span>
                       </div>
                     </div>
                   )}
@@ -2581,7 +2616,7 @@ function CustomerDetailsView() {
                   <p className="text-gray-400 text-xs mt-1">Content uploaded by creators will appear here</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-3 sm:grid-cols-2 lg:grid-cols-4 gap-1.5 sm:gap-4">
                   {portfolioItemsMapped.map(item => {
                     const latestVersion = item.versions[item.versions.length - 1];
                     const firstMedia = latestVersion?.media?.[0];
@@ -2605,7 +2640,7 @@ function CustomerDetailsView() {
                     return (
                       <div
                         key={item.id}
-                        className="bg-white rounded-xl shadow-sm border border-gray-200/50 overflow-hidden hover:shadow-md transition-shadow flex flex-col cursor-pointer"
+                        className="bg-gray-50 overflow-hidden flex flex-col cursor-pointer relative aspect-square sm:aspect-auto sm:h-auto sm:bg-white sm:rounded-xl sm:shadow-sm sm:border sm:border-gray-200/50 hover:shadow-md transition-shadow"
                         onClick={() => {
                           const fakeItem = { id: item.id, title: item.title, description: item.title, type: item.platform };
                           const fakeCal = { _id: item.calendarId, customerId: id, name: item.calendarName };
@@ -2613,29 +2648,34 @@ function CustomerDetailsView() {
                         }}
                       >
                         {/* Thumbnail */}
-                        <div className="relative h-36 bg-gray-100 flex-shrink-0">
+                        <div className="relative h-full w-full sm:h-36 flex-shrink-0 bg-gray-150">
                           {firstMedia?.url ? (
                             isVideoUrl(firstMedia.url) ? (
                               <div className="w-full h-full flex items-center justify-center bg-gray-800">
-                                <Video className="h-8 w-8 text-white" />
+                                <Video className="h-6 w-6 sm:h-8 sm:w-8 text-white" />
                               </div>
                             ) : (
                               <img src={firstMedia.url} alt="" className="w-full h-full object-cover" loading="lazy" />
                             )
                           ) : (
                             <div className="w-full h-full flex items-center justify-center">
-                              <ImageIcon className="h-8 w-8 text-gray-300" />
+                              <ImageIcon className="h-6 w-6 sm:h-8 sm:w-8 text-gray-300" />
                             </div>
                           )}
-                          <span className={`absolute top-2 left-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${getPortfolioStatusColor(displayStatus)}`}>
+
+                          {/* Desktop Status Badge vs Mobile Status Dot */}
+                          <span className={`hidden sm:inline-flex absolute top-2 left-2 items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${getPortfolioStatusColor(displayStatus)}`}>
                             {getPortfolioStatusLabel(displayStatus)}
                           </span>
-                          <span className="absolute top-2 right-2 px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-100 text-purple-700">
+                          <span className={`inline sm:hidden absolute top-1.5 left-1.5 w-2.5 h-2.5 rounded-full border border-white shadow-sm ${getPortfolioStatusDotColor(displayStatus)}`} title={getPortfolioStatusLabel(displayStatus)} />
+
+                          {/* Version Badge */}
+                          <span className="absolute top-1.5 right-1.5 px-1 py-0.5 rounded text-[8px] sm:top-2 sm:right-2 sm:px-1.5 sm:text-[10px] font-medium bg-purple-100 text-purple-700 shadow-sm">
                             V{item.totalVersions}
                           </span>
                         </div>
-                        {/* Body */}
-                        <div className="p-3 flex-1 flex flex-col">
+                        {/* Body (Desktop only) */}
+                        <div className="hidden sm:flex p-3 flex-1 flex-col">
                           <p className="text-sm font-medium text-gray-900 truncate mb-1">
                             {item.title || <span className="text-gray-400 italic font-normal">No caption</span>}
                           </p>
@@ -2697,13 +2737,13 @@ function CustomerDetailsView() {
             <div className="p-5">
               {/* Platform buttons */}
               <p className="text-sm font-medium text-gray-700 mb-3">Select a platform to generate a QR code:</p>
-              <div className="flex flex-wrap gap-3 mb-6">
+              <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2.5 mb-6">
                 {PLATFORMS_QR.map(({ key, label, color, Icon }) => (
                   <button
                     key={key}
                     onClick={() => handleGenerateQr(key)}
                     disabled={qrLoading}
-                    className={`${color} text-white px-5 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2 shadow-sm hover:shadow-md transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed`}
+                    className={`${color} text-white px-3 sm:px-5 py-2.5 rounded-xl text-sm font-medium flex items-center justify-center gap-2 shadow-sm hover:shadow-md transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed w-full sm:w-auto`}
                   >
                     {qrLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icon className="h-4 w-4" />}
                     {label}
@@ -2727,27 +2767,27 @@ function CustomerDetailsView() {
 
               {/* QR Result */}
               {qrResult.qrDataUrl && (
-                <div className="flex flex-col sm:flex-row gap-6 items-start">
+                <div className="flex flex-col sm:flex-row gap-6 items-center sm:items-start text-center sm:text-left">
                   {/* QR Image */}
-                  <div className="flex-shrink-0">
+                  <div className="flex-shrink-0 flex justify-center w-full sm:w-auto">
                     <div className="p-3 bg-white border-2 border-gray-200 rounded-xl inline-block shadow-sm">
-                      <img src={qrResult.qrDataUrl} alt="QR Code" className="w-44 h-44 sm:w-52 sm:h-52" />
+                      <img src={qrResult.qrDataUrl} alt="QR Code" className="w-44 h-44 sm:w-52 sm:h-52 mx-auto" />
                     </div>
                   </div>
                   {/* QR Details */}
-                  <div className="flex-1 min-w-0 space-y-3">
-                    <div>
+                  <div className="flex-1 min-w-0 space-y-3 w-full">
+                    <div className="flex flex-col items-center sm:items-start">
                       <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Platform</p>
                       <div className="flex items-center gap-2">
                         {PLATFORMS_QR.find(p => p.key === qrResult.platform) && (() => {
                           const plat = PLATFORMS_QR.find(p => p.key === qrResult.platform);
                           const Icon = plat.Icon;
-                          return <><Icon className="h-5 w-5" /><span className="font-semibold text-gray-800">{plat.label}</span></>;
+                          return <><Icon className="h-5 w-5 text-gray-800" /><span className="font-semibold text-gray-800">{plat.label}</span></>;
                         })()}
                       </div>
                     </div>
                     {timeRemaining && (
-                      <div>
+                      <div className="flex flex-col items-center sm:items-start">
                         <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Expires in</p>
                         <span className={`text-sm font-medium ${qrExpiration === 'expired' ? 'text-red-600' : qrExpiration === 'warning' ? 'text-amber-600' : 'text-green-600'}`}>
                           {timeRemaining}
@@ -2755,15 +2795,15 @@ function CustomerDetailsView() {
                       </div>
                     )}
                     {qrResult.qrCodeUrl && (
-                      <div>
+                      <div className="flex flex-col items-center sm:items-start">
                         <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">QR URL</p>
-                        <p className="text-xs text-gray-600 break-all bg-gray-50 rounded p-2">{qrResult.qrCodeUrl}</p>
+                        <p className="text-xs text-gray-600 break-all bg-gray-50 rounded p-2 w-full max-w-md mx-auto sm:mx-0">{qrResult.qrCodeUrl}</p>
                       </div>
                     )}
-                    <div className="flex gap-2 flex-wrap pt-1">
+                    <div className="flex flex-col sm:flex-row gap-2 pt-1 w-full justify-center sm:justify-start">
                       <button
                         onClick={downloadQrCode}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                        className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors w-full sm:w-auto"
                       >
                         <Download className="h-4 w-4" />
                         Download QR
@@ -2771,7 +2811,7 @@ function CustomerDetailsView() {
                       <button
                         onClick={handleSendQrEmail}
                         disabled={emailSending}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50"
+                        className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 w-full sm:w-auto"
                       >
                         {emailSending ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
@@ -2785,7 +2825,7 @@ function CustomerDetailsView() {
                           href={qrResult.configUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors"
+                          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors w-full sm:w-auto"
                         >
                           <ExternalLink className="h-4 w-4" />
                           Preview
@@ -3098,11 +3138,11 @@ function CustomerDetailsView() {
       {/* Content Detail Modal */}
       {selectedContentDetail && !selectedContentDetail._loading && (
         <div
-          className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center overflow-y-auto py-4 px-2"
+          className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center overflow-y-auto sm:py-4 sm:px-2"
           onClick={() => setSelectedContentDetail(null)}
         >
           <div
-            className="w-full max-w-5xl bg-gray-50 rounded-2xl p-4 my-auto"
+            className="w-full max-w-5xl bg-gray-50 min-h-screen sm:min-h-0 rounded-none sm:rounded-2xl p-3 sm:p-4 my-0 sm:my-auto"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-3">

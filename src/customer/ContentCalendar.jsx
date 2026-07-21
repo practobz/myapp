@@ -215,19 +215,15 @@ const getPlatformDisplayName = (platform) => {
 const PlatformNameBadges = React.memo(({ platforms = [], tone = 'gray' }) => {
   if (!platforms.length) return null;
 
-  const toneClass = tone === 'published'
-    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-    : 'bg-slate-50 text-slate-700 border-slate-200';
-
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       {platforms.map((platform) => (
         <span
           key={platform}
-          className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full border text-[11px] font-medium ${toneClass}`}
+          className="inline-flex items-center justify-center w-7 h-7 rounded-full border bg-slate-50/50 text-slate-700 border-slate-200 hover:bg-slate-100 transition-colors shadow-sm"
+          title={getPlatformDisplayName(platform)}
         >
           <PlatformIcon platform={platform} />
-          <span>{getPlatformDisplayName(platform)}</span>
         </span>
       ))}
     </div>
@@ -545,7 +541,7 @@ const ItemTimeline = ({ item, itemStatus, scheduledPosts = [], submissions = [],
       { key: 'due',       label: 'Due',       done: hasReachedDate(item.date),        date: fmtDate(item.date),        tone: 'orange' },
       ...versionSteps,
       { key: 'reviewed',  label: 'Approved by Customer',  done: isCustomerApproved, date: customerApprovedDate, tone: 'blue' },
-      { key: 'published', label: 'Published', done: hasReachedDate(publishedAt),       date: fmtDate(publishedAt),      tone: 'green' },
+      { key: 'published', label: 'Published', done: isCustomerApproved && hasReachedDate(publishedAt),       date: fmtDate(publishedAt),      tone: 'green' },
     ];
 
     toneClasses = {
@@ -641,7 +637,7 @@ const ItemTimeline = ({ item, itemStatus, scheduledPosts = [], submissions = [],
       { key: 'created', label: 'Created', done: hasReachedDate(item.createdAt), date: fmtDate(item.createdAt), tone: 'blue' },
       ...versionSteps,
       { key: 'reviewed', label: 'Approved by Customer', done: isCustomerApproved, date: customerApprovedDate, tone: 'green' },
-      { key: 'published', label: 'Published', done: hasReachedDate(publishedAt), date: fmtDate(publishedAt), tone: 'purple' },
+      { key: 'published', label: 'Published', done: isCustomerApproved && hasReachedDate(publishedAt), date: fmtDate(publishedAt), tone: 'purple' },
     ];
 
     toneClasses = {
@@ -1815,7 +1811,8 @@ function ContentCalendar({
         <div className="flex flex-col lg:flex-row gap-6">
           {/* Sidebar */}
           <div className="lg:w-72 flex-shrink-0">
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden sticky top-24">
+            {/* Desktop Sidebar (visible on lg and up) */}
+            <div className="hidden lg:block bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden sticky top-24">
               <div className="p-4 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-slate-50 flex items-center justify-between">
                 <h3 className="font-semibold text-gray-900 flex items-center gap-2">
                   <CalendarIcon className="h-4 w-4 text-indigo-600" />
@@ -1888,6 +1885,73 @@ function ContentCalendar({
                     );
                   })}
                 </div>
+              </div>
+            </div>
+
+            {/* Mobile Dropdown selector (visible below lg) */}
+            <div className="block lg:hidden bg-white rounded-xl shadow-sm border border-gray-150 p-4 mb-4">
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Select Calendar</label>
+              <div className="flex items-center gap-2">
+                <select
+                  value={selectedCalendarId || ""}
+                  onChange={(e) => setSelectedCalendarId(e.target.value || null)}
+                  className="flex-1 bg-gray-50 border border-gray-250 text-gray-800 text-sm rounded-lg px-3 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                >
+                  <option value="">All Calendars ({allItems.length})</option>
+                  {calendars.map((cal) => (
+                    <option key={cal._id || cal.id} value={cal._id || cal.id}>
+                      {cal.name} ({cal.contentItems?.length || 0})
+                    </option>
+                  ))}
+                </select>
+
+                {selectedCalendarId && (
+                  <div className="flex items-center gap-1">
+                    {(() => {
+                      const selectedCal = calendars.find(c => (c._id || c.id) === selectedCalendarId);
+                      if (!selectedCal) return null;
+                      return (
+                        <>
+                          {isAdmin && onAddItem && (
+                            <button
+                              onClick={() => onAddItem(selectedCal)}
+                              className="p-2 text-emerald-600 bg-emerald-50 hover:bg-emerald-100 rounded-lg border border-emerald-150 transition-colors"
+                              title="Add Item"
+                            >
+                              <PlusCircle className="h-4.5 w-4.5" />
+                            </button>
+                          )}
+                          {isAdmin && onEditCalendar && (
+                            <button
+                              onClick={() => onEditCalendar(selectedCal)}
+                              className="p-2 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-150 transition-colors"
+                              title="Edit Calendar"
+                            >
+                              <Edit className="h-4.5 w-4.5" />
+                            </button>
+                          )}
+                          {isAdmin && onDeleteCalendar && (
+                            <button
+                              onClick={() => onDeleteCalendar(selectedCalendarId)}
+                              className="p-2 text-red-650 bg-red-50 hover:bg-red-100 rounded-lg border border-red-150 transition-colors"
+                              title="Delete Calendar"
+                            >
+                              <Trash2 className="h-4.5 w-4.5" />
+                            </button>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
+                )}
+                {isAdmin && !selectedCalendarId && onAddCalendar && (
+                  <button
+                    onClick={onAddCalendar}
+                    className="p-2 text-indigo-650 bg-indigo-50 hover:bg-indigo-100 border border-indigo-150 rounded-lg transition-colors flex items-center justify-center gap-1 text-xs font-semibold"
+                  >
+                    <PlusCircle className="h-4 w-4" /> Add
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -2086,9 +2150,12 @@ function ContentCalendar({
                       authorRole: 'admin',
                       message: c.adminReply.text
                     }] : []);
-                    if (replies.length > 0) {
-                      const lastReply = replies[replies.length - 1];
-                      return (lastReply.authorRole === 'admin' || lastReply.authorRole === 'creator') && !lastReply.readByCustomer;
+                    const hasCreatorReply = replies.some(r => String(r.authorRole || '').toLowerCase() === 'creator');
+                    if (hasCreatorReply) return false;
+                    const customerVisibleReplies = replies.filter(r => String(r.authorRole || '').toLowerCase() !== 'creator');
+                    if (customerVisibleReplies.length > 0) {
+                      const lastReply = customerVisibleReplies[customerVisibleReplies.length - 1];
+                      return lastReply.authorRole === 'admin' && !lastReply.readByCustomer;
                     }
                     return false;
                   });
@@ -2329,181 +2396,190 @@ function ContentCalendar({
                         className={`bg-white rounded-xl border transition-all cursor-pointer group ${item.status === 'published' ? 'border-emerald-200 hover:border-emerald-300 hover:shadow-md' : 'border-gray-100 hover:border-gray-200 hover:shadow-md'}`}
                       >
                         <div className="p-4 sm:p-5">
-                          <div className="flex flex-col sm:flex-row sm:items-start gap-4">
-                            <div className="w-full sm:w-24 h-24 rounded-lg bg-gradient-to-br from-gray-100 to-gray-200 overflow-hidden flex-shrink-0">
-                              {previewMedia.imageUrl ? (
-                                isVideoUrl(previewMedia.imageUrl) ? (
-                                  <div className="relative w-full h-full bg-black">
-                                    <video
-                                      src={previewMedia.imageUrl}
-                                      muted
-                                      playsInline
-                                      preload="metadata"
-                                      className="w-full h-full object-cover"
-                                    />
-                                    <div className="absolute inset-0 flex items-center justify-center bg-black/15">
-                                      <Play className="h-8 w-8 text-white/85" />
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <img src={previewMedia.imageUrl} alt="" className="w-full h-full object-cover" />
-                                )
-                              ) : (
-                                <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-slate-100 to-gray-200">
-                                  <div className="w-14 h-14 rounded-xl bg-white/70 border border-gray-200 shadow-sm flex items-center justify-center">
-                                    <Image className="h-7 w-7 text-gray-300" />
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
-                                <div className="flex items-center gap-3">
-                                  <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${displayStatus === 'published' ? 'bg-emerald-100 text-emerald-700' :
-                                    displayStatus === 'customer_approved' ? 'bg-emerald-100 text-emerald-700' :
-                                    displayStatus === 'under_review' ? 'bg-amber-100 text-amber-700' :
-                                      displayStatus === 'scheduled' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
-                                    }`}>
-                                    {(displayStatus === 'published' || displayStatus === 'customer_approved') && <CheckCircle className="h-3 w-3" />}
-                                    {displayStatus === 'scheduled' && <Clock className="h-3 w-3" />}
-                                    {displayStatus === 'under_review' && <Eye className="h-3 w-3" />}
-                                    {getStatusLabel(displayStatus)}
-                                  </span>
-                                  {adminNotificationText && (
-                                    <span className="inline-flex items-center gap-1 bg-red-600 text-white px-2.5 py-0.5 rounded-full text-[10px] font-bold shadow-sm animate-pulse ml-2">
-                                      <AlertCircle className="h-3 w-3 text-white animate-bounce" />
-                                      {adminNotificationText}
-                                    </span>
-                                  )}
-                                  <span className="text-sm text-gray-500 flex items-center gap-1.5">
-                                    <CalendarIcon className="h-3.5 w-3.5" />
-                                    {format(new Date(item.date), 'MMM dd, yyyy')}
-                                  </span>
-                                </div>
-
-                                {/* Admin Action Buttons on Right */}
-                                <div className="flex flex-col items-end gap-1" onClick={e => e.stopPropagation()}>
-                                  <div className="flex items-center gap-1.5">
-                                    {item.status === 'published' && (
-                                      <PostTrendButton
-                                        isLoading={isTrendLoading}
-                                        isActive={isExpanded}
-                                        onClick={() => {
-                                          if (isExpanded) {
-                                            setExpandedTrendItem(null);
-                                          } else {
-                                            fetchPostTrend && fetchPostTrend(itemKey, item);
-                                            setExpandedTrendItem(itemKey);
-                                          }
-                                        }}
-                                      />
-                                    )}
-                                    <button
-                                      className="p-1.5 text-gray-400 hover:text-emerald-650 hover:bg-emerald-50 rounded transition-colors touch-manipulation"
-                                      onClick={(e) => { e.stopPropagation(); onManualPublish && onManualPublish(item, item.calendarId); }}
-                                      title="Publish Status"
-                                    >
-                                      <CheckCircle className="h-3.5 w-3.5" />
-                                    </button>
-                                    <button
-                                      className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors touch-manipulation"
-                                      onClick={(e) => { e.stopPropagation(); onEditItem && onEditItem(item, item.calendarId); }}
-                                      title="Edit"
-                                    >
-                                      <Edit className="h-3.5 w-3.5" />
-                                    </button>
-                                    <button
-                                      className="p-1.5 text-gray-400 hover:text-red-650 hover:bg-red-50 rounded transition-colors touch-manipulation"
-                                      onClick={(e) => { e.stopPropagation(); onDeleteItem && onDeleteItem(item.calendarId, item); }}
-                                      title="Delete"
-                                    >
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                    </button>
-                                    {!isAdmin && (
-                                      <button
-                                        className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors touch-manipulation"
-                                        onClick={(e) => { e.stopPropagation(); onUploadItem && onUploadItem(item.calendarId, item.calendarItemIndex); }}
-                                        title="Upload"
-                                      >
-                                        <Upload className="h-3.5 w-3.5" />
-                                      </button>
-                                    )}
-                                  </div>
-                                  {/* Creator badge below action icons */}
-                                  {item.creator && (
-                                    <div
-                                      title="Content Creator"
-                                      className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-indigo-600 transition-colors cursor-default"
-                                    >
-                                      <User className="h-3 w-3 flex-shrink-0" />
-                                      <span className="truncate max-w-[140px]">{item.creator}</span>
+                          <div className="flex flex-row items-center gap-4">
+                            <div className="flex-1 min-w-0 flex flex-col gap-3">
+                              {/* Top row: Thumbnail + title/actions */}
+                              <div className="flex flex-row items-start gap-3 sm:gap-4">
+                                <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-lg bg-gradient-to-br from-gray-100 to-gray-200 overflow-hidden flex-shrink-0">
+                                  {previewMedia.imageUrl ? (
+                                    isVideoUrl(previewMedia.imageUrl) ? (
+                                      <div className="relative w-full h-full bg-black">
+                                        <video
+                                          src={previewMedia.imageUrl}
+                                          muted
+                                          playsInline
+                                          preload="metadata"
+                                          className="w-full h-full object-cover"
+                                        />
+                                        <div className="absolute inset-0 flex items-center justify-center bg-black/15">
+                                          <Play className="h-8 w-8 text-white/85" />
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <img src={previewMedia.imageUrl} alt="" className="w-full h-full object-cover" />
+                                    )
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-slate-100 to-gray-200">
+                                      <div className="w-14 h-14 rounded-xl bg-white/70 border border-gray-200 shadow-sm flex items-center justify-center">
+                                        <Image className="h-7 w-7 text-gray-300" />
+                                      </div>
                                     </div>
                                   )}
                                 </div>
-                              </div>
-
-                              <p className="text-sm font-semibold text-gray-900 mb-1">{item.title || 'Untitled'}</p>
-                              <p className="text-gray-800 font-medium mb-3 line-clamp-2">{item.description || 'No description available'}</p>
-                              <div className="flex flex-wrap items-center gap-4">
-                                {item.selectedPlatforms?.length > 0 && (
-                                  <div>
-                                    <span className="text-xs text-gray-500">Selected for:</span>
-                                    <div className="mt-1.5">
-                                      <PlatformNameBadges platforms={item.selectedPlatforms} />
-                                    </div>
-                                  </div>
-                                )}
-                                {item.postType && (
-                                  <div>
-                                    <span className="text-xs text-gray-500">Post Type:</span>
-                                    <div className="mt-1.5">
-                                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700 border border-amber-200 capitalize">
-                                        {item.postType}
+                                
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+                                    <div className="flex items-center gap-3 flex-wrap">
+                                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${displayStatus === 'published' ? 'bg-emerald-100 text-emerald-700' :
+                                        displayStatus === 'customer_approved' ? 'bg-emerald-100 text-emerald-700' :
+                                        displayStatus === 'under_review' ? 'bg-amber-100 text-amber-700' :
+                                          displayStatus === 'scheduled' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
+                                        }`}>
+                                        {(displayStatus === 'published' || displayStatus === 'customer_approved') && <CheckCircle className="h-3 w-3" />}
+                                        {displayStatus === 'scheduled' && <Clock className="h-3 w-3" />}
+                                        {displayStatus === 'under_review' && <Eye className="h-3 w-3" />}
+                                        {getStatusLabel(displayStatus)}
+                                      </span>
+                                      {adminNotificationText && (
+                                        <span className="inline-flex items-center gap-1 bg-red-600 text-white px-2.5 py-0.5 rounded-full text-[10px] font-bold shadow-sm animate-pulse ml-2">
+                                          <AlertCircle className="h-3 w-3 text-white animate-bounce" />
+                                          {adminNotificationText}
+                                        </span>
+                                      )}
+                                      <span className="text-sm text-gray-500 flex items-center gap-1.5">
+                                        <CalendarIcon className="h-3.5 w-3.5" />
+                                        {format(new Date(item.date), 'MMM dd, yyyy')}
                                       </span>
                                     </div>
-                                  </div>
-                                )}
-                                {publishedLinks?.length > 0 && (
-                                  <div className="flex items-center gap-2">
-                                    <div className="flex items-center gap-1.5">
-                                      {publishedLinks.map((link, li) => (
-                                        <a
-                                          key={li}
-                                          href={link.url}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-100 transition-colors"
-                                          title={`Open on ${link.label}${link.isManual ? ' (Manual)' : ''}`}
+
+                                    {/* Admin Action Buttons on Right */}
+                                    <div className="flex flex-col items-end gap-1" onClick={e => e.stopPropagation()}>
+                                      <div className="flex items-center gap-1.5">
+                                        {item.status === 'published' && (
+                                          <PostTrendButton
+                                            isLoading={isTrendLoading}
+                                            isActive={isExpanded}
+                                            onClick={() => {
+                                              if (isExpanded) {
+                                                setExpandedTrendItem(null);
+                                              } else {
+                                                fetchPostTrend && fetchPostTrend(itemKey, item);
+                                                setExpandedTrendItem(itemKey);
+                                              }
+                                            }}
+                                          />
+                                        )}
+                                        <button
+                                          className="p-1.5 text-gray-400 hover:text-emerald-650 hover:bg-emerald-50 rounded transition-colors touch-manipulation"
+                                          onClick={(e) => { e.stopPropagation(); onManualPublish && onManualPublish(item, item.calendarId); }}
+                                          title="Publish Status"
                                         >
-                                          <PlatformIcon platform={link.platform || link.label} />
-                                          {link.isManual && <User className="h-3 w-3 text-emerald-600 bg-emerald-100/50 rounded ml-0.5 p-[2px]" />}
-                                          <ExternalLink className="h-2.5 w-2.5 ml-0.5" />
-                                        </a>
-                                      ))}
+                                          <CheckCircle className="h-3.5 w-3.5" />
+                                        </button>
+                                        <button
+                                          className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors touch-manipulation"
+                                          onClick={(e) => { e.stopPropagation(); onEditItem && onEditItem(item, item.calendarId); }}
+                                          title="Edit"
+                                        >
+                                          <Edit className="h-3.5 w-3.5" />
+                                        </button>
+                                        <button
+                                          className="p-1.5 text-gray-400 hover:text-red-650 hover:bg-red-50 rounded transition-colors touch-manipulation"
+                                          onClick={(e) => { e.stopPropagation(); onDeleteItem && onDeleteItem(item.calendarId, item); }}
+                                          title="Delete"
+                                        >
+                                          <Trash2 className="h-3.5 w-3.5" />
+                                        </button>
+                                        {!isAdmin && (
+                                          <button
+                                            className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors touch-manipulation"
+                                            onClick={(e) => { e.stopPropagation(); onUploadItem && onUploadItem(item.calendarId, item.calendarItemIndex); }}
+                                            title="Upload"
+                                          >
+                                            <Upload className="h-3.5 w-3.5" />
+                                          </button>
+                                        )}
+                                      </div>
+                                      {/* Creator badge below action icons */}
+                                      {item.creator && (
+                                        <div
+                                          title="Content Creator"
+                                          className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-indigo-600 transition-colors cursor-default"
+                                        >
+                                          <User className="h-3 w-3 flex-shrink-0" />
+                                          <span className="truncate max-w-[140px]">{item.creator}</span>
+                                        </div>
+                                      )}
                                     </div>
                                   </div>
-                                )}
-                                {item.commentCount > 0 && (
-                                  <div className="flex items-center gap-1.5 text-xs text-indigo-600 bg-indigo-50 px-2 py-1 rounded-md">
-                                    <MessageSquare className="h-3.5 w-3.5" /><span className="font-medium">{item.commentCount}</span>
-                                  </div>
+
+                                  <p className="text-sm font-semibold text-gray-900 mb-1">{item.title || 'Untitled'}</p>
+                                </div>
+                              </div>
+
+                              {/* Bottom section: description, badges, timeline */}
+                              <div className="space-y-3">
+                                <div className="flex flex-wrap items-center gap-4">
+                                  {item.selectedPlatforms?.length > 0 && (
+                                    <div>
+                                      <span className="text-xs text-gray-500">Selected for:</span>
+                                      <div className="mt-1">
+                                        <PlatformNameBadges platforms={item.selectedPlatforms} />
+                                      </div>
+                                    </div>
+                                  )}
+                                  {item.postType && (
+                                    <div>
+                                      <span className="text-xs text-gray-500">Post Type:</span>
+                                      <div className="mt-1">
+                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700 border border-amber-200 capitalize">
+                                          {item.postType}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  )}
+                                  {publishedLinks?.length > 0 && (
+                                    <div className="flex items-center gap-2">
+                                      <div className="flex items-center gap-1.5">
+                                        {publishedLinks.map((link, li) => (
+                                          <a
+                                            key={li}
+                                            href={link.url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-100 transition-colors"
+                                            title={`Open on ${link.label}${link.isManual ? ' (Manual)' : ''}`}
+                                          >
+                                            <PlatformIcon platform={link.platform || link.label} />
+                                            {link.isManual && <User className="h-3 w-3 text-emerald-600 bg-emerald-100/50 rounded ml-0.5 p-[2px]" />}
+                                            <ExternalLink className="h-2.5 w-2.5 ml-0.5" />
+                                          </a>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                  {item.commentCount > 0 && (
+                                    <div className="flex items-center gap-1.5 text-xs text-indigo-600 bg-indigo-50 px-2 py-1 rounded-md">
+                                      <MessageSquare className="h-3.5 w-3.5" /><span className="font-medium">{item.commentCount}</span>
+                                    </div>
+                                  )}
+                                </div>
+                                <ItemTimeline
+                                  item={item}
+                                  itemStatus={item.status}
+                                  scheduledPosts={scheduledPosts}
+                                  submissions={submissions.filter(sub => {
+                                    if (!isAdmin && sub.reviewType === 'internal') return false;
+                                    const subId = sub.assignment_id || sub.item_id;
+                                    if (subId) return subId === item.id;
+                                    return sub.item_name && sub.item_name === item.title;
+                                  })}
+                                  isAdmin={isAdmin}
+                                />
+                                {item.status === 'published' && itemTrendData && typeof itemTrendData === 'object' && (
+                                  <MiniTrendCharts platformData={itemTrendData} />
                                 )}
                               </div>
-                              <ItemTimeline
-                                item={item}
-                                itemStatus={item.status}
-                                scheduledPosts={scheduledPosts}
-                                submissions={submissions.filter(sub => {
-                                  if (!isAdmin && sub.reviewType === 'internal') return false;
-                                  const subId = sub.assignment_id || sub.item_id;
-                                  if (subId) return subId === item.id;
-                                  return sub.item_name && sub.item_name === item.title;
-                                })}
-                                isAdmin={isAdmin}
-                              />
-                              {item.status === 'published' && itemTrendData && typeof itemTrendData === 'object' && (
-                                <MiniTrendCharts platformData={itemTrendData} />
-                              )}
                             </div>
                             <div className="hidden sm:flex items-center">
                               <ChevronRight className="h-5 w-5 text-gray-300 group-hover:text-indigo-500 group-hover:translate-x-1 transition-all" />
@@ -2526,125 +2602,145 @@ function ContentCalendar({
                     ) : (
                       <div key={item.id} onClick={() => handleContentClick(item)} className={`bg-white rounded-xl border transition-all cursor-pointer group ${item.status === 'published' ? 'border-emerald-200 hover:border-emerald-300 hover:shadow-md' : 'border-gray-100 hover:border-gray-200 hover:shadow-md'}`}>
                         <div className="p-4 sm:p-5">
-                          <div className="flex flex-col sm:flex-row sm:items-start gap-4">
-                            <div className="w-full sm:w-24 h-24 rounded-lg bg-gradient-to-br from-gray-100 to-gray-200 overflow-hidden flex-shrink-0">
-                              {previewMedia.imageUrl ? (
-                                isVideoUrl(previewMedia.imageUrl) ? (
-                                  <div className="relative w-full h-full bg-black">
-                                    <video
-                                      src={previewMedia.imageUrl}
-                                      muted
-                                      playsInline
-                                      preload="metadata"
-                                      className="w-full h-full object-cover"
-                                    />
-                                    <div className="absolute inset-0 flex items-center justify-center bg-black/15">
-                                      <Play className="h-8 w-8 text-white/85" />
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <img src={previewMedia.imageUrl} alt="" className="w-full h-full object-cover" />
-                                )
-                              ) : (
-                                <div className="w-full h-full flex items-center justify-center"><Image className="h-8 w-8 text-gray-300" /></div>
-                              )}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
-                                <div className="flex items-center gap-3">
-                                  <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${displayStatus === 'published' ? 'bg-emerald-100 text-emerald-700' :
-                                    displayStatus === 'customer_approved' ? 'bg-emerald-100 text-emerald-700' :
-                                    displayStatus === 'under_review' ? 'bg-amber-100 text-amber-700' :
-                                      displayStatus === 'scheduled' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
-                                    }`}>
-                                    {(displayStatus === 'published' || displayStatus === 'customer_approved') && <CheckCircle className="h-3 w-3" />}
-                                    {displayStatus === 'scheduled' && <Clock className="h-3 w-3" />}
-                                    {displayStatus === 'under_review' && <Eye className="h-3 w-3" />}
-                                    {getStatusLabel(displayStatus)}
-                                  </span>
-                                  {customerNotificationText && (
-                                    <span className="inline-flex items-center gap-1 bg-red-600 text-white px-2.5 py-0.5 rounded-full text-[10px] font-bold shadow-sm animate-pulse ml-2">
-                                      <AlertCircle className="h-3 w-3 text-white animate-bounce" />
-                                      {customerNotificationText}
-                                    </span>
-                                  )}
-                                  <span className="text-sm text-gray-500 flex items-center gap-1.5">
-                                    <CalendarIcon className="h-3.5 w-3.5" />
-                                    {format(new Date(item.date), 'MMM dd, yyyy')}
-                                  </span>
-                                </div>
-                                <div className="flex flex-col items-end gap-1">
-                                  <div className="flex items-center gap-2">
-                                  {item.status === 'published' && (
-                                    <div className="flex items-center gap-1 text-xs text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg">
-                                      <ExternalLink className="h-3.5 w-3.5" /><span className="font-medium">View Details</span>
-                                    </div>
-                                  )}
-                                  <button
-                                    onClick={(e) => handleOpenReviewPanel(item, e)}
-                                    className="flex items-center gap-1 text-xs text-purple-650 bg-purple-50 hover:bg-purple-105 active:bg-purple-200 px-3 py-1.5 rounded-lg transition-colors font-medium"
-                                  >
-                                    <MessageSquare className="h-3.5 w-3.5" /><span>Content Review</span>
-                                  </button>
-                                  </div>
-                                  {item.creator && (
-                                    <div
-                                      title="Content Creator"
-                                      className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-purple-600 transition-colors cursor-default"
-                                    >
-                                      <User className="h-3 w-3 flex-shrink-0" />
-                                      <span className="truncate max-w-[140px]">{item.creator}</span>
-                                    </div>
+                          <div className="flex flex-row items-center gap-4">
+                            <div className="flex-1 min-w-0 flex flex-col gap-3">
+                              {/* Top row: Thumbnail + title/actions */}
+                              <div className="flex flex-row items-start gap-3 sm:gap-4">
+                                <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-lg bg-gradient-to-br from-gray-100 to-gray-200 overflow-hidden flex-shrink-0">
+                                  {previewMedia.imageUrl ? (
+                                    isVideoUrl(previewMedia.imageUrl) ? (
+                                      <div className="relative w-full h-full bg-black">
+                                        <video
+                                          src={previewMedia.imageUrl}
+                                          muted
+                                          playsInline
+                                          preload="metadata"
+                                          className="w-full h-full object-cover"
+                                        />
+                                        <div className="absolute inset-0 flex items-center justify-center bg-black/15">
+                                          <Play className="h-8 w-8 text-white/85" />
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <img src={previewMedia.imageUrl} alt="" className="w-full h-full object-cover" />
+                                    )
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center"><Image className="h-8 w-8 text-gray-300" /></div>
                                   )}
                                 </div>
-                              </div>
-                              <p className="text-gray-800 font-medium mb-3 line-clamp-2">{item.description || 'No description available'}</p>
-                              <div className="flex flex-wrap items-center gap-4">
-                                {item.selectedPlatforms?.length > 0 && (
-                                  <div>
-                                    <span className="text-xs text-gray-500">Selected for:</span>
-                                    <div className="mt-1.5">
-                                      <PlatformNameBadges platforms={item.selectedPlatforms} />
+                                
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+                                    <div className="flex items-center gap-3 flex-wrap">
+                                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${displayStatus === 'published' ? 'bg-emerald-100 text-emerald-700' :
+                                        displayStatus === 'customer_approved' ? 'bg-emerald-100 text-emerald-700' :
+                                        displayStatus === 'under_review' ? 'bg-amber-100 text-amber-700' :
+                                          displayStatus === 'scheduled' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
+                                        }`}>
+                                        {(displayStatus === 'published' || displayStatus === 'customer_approved') && <CheckCircle className="h-3 w-3" />}
+                                        {displayStatus === 'scheduled' && <Clock className="h-3 w-3" />}
+                                        {displayStatus === 'under_review' && <Eye className="h-3 w-3" />}
+                                        {getStatusLabel(displayStatus)}
+                                      </span>
+                                      {customerNotificationText && (
+                                        <span className="inline-flex items-center gap-1 bg-red-600 text-white px-2.5 py-0.5 rounded-full text-[10px] font-bold shadow-sm animate-pulse ml-2">
+                                          <AlertCircle className="h-3 w-3 text-white animate-bounce" />
+                                          {customerNotificationText}
+                                        </span>
+                                      )}
+                                      <span className="text-sm text-gray-500 flex items-center gap-1.5">
+                                        <CalendarIcon className="h-3.5 w-3.5" />
+                                        {format(new Date(item.date), 'MMM dd, yyyy')}
+                                      </span>
                                     </div>
-                                  </div>
-                                )}
-                                {publishedLinks?.length > 0 && (
-                                  <div>
-                                    <span className="text-xs text-gray-500">Published links:</span>
-                                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                                      {publishedLinks.map((link, li) => (
-                                        <a
-                                          key={li}
-                                          href={link.url}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-100 transition-colors"
-                                          title={`Open on ${link.label}${link.isManual ? ' (Manual)' : ''}`}
+                                    <div className="flex flex-col items-end gap-1">
+                                      <div className="flex items-center gap-2">
+                                      {item.status === 'published' && (
+                                        <div className="flex items-center gap-1 text-xs text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg">
+                                          <ExternalLink className="h-3.5 w-3.5" /><span className="font-medium">View Details</span>
+                                        </div>
+                                      )}
+                                      <button
+                                        onClick={(e) => handleOpenReviewPanel(item, e)}
+                                        className="flex items-center gap-1 text-xs text-purple-650 bg-purple-50 hover:bg-purple-105 active:bg-purple-200 px-3 py-1.5 rounded-lg transition-colors font-medium"
+                                      >
+                                        <MessageSquare className="h-3.5 w-3.5" /><span>Content Review</span>
+                                      </button>
+                                      </div>
+                                      {item.creator && (
+                                        <div
+                                          title="Content Creator"
+                                          className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-purple-600 transition-colors cursor-default"
                                         >
-                                          <PlatformIcon platform={link.platform || link.label} />
-                                          <span>{link.label}</span>
-                                          <ExternalLink className="h-3 w-3" />
-                                        </a>
-                                      ))}
+                                          <User className="h-3 w-3 flex-shrink-0" />
+                                          <span className="truncate max-w-[140px]">{item.creator}</span>
+                                        </div>
+                                      )}
                                     </div>
                                   </div>
-                                )}
-                                {item.commentCount > 0 && (
-                                  <div className="flex items-center gap-1.5 text-xs text-indigo-600 bg-indigo-50 px-2 py-1 rounded-md">
-                                    <MessageSquare className="h-3.5 w-3.5" /><span className="font-medium">{item.commentCount}</span>
-                                  </div>
-                                )}
+                                  <p className="text-sm font-semibold text-gray-900 mb-1">{item.title || 'Untitled'}</p>
+                                </div>
                               </div>
-                              <ItemTimeline
-                                item={item}
-                                itemStatus={item.status}
-                                scheduledPosts={scheduledPosts}
-                                submissions={submissions.filter(sub => {
-                                  if (!isAdmin && sub.reviewType === 'internal') return false;
-                                  return isSubmissionForItem(sub, item, item.calendarId);
-                                })}
-                                isAdmin={isAdmin}
-                              />
+                              
+                              {/* Bottom section: description, badges, timeline */}
+                              <div className="space-y-3">
+                                <div className="flex flex-wrap items-center gap-4">
+                                  {item.selectedPlatforms?.length > 0 && (
+                                    <div>
+                                      <span className="text-xs text-gray-500">Selected for:</span>
+                                      <div className="mt-1">
+                                        <PlatformNameBadges platforms={item.selectedPlatforms} />
+                                      </div>
+                                    </div>
+                                  )}
+                                  {item.postType && (
+                                    <div>
+                                      <span className="text-xs text-gray-500">Post Type:</span>
+                                      <div className="mt-1">
+                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700 border border-amber-200 capitalize">
+                                          {item.postType}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  )}
+                                  {publishedLinks?.length > 0 && (
+                                    <div>
+                                      <span className="text-xs text-gray-500">Published links:</span>
+                                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                                        {publishedLinks.map((link, li) => (
+                                          <a
+                                            key={li}
+                                            href={link.url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-100 transition-colors"
+                                            title={`Open on ${link.label}${link.isManual ? ' (Manual)' : ''}`}
+                                          >
+                                            <PlatformIcon platform={link.platform || link.label} />
+                                            <span>{link.label}</span>
+                                            <ExternalLink className="h-3 w-3" />
+                                          </a>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                  {item.commentCount > 0 && (
+                                    <div className="flex items-center gap-1.5 text-xs text-indigo-600 bg-indigo-50 px-2 py-1 rounded-md">
+                                      <MessageSquare className="h-3.5 w-3.5" /><span className="font-medium">{item.commentCount}</span>
+                                    </div>
+                                  )}
+                                </div>
+                                <ItemTimeline
+                                  item={item}
+                                  itemStatus={item.status}
+                                  scheduledPosts={scheduledPosts}
+                                  submissions={submissions.filter(sub => {
+                                    if (!isAdmin && sub.reviewType === 'internal') return false;
+                                    return isSubmissionForItem(sub, item, item.calendarId);
+                                  })}
+                                  isAdmin={isAdmin}
+                                />
+                              </div>
                             </div>
                             <div className="hidden sm:flex items-center">
                               <ChevronRight className="h-5 w-5 text-gray-300 group-hover:text-indigo-500 group-hover:translate-x-1 transition-all" />

@@ -755,6 +755,30 @@ function ContentDetailView({
     [selectedContent, selectedVersionIndex]
   );
 
+  const isRevisionRequested = useMemo(() => {
+    if (!currentVersion) return false;
+    const status = currentVersion.status || '';
+    return status === 'revision_requested' || status === 'sent_to_creator' || status === 'changes_requested' || status === 'changes_requested_admin' || status === 'changes_requested_customer_approved_admin';
+  }, [currentVersion]);
+
+  const isAdminApproved = useMemo(() => {
+    if (!currentVersion) return false;
+    const status = currentVersion.status || '';
+    return currentVersion.approved_by_admin || ['approved', 'approved_both', 'pending_customer_review', 'customer_feedback_pending_admin', 'published', 'scheduled'].includes(status);
+  }, [currentVersion]);
+
+  const isSentToCustomer = useMemo(() => {
+    if (!currentVersion) return false;
+    const status = currentVersion.status || '';
+    return currentVersion.submission_stage === 'customer' || ['pending_customer_review', 'customer_feedback_pending_admin', 'approved_both', 'approved_customer', 'published', 'scheduled'].includes(status);
+  }, [currentVersion]);
+
+  const isCustomerApproved = useMemo(() => {
+    if (!currentVersion) return false;
+    const status = currentVersion.status || '';
+    return currentVersion.approved_by_customer === true || ['approved_customer', 'approved_both', 'published', 'scheduled'].includes(status);
+  }, [currentVersion]);
+
   const isCustomerApprovedForPosting = useMemo(() => {
     const approvedStatuses = ['approved_customer', 'approved_both', 'published'];
     const topLevelStatus = (selectedContent?.status || '').toLowerCase();
@@ -1552,25 +1576,76 @@ function ContentDetailView({
                 </span>
               </div>
               <div className="p-3 space-y-2.5">
-                {/* Current Version Stage badges */}
-                <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                  <div className={`px-2 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 border ${currentVersion?.approved_by_admin || currentVersion?.status === 'approved' || currentVersion?.status === 'approved_both' || currentVersion?.status === 'pending_customer_review'
-                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                      : 'bg-amber-50 text-amber-700 border-amber-200'
-                    }`}>
-                    {currentVersion?.approved_by_admin || currentVersion?.status === 'approved' || currentVersion?.status === 'approved_both' || currentVersion?.status === 'pending_customer_review' ? (
-                      <><CheckCircle className="h-3.5 w-3.5 text-emerald-600" /> Admin Approved</>
-                    ) : (
-                      <><Clock className="h-3.5 w-3.5 text-amber-600" /> Pending Admin Review</>
-                    )}
-                  </div>
+                {/* Stepper Timeline */}
+                {(() => {
+                  const step1State = isRevisionRequested ? { label: 'Revisions Requested', color: 'text-red-600' }
+                    : isAdminApproved ? { label: 'Approved', color: 'text-emerald-600' }
+                    : { label: 'Pending Review', color: 'text-amber-500' };
 
-                  {(currentVersion?.submission_stage === 'customer' || currentVersion?.status === 'pending_customer_review' || currentVersion?.status === 'customer_feedback_pending_admin') && (
-                    <div className="px-2 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200">
-                      <Send className="h-3.5 w-3.5 text-blue-600" /> Sent to Customer
+                  const step2State = !isAdminApproved ? { label: 'Waiting', color: 'text-gray-400' }
+                    : isCustomerApproved ? { label: 'Approved', color: 'text-emerald-600' }
+                    : currentVersion?.status === 'customer_feedback_pending_admin' ? { label: 'Changes Requested', color: 'text-red-600' }
+                    : isSentToCustomer ? { label: 'Pending Feedback', color: 'text-blue-600' }
+                    : { label: 'Ready to Send', color: 'text-gray-500' };
+
+                  return (
+                    <div className="bg-gray-50 rounded-xl p-3 border border-gray-100 space-y-3">
+                      {/* Step 1 */}
+                      <div className="flex items-start gap-2.5">
+                        <div className={`mt-0.5 p-1 rounded-full ${
+                          isAdminApproved ? 'bg-emerald-50 text-emerald-600' : isRevisionRequested ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-500'
+                        }`}>
+                          {isAdminApproved ? (
+                            <CheckCircle className="h-4 w-4" />
+                          ) : isRevisionRequested ? (
+                            <XCircle className="h-4 w-4" />
+                          ) : (
+                            <Clock className="h-4 w-4" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between">
+                            <h4 className="text-xs font-bold text-gray-800">1. Admin Review</h4>
+                            <span className={`text-[10px] font-semibold uppercase tracking-wider ${step1State.color}`}>
+                              {step1State.label}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-gray-450 leading-tight mt-0.5">
+                            {isAdminApproved ? 'Admin approved internal check' : isRevisionRequested ? 'Sent back to creator for edits' : 'Awaiting admin internal approval'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="border-t border-gray-200/60 my-1" />
+
+                      {/* Step 2 */}
+                      <div className="flex items-start gap-2.5">
+                        <div className={`mt-0.5 p-1 rounded-full ${
+                          isCustomerApproved ? 'bg-emerald-50 text-emerald-600' : currentVersion?.status === 'customer_feedback_pending_admin' ? 'bg-red-50 text-red-600' : isSentToCustomer ? 'bg-blue-50 text-blue-600' : 'bg-gray-50 text-gray-400'
+                        }`}>
+                          {isCustomerApproved ? (
+                            <CheckCircle className="h-4 w-4" />
+                          ) : currentVersion?.status === 'customer_feedback_pending_admin' ? (
+                            <AlertCircle className="h-4 w-4" />
+                          ) : (
+                            <Clock className="h-4 w-4" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between">
+                            <h4 className="text-xs font-bold text-gray-800">2. Customer Review</h4>
+                            <span className={`text-[10px] font-semibold uppercase tracking-wider ${step2State.color}`}>
+                              {step2State.label}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-gray-455 leading-tight mt-0.5">
+                            {isCustomerApproved ? 'Approved by customer' : currentVersion?.status === 'customer_feedback_pending_admin' ? 'Customer requested revisions' : isSentToCustomer ? 'Currently with customer for feedback' : 'Awaiting admin approval first'}
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                  )}
-                </div>
+                  );
+                })()}
 
                 {/* Internal Review Actions */}
                 <div className="space-y-1.5 pt-1">

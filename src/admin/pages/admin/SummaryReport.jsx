@@ -431,62 +431,63 @@ const ContentItemCard = ({ assignment, scheduledPosts, calendarName, isExpanded,
   if (uploadedAt && approvedAt) {
     daysToApproval = Math.max(0, (new Date(approvedAt) - new Date(uploadedAt)) / (1000 * 60 * 60 * 24)).toFixed(1);
   }
-
   return (
     <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
-      <div className="flex items-start gap-4 p-5">
-        <Thumbnail url={assignment.thumbnail} />
-        <div className="flex-1 min-w-0">
-          {calendarName && (
-            <p className="text-[10px] text-gray-400 mb-1 flex items-center gap-1">
-              <Calendar className="w-3 h-3" />
-              {calendarName}
-            </p>
-          )}
-          <h3 className="text-[15px] font-bold text-gray-900 mb-1.5 leading-snug">
-            {assignment.itemTitle || assignment.caption?.slice(0, 70) || `Assignment …${assignment.assignmentId?.slice(-6)}`}
-          </h3>
-          <div className="flex items-center gap-2.5 flex-wrap text-xs text-gray-500">
-            <span className="flex items-center gap-1">
-              <Clock className="w-3 h-3" />
-              Created {assignment.firstSubmittedAt
-                ? new Date(assignment.firstSubmittedAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })
-                : '—'}
-            </span>
-            <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0 ${getAvatarColor(assignment.creatorName)}`}>
-              {getInitials(assignment.creatorName)}
-            </div>
-            <span className="font-medium text-gray-700">{assignment.creatorName}</span>
-          </div>
-          {publishedPosts.length > 0 && (
-            <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-semibold">
-                <CheckCircle className="w-3 h-3" />
-                Published
+      <div className="flex flex-col sm:flex-row items-start gap-4 p-5">
+        <div className="flex items-start gap-4 w-full sm:w-auto flex-1 min-w-0">
+          <Thumbnail url={assignment.thumbnail} />
+          <div className="flex-1 min-w-0">
+            {calendarName && (
+              <p className="text-[10px] text-gray-400 mb-1 flex items-center gap-1">
+                <Calendar className="w-3 h-3" />
+                {calendarName}
+              </p>
+            )}
+            <h3 className="text-[15px] font-bold text-gray-900 mb-1.5 leading-snug">
+              {assignment.itemTitle || assignment.caption?.slice(0, 70) || `Assignment …${assignment.assignmentId?.slice(-6)}`}
+            </h3>
+            <div className="flex items-center gap-2.5 flex-wrap text-xs text-gray-500">
+              <span className="flex items-center gap-1">
+                <Clock className="w-3 h-3" />
+                Created {assignment.firstSubmittedAt
+                  ? new Date(assignment.firstSubmittedAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })
+                  : '—'}
               </span>
-              {publishedPosts[0]?.publishedAt && (
-                <span className="text-[10px] text-gray-400">
-                  {new Date(publishedPosts[0].publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                </span>
-              )}
-              {publishedPosts.flatMap(getPostLinks).filter((l, i, arr) => arr.findIndex(x => (x.platform ?? x.label) === (l.platform ?? l.label)) === i).map((link, li) => (
-                <a
-                  key={li}
-                  href={link.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={e => e.stopPropagation()}
-                  title={`Open on ${link.label}`}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded border text-[11px] font-semibold bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100 transition-colors"
-                >
-                  {link.label}
-                  <ExternalLink className="w-2.5 h-2.5" />
-                </a>
-              ))}
+              <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0 ${getAvatarColor(assignment.creatorName)}`}>
+                {getInitials(assignment.creatorName)}
+              </div>
+              <span className="font-medium text-gray-700">{assignment.creatorName}</span>
             </div>
-          )}
+            {publishedPosts.length > 0 && (
+              <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-semibold">
+                  <CheckCircle className="w-3 h-3" />
+                  Published
+                </span>
+                {publishedPosts[0]?.publishedAt && (
+                  <span className="text-[10px] text-gray-400">
+                    {new Date(publishedPosts[0].publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </span>
+                )}
+                {publishedPosts.flatMap(getPostLinks).filter((l, i, arr) => arr.findIndex(x => (x.platform ?? x.label) === (l.platform ?? l.label)) === i).map((link, li) => (
+                  <a
+                    key={li}
+                    href={link.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={e => e.stopPropagation()}
+                    title={`Open on ${link.label}`}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded border text-[11px] font-semibold bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100 transition-colors"
+                  >
+                    {link.label}
+                    <ExternalLink className="w-2.5 h-2.5" />
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
-        <div className="flex flex-col items-end gap-2 flex-shrink-0">
+        <div className="flex flex-row sm:flex-col items-center sm:items-end gap-2 w-full sm:w-auto justify-between sm:justify-end border-t border-gray-100 sm:border-0 pt-3 sm:pt-0 mt-1 sm:mt-0 flex-shrink-0">
           <div className="flex flex-wrap gap-1 justify-end">
             {platforms.map(p => <PlatformPill key={p} platform={p} />)}
           </div>

@@ -451,6 +451,7 @@ function ContentUpload() {
     setAdminUploadedForThis(false);
     setReviewTabMode('both');
     setThumbnailFileObj(null);
+    setThumbnailFileRemoved(false);
   }, [calendarId, itemIndex]);
 
   // Fetch real assignment data based on calendarId and itemIndex
@@ -1918,8 +1919,8 @@ function ContentUpload() {
                         key={opt.key}
                         onClick={() => setPickerStatus(opt.key)}
                         className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${pickerStatus === opt.key
-                            ? 'bg-purple-600 text-white shadow-sm'
-                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                          ? 'bg-purple-600 text-white shadow-sm'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                           }`}
                       >
                         {opt.label}
@@ -2146,8 +2147,8 @@ function ContentUpload() {
                 setSelectedMediaIndex(0);
               }}
               className={`flex-1 py-3 text-sm font-semibold rounded-xl transition-all duration-300 flex items-center justify-center gap-2 ${activeTab === 'admin'
-                  ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                 }`}
             >
               <Palette className="h-4 w-4" />
@@ -2162,8 +2163,8 @@ function ContentUpload() {
                 setSelectedMediaIndex(0);
               }}
               className={`flex-1 py-3 text-sm font-semibold rounded-xl transition-all duration-300 flex items-center justify-center gap-2 ${activeTab === 'customer'
-                  ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                 }`}
             >
               <User className="h-4 w-4" />
@@ -2291,53 +2292,53 @@ function ContentUpload() {
                   )}
                 </div>
 
-              {/* Hidden inputs always rendered in DOM */}
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                accept="image/*,video/*"
-                onChange={handleChange}
-                className="hidden"
-              />
-              <input
-                ref={thumbnailInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleThumbnailChange}
-                className="hidden"
-              />
-              <input
-                ref={replaceFileInputRef}
-                type="file"
-                accept="image/*,video/*"
-                onChange={handleReplaceChange}
-                className="hidden"
-              />
+                {/* Hidden inputs always rendered in DOM */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept="image/*,video/*"
+                  onChange={handleChange}
+                  className="hidden"
+                />
+                <input
+                  ref={thumbnailInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleThumbnailChange}
+                  className="hidden"
+                />
+                <input
+                  ref={replaceFileInputRef}
+                  type="file"
+                  accept="image/*,video/*"
+                  onChange={handleReplaceChange}
+                  className="hidden"
+                />
 
-              {previousSubmissionLoaded && previousVersions.length === 0 && (() => {
-                const isThumbnailAllowed = ['reel', 'video'].includes((assignment?.postType || '').toLowerCase());
-                return (
-                  <>
+                {previousSubmissionLoaded && previousVersions.length === 0 && (() => {
+                  const isThumbnailAllowed = ['reel', 'video'].includes((assignment?.postType || '').toLowerCase());
+                  return (
+                    <>
 
-                    {isThumbnailAllowed && thumbnailFileObj && (
-                      <div className="mt-3 p-3 bg-indigo-50/80 border border-indigo-100 rounded-xl flex items-center justify-between shadow-sm">
-                        <div className="flex items-center gap-3">
-                          <img src={thumbnailFileObj.preview} alt="Thumbnail preview" className="w-12 h-12 object-cover rounded-lg border border-indigo-200" />
-                          <div className="min-w-0">
-                            <p className="text-xs font-semibold text-indigo-900 truncate">{thumbnailFileObj.name}</p>
-                            <p className="text-[10px] text-indigo-600">{formatFileSize(thumbnailFileObj.size)}</p>
+                      {isThumbnailAllowed && thumbnailFileObj && (
+                        <div className="mt-3 p-3 bg-indigo-50/80 border border-indigo-100 rounded-xl flex items-center justify-between shadow-sm">
+                          <div className="flex items-center gap-3">
+                            <img src={thumbnailFileObj.preview} alt="Thumbnail preview" className="w-12 h-12 object-cover rounded-lg border border-indigo-200" />
+                            <div className="min-w-0">
+                              <p className="text-xs font-semibold text-indigo-900 truncate">{thumbnailFileObj.name}</p>
+                              <p className="text-[10px] text-indigo-600">{formatFileSize(thumbnailFileObj.size)}</p>
+                            </div>
                           </div>
+                          <button
+                            type="button"
+                            onClick={() => setThumbnailFileObj(null)}
+                            className="p-1 rounded-full text-indigo-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => setThumbnailFileObj(null)}
-                          className="p-1 rounded-full text-indigo-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      </div>
-                    )}
+                      )}
 
                       {/* Ã¢â€â‚¬Ã¢â€â‚¬ WhatsApp-style compact thumbnail strip for initial upload (No versions yet) Ã¢â€â‚¬Ã¢â€â‚¬ */}
                       {uploadedFiles.length > 0 && (
@@ -2371,8 +2372,8 @@ function ContentUpload() {
 
                               {/* Top-left badge: green check (existing) or purple NEW */}
                               <div className={`absolute top-0.5 left-0.5 flex items-center justify-center rounded text-[8px] font-bold leading-none z-10 ${file.isExisting
-                                  ? 'w-3.5 h-3.5 bg-emerald-500 text-white'
-                                  : 'px-1 py-0.5 bg-purple-600 text-white'
+                                ? 'w-3.5 h-3.5 bg-emerald-500 text-white'
+                                : 'px-1 py-0.5 bg-purple-600 text-white'
                                 }`}>
                                 {file.isExisting ? <Check className="h-2.5 w-2.5" /> : 'NEW'}
                               </div>
@@ -2482,8 +2483,8 @@ function ContentUpload() {
                                           setSelectedMediaIndex(0);
                                         }}
                                         className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all ${isSelected
-                                            ? 'bg-blue-700 text-white shadow-sm'
-                                            : 'bg-gray-100 text-gray-600 hover:bg-blue-100 hover:text-blue-700'
+                                          ? 'bg-blue-700 text-white shadow-sm'
+                                          : 'bg-gray-100 text-gray-600 hover:bg-blue-100 hover:text-blue-700'
                                           }`}
                                       >
                                         V{seqNum}
@@ -2509,6 +2510,7 @@ function ContentUpload() {
                                     const revisionStatuses = ['revision_requested', 'changes_requested', 'changes_requested_admin', 'changes_requested_customer_approved_admin'];
                                     const isRevisionRequested = allPreviousVersions.length > 0 && revisionStatuses.includes(allPreviousVersions[allPreviousVersions.length - 1]?.status);
                                     const isEditable = isLatestVersion && isRevisionRequested;
+                                    const isThumbnailAllowed = ['reel', 'video'].includes((assignment?.postType || '').toLowerCase());
 
                                     // Read-only slides: version media + thumbnail slide if present
                                     const readOnlySlides = thumbUrl
@@ -2597,29 +2599,29 @@ function ContentUpload() {
                                           </div>
                                         )}
 
-                                         {otherSlidesWithComments.length > 0 && (
-                                           <div className="mb-3 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-700 font-medium flex items-center flex-wrap gap-1.5">
-                                             <AlertCircle className="h-3.5 w-3.5 text-amber-600 flex-shrink-0 mt-0.5 animate-bounce" />
-                                             <span>Comments found on:</span>
-                                             <div className="flex items-center gap-1">
-                                               {otherSlidesWithComments.map(slideNum => {
-                                                 const isThumb = slides[slideNum - 1]?.isThumbnailSlide === true;
-                                                 const label = isThumb ? 'Thumbnail' : `Slide ${slideNum}`;
-                                                 return (
-                                                   <button
-                                                     key={slideNum}
-                                                     type="button"
-                                                     onClick={() => setSelectedMediaIndex(slideNum - 1)}
-                                                     className="px-1.5 py-0.5 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded text-[10px] font-bold text-amber-800 transition-colors cursor-pointer focus:outline-none focus:ring-1 focus:ring-amber-500"
-                                                     title={`Go to ${isThumb ? 'thumbnail' : `slide ${slideNum}`}`}
-                                                   >
-                                                     {label}
-                                                   </button>
-                                                 );
-                                               })}
-                                             </div>
-                                           </div>
-                                         )}
+                                        {otherSlidesWithComments.length > 0 && (
+                                          <div className="mb-3 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-700 font-medium flex items-center flex-wrap gap-1.5">
+                                            <AlertCircle className="h-3.5 w-3.5 text-amber-600 flex-shrink-0 mt-0.5 animate-bounce" />
+                                            <span>Comments found on:</span>
+                                            <div className="flex items-center gap-1">
+                                              {otherSlidesWithComments.map(slideNum => {
+                                                const isThumb = slides[slideNum - 1]?.isThumbnailSlide === true;
+                                                const label = isThumb ? 'Thumbnail' : `Slide ${slideNum}`;
+                                                return (
+                                                  <button
+                                                    key={slideNum}
+                                                    type="button"
+                                                    onClick={() => setSelectedMediaIndex(slideNum - 1)}
+                                                    className="px-1.5 py-0.5 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded text-[10px] font-bold text-amber-800 transition-colors cursor-pointer focus:outline-none focus:ring-1 focus:ring-amber-500"
+                                                    title={`Go to ${isThumb ? 'thumbnail' : `slide ${slideNum}`}`}
+                                                  >
+                                                    {label}
+                                                  </button>
+                                                );
+                                              })}
+                                            </div>
+                                          </div>
+                                        )}
 
                                         <div className="flex items-center justify-between mb-2">
                                           <p className="text-[10px] text-gray-400">
@@ -2744,8 +2746,8 @@ function ContentUpload() {
                                                       <button
                                                         onClick={() => handleVersionToggleDone(comment.id)}
                                                         className={`w-full px-3 py-1.5 text-xs rounded-lg font-medium transition-all flex items-center justify-center mt-2 ${comment.done
-                                                            ? 'bg-gray-200 hover:bg-gray-300 text-gray-700'
-                                                            : 'bg-green-600 hover:bg-green-700 text-white'
+                                                          ? 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+                                                          : 'bg-green-600 hover:bg-green-700 text-white'
                                                           }`}
                                                       >
                                                         <CheckCircle className="h-3 w-3 mr-1" />
@@ -2812,10 +2814,10 @@ function ContentUpload() {
                                                       {/* Top-left status badge */}
                                                       {!slide.isThumbnailSlide && file && (
                                                         <div className={`absolute top-0.5 left-0.5 flex items-center justify-center rounded text-[8px] font-bold leading-none z-10 ${file.isExisting
-                                                            ? 'w-3.5 h-3.5 bg-emerald-500 text-white'
-                                                            : file.isReplaced
-                                                              ? 'px-1 py-0.5 bg-blue-500 text-white'
-                                                              : 'px-1 py-0.5 bg-purple-600 text-white'
+                                                          ? 'w-3.5 h-3.5 bg-emerald-500 text-white'
+                                                          : file.isReplaced
+                                                            ? 'px-1 py-0.5 bg-blue-500 text-white'
+                                                            : 'px-1 py-0.5 bg-purple-600 text-white'
                                                           }`}>
                                                           {file.isExisting ? <Check className="h-2.5 w-2.5" /> : file.isReplaced ? 'REPLACE' : 'NEW'}
                                                         </div>
@@ -2887,6 +2889,19 @@ function ContentUpload() {
                                                 title="Add media"
                                               >
                                                 <Plus className="h-6 w-6 text-gray-400" />
+                                              </button>
+                                            )}
+
+                                            {/* "+" add-thumbnail tile (only in edit/upload mode when isEditable is true, thumbnail is allowed and not present) */}
+                                            {isEditable && isThumbnailAllowed && !currentThumbUrl && (
+                                              <button
+                                                type="button"
+                                                onClick={onThumbnailButtonClick}
+                                                className="w-16 h-16 rounded-lg border-2 border-dashed border-indigo-300 hover:border-indigo-500 hover:bg-indigo-50 flex flex-col items-center justify-center transition-all flex-shrink-0 bg-white"
+                                                title="Add thumbnail"
+                                              >
+                                                <Plus className="h-4 w-4 text-indigo-500 mb-0.5" />
+                                                <span className="text-[8px] font-bold text-indigo-600">THUMB</span>
                                               </button>
                                             )}
 
@@ -2982,8 +2997,8 @@ function ContentUpload() {
                                   <div
                                     key={comment.id || idx}
                                     className={`flex flex-col gap-2 p-3 rounded-xl border transition-all duration-200 ${activeVersionComment === comment.id
-                                        ? 'bg-purple-50/20 border-purple-200 shadow-sm'
-                                        : 'bg-slate-50/10 border-slate-100 hover:bg-slate-50/30 hover:border-slate-200'
+                                      ? 'bg-purple-50/20 border-purple-200 shadow-sm'
+                                      : 'bg-slate-50/10 border-slate-100 hover:bg-slate-50/30 hover:border-slate-200'
                                       }`}
                                   >
                                     {/* The initial comment bubble (Left aligned) */}
@@ -2994,11 +3009,10 @@ function ContentUpload() {
                                       <span className="font-bold text-white bg-purple-500 rounded-full w-5 h-5 flex items-center justify-center text-[10px] flex-shrink-0 mt-1 shadow-sm">
                                         {idx + 1}
                                       </span>
-                                      <div className={`shadow-sm px-3 py-2 flex flex-col relative ${
-                                        isCreatorOwnedEntry(comment)
+                                      <div className={`shadow-sm px-3 py-2 flex flex-col relative ${isCreatorOwnedEntry(comment)
                                           ? 'bg-[#E7FFDB] border border-[#d3f5c0] rounded-2xl rounded-tr-sm'
                                           : (activeVersionComment === comment.id ? 'bg-purple-100 border border-purple-200 rounded-2xl rounded-tl-sm' : 'bg-white border border-gray-200 rounded-2xl rounded-tl-sm')
-                                      }`}>
+                                        }`}>
                                         <div className="flex items-center gap-1 mb-0.5">
                                           <span className="text-[9px] font-bold text-blue-700">
                                             {comment.authorRole === 'admin' ? 'Admin' : (comment.authorRole === 'customer' || comment.reviewType === 'external' ? (assignment?.customerName || assignment?.customer_name || comment.authorName || (comment.authorEmail ? comment.authorEmail.split('@')[0] : 'Customer')) : 'Creator')}
@@ -3097,8 +3111,8 @@ function ContentUpload() {
                                             </div>
 
                                             <div className={`px-3 py-2 shadow-sm flex flex-col relative ${isCreator
-                                                ? 'bg-[#E7FFDB] border border-[#d3f5c0] rounded-2xl rounded-tr-sm'
-                                                : 'bg-white border border-gray-200 rounded-2xl rounded-tl-sm'
+                                              ? 'bg-[#E7FFDB] border border-[#d3f5c0] rounded-2xl rounded-tr-sm'
+                                              : 'bg-white border border-gray-200 rounded-2xl rounded-tl-sm'
                                               }`}>
                                               {/* WhatsApp style reply quote */}
                                               <div className="mb-1.5 text-[10px] bg-black/5 px-2 py-1 rounded border-l-2 border-indigo-500/50 flex flex-col pointer-events-none select-none max-w-[200px] sm:max-w-[300px]">
@@ -3261,11 +3275,11 @@ function ContentUpload() {
                   <div className="flex items-center gap-1 flex-wrap sm:justify-end">
                     {(Array.isArray(assignment.platform) ? assignment.platform : [assignment.platform]).filter(Boolean).map((p, pi) => (
                       <span key={pi} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-xs font-medium ${p.toLowerCase() === 'facebook' ? 'bg-blue-100 text-blue-700 border-blue-200' :
-                          p.toLowerCase() === 'instagram' ? 'bg-pink-100 text-pink-700 border-pink-200' :
-                            p.toLowerCase() === 'youtube' ? 'bg-red-100 text-red-700 border-red-200' :
-                              p.toLowerCase() === 'linkedin' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                                p.toLowerCase() === 'twitter' ? 'bg-sky-100 text-sky-700 border-sky-200' :
-                                  'bg-gray-100 text-gray-700 border-gray-200'
+                        p.toLowerCase() === 'instagram' ? 'bg-pink-100 text-pink-700 border-pink-200' :
+                          p.toLowerCase() === 'youtube' ? 'bg-red-100 text-red-700 border-red-200' :
+                            p.toLowerCase() === 'linkedin' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                              p.toLowerCase() === 'twitter' ? 'bg-sky-100 text-sky-700 border-sky-200' :
+                                'bg-gray-100 text-gray-700 border-gray-200'
                         }`}>
                         {p.toLowerCase() === 'facebook' ? <Facebook className="h-3 w-3" /> :
                           p.toLowerCase() === 'instagram' ? <Instagram className="h-3 w-3" /> :
@@ -3501,8 +3515,8 @@ function ContentUpload() {
                     <p className="text-sm text-gray-500">{formatFileSize(selectedMedia.size)}</p>
                   </div>
                   <span className={`px-3 py-1 rounded-full text-sm font-medium ${selectedMedia.type === 'image'
-                      ? 'bg-green-100 text-green-800'
-                      : 'bg-blue-100 text-blue-800'
+                    ? 'bg-green-100 text-green-800'
+                    : 'bg-blue-100 text-blue-800'
                     }`}>
                     {selectedMedia.type.toUpperCase()}
                   </span>

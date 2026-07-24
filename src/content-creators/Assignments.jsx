@@ -837,11 +837,22 @@ function Assignments() {
       : assignmentOrId;
     const calId = assignmentOrId && typeof assignmentOrId === 'object' ? assignmentOrId.calendarId : undefined;
     const idx = assignmentOrId && typeof assignmentOrId === 'object' ? assignmentOrId.itemIndex : undefined;
+    const strId = String(id || '');
+    const isStableId = strId && !strId.includes('::');
+
     const subs = submissions.filter(s => {
       const sid = String(s.assignment_id || s.assignmentId || '');
       const iid = String(s.item_id || '');
-      const strId = String(id || '');
-      if (strId && (sid === strId || iid === strId)) return true;
+      const subId = sid || iid;
+      const isSubStable = subId && !subId.includes('::');
+
+      if (isStableId && isSubStable) {
+        return sid === strId || iid === strId;
+      }
+      if (isStableId || isSubStable) {
+        return false;
+      }
+
       if (calId && s.calendar_id === calId && idx !== undefined && s.item_index !== undefined && Number(s.item_index) === Number(idx)) return true;
       return false;
     });
@@ -890,16 +901,12 @@ function Assignments() {
       if (!s) return;
 
       const keys = [];
-      if (s.assignment_id) keys.push(String(s.assignment_id));
-      if (s.item_id && String(s.item_id) !== String(s.assignment_id)) keys.push(String(s.item_id));
-      if (s.calendar_id && s.item_index !== undefined && s.item_index !== null) {
-        keys.push(`${s.calendar_id}::${Number(s.item_index)}`);
-      }
-
-      // Ensure the assignment's own IDs are added to keys
       const assId = String(assignment.id || assignment._id || '');
-      if (assId) keys.push(assId);
-      if (assignment.calendarId && assignment.itemIndex !== undefined) {
+      const isStable = assId && !assId.includes('::');
+
+      if (isStable) {
+        keys.push(assId);
+      } else if (assignment.calendarId && assignment.itemIndex !== undefined) {
         keys.push(`${assignment.calendarId}::${Number(assignment.itemIndex)}`);
       }
 
@@ -927,7 +934,12 @@ function Assignments() {
   const assignmentMatchesSet = (assignment, set) => {
     if (!set.size) return false;
     const id = String(assignment.id || assignment._id || '');
-    if (id && set.has(id)) return true;
+    const isStableId = id && !id.includes('::');
+    
+    if (isStableId) {
+      return set.has(id);
+    }
+    
     if (assignment.calendarId && assignment.itemIndex !== undefined) {
       if (set.has(`${assignment.calendarId}::${Number(assignment.itemIndex)}`)) return true;
     }

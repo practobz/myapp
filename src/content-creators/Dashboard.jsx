@@ -247,9 +247,14 @@ function Dashboard() {
     const anySubmissionKeys = new Set();
     submissions.forEach(s => {
       const keys = [];
-      if (s.assignment_id) keys.push(String(s.assignment_id));
-      if (s.item_id && String(s.item_id) !== String(s.assignment_id)) keys.push(String(s.item_id));
-      if (s.calendar_id && s.item_index !== undefined && s.item_index !== null) {
+      const sid = String(s.assignment_id || s.assignmentId || '');
+      const iid = String(s.item_id || '');
+      const hasStableId = (sid && !sid.includes('::')) || (iid && !iid.includes('::'));
+
+      if (sid) keys.push(sid);
+      if (iid && iid !== sid) keys.push(iid);
+
+      if (!hasStableId && s.calendar_id && s.item_index !== undefined && s.item_index !== null) {
         keys.push(`${s.calendar_id}::${Number(s.item_index)}`);
       }
       const stage = s.submission_stage || s.submissionStage || '';
@@ -285,7 +290,12 @@ function Dashboard() {
   const assignmentMatchesSet = (assignment, set) => {
     if (!set.size) return false;
     const id = String(assignment.id || assignment._id || '');
-    if (id && set.has(id)) return true;
+    const isStableId = id && !id.includes('::');
+    
+    if (isStableId) {
+      return set.has(id);
+    }
+    
     if (assignment.calendarId && assignment.itemIndex !== undefined) {
       if (set.has(`${assignment.calendarId}::${Number(assignment.itemIndex)}`)) return true;
     }
@@ -347,9 +357,22 @@ function Dashboard() {
     if (getFilterStatus(a) !== 'pending') return false;
     // If already submitted (under review), exclude unless revision was requested
     if (assignmentMatchesSet(a, submissionFilterSets.anySubmissionKeys)) {
+      const aid = String(a.id || a._id || '');
+      const isStableId = aid && !aid.includes('::');
       const latestSub = submissions
         .filter(s => {
-          if (s.assignment_id && String(s.assignment_id) === String(a.id || a._id || '')) return true;
+          const sid = String(s.assignment_id || s.assignmentId || '');
+          const iid = String(s.item_id || '');
+          const subId = sid || iid;
+          const isSubStable = subId && !subId.includes('::');
+
+          if (isStableId && isSubStable) {
+            return sid === aid || iid === aid;
+          }
+          if (isStableId || isSubStable) {
+            return false;
+          }
+
           if (a.calendarId && a.itemIndex !== undefined &&
               s.calendar_id === a.calendarId && String(s.item_index) === String(a.itemIndex)) return true;
           return false;

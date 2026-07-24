@@ -310,11 +310,14 @@ function ContentDetailView({
 
   const itemScheduledPosts = useMemo(() => {
     if (!scheduledPosts || !selectedContent) return [];
-    return scheduledPosts.filter(post =>
-      (post.item_id && post.item_id === selectedContent.id) ||
-      (post.contentId && post.contentId === selectedContent.id) ||
-      (post.item_name && post.item_name === (selectedContent.title || selectedContent.description || selectedContent.itemName))
-    );
+    return scheduledPosts.filter(post => {
+      const postId = post.item_id || post.contentId;
+      if (postId) {
+        return String(postId) === String(selectedContent.id);
+      }
+      const itemTitle = selectedContent.title || selectedContent.description || selectedContent.itemName;
+      return Boolean(post.item_name && itemTitle && String(post.item_name).trim().toLowerCase() === String(itemTitle).trim().toLowerCase());
+    });
   }, [scheduledPosts, selectedContent]);
 
   const getPlatformIcon = useCallback((platform) => {
@@ -686,7 +689,7 @@ function ContentDetailView({
   useEffect(() => {
     if (selectedContent?.versions?.length) {
       setSelectedVersionIndex(selectedContent.versions.length - 1);
-      
+
       const currentId = selectedContent.id;
       if (prevAdminContentIdRef.current !== currentId) {
         setSelectedMediaIndex(0);
@@ -747,37 +750,13 @@ function ContentDetailView({
 
   const isRevisionPending = useMemo(() => {
     const status = currentVersion?.status || '';
-    return status === 'revision_requested' || status === 'changes_requested' || status === 'changes_requested_admin';
+    return status === 'revision_requested' || status === 'changes_requested' || status === 'changes_requested_admin' || status === 'sent_to_creator';
   }, [currentVersion]);
 
   const isOutdatedVersion = useMemo(() =>
     selectedVersionIndex < ((selectedContent?.versions?.length || 0) - 1),
     [selectedContent, selectedVersionIndex]
   );
-
-  const isRevisionRequested = useMemo(() => {
-    if (!currentVersion) return false;
-    const status = currentVersion.status || '';
-    return status === 'revision_requested' || status === 'sent_to_creator' || status === 'changes_requested' || status === 'changes_requested_admin' || status === 'changes_requested_customer_approved_admin';
-  }, [currentVersion]);
-
-  const isAdminApproved = useMemo(() => {
-    if (!currentVersion) return false;
-    const status = currentVersion.status || '';
-    return currentVersion.approved_by_admin || ['approved', 'approved_both', 'pending_customer_review', 'customer_feedback_pending_admin', 'published', 'scheduled'].includes(status);
-  }, [currentVersion]);
-
-  const isSentToCustomer = useMemo(() => {
-    if (!currentVersion) return false;
-    const status = currentVersion.status || '';
-    return currentVersion.submission_stage === 'customer' || ['pending_customer_review', 'customer_feedback_pending_admin', 'approved_both', 'approved_customer', 'published', 'scheduled'].includes(status);
-  }, [currentVersion]);
-
-  const isCustomerApproved = useMemo(() => {
-    if (!currentVersion) return false;
-    const status = currentVersion.status || '';
-    return currentVersion.approved_by_customer === true || ['approved_customer', 'approved_both', 'published', 'scheduled'].includes(status);
-  }, [currentVersion]);
 
   const isCustomerApprovedForPosting = useMemo(() => {
     const approvedStatuses = ['approved_customer', 'approved_both', 'published'];
@@ -817,7 +796,7 @@ function ContentDetailView({
       if (onRefresh) {
         await onRefresh();
       }
-      
+
       setSelectedMediaIndex(prev => {
         const newLength = (currentVersion?.media?.length || 1) - 1;
         if (prev >= newLength) {
@@ -1363,8 +1342,8 @@ function ContentDetailView({
                       key={v.id || idx}
                       onClick={() => { setSelectedVersionIndex(idx); setSelectedMediaIndex(0); }}
                       className={`px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors ${selectedVersionIndex === idx
-                          ? 'bg-blue-600 text-white border-blue-600'
-                          : 'bg-white text-blue-600 border-blue-200 hover:bg-blue-50'
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'bg-white text-blue-600 border-blue-200 hover:bg-blue-50'
                         }`}
                     >
                       V{v.versionNumber}
@@ -1576,76 +1555,31 @@ function ContentDetailView({
                 </span>
               </div>
               <div className="p-3 space-y-2.5">
-                {/* Stepper Timeline */}
-                {(() => {
-                  const step1State = isRevisionRequested ? { label: 'Revisions Requested', color: 'text-red-600' }
-                    : isAdminApproved ? { label: 'Approved', color: 'text-emerald-600' }
-                    : { label: 'Pending Review', color: 'text-amber-500' };
+                {/* Current Version Stage badges */}
+                <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                  <div className={`px-2 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 border ${currentVersion?.approved_by_admin || currentVersion?.status === 'approved' || currentVersion?.status === 'approved_both' || currentVersion?.status === 'pending_customer_review'
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    : ['revision_requested', 'changes_requested', 'changes_requested_admin', 'sent_to_creator'].includes(currentVersion?.status)
+                      ? 'bg-purple-50 text-purple-700 border-purple-200'
+                      : 'bg-amber-50 text-amber-700 border-amber-200'
+                    }`}>
+                    {currentVersion?.approved_by_admin || currentVersion?.status === 'approved' || currentVersion?.status === 'approved_both' || currentVersion?.status === 'pending_customer_review' ? (
+                      <><CheckCircle className="h-3.5 w-3.5 text-emerald-600" /> Admin Approved</>
+                    ) : !currentVersion ? (
+                      <><Clock className="h-3.5 w-3.5 text-amber-600" /> Pending</>
+                    ) : ['revision_requested', 'changes_requested', 'changes_requested_admin', 'sent_to_creator'].includes(currentVersion?.status) ? (
+                      <><Send className="h-3.5 w-3.5 text-purple-600" /> Sent to Creator</>
+                    ) : (
+                      <><Clock className="h-3.5 w-3.5 text-amber-600" /> Pending Admin Review</>
+                    )}
+                  </div>
 
-                  const step2State = !isAdminApproved ? { label: 'Waiting', color: 'text-gray-400' }
-                    : isCustomerApproved ? { label: 'Approved', color: 'text-emerald-600' }
-                    : currentVersion?.status === 'customer_feedback_pending_admin' ? { label: 'Changes Requested', color: 'text-red-600' }
-                    : isSentToCustomer ? { label: 'Pending Feedback', color: 'text-blue-600' }
-                    : { label: 'Ready to Send', color: 'text-gray-500' };
-
-                  return (
-                    <div className="bg-gray-50 rounded-xl p-3 border border-gray-100 space-y-3">
-                      {/* Step 1 */}
-                      <div className="flex items-start gap-2.5">
-                        <div className={`mt-0.5 p-1 rounded-full ${
-                          isAdminApproved ? 'bg-emerald-50 text-emerald-600' : isRevisionRequested ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-500'
-                        }`}>
-                          {isAdminApproved ? (
-                            <CheckCircle className="h-4 w-4" />
-                          ) : isRevisionRequested ? (
-                            <XCircle className="h-4 w-4" />
-                          ) : (
-                            <Clock className="h-4 w-4" />
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between">
-                            <h4 className="text-xs font-bold text-gray-800">1. Admin Review</h4>
-                            <span className={`text-[10px] font-semibold uppercase tracking-wider ${step1State.color}`}>
-                              {step1State.label}
-                            </span>
-                          </div>
-                          <p className="text-[10px] text-gray-450 leading-tight mt-0.5">
-                            {isAdminApproved ? 'Admin approved internal check' : isRevisionRequested ? 'Sent back to creator for edits' : 'Awaiting admin internal approval'}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="border-t border-gray-200/60 my-1" />
-
-                      {/* Step 2 */}
-                      <div className="flex items-start gap-2.5">
-                        <div className={`mt-0.5 p-1 rounded-full ${
-                          isCustomerApproved ? 'bg-emerald-50 text-emerald-600' : currentVersion?.status === 'customer_feedback_pending_admin' ? 'bg-red-50 text-red-600' : isSentToCustomer ? 'bg-blue-50 text-blue-600' : 'bg-gray-50 text-gray-400'
-                        }`}>
-                          {isCustomerApproved ? (
-                            <CheckCircle className="h-4 w-4" />
-                          ) : currentVersion?.status === 'customer_feedback_pending_admin' ? (
-                            <AlertCircle className="h-4 w-4" />
-                          ) : (
-                            <Clock className="h-4 w-4" />
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between">
-                            <h4 className="text-xs font-bold text-gray-800">2. Customer Review</h4>
-                            <span className={`text-[10px] font-semibold uppercase tracking-wider ${step2State.color}`}>
-                              {step2State.label}
-                            </span>
-                          </div>
-                          <p className="text-[10px] text-gray-455 leading-tight mt-0.5">
-                            {isCustomerApproved ? 'Approved by customer' : currentVersion?.status === 'customer_feedback_pending_admin' ? 'Customer requested revisions' : isSentToCustomer ? 'Currently with customer for feedback' : 'Awaiting admin approval first'}
-                          </p>
-                        </div>
-                      </div>
+                  {(currentVersion?.submission_stage === 'customer' || currentVersion?.status === 'pending_customer_review' || currentVersion?.status === 'customer_feedback_pending_admin') && (
+                    <div className="px-2 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200">
+                      <Send className="h-3.5 w-3.5 text-blue-600" /> Sent to Customer
                     </div>
-                  );
-                })()}
+                  )}
+                </div>
 
                 {/* Internal Review Actions */}
                 <div className="space-y-1.5 pt-1">
@@ -1671,8 +1605,8 @@ function ContentDetailView({
                       )}
                       <button
                         onClick={handleApproveAdmin}
-                        disabled={approvingAdmin || isOutdatedVersion || hasUnresolvedComments || isRevisionPending}
-                        title={isOutdatedVersion ? "Cannot approve an outdated version" : hasUnresolvedComments ? "Cannot approve with unresolved comments" : isRevisionPending ? "Cannot approve a version with pending revision request" : ""}
+                        disabled={approvingAdmin || isOutdatedVersion || hasUnresolvedComments || isRevisionPending || !currentVersion}
+                        title={!currentVersion ? "No content submitted yet" : isOutdatedVersion ? "Cannot approve an outdated version" : hasUnresolvedComments ? "Cannot approve with unresolved comments" : isRevisionPending ? "Cannot approve a version with pending revision request" : ""}
                         className="w-full py-2 bg-gradient-to-r from-emerald-600 to-green-600 text-white rounded-lg text-xs font-semibold hover:from-emerald-700 hover:to-green-700 shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
                       >
                         {approvingAdmin ? (
@@ -1685,8 +1619,8 @@ function ContentDetailView({
                   ) : !(currentVersion?.approved_by_admin || currentVersion?.status === 'approved' || currentVersion?.status === 'approved_both' || currentVersion?.status === 'pending_customer_review') ? (
                     <button
                       onClick={handleApproveAdmin}
-                      disabled={approvingAdmin || isOutdatedVersion || hasUnresolvedComments || isRevisionPending}
-                      title={isOutdatedVersion ? "Cannot approve an outdated version" : hasUnresolvedComments ? "Cannot approve with unresolved comments" : isRevisionPending ? "Cannot approve a version with pending revision request" : ""}
+                      disabled={approvingAdmin || isOutdatedVersion || hasUnresolvedComments || isRevisionPending || !currentVersion}
+                      title={!currentVersion ? "No content submitted yet" : isOutdatedVersion ? "Cannot approve an outdated version" : hasUnresolvedComments ? "Cannot approve with unresolved comments" : isRevisionPending ? "Cannot approve a version with pending revision request" : ""}
                       className="w-full py-2 bg-gradient-to-r from-emerald-600 to-green-600 text-white rounded-lg text-xs font-semibold hover:from-emerald-700 hover:to-green-700 shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
                     >
                       {approvingAdmin ? (
@@ -1792,14 +1726,13 @@ function ContentDetailView({
                       <div
                         key={comment.id || idx}
                         data-cdv-sidebar-comment="true"
-                        className={`flex flex-col gap-2 p-3 rounded-xl border transition-all duration-200 ${
-                          isActive
+                        className={`flex flex-col gap-2 p-3 rounded-xl border transition-all duration-200 ${isActive
                             ? 'bg-purple-50/20 border-purple-200 shadow-sm'
                             : 'bg-slate-50/10 border-slate-100 hover:bg-slate-50/30 hover:border-slate-200'
-                        }`}
+                          }`}
                       >
                         {/* The initial comment bubble */}
-                        <div 
+                        <div
                           className={`flex items-start gap-2 max-w-[90%] cursor-pointer group ${isOutgoing ? 'self-end flex-row-reverse' : 'self-start'}`}
                           onClick={() => {
                             const next = isActive ? null : comment.id;
@@ -1818,11 +1751,10 @@ function ContentDetailView({
                           <span className={`font-bold text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] flex-shrink-0 mt-1 shadow-sm ${isOutgoing ? 'bg-purple-500' : 'bg-blue-500'}`}>
                             {idx + 1}
                           </span>
-                          <div className={`shadow-sm px-3 py-2 flex flex-col relative ${
-                            isOutgoing 
-                              ? 'bg-[#E7FFDB] border border-[#d3f5c0] rounded-2xl rounded-tr-sm' 
+                          <div className={`shadow-sm px-3 py-2 flex flex-col relative ${isOutgoing
+                              ? 'bg-[#E7FFDB] border border-[#d3f5c0] rounded-2xl rounded-tr-sm'
                               : 'bg-white border border-gray-200 rounded-2xl rounded-tl-sm'
-                          } ${isActive ? 'ring-1 ring-purple-300' : ''}`}>
+                            } ${isActive ? 'ring-1 ring-purple-300' : ''}`}>
                             <div className="flex items-center gap-1 mb-0.5">
                               <span className={`text-[9px] font-bold ${isOutgoing ? 'text-green-700' : 'text-blue-700'}`}>
                                 {isOutgoing ? 'Internal' : (getCustomerName() || selectedContent?.customerName || selectedContent?.customer_name || comment.authorName || (comment.authorEmail ? comment.authorEmail.split('@')[0] : 'Customer'))}
@@ -1832,18 +1764,18 @@ function ContentDetailView({
                               )}
 
                             </div>
-                            
+
                             <p className={`text-[13px] break-words leading-snug ${comment.discarded ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
                               {comment.message || comment.comment}
                             </p>
-                            
+
                             <div className="flex items-center justify-end gap-2 mt-1.5 pt-1.5 border-t border-black/5">
                               <span className="text-[9px] text-gray-500/80">
-                                {comment.timestamp ? new Date(comment.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}
+                                {comment.timestamp ? new Date(comment.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                               </span>
-                              
 
-                              
+
+
                               {!isAdminComment && (
                                 <button
                                   onClick={(e) => { e.stopPropagation(); handleToggleDiscard(comment.id); }}
@@ -1867,7 +1799,7 @@ function ContentDetailView({
                                   <CheckCheck className="h-3 w-3 text-blue-500" /> Read
                                 </span>
                               )}
-                              
+
                               {canAdminReplyToEntry(comment) && (
                                 <button
                                   onClick={(e) => {
@@ -1883,7 +1815,7 @@ function ContentDetailView({
                                   <MessageSquare className="h-3 w-3" /> Reply
                                 </button>
                               )}
-                              
+
                               {isAdminComment && (
                                 <button
                                   onClick={(e) => { e.stopPropagation(); handleDeleteComment(comment.id); }}
@@ -1892,7 +1824,7 @@ function ContentDetailView({
                                   <Trash2 className="h-3 w-3" />
                                 </button>
                               )}
-                              
+
                               {comment.videoTimestamp != null && (
                                 <button
                                   onClick={(e) => {
@@ -1924,12 +1856,12 @@ function ContentDetailView({
                             message: comment.adminReply.text,
                             timestamp: comment.adminReply.timestamp
                           }] : []);
-                          
+
                           return replies.map((rep, rIdx) => {
                             const isRepOutgoing = rep.authorRole === 'admin';
                             return (
-                              <div 
-                                key={rep.id || rIdx} 
+                              <div
+                                key={rep.id || rIdx}
                                 className={`flex items-start gap-2 max-w-[90%] group ${isRepOutgoing ? 'self-end flex-row-reverse' : 'self-start'}`}
                               >
                                 <div className="w-5 h-5 flex-shrink-0 flex items-center justify-center rounded-full bg-gray-100 border border-gray-200 text-[9px] font-bold text-gray-500 mt-1 shadow-sm">
@@ -1945,12 +1877,11 @@ function ContentDetailView({
                                     return name.trim().charAt(0).toUpperCase() || 'U';
                                   })()}
                                 </div>
-                                
-                                <div className={`px-3 py-2 shadow-sm flex flex-col relative ${
-                                  isRepOutgoing 
-                                    ? 'bg-[#E7FFDB] border border-[#d3f5c0] rounded-2xl rounded-tr-sm' 
+
+                                <div className={`px-3 py-2 shadow-sm flex flex-col relative ${isRepOutgoing
+                                    ? 'bg-[#E7FFDB] border border-[#d3f5c0] rounded-2xl rounded-tr-sm'
                                     : 'bg-white border border-gray-200 rounded-2xl rounded-tl-sm'
-                                }`}>
+                                  }`}>
                                   {/* WhatsApp style reply quote */}
                                   <div className="mb-1.5 text-[10px] bg-black/5 px-2 py-1 rounded border-l-2 border-indigo-500/50 flex flex-col pointer-events-none select-none max-w-[200px] sm:max-w-[300px]">
                                     <span className="font-semibold text-indigo-600 truncate text-[9px]">{isOutgoing ? 'Internal' : (getCustomerName() || selectedContent?.customerName || selectedContent?.customer_name || comment.authorName || (comment.authorEmail ? comment.authorEmail.split('@')[0] : 'Customer'))}</span>
@@ -1960,7 +1891,7 @@ function ContentDetailView({
                                     <span className="text-[9px] font-medium text-gray-500 mb-0.5">{rep.authorEmail}</span>
                                   )}
                                   <p className="text-[13px] text-gray-800 break-words leading-snug">{rep.message || rep.text}</p>
-                                  
+
                                   <div className="flex items-center justify-end gap-3 mt-1">
                                     {canAdminReplyToEntry(rep) && !isSameAdminAuthor(rep) && (
                                       <button
@@ -2004,7 +1935,7 @@ function ContentDetailView({
                                       </button>
                                     )}
                                     <span className="text-[9px] text-gray-500/80">
-                                      {rep.timestamp ? new Date(rep.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}
+                                      {rep.timestamp ? new Date(rep.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                                     </span>
                                   </div>
                                 </div>

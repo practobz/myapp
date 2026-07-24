@@ -484,10 +484,9 @@ const ItemTimeline = ({ item, itemStatus, scheduledPosts = [], submissions = [] 
   const matchedPost = scheduledPosts.find(post => {
     if (!(post.status === 'published' || post.publishedAt)) return false;
     const postId = post.item_id || post.contentId;
-    if (postId && item.id) return String(postId) === String(item.id);
-    if (postId || item.id) return false;
+    if (postId) return String(postId) === String(item.id);
     const itemTitle = item.title || item.description;
-    return Boolean(post.item_name && itemTitle && post.item_name === itemTitle);
+    return Boolean(post.item_name && itemTitle && String(post.item_name).trim().toLowerCase() === String(itemTitle).trim().toLowerCase());
   });
 
   const fmtDate = (d) => {
@@ -1270,10 +1269,9 @@ function CustomerDetailsView() {
       }
       if (!(post.status === 'published' || post.publishedAt)) return false;
       const postId = post.item_id || post.contentId;
-      if (postId && item.id) return String(postId) === String(item.id);
-      if (postId || item.id) return false;
+      if (postId) return String(postId) === String(item.id);
       const itemTitle = item.title || item.description;
-      return Boolean(post.item_name && itemTitle && post.item_name === itemTitle);
+      return Boolean(post.item_name && itemTitle && String(post.item_name).trim().toLowerCase() === String(itemTitle).trim().toLowerCase());
     });
   }, [scheduledPosts]);
 
@@ -1363,10 +1361,9 @@ function CustomerDetailsView() {
     const matchedPosts = scheduledPosts.filter(post => {
       if (!(post.status === 'published' || post.publishedAt)) return false;
       const postId = post.item_id || post.contentId;
-      if (postId && item.id) return String(postId) === String(item.id);
-      if (postId || item.id) return false;
+      if (postId) return String(postId) === String(item.id);
       const itemTitle = item.title || item.description;
-      return Boolean(post.item_name && itemTitle && post.item_name === itemTitle);
+      return Boolean(post.item_name && itemTitle && String(post.item_name).trim().toLowerCase() === String(itemTitle).trim().toLowerCase());
     });
 
     for (const matchedPost of matchedPosts) {
@@ -2152,10 +2149,13 @@ function CustomerDetailsView() {
       }
     }
     for (const post of scheduledPosts) {
-      const matches =
-        (post.item_id && post.item_id === item.id) ||
-        (post.contentId && post.contentId === item.id) ||
-        (post.item_name && post.item_name === (item.title || item.description));
+      const postId = post.item_id || post.contentId;
+      let matches = false;
+      if (postId) {
+        matches = String(postId) === String(item.id);
+      } else {
+        matches = Boolean(post.item_name && (item.title || item.description) && String(post.item_name).trim().toLowerCase() === String(item.title || item.description).trim().toLowerCase());
+      }
       if (!matches || !(post.status === 'published' || post.publishedAt)) continue;
       if (isIdValid(post.facebookPostId) && !post.facebookPostId.startsWith('fb_shared_from_')) {
         const fbId = post.facebookPostId;

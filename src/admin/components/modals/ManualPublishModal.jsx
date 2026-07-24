@@ -27,13 +27,16 @@ function ManualPublishModal({ isOpen, onClose, onSave, item, scheduledPosts = []
 
   useEffect(() => {
     if (isOpen && item) {
-      // Find matching scheduled posts that are published
-      const matchingPosts = scheduledPosts.filter(post => 
-        ((post.item_id && post.item_id === item.id) ||
-         (post.contentId && post.contentId === item.id) ||
-         (post.item_name && post.item_name === (item.title || item.description))) &&
-        (post.status === 'published' || post.publishedAt)
-      );
+      const matchingPosts = scheduledPosts.filter(post => {
+        const postId = post.item_id || post.contentId;
+        let matches = false;
+        if (postId) {
+          matches = String(postId) === String(item.id);
+        } else {
+          matches = Boolean(post.item_name && (item.title || item.description) && String(post.item_name).trim().toLowerCase() === String(item.title || item.description).trim().toLowerCase());
+        }
+        return matches && (post.status === 'published' || post.publishedAt);
+      });
 
       const autoMap = {};
       const autoUrls = {};

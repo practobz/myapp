@@ -325,12 +325,16 @@ function ContentCreatorDetails() {
     // Check manual publish flag
     if (item.published === true) return true;
     // Check scheduled posts
-    return scheduledPosts.some(post =>
-      ((post.item_id && post.item_id === item.id) ||
-       (post.contentId && post.contentId === item.id) ||
-       (post.item_name && post.item_name === (item.title || item.description))) &&
-      (post.status === 'published' || post.publishedAt)
-    );
+    return scheduledPosts.some(post => {
+      const postId = post.item_id || post.contentId;
+      let matches = false;
+      if (postId) {
+        matches = String(postId) === String(item.id);
+      } else {
+        matches = Boolean(post.item_name && (item.title || item.description) && String(post.item_name).trim().toLowerCase() === String(item.title || item.description).trim().toLowerCase());
+      }
+      return matches && (post.status === 'published' || post.publishedAt);
+    });
   }, [scheduledPosts]);
 
   // Get item status with published check

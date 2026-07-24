@@ -428,12 +428,16 @@ ExpandedTrendChart.displayName = 'ExpandedTrendChart';
 const ItemTimeline = ({ item, itemStatus, scheduledPosts = [], submissions = [], isAdmin = false }) => {
   const nowTs = Date.now();
 
-  const matchedPost = scheduledPosts.find(post =>
-    ((post.item_id && post.item_id === item.id) ||
-      (post.contentId && post.contentId === item.id) ||
-      (post.item_name && post.item_name === (item.title || item.description))) &&
-    (post.status === 'published' || post.publishedAt)
-  );
+  const matchedPost = scheduledPosts.find(post => {
+    const postId = post.item_id || post.contentId;
+    let matches = false;
+    if (postId) {
+      matches = String(postId) === String(item.id);
+    } else {
+      matches = Boolean(post.item_name && (item.title || item.description) && String(post.item_name).trim().toLowerCase() === String(item.title || item.description).trim().toLowerCase());
+    }
+    return matches && (post.status === 'published' || post.publishedAt);
+  });
 
   const fmtDate = (d) => {
     if (!d) return null;
@@ -806,12 +810,16 @@ function ContentCalendar({
     const platformResult = {};
     itemPlatforms.forEach(p => { platformResult[p.toLowerCase()] = []; });
 
-    const matchedPosts = scheduledPosts.filter(post =>
-      ((post.item_id && post.item_id === item.id) ||
-        (post.contentId && post.contentId === item.id) ||
-        (post.item_name && post.item_name === (item.title || item.description))) &&
-      (post.status === 'published' || post.publishedAt)
-    );
+    const matchedPosts = scheduledPosts.filter(post => {
+      const postId = post.item_id || post.contentId;
+      let matches = false;
+      if (postId) {
+        matches = String(postId) === String(item.id);
+      } else {
+        matches = Boolean(post.item_name && (item.title || item.description) && String(post.item_name).trim().toLowerCase() === String(item.title || item.description).trim().toLowerCase());
+      }
+      return matches && (post.status === 'published' || post.publishedAt);
+    });
 
     for (const matchedPost of matchedPosts) {
       const instagramId = matchedPost?.instagramId;
@@ -907,6 +915,11 @@ function ContentCalendar({
   }, [isAdmin, calendars, scheduledPosts, fetchPostTrend]);
 
   const getItemPublishedLinks = (item) => {
+    // If not admin, only display published links if item is actually published
+    if (!isAdmin && item.status !== 'published') {
+      return [];
+    }
+
     const links = [];
 
     // Manual platform URLs first
@@ -929,10 +942,13 @@ function ContentCalendar({
       }
     }
     for (const post of scheduledPosts) {
-      const matches =
-        (post.item_id && post.item_id === item.id) ||
-        (post.contentId && post.contentId === item.id) ||
-        (post.item_name && post.item_name === (item.title || item.description));
+      const postId = post.item_id || post.contentId;
+      let matches = false;
+      if (postId) {
+        matches = String(postId) === String(item.id);
+      } else {
+        matches = Boolean(post.item_name && (item.title || item.description) && String(post.item_name).trim().toLowerCase() === String(item.title || item.description).trim().toLowerCase());
+      }
       if (!matches || !(post.status === 'published' || post.publishedAt)) continue;
       if (isIdValid(post.facebookPostId) && !post.facebookPostId.startsWith('fb_shared_from_')) {
         const fbId = post.facebookPostId;
@@ -1145,15 +1161,12 @@ function ContentCalendar({
 
     const postId = post.item_id || post.contentId;
     const itemId = item.id || item._id;
-    if (postId && itemId) {
+    if (postId) {
       return String(postId) === String(itemId);
-    }
-    if (postId || itemId) {
-      return false;
     }
 
     const itemTitle = item.title || item.description;
-    return Boolean(post.item_name && itemTitle && String(post.item_name).trim() === String(itemTitle).trim());
+    return Boolean(post.item_name && itemTitle && String(post.item_name).trim().toLowerCase() === String(itemTitle).trim().toLowerCase());
   };
 
   const getDisplayStatus = (item) => {
@@ -1771,15 +1784,16 @@ function ContentCalendar({
   };
 
   const handleContentClick = (item) => {
-    const scheduledPublishedPosts = scheduledPosts.filter(post => {
+    const isPublished = item.status === 'published';
+    const scheduledPublishedPosts = isPublished ? scheduledPosts.filter(post => {
       const postId = post.item_id || post.contentId;
       if (postId) {
-        return postId === item.id;
+        return String(postId) === String(item.id);
       }
       const postCalId = post.calendarId || post.calendar_id;
-      if (postCalId && item.calendarId && postCalId !== item.calendarId) return false;
-      return post.item_name && post.item_name === item.title;
-    });
+      if (postCalId && item.calendarId && String(postCalId) !== String(item.calendarId)) return false;
+      return post.item_name && item.title && String(post.item_name).trim().toLowerCase() === String(item.title).trim().toLowerCase();
+    }) : [];
     const manualPublishedPosts = [];
     if (item.published === true && item.publishedPlatforms?.length > 0) {
       const scheduledPlatforms = new Set(scheduledPublishedPosts.map(p => p.platform?.toLowerCase()));
